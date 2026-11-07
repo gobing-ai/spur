@@ -259,6 +259,16 @@ function digestFile(path: string): string {
     return sha256(readFileSync(resolve(REPO_ROOT, path)));
 }
 
+function gitShow(revision: string, path: string): Buffer {
+    const result = Bun.spawnSync(['git', 'show', `${revision}:${path}`], {
+        cwd: REPO_ROOT,
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    if (result.exitCode !== 0) throw new Error(`git show ${revision}:${path} failed`);
+    return result.stdout;
+}
+
 function gitHead(): string {
     const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: REPO_ROOT, stdout: 'pipe', stderr: 'pipe' });
     if (result.exitCode !== 0) throw new Error('git rev-parse HEAD failed');
@@ -429,12 +439,19 @@ function stable(report: OwnershipReport): unknown {
         sourceRevision: _sourceRevision,
         offlineProof: _proof,
         sourceDigests,
+        provenance,
         ...rest
     } = report;
     // A report generated where the bundle existed also recorded its digest; that key is dropped so
-    // the frozen comparison is over tracked inputs only.
+    // the frozen comparison is over tracked inputs only. Every release bump rewrites the package
+    // versions, manifests and lockfile, so those are measurement-time provenance, not decision
+    // inputs: comparing them made the frozen report fail after each release (0.4.26).
     const { 'apps/cli/spur.js': _bundle, ...trackedDigests } = sourceDigests ?? {};
-    return { ...rest, sourceDigests: trackedDigests };
+    const decisionDigests = Object.fromEntries(
+        Object.entries(trackedDigests).filter(([path]) => !(DEPENDENCY_PATHS as readonly string[]).includes(path)),
+    );
+    const { domainPackage: _domain, cliPackage: _cli, ...stableProvenance } = provenance ?? {};
+    return { ...rest, provenance: stableProvenance, sourceDigests: decisionDigests };
 }
 
 function renderMarkdown(report: OwnershipReport): string {
@@ -582,6 +599,24 @@ describe('1311 SQL normalization and decision', () => {
         };
         expect(stable(measured as OwnershipReport)).toEqual(stable(committed as OwnershipReport));
         expect(committed.sourceRevision).not.toBe(measured.sourceRevision);
+    });
+
+    test('frozen equality ignores a release bump but not a migration SQL change', () => {
+        const committed = {
+            status: 'go' as const,
+            provenance: { bun: '1.4.3', domainPackage: '0.4.25', cliPackage: '0.4.25' },
+            sourceDigests: { 'bun.lock': 'a', 'apps/cli/package.json': 'b', 'drizzle/0037.sql': 'c' },
+        };
+        const bumped = {
+            ...committed,
+            provenance: { bun: '1.4.3', domainPackage: '0.4.26', cliPackage: '0.4.26' },
+            sourceDigests: { 'bun.lock': 'x', 'apps/cli/package.json': 'y', 'drizzle/0037.sql': 'c' },
+        };
+        const sqlChanged = { ...committed, sourceDigests: { ...committed.sourceDigests, 'drizzle/0037.sql': 'z' } };
+        expect(stable(bumped as unknown as OwnershipReport)).toEqual(stable(committed as unknown as OwnershipReport));
+        expect(stable(sqlChanged as unknown as OwnershipReport)).not.toEqual(
+            stable(committed as unknown as OwnershipReport),
+        );
     });
 
     test('a missing measurement is inconclusive and each failed gate is no-go', () => {
@@ -844,7 +879,41 @@ describe('1311 migration ownership evidence', () => {
             // is one of the decision's inputs, so a tree without the artifact reaches a different,
             // weaker verdict by design. Compare the frozen decision only when it was measurable.
             const existing = JSON.parse(readFileSync(REPORT_JSON, 'utf8')) as OwnershipReport;
-            expect(stable(existing)).toEqual(stable(report));
+            const embeddingFile = 'packages/domain/src/migrations.ts';
+            if (existing.sourceDigests[embeddingFile] === report.sourceDigests[embeddingFile]) {
+                expect(stable(existing)).toEqual(stable(report));
+            } else {
+                // Task 1312 consumed this decision: 0037 is now generated from the released .sql, so the
+                // embedded bytes and migrations.ts digest move by design. The frozen report must still be
+                // authentic at its revision, and the live embedding must be the released bytes exactly
+                // with the same normalized SQL 1311 measured. Everything else stays frozen.
+                expect(sha256(gitShow(existing.sourceRevision, embeddingFile))).toBe(
+                    existing.sourceDigests[embeddingFile] ?? '<missing frozen digest>',
+                );
+                expect(report.hashes.embedded0037).toBe(report.hashes.tracked0037);
+                expect(report.hashes.tracked0037).toBe(existing.hashes.tracked0037);
+                expect(report.hashes.normalizedEmbedded0037).toBe(existing.hashes.normalizedEmbedded0037);
+                expect(porcelain(['drizzle'])).toEqual([]);
+                const consumed = (value: OwnershipReport): unknown => {
+                    const { status: _status, reason: _reason, ...rest } = stable(value) as OwnershipReport;
+                    const { [embeddingFile]: _embedding, ...digests } = rest.sourceDigests;
+                    return {
+                        ...rest,
+                        sourceDigests: digests,
+                        hashes: { ...rest.hashes, embedded0037: '<1312-generated>' },
+                        mirrors: {
+                            ...rest.mirrors,
+                            rows: rest.mirrors.rows.map((row) =>
+                                row.id === CANDIDATE_ID ? { ...row, exactEqual: '<1312-generated>' } : row,
+                            ),
+                        },
+                    };
+                };
+                expect(consumed(report)).toEqual(consumed(existing));
+                expect(report.mirrors.rows.find((row) => row.id === CANDIDATE_ID)?.exactEqual).toBe(true);
+                // Status is re-derived live: an uncommitted migrations.ts reads as dirty released SQL.
+                if (!releasedClean) expect(report.status).toBe('no-go');
+            }
         } else {
             // No bundle: the task's contract is to fail closed rather than claim a decision.
             expect(report.status).not.toBe('go');
@@ -871,7 +940,7 @@ describe('1311 migration ownership evidence', () => {
         expect(typeof offlineProof.pass).toBe('boolean');
         // `go` is only reachable where the offline proof could run; a clean checkout fails closed.
         expect(report.status, `${JSON.stringify(offlineProof)}\n${sourceFreeStderr}`).toBe(
-            offlineProof.pass ? 'go' : 'inconclusive',
+            releasedClean ? (offlineProof.pass ? 'go' : 'inconclusive') : 'no-go',
         );
     }, 120_000);
 });

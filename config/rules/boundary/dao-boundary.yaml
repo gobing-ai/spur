@@ -87,6 +87,8 @@ rules:
     exclude:
       # the CLI migration journal — 43 DDL statements (verified load-bearing)
       - "packages/domain/src/migrations.ts"
+      # 0037's embedded mirror, generated verbatim from released drizzle SQL (task 1312)
+      - "packages/domain/src/migration-sql.generated.ts"
 
   - id: raw-sql-only-in-domain
     description: >

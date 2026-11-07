@@ -60,7 +60,7 @@ bodies:
 
 | Layer | spur-new | superskill | knowledge-kit | Owning surface (ADR-130 reading) |
 | --- | --- | --- | --- | --- |
-| L1 build / package / release | `scripts/commands/build-*`, `bundle-*`, `emit-board-types`, `verify-pack`, `plugin-install-smoke` | `scripts/builder.ts`, `build-plugin-zip.ts` | `scripts/bundle-plugins.ts`, `build-board.ts`, `publish*.ts`, `verify-sp-install.ts` | repo `scripts/`; release plumbing that any project needs moves to `spur builder` |
+| L1 build / package / release | `scripts/commands/build-*`, `bundle-*`, `emit-board-types`, `emit-migration-sql`, `verify-pack`, `plugin-install-smoke` | `scripts/builder.ts`, `build-plugin-zip.ts` | `scripts/bundle-plugins.ts`, `build-board.ts`, `publish*.ts`, `verify-sp-install.ts` | repo `scripts/`; release plumbing that any project needs moves to `spur builder` |
 | L2 test runner / coverage | `run-tests.ts`, `coverage-*` | — (inline in `package.json`) | — (inline) | repo `scripts/`, bound to `test*` actions |
 | L3 repo contract checks | `link-check`, `script-contract-check`, `transition-shim-check`, `dependency-drift-check`, `workflow-promotion`, `validate-*`, `surface-drift-inventory` | — | `check-tool-freshness.ts`, `rule-falsification-suites.test.ts` | repo `scripts/`, composed by `check-feature` |
 | L4 dev runtime / eval | `dev-all`, `eval-pipeline`, `skill-eval`, `fleet-e2e` | — | — | repo `scripts/`, bound to `dev` / custom actions |

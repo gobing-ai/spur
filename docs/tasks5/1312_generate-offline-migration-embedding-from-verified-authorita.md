@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Generate offline migration embedding from verified authoritative SQL
-status: blocked
+status: testing
 template: feature-impl
 created_at: 2026-11-05T20:01:23.920Z
-updated_at: "2026-11-05T20:38:16.783Z"
+updated_at: "2026-11-07T07:17:05.354Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A331
@@ -42,7 +42,7 @@ Rubric: E8 D1 L2 C1 R2 = 14. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Offline migration embedding shares an authoritative source without rewriting history; implement the exact Given/When/Then contract below.
+- [x] R1. Offline migration embedding shares an authoritative source without rewriting history; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -95,23 +95,64 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Require the current positive 0037 evidence artifact; absent/no-go/stale input keeps this task blocked.
-- [ ] 2. Write deterministic generation/stale-artifact and schema/guard parity proofs before changing the export.
-- [ ] 3. Generate the one constant, preserve its facade, remove its handwritten twin and wire existing build paths.
-- [ ] 4. Verify source-free binary startup and all historical fixture upgrades without touching real DBs.
-- [ ] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Require the current positive 0037 evidence artifact; absent/no-go/stale input keeps this task blocked.
+- [x] 2. Write deterministic generation/stale-artifact and schema/guard parity proofs before changing the export.
+- [x] 3. Generate the one constant, preserve its facade, remove its handwritten twin and wire existing build paths.
+- [x] 4. Verify source-free binary startup and all historical fixture upgrades without touching real DBs.
+- [x] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Entry condition was met: `docs/reports/1311-migration-ownership.json` records candidate `0037-dimension-marts`, status `go`.
+
+- New repo-internal `scripts/commands/emit-migration-sql.ts`:
+  - Reads `drizzle/0037_spur_cli_history_dimension_marts.sql`.
+  - Deterministically emits the tracked `packages/domain/src/migration-sql.generated.ts`: a template literal with `\`, backtick and `${` escaped.
+  - Writes only when the content changed.
+- `packages/domain/src/migrations.ts:8,1293` imports and re-exports `HISTORY_DIMENSION_MARTS_SCHEMA_SQL`.
+  - The handwritten twin is removed.
+  - The `CLI_MIGRATIONS` IDs, guards and `applyCliMigrations` branches are unchanged.
+- Wiring:
+  - `scripts/spur-dev.ts` gains the `emit-migration-sql` case.
+  - `apps/cli/package.json` `build:bundle` runs it before `bun build`.
+  - No public verb and no workflow edit.
+- Docs: `docs/03_ARCHITECTURE.md` §8.1 rule 5 and the `docs/design/sdlc-actions.md` L1 row are updated.
+- Raw-byte difference from the old embedding, reported explicitly:
+  - The old constant started with `\n` and kept the 12-line header comment in JSDoc. Its sha256 was `34d7b3…`.
+  - The generated constant is the released file verbatim, header comment included. Its sha256 is `bbbd92…`, equal to the tracked file.
+  - The normalized SQL hash `249811…` is unchanged, and the applied schema is equal.
+  - The comment contains no `;`, so `splitSqlStatements` is unaffected.
+- The 1311 proof gains a consumed-decision branch:
+  - The frozen report must be authentic at its revision.
+  - The live embedding must equal the tracked bytes, with the same normalized SQL.
+  - `drizzle/` must be clean.
+  - Every other field stays frozen.
+- Handwritten source delta: `migrations.ts` +3/−58 (twin removed); the generator is 43 lines and the generated module 59.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/emit-migration-sql.ts:23` deterministic escaped render of `drizzle/0037_spur_cli_history_dimension_marts.sql`; `packages/domain/src/migrations.ts:8` imports the generated constant and `packages/domain/src/migrations.ts:1293` re-exports it (twin removed, IDs/guards unchanged); `apps/cli/package.json:53` `build:bundle` runs `emit-migration-sql`; `packages/domain/tests/dao/migration-ownership.test.ts:886` consumed-decision branch: embedded sha256 == tracked `bbbd92…`, normalized `249811…` unchanged, `drizzle/` clean; live proof `.spur/run/1312-migration-ownership-live.json` 55 ids 0000…0054, six guard fixtures pass, schemaEqual, offline bundle pass. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Offline migration embedding shares an authoritative source without rewriting history | MET | test | `scripts/commands/emit-migration-sql.test.ts:28` committed module equals the render; `scripts/commands/emit-migration-sql.test.ts:33` export carries released bytes verbatim; `scripts/commands/emit-migration-sql.test.ts:46` escaping round-trip (mutation dropping `${` escape fails it); `packages/domain/tests/dao/migration-ownership.test.ts:643` fresh/already-applied/previous-release/interrupted/duplicate/absent fixtures and source-free bundled CLI migrate; `.spur/run/1312-domain.junit.xml` 74/0, `.spur/run/1312-generator.junit.xml` 9/0 — pass this session. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -120,4 +161,7 @@ No production implementation occurs during this refinement. No new dependency, p
 ### History
 
 - 2026-11-05T20:02:22.957Z todo → blocked (system)
+- 2026-11-07T07:07:49.268Z blocked → todo (system)
+- 2026-11-07T07:07:49.483Z todo → wip (system)
+- 2026-11-07T07:17:05.354Z wip → testing (system)
 

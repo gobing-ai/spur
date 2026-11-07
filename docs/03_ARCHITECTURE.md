@@ -382,6 +382,10 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 4. **DDL is derived, never hand-written** — `DOMAIN_SCHEMA_SQL` composes each table's
    `createTableSql`; no raw `CREATE TABLE` for a Drizzle-backed table, no `.sql` text-imports.
 5. **Raw string SQL stays inside `packages/domain`** (DAO/migration layer), never in apps.
+   Embedded migration SQL is a handwritten mirror of the released `drizzle/*.sql`, except for 0037. Its
+   mirror is generated as a string module (`migration-sql.generated.ts`, created by
+   `scripts/commands/emit-migration-sql.ts` in `build:bundle`, task 1312). That is not a `.sql` text
+   import, so the offline bundle still reads no files.
 
 ## 9. Observability & Security
 

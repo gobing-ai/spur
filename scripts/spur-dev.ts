@@ -14,6 +14,7 @@
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
  *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
  *   emit-board-types                            emit apps/cli/board/index.d.ts from the authoring source
+ *   emit-migration-sql                          emit the 0037 migration SQL module from its released .sql
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              cross-compile per-platform spur
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
@@ -61,6 +62,7 @@ import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { devAll } from './commands/dev-all';
 import { emitBoardDeclarations } from './commands/emit-board-types';
+import { emitMigrationSql } from './commands/emit-migration-sql';
 import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
 import { linkCheck } from './commands/link-check';
@@ -86,7 +88,7 @@ const DELEGATED: Record<string, string> = {
 
 function usage(message?: string): never {
     console.error(
-        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
+        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, emit-migration-sql, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
     );
     process.exit(message ? 1 : 0);
 }
@@ -126,6 +128,11 @@ try {
         case 'bundle-plugins': {
             const result = await bundlePlugins();
             console.log(`Staged plugins ${result.pluginTarget} + marketplace ${result.marketplaceTarget} for npm`);
+            break;
+        }
+        case 'emit-migration-sql': {
+            const result = await emitMigrationSql();
+            console.log(`${result.changed ? 'Wrote' : 'Unchanged'} migration SQL module ${result.target}`);
             break;
         }
         case 'emit-board-types': {

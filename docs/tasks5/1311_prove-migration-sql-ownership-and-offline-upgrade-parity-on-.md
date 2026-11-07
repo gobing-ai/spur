@@ -4,7 +4,7 @@ name: Prove migration SQL ownership and offline upgrade parity on fixtures
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.919Z
-updated_at: "2026-11-06T16:21:25.627Z"
+updated_at: "2026-11-07T06:53:30.563Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: A331
@@ -136,11 +136,11 @@ Focused check `(cd packages/domain && bun test tests/dao/migrations.test.ts test
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/tests/dao/migration-ownership.test.ts:248` returns go only after the id set, normalized 0037 SQL, applied schema, clean released SQL, clean dependency manifests, guard fixtures, and the source-free bundle smoke all pass. `packages/domain/tests/dao/migration-ownership.test.ts:841` names fresh, already-applied, previous-release, interrupted, duplicate-column, and absent-column. `packages/domain/src/migrations.ts:1733` journals id and applied_at. `docs/reports/1311-migration-ownership.json:4` records status go. Named check: packages/domain bun test packages/domain/tests/dao/migration-ownership.test.ts exited 0 (6 pass, 0 fail). |
+| R1 | MET | `packages/domain/tests/dao/migration-ownership.test.ts:633` publishes the 0037 ownership decision from fixtures; `packages/domain/tests/dao/migration-ownership.test.ts:841` non-candidate mirrors stay inventory-only; `packages/domain/src/migrations.ts:1733` `__spur_cli_migrations` ledger; tracked `docs/reports/1311-migration-ownership.json:3-4` candidate 0037-dimension-marts, status go; `packages/domain/tests/dao/migration-ownership.test.ts:421` `stable()` now drops package versions and `DEPENDENCY_PATHS` (`:45`) digests so a release bump cannot fail the frozen check; domain 11 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Migration ownership evidence decides whether embedding consolidation is safe | MET | test | `packages/domain/tests/dao/migration-ownership.test.ts:596` publishes the versioned 0037 ownership decision from in-memory fixtures and a source-free bundle migrate. `packages/domain/tests/dao/migration-ownership.test.ts:853` requires status go. `docs/reports/1311-migration-ownership.json:2` is schemaVersion 1 and `docs/reports/1311-migration-ownership.json:4` is status go. Named check: packages/domain bun test packages/domain/tests/dao/migration-ownership.test.ts exited 0 (6 pass, 0 fail). |
+| R1 — Migration ownership evidence decides whether embedding consolidation is safe | MET | test | `packages/domain/tests/dao/migration-ownership.test.ts:594` release bump ignored but a migration SQL change is not; `packages/domain/tests/dao/migration-ownership.test.ts:612` missing measurement inconclusive, failed gate no-go; `packages/domain/tests/dao/migration-ownership.test.ts:624` unguarded duplicate ADD COLUMN fails; `packages/domain/tests/dao/migration-ownership.test.ts:633` decision from fixtures — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
