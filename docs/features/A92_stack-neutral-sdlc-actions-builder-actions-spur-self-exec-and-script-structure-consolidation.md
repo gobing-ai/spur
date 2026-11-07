@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A92"
 name: "Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-17T03:57:44.144Z"
-updated_at: "2026-11-05T20:03:48.972Z"
+updated_at: "2026-11-07T02:17:29.645Z"
 ---
 
 # A92: Stack-neutral SDLC actions: builder.actions, spur self exec, and script-structure consolidation
@@ -141,13 +141,13 @@ Feature: Stack-neutral SDLC actions and script-structure consolidation
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1222 | SDLC action config schema and shared resolver | done |
-| 1223 | spur self exec verb with list, dry-run and exit-code propagation | done |
-| 1224 | Route quality gate and shipped workflows through SDLC actions | done |
 | 1225 | Seed builder actions in spur self init by detected stack | done |
+| 1224 | Route quality gate and shipped workflows through SDLC actions | done |
 | 1226 | Consolidate package.json scripts and script folders onto the action vocabulary | done |
+| 1303 | Propose safe npm and pnpm bindings through existing init actions | done |
+| 1304 | Complete language and monorepo action onboarding without guessing commands | done |
+| 1223 | spur self exec verb with list, dry-run and exit-code propagation | done |
 | 1227 | Point sp plugin gate guidance at spur self exec | done |
-| 1303 | Propose safe npm and pnpm bindings through existing init actions | todo |
-| 1304 | Complete language and monorepo action onboarding without guessing commands | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -164,4 +164,6 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 - 2026-10-17T15:58:36.176Z active → verifying (system)
 - 2026-10-17T16:16:31.457Z verifying → done (system)
 - 2026-11-05T19:58:44.201Z done → active (system)
+- 2026-11-07T02:17:28.514Z active → verifying (system)
+- 2026-11-07T02:17:29.645Z verifying → done (system)
 

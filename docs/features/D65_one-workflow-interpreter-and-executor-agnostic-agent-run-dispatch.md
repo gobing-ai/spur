@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D65"
 name: "One workflow interpreter and executor-agnostic agent.run dispatch"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-17T07:27:13.932Z"
-updated_at: "2026-11-05T20:03:49.468Z"
+updated_at: "2026-11-07T02:19:03.132Z"
 ---
 
 # D65: One workflow interpreter and executor-agnostic agent.run dispatch
@@ -179,19 +179,19 @@ Feature: One workflow interpreter and executor-agnostic agent.run dispatch
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1231 | Author the workflow execution foundation design satellite | done |
-| 1232 | Executor-agnostic agent.run dispatch with host pause and durable receipt | done |
-| 1233 | Lint self-contained stages in workflow validate | done |
+| 1237 | Report gate time and engine traces in run summaries | done |
+| 1242 | Delete the inline bookkeeping verbs and parity scripts | done |
 | 1234 | Typed engine builtins for gate, commit-guard and corpus transition | done |
+| 1239 | Rewrite task-pipeline as a seven-state graph without the proof chain | done |
+| 1241 | Migrate idea, wrapup and pr-review pipelines onto the foundation | done |
+| 1233 | Lint self-contained stages in workflow validate | done |
 | 1235 | Engine-owned leases for the gate, worktree and fleet occupancy | done |
 | 1236 | Resolve operator gates as decision points under every profile | done |
-| 1237 | Report gate time and engine traces in run summaries | done |
 | 1238 | Pilot feature-verification on the foundation and run the executor matrix | done |
-| 1239 | Rewrite task-pipeline as a seven-state graph without the proof chain | done |
+| 1232 | Executor-agnostic agent.run dispatch with host pause and durable receipt | done |
 | 1240 | Measure the rewritten task-pipeline against the 32-run baseline | done |
-| 1241 | Migrate idea, wrapup and pr-review pipelines onto the foundation | done |
-| 1242 | Delete the inline bookkeeping verbs and parity scripts | done |
-| 1305 | Unify executor admission and invocation policy across existing dispatch surfaces | todo |
-| 1306 | Share executor result finalization while preserving receipts and partial work | todo |
+| 1305 | Unify executor admission and invocation policy across existing dispatch surfaces | done |
+| 1306 | Share executor result finalization while preserving receipts and partial work | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -212,4 +212,6 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 - 2026-10-18T02:07:40.922Z active → verifying (system)
 - 2026-10-18T02:07:56.470Z verifying → done (system)
 - 2026-11-05T19:58:46.382Z done → active (system)
+- 2026-11-07T02:19:01.985Z active → verifying (system)
+- 2026-11-07T02:19:03.132Z verifying → done (system)
 

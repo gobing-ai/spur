@@ -2,11 +2,11 @@
 schema_version: 1
 id: "C3"
 name: "Coverage artifact provenance and completion integrity"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-14T05:42:58.952Z"
-updated_at: "2026-11-05T20:03:47.978Z"
+updated_at: "2026-11-07T02:25:13.621Z"
 ---
 
 # C3: Coverage artifact provenance and completion integrity
@@ -65,7 +65,7 @@ Scenario: Recovery and caller scope are documented
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1203 | coverage-gate: an interrupted full run leaves a partial .coverage artifact that fails unrelated files | done |
-| 1314 | Parse coverage diagnostic thresholds with the native TOML parser | todo |
+| 1314 | Parse coverage diagnostic thresholds with the native TOML parser | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -81,4 +81,6 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 - 2026-10-14T07:23:20.865Z backlog → active (system)
 - 2026-10-14T07:24:25.757Z active → verifying (system)
 - 2026-11-05T19:58:40.118Z verifying → active (system)
+- 2026-11-07T02:25:12.560Z active → verifying (system)
+- 2026-11-07T02:25:13.621Z verifying → done (system)
 
