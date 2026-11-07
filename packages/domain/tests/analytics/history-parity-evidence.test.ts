@@ -737,9 +737,24 @@ function sourceAt(path: string, revision: string | null): Buffer {
         stdout: 'pipe',
         stderr: 'pipe',
     });
-    if (result.exitCode !== 0)
-        throw new Error(`git show ${revision}:${path} failed: ${result.stderr.toString().trim()}`);
-    return Buffer.from(result.stdout);
+    if (result.exitCode === 0) return Buffer.from(result.stdout);
+    // A shallow clone has no such object, and git reports that as "path exists on disk, but not
+    // in <sha>" — which reads like a moved file and is not. Name the real cause (1309 evidence
+    // needs the frozen revision's history; CI checks out with fetch-depth: 0 for it).
+    const reachable = Bun.spawnSync(['git', 'cat-file', '-e', `${revision}^{commit}`], {
+        cwd: REPO_ROOT,
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    if (reachable.exitCode !== 0) {
+        throw new Error(
+            `frozen sourceRevision ${revision} is not in this clone, so ${path} cannot be re-read ` +
+                '(shallow or partial checkout). Fetch the history — `git fetch --unshallow` or ' +
+                `\`git fetch origin ${revision}\` — then re-run; the parity evidence is measured at the ` +
+                'revision the report recorded, not the current tree.',
+        );
+    }
+    throw new Error(`git show ${revision}:${path} failed: ${result.stderr.toString().trim()}`);
 }
 
 function digestSource(path: string, revision: string | null): string {

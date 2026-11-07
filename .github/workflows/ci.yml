@@ -13,7 +13,13 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
+            # fetch-depth: 0 — the suite verifies committed evidence artifacts against the
+            # revision they recorded (packages/domain/tests/analytics/history-parity-evidence.test.ts
+            # re-reads 1309's frozen sourceRevision through `git show`). The default depth-1 checkout
+            # has no such object, and the short clone fails the parity evidence on a tree that is green.
             - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
             - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: 1.4.3
