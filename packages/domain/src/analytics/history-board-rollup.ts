@@ -33,6 +33,7 @@ import {
     rollupTableFreshness,
     writeRollupWatermark,
 } from './rollup-watermark';
+import { buildTimeRangeClauses } from './selector-time-range';
 import { ALIASED_TOOL_NAME_SQL, applyToolAliases } from './tool-alias';
 import { HISTORY_BOARD_ACTIVITY_DAYS, RESOLVED_TOOL_NAME_SQL } from './tool-name-sql';
 
@@ -719,20 +720,10 @@ function buildRollupWhere(
         toolOnly?: boolean;
     },
 ): WhereSpec {
-    const clauses: string[] = [];
-    const params: unknown[] = [];
-    if (sel.since !== null) {
-        clauses.push(
-            `${alias}.${options.timestamp} >= ${options.dateOnly ? 'DATE(?)' : "strftime('%Y-%m-%dT%H:%M:%SZ', ?)"}`,
-        );
-        params.push(sel.since);
-    }
-    if (sel.until !== null) {
-        clauses.push(
-            `${alias}.${options.timestamp} <= ${options.dateOnly ? 'DATE(?)' : "strftime('%Y-%m-%dT%H:%M:%SZ', ?)"}`,
-        );
-        params.push(sel.until);
-    }
+    const { clauses, params } = buildTimeRangeClauses(sel, {
+        column: `${alias}.${options.timestamp}`,
+        grain: options.dateOnly ? 'day' : 'timestamp',
+    });
     if (sel.sources !== null && sel.sources.length > 0) {
         clauses.push(`${alias}.source IN (${sel.sources.map(() => '?').join(', ')})`);
         params.push(...sel.sources);

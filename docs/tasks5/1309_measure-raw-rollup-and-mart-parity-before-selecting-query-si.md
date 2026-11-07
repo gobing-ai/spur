@@ -4,7 +4,7 @@ name: Measure raw rollup and mart parity before selecting query simplification
 status: done
 template: feature-impl
 created_at: 2026-11-05T20:01:23.919Z
-updated_at: "2026-11-06T08:07:36.683Z"
+updated_at: "2026-11-07T06:53:29.847Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: E94
@@ -136,11 +136,11 @@ Light gate post-check is still red. `coverage-provenance-check` reports a stale 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/tests/analytics/history-parity-evidence.test.ts:173-201` returns go only when comparable differences are zero and the proposed surface is smaller; `docs/reports/1309-analytics-parity.json:3-4` records candidate time-range-predicates and status go; `docs/reports/1309-analytics-parity.md:45-49` shows empty differences on the comparable daily cases. Focused check in packages/domain, `bun test packages/domain/tests/analytics/history-parity-evidence.test.ts`, exited 0 with 4 pass and 0 fail. |
+| R1 | MET | `packages/domain/tests/analytics/history-parity-evidence.test.ts:173-201` `decide` maps case/timing completeness and parity to go/no-go/inconclusive; tracked `docs/reports/1309-analytics-parity.json:3-4` candidate time-range-predicates, status go; `docs/reports/1309-analytics-parity.md:45-49` predicate-difference rows; domain 11 pass / 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — History parity evidence decides whether consolidation is justified (req: R1) | MET | test | `packages/domain/tests/analytics/history-parity-evidence.test.ts:369-489` seeds duplicate import, null measures, unknown model, midnight boundary, and fresh then stale watermark; `packages/domain/tests/analytics/history-parity-evidence.test.ts:601-660` compares raw, rollup, and mart on comparable daily requests; `packages/domain/tests/analytics/history-parity-evidence.test.ts:691-710` records two warmups and nine sequential reads; `docs/reports/1309-analytics-parity.md:5-9` records status go, source revision, tool versions, and the regenerate command. The same focused check exited 0 with 4 pass and 0 fail. |
+| AC1 — History parity evidence decides whether consolidation is justified (req: R1) | MET | test | `packages/domain/tests/analytics/history-parity-evidence.test.ts:870` comparable difference is no-go, missing sample inconclusive; `packages/domain/tests/analytics/history-parity-evidence.test.ts:920` fixture records predicate vectors, parity and the decision artifact (seeded by `:369-489`, compared by `:601-660`, timed by `:691-710`) — pass this session. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

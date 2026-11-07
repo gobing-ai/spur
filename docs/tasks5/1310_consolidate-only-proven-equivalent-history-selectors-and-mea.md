@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Consolidate only proven equivalent history selectors and measures
-status: blocked
+status: wip
 template: feature-impl
 created_at: 2026-11-05T20:01:23.919Z
-updated_at: "2026-11-05T20:38:12.259Z"
+updated_at: "2026-11-07T07:18:34.391Z"
 ac_altitude: task-local
 ac_numbering: task-local
 feature_id: E94
@@ -42,7 +42,7 @@ Rubric: E8 D1 L2 C0 R1 = 12. Keep this candidate as one cohesive deliverable wit
 
 ### Requirements
 
-- [ ] R1. Equivalent analytics definitions are consolidated without changing results; implement the exact Given/When/Then contract below.
+- [x] R1. Equivalent analytics definitions are consolidated without changing results; implement the exact Given/When/Then contract below.
 
 ### Acceptance Criteria
 
@@ -95,23 +95,51 @@ No production implementation occurs during this refinement. No new dependency, p
 
 ### Plan
 
-- [ ] 1. Confirm the positive 1309 artifact and source digest before starting; retain blocked status if absent/stale/no-go.
-- [ ] 2. Write parity tests for predicate strings/parameter order and golden query outputs before extracting the helper.
-- [ ] 3. Replace the two duplicated time-bound blocks and prove no extra abstraction or route/measure changes.
-- [ ] 4. Repeat the same golden/timing fixture and report handwritten source delta; retain evidence for differences.
-- [ ] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
+- [x] 1. Confirm the positive 1309 artifact and source digest before starting; retain blocked status if absent/stale/no-go.
+- [x] 2. Write parity tests for predicate strings/parameter order and golden query outputs before extracting the helper.
+- [x] 3. Replace the two duplicated time-bound blocks and prove no extra abstraction or route/measure changes.
+- [x] 4. Repeat the same golden/timing fixture and report handwritten source delta; retain evidence for differences.
+- [x] 5. Run the exact focused checks above, inspect the diff against R-items/feature AC, synchronize owners and record evidence through the task pipeline; do not fabricate completion.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Entry condition was met: `docs/reports/1309-history-parity.json` records schemaVersion 1, candidate `time-range-predicates`, status `go`, and all four source digests match.
+
+- New `packages/domain/src/analytics/selector-time-range.ts:14` exports `buildTimeRangeClauses({since,until},{column,grain})`.
+  - Inclusive `>=`/`<=` comparisons; `DATE(?)` for day grain and `strftime('%Y-%m-%dT%H:%M:%SZ', ?)` for timestamp grain.
+  - Parameters stay in since-then-until order. Only `null` means no bound.
+  - The column must match a fixed `[alias.]identifier` pattern; callers pass only constants.
+- `packages/domain/src/analytics/history-board-rollup.ts:723` (`buildRollupWhere`) and `packages/domain/src/analytics/history-board-marts.ts:302` (`dayClauses`) now call the helper for their time bounds only.
+  - Source/model/tool/skill predicates and mart/raw routing are untouched. Public query and result types are unchanged.
+- `packages/domain/tests/analytics/history-parity-evidence.test.ts` (the 1309 proof) now measures source at the frozen report's `sourceRevision`, using `git show`.
+  - The 1309 decision stays reproducible after this consolidation consumed it.
+- Emitted SQL is byte-identical to the 1309 predicate vectors, so read latency cannot regress.
+- Handwritten source delta: the readers lost 25 lines and gained 7 (`history-board-rollup.ts` +5/−14, `history-board-marts.ts` +2/−11), plus the 31-line helper. The 1309 golden fixture reran unchanged; the 1309 test produced 4 passes with equal cases and predicate vectors.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/selector-time-range.ts:14` single inclusive since/until builder; `packages/domain/src/analytics/history-board-rollup.ts:723` and `packages/domain/src/analytics/history-board-marts.ts:302` call it for time bounds only; `packages/domain/tests/analytics/rollup-equivalence.test.ts:431` incremental rollups byte-identical to full rebuild; `packages/domain/tests/analytics/history-parity-evidence.test.ts:1178` 1309 proof still reproduces at its frozen revision; `.spur/run/1310-focused.junit.xml` 78 tests / 0 failures; domain analytics suite 446 pass / 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Equivalent analytics definitions are consolidated without changing results | MET | test | `packages/domain/tests/analytics/selector-time-range.test.ts:31` both bounds keep since-then-until order with the pre-1310 golden predicates; `packages/domain/tests/analytics/selector-time-range.test.ts:49` non-identifier columns refused; `packages/domain/tests/analytics/rollup-equivalence.test.ts:454` seeded off-by-one fails equivalence; mutation `>=`→`>` produced 2 failures and was reverted — pass this session. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -120,4 +148,8 @@ No production implementation occurs during this refinement. No new dependency, p
 ### History
 
 - 2026-11-05T20:02:19.395Z todo → blocked (system)
+- 2026-11-07T07:07:48.832Z blocked → todo (system)
+- 2026-11-07T07:07:49.053Z todo → wip (system)
+- 2026-11-07T07:17:04.343Z wip → testing (system)
+- 2026-11-07T07:18:34.391Z testing → wip (system)
 

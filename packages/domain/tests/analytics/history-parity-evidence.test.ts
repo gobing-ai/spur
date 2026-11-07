@@ -221,7 +221,7 @@ function boundAssembly(fnSource: string, stopMarker: string): string {
     return fnSource.slice(since, stop);
 }
 
-function measureSurface(rollupSource: string, martSource: string): ParityReport['surface'] {
+function measureSurface(rollupSource: string, martSource: string, messageWhereSource: string): ParityReport['surface'] {
     const rollupBlock = boundAssembly(sliceFunction(rollupSource, 'buildRollupWhere'), 'if (sel.sources !== null &&');
     const dayBlock = boundAssembly(sliceFunction(martSource, 'dayClauses'), 'return {');
     if (!rollupBlock.includes('DATE(?)') || !rollupBlock.includes('strftime')) {
@@ -233,10 +233,7 @@ function measureSurface(rollupSource: string, martSource: string): ParityReport[
     const adjacentAssemblies = [
         ...scanAssemblies('packages/domain/src/analytics/history-board-rollup.ts', rollupSource),
         ...scanAssemblies('packages/domain/src/analytics/history-board-marts.ts', martSource),
-        ...scanAssemblies(
-            'packages/domain/src/analytics/message-where.ts',
-            readFileSync(resolve(REPO_ROOT, 'packages/domain/src/analytics/message-where.ts'), 'utf8'),
-        ),
+        ...scanAssemblies('packages/domain/src/analytics/message-where.ts', messageWhereSource),
     ];
     return {
         candidateFunctions: ['buildRollupWhere', 'dayClauses'],
@@ -728,10 +725,25 @@ function gitHead(): string {
     return result.stdout.toString().trim();
 }
 
-function digestFile(path: string): string {
-    return createHash('sha256')
-        .update(readFileSync(resolve(REPO_ROOT, path)))
-        .digest('hex');
+/**
+ * Bytes of an inspected source: the working tree, or `revision` once a report is frozen. 1309 measured
+ * the code before 1310 consolidated it; re-measuring the consolidated tree would compare a different
+ * surface, so a frozen report is reproduced from the revision it recorded.
+ */
+function sourceAt(path: string, revision: string | null): Buffer {
+    if (revision === null) return readFileSync(resolve(REPO_ROOT, path));
+    const result = Bun.spawnSync(['git', 'show', `${revision}:${path}`], {
+        cwd: REPO_ROOT,
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    if (result.exitCode !== 0)
+        throw new Error(`git show ${revision}:${path} failed: ${result.stderr.toString().trim()}`);
+    return Buffer.from(result.stdout);
+}
+
+function digestSource(path: string, revision: string | null): string {
+    return createHash('sha256').update(sourceAt(path, revision)).digest('hex');
 }
 
 function stable(report: ParityReport): unknown {
@@ -1161,16 +1173,18 @@ describe('1309 history parity evidence', () => {
             allHistory: await measureReads(sevenDb, selector()),
         };
 
-        const rollupSource = readFileSync(
-            resolve(REPO_ROOT, 'packages/domain/src/analytics/history-board-rollup.ts'),
-            'utf8',
+        // The read paths above run the current code, so they also prove 1310's consolidation kept
+        // every result; only the source surface is measured at the frozen revision.
+        const frozenRevision = existsSync(REPORT_JSON)
+            ? (JSON.parse(readFileSync(REPORT_JSON, 'utf8')) as ParityReport).sourceRevision
+            : null;
+        const read = (path: string) => sourceAt(path, frozenRevision).toString('utf8');
+        const surface = measureSurface(
+            read('packages/domain/src/analytics/history-board-rollup.ts'),
+            read('packages/domain/src/analytics/history-board-marts.ts'),
+            read('packages/domain/src/analytics/message-where.ts'),
         );
-        const martSource = readFileSync(
-            resolve(REPO_ROOT, 'packages/domain/src/analytics/history-board-marts.ts'),
-            'utf8',
-        );
-        const surface = measureSurface(rollupSource, martSource);
-        const sourceDigests = Object.fromEntries(INSPECTED.map((path) => [path, digestFile(path)]));
+        const sourceDigests = Object.fromEntries(INSPECTED.map((path) => [path, digestSource(path, frozenRevision)]));
         const comparableDifferences = cases
             .filter((item) => item.comparable)
             .reduce((sum, item) => sum + item.differences.length, 0);
@@ -1201,7 +1215,7 @@ describe('1309 history parity evidence', () => {
                 sqlite: (await db.queryFirst<{ v: string }>('SELECT sqlite_version() AS v'))?.v ?? '',
             },
             timings,
-            sourceRevision: gitHead(),
+            sourceRevision: frozenRevision ?? gitHead(),
             sourceDigests,
             fixtureSeed: FIXTURE_SEED,
             command: COMMAND,

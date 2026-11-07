@@ -8,6 +8,7 @@ import type {
     HistoryBoardSourceModelRow,
     HistoryBoardSummaryRollup,
 } from './history-board-rollup';
+import { buildTimeRangeClauses } from './selector-time-range';
 
 /**
  * Dimension marts (task 0743).
@@ -298,17 +299,7 @@ interface WhereSpec {
 
 /** Day-range predicates over a `day` column (the daily mart grain). */
 function dayClauses(sel: ArtifactSelector): WhereSpec {
-    const clauses: string[] = [];
-    const params: unknown[] = [];
-    if (sel.since !== null) {
-        clauses.push('d.day >= DATE(?)');
-        params.push(sel.since);
-    }
-    if (sel.until !== null) {
-        clauses.push('d.day <= DATE(?)');
-        params.push(sel.until);
-    }
-    return { clauses, params };
+    return buildTimeRangeClauses(sel, { column: 'd.day', grain: 'day' });
 }
 
 /** A `dimension_key IN (...)` predicate for the same-dimension allowlist, when present. */
