@@ -95,12 +95,12 @@ test('a failing cited file and a missing one each produce a finding', async () =
         );
 
         expect(result.findings).toContainEqual({
-            anchor: 'apps/cli/tests/a.test.ts',
+            anchor: 'apps/cli/tests/a.test.ts:1',
             file: 'apps/cli/tests/a.test.ts',
             exitCode: 1,
         });
         expect(result.findings).toContainEqual({
-            anchor: 'apps/cli/tests/gone.test.ts',
+            anchor: 'apps/cli/tests/gone.test.ts:3',
             file: 'apps/cli/tests/gone.test.ts',
             missing: true,
         });
@@ -116,7 +116,7 @@ test('a cited file that times out is reported as timedOut, not as a bare exit co
         const result = await replayCitedTests([{ evidence: '`apps/cli/tests/a.test.ts:1`' }], { cwd, executor });
 
         expect(result.findings).toEqual([
-            { anchor: 'apps/cli/tests/a.test.ts', file: 'apps/cli/tests/a.test.ts', timedOut: true, exitCode: null },
+            { anchor: 'apps/cli/tests/a.test.ts:1', file: 'apps/cli/tests/a.test.ts', timedOut: true, exitCode: null },
         ]);
     } finally {
         rmSync(cwd, { recursive: true, force: true });
@@ -136,6 +136,7 @@ test('the replay report names each finding and counts both sides', () => {
     const report = formatReplayReport({
         files: ['apps/cli/tests/a.test.ts', 'apps/cli/tests/b.test.ts'],
         ran: [{ file: 'apps/cli/tests/a.test.ts', exitCode: 1 }],
+        skipped: [],
         findings: [
             { anchor: 'apps/cli/tests/a.test.ts', file: 'apps/cli/tests/a.test.ts', exitCode: 1 },
             { anchor: 'apps/cli/tests/b.test.ts', file: 'apps/cli/tests/b.test.ts', missing: true },
@@ -155,6 +156,7 @@ test('an unknown exit code is reported as unknown, never as success', () => {
     const report = formatReplayReport({
         files: ['apps/cli/tests/a.test.ts'],
         ran: [],
+        skipped: [],
         findings: [{ anchor: 'apps/cli/tests/a.test.ts', file: 'apps/cli/tests/a.test.ts', exitCode: null }],
     });
 
@@ -176,6 +178,66 @@ test('an unbound test-changed binding skips the file instead of calling it missi
         expect(result.ran).toEqual([]);
         expect(result.findings).toEqual([]);
         expect(calls).toEqual([]);
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+    }
+});
+
+// Review fix (1319 verify): failure modes the replay must survive —
+//  1. a root-level suite under a bunfig with a per-file `coverageThreshold` exits 1 with `0 fail`
+//     (Bun applies the threshold per measured file), so running it would forge a finding;
+//  2. a workspace whose bunfig declares no threshold must still run;
+//  3. a root-level file with no root bunfig must still run;
+//  4. a finding must cite the verdict's own anchor (`path:line`), not just the path.
+
+test('a suite under a coverage-threshold bunfig is skipped with a reason, not reported as failing', async () => {
+    const cwd = repo(['scripts/commands/x.test.ts']);
+    writeFileSync(join(cwd, 'bunfig.toml'), '[test]\ncoverage = true\ncoverageThreshold = { lines = 0.9 }\n');
+    const { executor, calls } = stubExecutor({ exitCode: 1 });
+    try {
+        const result = await replayCitedTests([{ evidence: '`scripts/commands/x.test.ts:4`' }], { cwd, executor });
+
+        expect(calls).toEqual([]);
+        expect(result.findings).toEqual([]);
+        expect(result.ran).toEqual([]);
+        expect(result.skipped).toEqual([
+            { file: 'scripts/commands/x.test.ts', reason: 'coverageThreshold in ./bunfig.toml' },
+        ]);
+        expect(formatReplayReport(result).summary).toBe('Replay: 1 cited test file(s), 0 finding(s), 1 skipped');
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+    }
+});
+
+test('a workspace bunfig without a threshold, or no root bunfig at all, still runs', async () => {
+    const cwd = repo(['apps/cli/tests/a.test.ts', 'scripts/b.test.ts']);
+    writeFileSync(join(cwd, 'apps/cli/bunfig.toml'), '[test]\npreload = ["./tests/setup.ts"]\n');
+    const { executor, calls } = stubExecutor({ exitCode: 0 });
+    try {
+        const result = await replayCitedTests([{ evidence: '`apps/cli/tests/a.test.ts:1` `scripts/b.test.ts:2`' }], {
+            cwd,
+            executor,
+        });
+
+        expect(calls).toHaveLength(2);
+        expect(result.skipped).toEqual([]);
+    } finally {
+        rmSync(cwd, { recursive: true, force: true });
+    }
+});
+
+test('a finding cites the first verdict anchor for the file', async () => {
+    const cwd = repo(['apps/cli/tests/a.test.ts']);
+    const { executor } = stubExecutor({ exitCode: 1 });
+    try {
+        const result = await replayCitedTests(
+            [{ evidence: '`apps/cli/tests/a.test.ts:10-20`' }, { evidence: '`apps/cli/tests/a.test.ts:30`' }],
+            { cwd, executor },
+        );
+
+        expect(result.findings).toEqual([
+            { anchor: 'apps/cli/tests/a.test.ts:10-20', file: 'apps/cli/tests/a.test.ts', exitCode: 1 },
+        ]);
     } finally {
         rmSync(cwd, { recursive: true, force: true });
     }

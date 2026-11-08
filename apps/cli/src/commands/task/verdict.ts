@@ -116,7 +116,11 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
             // findings name the anchor. A non-PASS is never upgraded.
             const replay =
                 options.replay === true
-                    ? await replayCitedTests([...result.requirements, ...(result.acceptanceCriteria ?? [])])
+                    ? await replayCitedTests([...result.requirements, ...(result.acceptanceCriteria ?? [])], {
+                          // The project's own `test-changed` binding, not the default preset.
+                          cwd: context.cwd,
+                          builder: context.spurConfig?.builder,
+                      })
                     : undefined;
             const downgraded = replay !== undefined && replay.findings.length > 0 && result.verdict === 'PASS';
             if (downgraded) result.verdict = 'PARTIAL';

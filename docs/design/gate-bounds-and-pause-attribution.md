@@ -51,11 +51,11 @@ the verdict is derived, it re-executes the **test files the verdict rows cite**.
 | --- | --- |
 | Source of files | backticked `path:line` / `path:start-end` anchors in each derived row's `evidence` (the grammar `spur task migrate-anchors` qualifies), test files only (`*.test.*` / `*.spec.*`) |
 | Cap | 5 distinct files, first-cited order |
-| Execution | the `test-changed` SDLC binding from the owning workspace (`cd <workspace> && bun test <path>`), which leaves the root coverage threshold out of a focused run |
+| Execution | the project's `test-changed` SDLC binding from the owning workspace (`cd <workspace> && bun test <path>`); a workspace whose `bunfig.toml` declares `coverageThreshold` (the repo root here) is **skipped with a reason**, because Bun applies that threshold per measured file and a passing suite can exit 1 with `0 fail` — Bun 1.4 has no CLI switch to turn it off |
 | Bound | 120 s per file, via `ProcessExecutor` with `timeout` (group-owned) |
 | Lock | never under the host-wide gate lock — replay is not a second full gate (1127) |
-| Effect | a cited file that is missing, exits non-zero or times out **downgrades a derived PASS to PARTIAL** and adds one finding naming the anchor; a non-PASS is never upgraded |
-| Record | the artifact carries `replay: { files, ran, findings }` |
+| Effect | a cited file that is missing, exits non-zero or times out **downgrades a derived PASS to PARTIAL** and adds one finding naming the first citing anchor (`path:line`); a skipped file is neither a finding nor a pass; a non-PASS is never upgraded |
+| Record | the artifact carries `replay: { files, ran, skipped, findings }` |
 
 Why this and not a general command replay: the anchors are already machine-parsed, the result is
 deterministic, and "the cited test does not pass" is exactly the defect class that survived the

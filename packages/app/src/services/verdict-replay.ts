@@ -7,8 +7,8 @@
  *
  * Replay is deliberately narrow: it executes the *test files* the verdict rows cite (backticked
  * `path:line` anchors, the grammar `spur task migrate-anchors` qualifies), never arbitrary prose
- * commands. That keeps it deterministic, cheap (≤5 files, 120 s each, coverage off via the
- * per-workspace `test-changed` binding) and impossible to turn into a second full gate — the
+ * commands. That keeps it deterministic, cheap (≤5 files, 120 s each, run from the owning workspace
+ * through the `test-changed` binding; a coverage-threshold workspace is skipped, not run) and impossible to turn into a second full gate — the
  * host-contention failure mode task 1127 measured.
  */
 import type { BuilderConfig } from '@gobing-ai/spur-config';
@@ -41,10 +41,12 @@ export interface ReplayFinding {
     missing?: boolean;
 }
 
-/** Replay outcome: the files it ran, the files it could not, and its findings. */
+/** Replay outcome: the files it ran, the files it deliberately skipped, and its findings. */
 export interface ReplayResult {
     files: string[];
     ran: Array<{ file: string; exitCode: number | null }>;
+    /** Files that cannot be replayed honestly here (e.g. a per-file coverage threshold). */
+    skipped: Array<{ file: string; reason: string }>;
     findings: ReplayFinding[];
 }
 
@@ -56,8 +58,8 @@ export interface VerdictReplayOptions {
     builder?: BuilderConfig;
     /** Executor seam (tests inject one); defaults to the real node executor. */
     executor?: Pick<ProcessExecutor, 'run'>;
-    /** Filesystem seam for the cited-file existence check; defaults to the node backend. */
-    fs?: Pick<FileSystem, 'exists'>;
+    /** Filesystem seam (cited-file existence, workspace bunfig read); defaults to the node backend. */
+    fs?: Pick<FileSystem, 'exists' | 'readFile'>;
     /** Per-file bound override. */
     timeoutMs?: number;
     /** File-cap override (tests). */
@@ -65,17 +67,23 @@ export interface VerdictReplayOptions {
 }
 
 const TEST_FILE_PATTERN = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
+const COVERAGE_THRESHOLD_PATTERN = /^\s*coverageThreshold\s*=/m;
+
+/** Distinct cited test files mapped to their first citing anchor, in first-cited order, capped. */
+function citedTestAnchors(rows: ReadonlyArray<ReplayRow>, max: number): Map<string, string> {
+    const seen = new Map<string, string>();
+    for (const row of rows) {
+        for (const anchor of extractBacktickLineAnchors(row.evidence ?? '')) {
+            if (!TEST_FILE_PATTERN.test(anchor.path) || seen.has(anchor.path)) continue;
+            seen.set(anchor.path, anchor.raw);
+        }
+    }
+    return new Map([...seen].slice(0, max));
+}
 
 /** Distinct cited test files, in first-cited order, capped (1319 R4). */
 export function citedTestFiles(rows: ReadonlyArray<ReplayRow>, max: number = REPLAY_MAX_FILES): string[] {
-    const seen = new Set<string>();
-    for (const row of rows) {
-        for (const anchor of extractBacktickLineAnchors(row.evidence ?? '')) {
-            if (!TEST_FILE_PATTERN.test(anchor.path)) continue;
-            seen.add(anchor.path);
-        }
-    }
-    return [...seen].slice(0, max);
+    return [...citedTestAnchors(rows, max).keys()];
 }
 
 /**
@@ -98,7 +106,8 @@ export async function replayCitedTests(
 ): Promise<ReplayResult> {
     const cwd = options.cwd ?? process.cwd();
     const timeoutMs = options.timeoutMs ?? REPLAY_TIMEOUT_MS;
-    const files = citedTestFiles(rows, options.maxFiles ?? REPLAY_MAX_FILES);
+    const anchors = citedTestAnchors(rows, options.maxFiles ?? REPLAY_MAX_FILES);
+    const files = [...anchors.keys()];
     const executor = options.executor ?? new NodeProcessExecutor();
     const fileSystem = options.fs ?? createNodeFileSystem();
     const resolved = resolveAction(options.builder, 'test-changed');
@@ -109,12 +118,15 @@ export async function replayCitedTests(
               ? resolved.steps.join(' && ')
               : '';
     const ran: Array<{ file: string; exitCode: number | null }> = [];
+    const skipped: Array<{ file: string; reason: string }> = [];
     const findings: ReplayFinding[] = [];
+    const thresholdByWorkspace = new Map<string, boolean>();
 
     for (const file of files) {
+        const anchor = anchors.get(file) ?? file;
         const exists = await fileSystem.exists(`${cwd}/${file}`);
         if (!exists) {
-            findings.push({ anchor: file, file, missing: true });
+            findings.push({ anchor, file, missing: true });
             continue;
         }
         // No `test-changed` binding for this project means the file cannot be replayed at all — that
@@ -122,6 +134,18 @@ export async function replayCitedTests(
         // silent pass: the file simply does not appear in `ran`.
         if (template.length === 0) continue;
         const workspace = replayWorkspace(file);
+        // Bun applies `coverageThreshold` per measured file, so a passing suite run under it can
+        // exit 1 with `0 fail` (the root bunfig does). That exit is not evidence against the verdict,
+        // and Bun 1.4 has no CLI switch to turn coverage off — skip it visibly instead.
+        let threshold = thresholdByWorkspace.get(workspace);
+        if (threshold === undefined) {
+            threshold = await declaresCoverageThreshold(fileSystem, `${cwd}/${workspace}/bunfig.toml`);
+            thresholdByWorkspace.set(workspace, threshold);
+        }
+        if (threshold) {
+            skipped.push({ file, reason: `coverageThreshold in ${workspace}/bunfig.toml` });
+            continue;
+        }
         const path = workspace === '.' ? file : file.slice(workspace.length + 1);
         const command = renderScoped(template, { workspace, paths: [path] });
         const result = await executor.run({
@@ -134,11 +158,24 @@ export async function replayCitedTests(
         });
         const exitCode = result.exitCode ?? null;
         ran.push({ file, exitCode });
-        if (result.outcome === 'timeout') findings.push({ anchor: file, file, timedOut: true, exitCode });
-        else if (exitCode !== 0) findings.push({ anchor: file, file, exitCode });
+        if (result.outcome === 'timeout') findings.push({ anchor, file, timedOut: true, exitCode });
+        else if (exitCode !== 0) findings.push({ anchor, file, exitCode });
     }
 
-    return { files, ran, findings };
+    return { files, ran, skipped, findings };
+}
+
+/** True when the bunfig exists and declares a coverage threshold; unreadable counts as no. */
+async function declaresCoverageThreshold(
+    fileSystem: Pick<FileSystem, 'exists' | 'readFile'>,
+    bunfigPath: string,
+): Promise<boolean> {
+    try {
+        if (!(await fileSystem.exists(bunfigPath))) return false;
+        return COVERAGE_THRESHOLD_PATTERN.test(await fileSystem.readFile(bunfigPath));
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -147,7 +184,9 @@ export async function replayCitedTests(
  */
 export function formatReplayReport(replay: ReplayResult): { summary: string; findings: string[] } {
     return {
-        summary: `Replay: ${replay.files.length} cited test file(s), ${replay.findings.length} finding(s)`,
+        summary: `Replay: ${replay.files.length} cited test file(s), ${replay.findings.length} finding(s)${
+            replay.skipped.length > 0 ? `, ${replay.skipped.length} skipped` : ''
+        }`,
         findings: replay.findings.map(
             (finding) =>
                 `  ${finding.anchor}: ${
