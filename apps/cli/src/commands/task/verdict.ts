@@ -11,6 +11,8 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
         .summary('Derive PASS/PARTIAL/FAIL/UNKNOWN verdict from verify answer text (replaces pipeline grep/shell).')
         .argument('<wbs>', 'Task WBS number')
         .option('--from-answer <path>', 'Path to verify answer text file')
+        // 1319 R4: replay the test files the verdict rows cite, before a PASS becomes durable.
+        .option('--replay', 'Re-execute the test files the verdict rows cite; a failure downgrades PASS to PARTIAL')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -19,8 +21,10 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
             const {
                 ANSWER_LINT_MAX_FINDINGS,
                 deriveVerdict,
+                formatReplayReport,
                 lintVerifyAnswerForTask,
                 readTaskAcceptanceCriteria,
+                replayCitedTests,
                 summarizeRowIds,
                 VERDICT_SCENARIO_KEY_FORMS,
                 verdictScenarioKeyGap,
@@ -46,6 +50,17 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
                 featuresDir: context.fs.resolve(featuresDir),
             };
             const lintFindings = await lintVerifyAnswerForTask(wbs, answerText, corpusDeps);
+            // 1319 R5(a): one lint file per task, cleared on EVERY invocation so a retry token can
+            // never read a stale finding set, and rewritten on a lint failure so the review state can
+            // re-issue the prompt with the findings instead of buying a remediate hop.
+            const lintPath = `.spur/run/${wbs}-verdict-lint.txt`;
+            const clearLintFile = async (): Promise<void> => {
+                try {
+                    await context.fs.deleteFile(lintPath);
+                } catch {
+                    // Absent is the normal case.
+                }
+            };
             if (lintFindings.length > 0) {
                 if (options.json) {
                     context.output.write(JSON.stringify({ wbs, lintFindings }, null, 2));
@@ -56,9 +71,15 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
                     );
                     for (const f of lintFindings) context.output.error(`  line ${f.line}: ${f.message}`);
                 }
+                await context.fs.ensureDir('.spur/run');
+                await context.fs.writeFile(
+                    lintPath,
+                    `${lintFindings.map((f) => `line ${f.line}: ${f.message}`).join('\n')}\n`,
+                );
                 context.setExitCode(1);
                 return;
             }
+            await clearLintFile();
 
             // Derive verdict from answer text. The pipeline's verify→record
             // transition already gates on task check independently, so the
@@ -90,8 +111,27 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
                 return;
             }
 
+            // 1319 R4: replay before the artifact becomes durable. A cited test file that is missing,
+            // fails or times out means the PASS was not earned, so it downgrades to PARTIAL and the
+            // findings name the anchor. A non-PASS is never upgraded.
+            const replay =
+                options.replay === true
+                    ? await replayCitedTests([...result.requirements, ...(result.acceptanceCriteria ?? [])])
+                    : undefined;
+            const downgraded = replay !== undefined && replay.findings.length > 0 && result.verdict === 'PASS';
+            if (downgraded) result.verdict = 'PARTIAL';
+
             // Emit verdict artifact.
-            const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);
+            const jsonOut = JSON.stringify(
+                {
+                    wbs,
+                    ...result,
+                    ...(replay !== undefined ? { replay } : {}),
+                    source: 'spur-task-verdict',
+                },
+                null,
+                2,
+            );
             await context.fs.ensureDir('.spur/run');
             await context.fs.writeFile(`.spur/run/${wbs}-verdict.json`, `${jsonOut}\n`);
 
@@ -101,6 +141,11 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
                 context.output.write(
                     `Verdict: ${result.verdict} (${result.requirements.length} requirements, ${result.checks.length} checks)`,
                 );
+                if (replay !== undefined) {
+                    const report = formatReplayReport(replay);
+                    context.output.write(report.summary);
+                    for (const line of report.findings) context.output.error(line);
+                }
             }
 
             if (result.verdict !== 'PASS') {

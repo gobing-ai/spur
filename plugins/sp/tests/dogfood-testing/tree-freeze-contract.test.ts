@@ -38,15 +38,32 @@ describe('implement-probe and post-gate freeze contract (task 1135)', () => {
         const intoReview = parsed.transitions.filter((t) => t.to === 'review');
         expect(intoReview.length).toBeGreaterThan(0);
         for (const t of intoReview) {
-            expect(t.from).toBe('gate');
             const cmd = String((t.guard?.options as Record<string, unknown> | undefined)?.command ?? '');
+            // 1319 R5(c): the ONE self-entry is the inner lint retry — it re-issues the review in
+            // place (guarded by the run-scoped retry token) instead of buying a remediate hop. It
+            // certifies nothing new: `review → done` still demands the gate tokens plus the
+            // verdict PASS, so a stale review cannot ride a blocked gate into certification.
+            if (t.from === 'review') {
+                expect(cmd).toContain('-review-lint-retry');
+                continue;
+            }
+            expect(t.from).toBe('gate');
             expect(cmd).toContain('-gate.status');
             expect(cmd).toContain('-test-gate.status');
         }
         // (2) nothing runs between gate and review that could move the tree: the reviewer
-        // dispatches first, so the tree it reads is the tree the receipt is keyed to.
+        // dispatches first, so the tree it reads is the tree the receipt is keyed to. 1319 R5: the
+        // one step allowed ahead of it reads the previous visit's lint file and writes a prompt
+        // fragment — both under `.spur/run`, which the receipt's tree hash excludes.
         const onEnter = stateOf('review').onEnter ?? [];
-        expect(onEnter[0]?.kind).toBe('agent.run');
+        if (onEnter[0]?.kind !== 'agent.run') {
+            expect(onEnter[0]?.kind).toBe('shell');
+            expect(String((onEnter[0]?.options as Record<string, unknown> | undefined)?.command)).toContain(
+                '.spur/run',
+            );
+            expect(onEnter[1]?.kind).toBe('file.read.into-var');
+            expect(onEnter[2]?.kind).toBe('agent.run');
+        }
         // (3) the evidence identity the run reports is the receipt's tree hash (the retired
         // proof actions are gone from the graph, not merely renamed).
         expect(pipeline).toContain('-check-receipt.json');

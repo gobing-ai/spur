@@ -13,6 +13,7 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import type { CompositionAdvisory } from '../workflow/composition-lint';
+import type { HostPause } from '../workflow/host-pause';
 import type { WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkItem } from '../workflow/receipt';
 import type {
@@ -208,6 +209,16 @@ export interface WorkflowTraceEntry {
     version?: string | null;
     /** Persisted definition digest from run metadata (0768 R1). */
     definitionDigest?: string;
+    /**
+     * 1319 R7: measured host pauses (node, pausedAt, resumedAt, hostDurationMs). A host-executor
+     * `agent.run` records 2 ms on its action row while the work happened in the operator's session;
+     * this is the wall clock that was missing. Absent on runs that never paused.
+     */
+    hostPauses?: HostPause[];
+    /** 1319 R8: derived label — the run is still paused past its stall budget. */
+    stalled?: boolean;
+    /** 1319 R8: how long the open pause has lasted, in milliseconds. */
+    stalledMs?: number;
     /**
      * Fresh-run start point recorded at run start (task 1072 R7). Present only on
      * runs launched with `--from`; absent from every legacy row.
@@ -613,6 +624,10 @@ export interface ContinuePausedOptions {
     readonly resumeOwner?: ResumeOwnership;
     /** 0901 R4: the async continue worker stamps its pid at the resume claim. */
     readonly recordSelfPid?: boolean;
+    /**
+     * 1319 R7: the resume instant (test seam / deterministic clock). Defaults to now.
+     */
+    readonly now?: Date;
 }
 
 // Re-exported from `workflow/run-record` (0962): that module owns the traversal guard that throws

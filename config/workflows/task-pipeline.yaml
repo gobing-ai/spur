@@ -139,6 +139,15 @@ vars:
     # The gate observes, it does not mutate: `implement` already ran `$formatCmd` on its way out,
     # and a formatter inside the gate would rewrite the tree the receipt is keyed by.
     qualityGateCmd: "${spurBin:-spur} self exec check"
+    # 1319 R1: per-spawn bound for EVERY command the gate runs (full attempt, recheck probe, light
+    # sub-checks, changed-path read). `command.gate` exports workflow vars as env, so this var reaches
+    # `spur task gate` as `gateTimeoutMs` with no new flag. A hit is BLOCKED (exit 2), never a red
+    # gate, and writes no check receipt. 15 min: above a healthy full gate, far below a hang.
+    gateTimeoutMs: "900000"
+    # 1319 R2(c): outer backstop on the gate ACTION itself. Only a finite `timeoutMs` gives
+    # `ts-runtime` process-group ownership, which reaps grandchildren the gate's own `spawnSync`
+    # cannot reach. Must stay above lock wait (2 h, quality-gate.ts) + 5 x gateTimeoutMs + probe.
+    gateBackstopMs: "14400000"
     # Cheap red-detector run before the full gate on **recheck visits only**; empty ⇒ no probe.
     # A project overriding qualityGateCmd should override this too. TRUSTED CONFIG ONLY.
     gateProbeCmd: "${spurBin:-spur} self exec lint"
@@ -163,6 +172,9 @@ vars:
     # anchors directly in the /sp:dev-fixall input, so the fix agent starts AT the failing
     # file:line instead of re-deriving it from a fresh gate run (0482 R3).
     gateFindings: ""
+    # 1319 R5: lint findings from the previous review visit, echoed into the review prompt on the
+    # inline retry. Empty on the happy path, so the prompt pays nothing when nothing is wrong.
+    reviewLint: ""
     # The quality-gate mode this visit runs — `run` on the first gate visit of the run,
     # `recheck` after a remediation hop, `deferred` under the opt-in batch policy. Written by
     # the gate's own shell and projected into this var (args cannot branch) — D65 1239 R2.
@@ -332,9 +344,19 @@ states:
           # Best-effort: `; exit 0` (not `&&`) so a missing/failing formatter in a seeded
           # non-Bun project cannot abort a run mid-implement. `${vars.qualityGateCmd}` at
           # `gate` is the gate that actually decides.
-          - kind: shell
+          # 1319 R3: the formatter is a bounded `command.gate` instead of an unbounded `shell`.
+          # Best-effort semantics stay (`softFail: true`: a missing/failing/timed-out formatter
+          # never aborts the run — the quality gate is the real gate), but a formatter that hangs
+          # can no longer hold the step open forever. `shell` cannot carry a bound upstream
+          # (ts-runtime PipeProcessOptions has no timeout), so the step kind changes, not the intent.
+          - kind: command.gate
             options:
-                command: 'sh -c "$formatCmd" ; exit 0'
+                id: implement-format
+                executable: "sh"
+                args: ["-c", "${vars.formatCmd}"]
+                resultFile: .spur/run/${vars.__runId}-implement-format.status
+                softFail: true
+                timeoutMs: "${vars.stepTimeoutMs}"
           # 1109 R3: qualify this task's unique basename anchors to repo-relative paths.
           # Placement is load-bearing: it runs AFTER implement's mutations (and the format
           # above) and BEFORE the gate reads the tree, so the receipt is keyed to the final
@@ -518,6 +540,9 @@ states:
                 args: ["task", "gate", "${vars.wbs}", "${vars.gateMode}", "--no-logo"]
                 resultFile: .spur/run/${vars.__runId}-gate.status
                 softFail: true
+                # 1319 R2(c): group-owned backstop. The gate's own per-spawn bound (R1) bounds
+                # each command; this bounds the action and reaps any surviving descendant.
+                timeoutMs: "${vars.gateBackstopMs}"
           # (d) record what the PREVIOUS gate visit's failure-class answer turned out to be
           # (1263 R3a): a recheck visit means the last class was `fix` and the repair hop ran, so
           # this visit's gate status says whether it was right. First write wins, the step never
@@ -635,6 +660,18 @@ states:
           approval decision point. Cost at this decision point (1122): open P1-P3 review
           findings block `done`; only P4 rows and DEFER-ed P3 rows are wrap residuals.
       onEnter:
+          # 1319 R5(b)/Q9: surface the previous visit's verdict-lint findings for THIS visit's prompt.
+          # Empty on the first visit (and after a clean lint), capped so the prompt stays inside its
+          # composition budget, and it names the declared R/AC ids because the lint already does.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; L=".spur/run/$wbs-verdict-lint.txt"; O=".spur/run/$__runId-review-lint.txt";
+                    if [ -s "$L" ]; then head -c 600 "$L" > "$O"; else : > "$O"; fi; exit 0
+          - kind: file.read.into-var
+            options:
+                path: .spur/run/${vars.__runId}-review-lint.txt
+                var: reviewLint
           - kind: agent.run
             options:
                 # 0710 R2: review always runs on a fresh session — no implementation-session
@@ -664,7 +701,7 @@ states:
                     Answer contract: super-reviewer Output Format. Emit the machine-linted artifact, not a prose summary.
                     `## Review`: deriveReviewConfidence. Captured answer (`spur task verdict`) has one `Confidence: HIGH|MEDIUM|LOW`
                     line (deriveVerifyConfidence), never the section's disposition level.
-                    End with one `Verdict: PASS|PARTIAL|FAIL` line (plain, final) after
+                    End with one `Verdict: PASS|PARTIAL|FAIL` line after
                     `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and
                     `| AC | Status | Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A).
                     Evidence types (`+` ok): test | command | static-ref | manual-review | llm-judge | n/a.
@@ -672,6 +709,7 @@ states:
                     a declared `AC-N` alias; a linked scenario covers its task; a task-local criterion needs no feature credit.
                     Open P1-P3 blocks completion.
                     Also write it to `.spur/run/${vars.__runId}-review-cert.md`.
+                    ${vars.reviewLint}
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt
@@ -712,9 +750,12 @@ states:
             options:
                 id: review-verdict
                 executable: "${vars.spurBin}"
-                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-cert.md"]
+                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-cert.md", "--replay"]
                 resultFile: .spur/run/${vars.__runId}-review-verdict.status
                 softFail: true
+                # 1319 R4: the replay runs up to 5 cited suites at 120 s each; the action bound is
+                # the same headroom the review hop gets, so a slow cited suite cannot pin the visit.
+                timeoutMs: "900000"
           # (e) one fold, one token: PASS requires the typed verdict PASS, the artifact's own
           # PASS, and a clean review gate (open P1-P3 finding or an uncited claim blocks it).
           # Fail-closed: any missing/corrupt input leaves FAIL, so the transitions can route a
@@ -759,6 +800,14 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; A=APPROVED; if [ "$profile" = auto ]; then [ "$__hitlAnswer" = no ] && A=DENIED; else [ "$__hitlAnswer" = yes ] || A=DENIED; fi; printf '%s\n' "$A" > ".spur/run/$wbs-approval.status"; exit 0
+          # 1319 R5(b): one inline re-review token, decided AFTER every fold above so deleting the
+          # stale cert/answer cannot make a fold read the previous visit's verdict. Run-scoped, so a
+          # stale file from an earlier run can never trigger a retry; `-retried` makes it once only.
+          # A second lint failure leaves the token NONE and routes to remediate exactly as today.
+          - kind: shell
+            options:
+                command: >-
+                    if [ -s ".spur/run/$wbs-verdict-lint.txt" ] && [ ! -f ".spur/run/$__runId-review-lint-retried" ]; then touch ".spur/run/$__runId-review-lint-retried"; printf 'RETRY\n' > ".spur/run/$__runId-review-lint-retry"; rm -f ".spur/run/$__runId-review-cert.md" ".spur/run/$__runId-review-answer.txt"; else printf 'NONE\n' > ".spur/run/$__runId-review-lint-retry"; fi; exit 0
 
     - id: done
       description: >
@@ -1050,6 +1099,16 @@ transitions:
           kind: shell
           options:
               command: 'test "$(cat ".spur/run/$wbs-approval.status" 2>/dev/null)" = DENIED'
+    # 1319 R5(c): one inline re-review when the answer LINT failed, before any remediate hop is
+    # spent. Declared after the denial route and before `retry-exhausted` because a lint retry is
+    # not a repair attempt (it does not consume the shared fix-attempt counter). First match wins.
+    - from: review
+      to: review
+      description: The verdict lint rejected the answer's shape — re-issue the review prompt once with the lint findings instead of buying a remediate hop.
+      guard:
+          kind: shell
+          options:
+              command: 'test "$(cat ".spur/run/$__runId-review-lint-retry" 2>/dev/null)" = RETRY'
     - from: review
       to: failed
       terminalReason: retry-exhausted

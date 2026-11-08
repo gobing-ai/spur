@@ -74,6 +74,38 @@ export const RETRY_DELAY_MS_DEFAULT = 10_000;
 /** Env var overriding the base lock-retry delay (milliseconds). */
 export const RETRY_DELAY_MS_ENV = 'SPUR_QUALITY_GATE_RETRY_DELAY_MS';
 
+/**
+ * Env/var naming the per-spawn gate timeout (milliseconds). `command.gate` exports workflow vars as
+ * env, so the pipeline's `gateTimeoutMs` var reaches this resolver with no new flag (1319 R1).
+ */
+export const GATE_TIMEOUT_MS_ENV = 'gateTimeoutMs';
+/** Default per-spawn gate timeout: 15 minutes — above a healthy full gate, far below a hang. */
+export const GATE_TIMEOUT_MS_DEFAULT = 900_000;
+
+/** Result of resolving the per-spawn gate timeout: a positive bound, or the usage error to print. */
+export type GateTimeoutResolution = { ok: true; ms: number } | { ok: false; error: string };
+
+/**
+ * Resolve the per-spawn gate timeout (1319 R1). Missing means the default; a malformed value is a
+ * usage error (exit 2) rather than a silent default — an operator who tried to bound the gate must
+ * never end up with an unbounded one.
+ */
+export function resolveGateTimeoutMs(env: QualityGateEnv): GateTimeoutResolution {
+    const raw = env[GATE_TIMEOUT_MS_ENV];
+    if (raw === undefined || raw.trim() === '') return { ok: true, ms: GATE_TIMEOUT_MS_DEFAULT };
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0)
+        return { ok: false, error: `quality-gate: ${GATE_TIMEOUT_MS_ENV} must be a positive number, got "${raw}"` };
+    return { ok: true, ms: Math.trunc(parsed) };
+}
+
+/** The timeout one gate run uses: the option override wins, then env, then the default. */
+function gateTimeoutMsFor(env: QualityGateEnv, options: QualityGateOptions): number {
+    if (options.gateTimeoutMs !== undefined && options.gateTimeoutMs > 0) return options.gateTimeoutMs;
+    const resolved = resolveGateTimeoutMs(env);
+    return resolved.ok ? resolved.ms : GATE_TIMEOUT_MS_DEFAULT;
+}
+
 /** Transient SQLite lock/busy markers that justify a gate retry (same as the former grep -Eq). */
 export const LOCKED_PATTERN = /SQLiteError: database is locked|SQLite database .*is busy|SQLITE_BUSY/;
 
@@ -105,6 +137,11 @@ export interface QualityGateOptions {
     /** Project action binding for the light tier (feature A92); absent means the default preset. */
     builder?: BuilderConfig;
     /**
+     * Per-spawn gate timeout override (1319 R1); the CLI path resolves it from env instead. Absent
+     * falls back to {@link GATE_TIMEOUT_MS_DEFAULT}.
+     */
+    gateTimeoutMs?: number;
+    /**
      * Test seam for {@link captureGateGitTree} (the receipt identity). Only the capture is
      * injectable — the reuse decision itself always compares against the captured tree, so a
      * caller-supplied digest can never reach the receipt (1234 R2).
@@ -120,7 +157,7 @@ export type GitTreeCaptureFn = (cwd: string) => GitTreeCapture;
 
 /** Where the gate wrote its run artifacts (log, findings, status, attempt, receipt). */
 export interface QualityGateResult {
-    status: 'PASS' | 'FAIL';
+    status: 'PASS' | 'FAIL' | 'BLOCKED';
     attempts: number;
     logFile: string;
     findingsFile: string;
@@ -613,11 +650,14 @@ export function planLightChecks(
 }
 
 /** Changed paths for the light tier: `git diff --name-only HEAD` plus untracked; existing only. */
-function gitChangedFiles(cwd: string | undefined): string[] {
+function gitChangedFiles(cwd: string | undefined, timeoutMs?: number): string[] | null {
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
     const changed = new Set<string>();
     for (const cmd of ['git diff --name-only HEAD', 'git ls-files --others --exclude-standard']) {
-        const result = runShellCommand(cmd, cwd);
+        const result = runShellCommand(cmd, cwd, undefined, timeoutMs);
+        // 1319 R1: a timed-out changed-path read cannot scope the light tier — report it as
+        // undecidable so the caller exits BLOCKED instead of checking an empty scope.
+        if (result.timedOut) return null;
         for (const line of result.output.split('\n')) {
             const file = line.trim();
             if (file.length > 0 && existsSync(abs(file))) changed.add(file);
@@ -637,6 +677,8 @@ export interface LightGateResult {
     checks: CheckReceiptRow[];
     logFile: string;
     receiptFile: string;
+    /** Set when the tier could not decide (a changed-path `git diff` timed out) — exit 2 (1319 R1). */
+    blocked?: string;
 }
 
 /** Deferred-tier result (task 1111): the light verdict plus the status token written. */
@@ -688,13 +730,29 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     const logFile = join(runDir, `${env.wbs}-light-gate.log`);
     const receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
     writeFileSync(abs(logFile), '');
+    const timeoutMs = gateTimeoutMsFor(env, options);
+
+    const changed = gitChangedFiles(cwd, timeoutMs);
+    if (changed === null) {
+        const line = `--- light gate BLOCKED: changed-path git read timed out after ${timeoutMs}ms\n`;
+        appendFileSync(abs(logFile), line);
+        process.stderr.write(line);
+        return {
+            status: 'FAIL',
+            scope: { files: [], workspaces: [], tests: [] },
+            checks: [],
+            logFile,
+            receiptFile,
+            blocked: line.trim(),
+        };
+    }
 
     const capture = (options.captureGitTree ?? captureGateGitTree)(cwd ?? process.cwd());
     const digest = capture.ok ? capture.tree : '';
     if (!capture.ok) {
         appendFileSync(abs(logFile), `--- light receipt: no git tree identity — ${capture.error}\n`);
     }
-    const scope = lightScope(gitChangedFiles(cwd), (p) => existsSync(abs(p)));
+    const scope = lightScope(changed, (p) => existsSync(abs(p)));
     // Bind the fs predicates to the gate cwd, not the process cwd (tests run gates in fixtures).
     const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)), options.builder);
 
@@ -740,10 +798,13 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
             continue;
         }
         const startedAtMs = Date.now();
-        const result = runShellCommand(plan.cmd, cwd);
+        const result = runShellCommand(plan.cmd, cwd, undefined, timeoutMs);
         const durationMs = Date.now() - startedAtMs;
-        const status: CheckStatus = result.code === 0 ? 'PASS' : 'FAIL';
-        appendFileSync(abs(logFile), `--- light ${plan.id}: ${status} (${durationMs}ms)\n${result.output}`);
+        const status: CheckStatus = result.code === 0 && !result.timedOut ? 'PASS' : 'FAIL';
+        const header = result.timedOut
+            ? `--- light ${plan.id}: ${status} (timeout after ${timeoutMs}ms, ${durationMs}ms elapsed)\n`
+            : `--- light ${plan.id}: ${status} (${durationMs}ms)\n`;
+        appendFileSync(abs(logFile), `${header}${result.output}`);
         checks.push({ id: plan.id, cmd: plan.cmd, status, durationMs, logPath: logFile });
     }
 
@@ -792,12 +853,13 @@ function gateSleep(ms: number): void {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/** `sh -c <cmd> > <attempt log> 2>&1` equivalent: merged output plus exit code. */
+/** `sh -c <cmd> > <attempt log> 2>&1` equivalent: merged output, exit code and a timeout flag. */
 export function runShellCommand(
     cmd: string,
     cwd: string | undefined,
     extraEnv?: Record<string, string>,
-): { output: string; code: number } {
+    timeoutMs?: number,
+): { output: string; code: number; timedOut: boolean } {
     const dir = mkdtempSync(join(tmpdir(), 'spur-quality-gate-'));
     const path = join(dir, 'output');
     const fd = openSync(path, 'w');
@@ -805,15 +867,22 @@ export function runShellCommand(
         // One file descriptor preserves stream order and avoids spawnSync's pipe buffer limit.
         // Bun does not propagate inherited-env mutations to spawned children, so the gate lock
         // token (R6 re-entrancy) must ride in explicitly.
+        // ponytail: spawnSync's timeout reaches only the direct `sh` — a grandchild survives on
+        // this CLI path (a pipeline `command.gate` has group ownership via ts-runtime). Upgrade to
+        // runBoundedChild (bounded-child-run.ts) once the gate chain can go async. 1319 R1.
         const result = spawnSync('sh', ['-c', cmd], {
             cwd,
             stdio: ['ignore', fd, fd],
             env: extraEnv === undefined ? undefined : { ...getEnvVars(), ...extraEnv },
+            ...(timeoutMs !== undefined ? { timeout: timeoutMs, killSignal: 'SIGKILL' as const } : {}),
         });
-        if (result.error !== undefined) {
-            return { output: `sh -c failed: ${result.error.message}\n`, code: 1 };
+        // A SIGKILL death is how spawnSync reports its own deadline (ETIMEDOUT rides `error`).
+        const timedOut =
+            (result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' || result.signal === 'SIGKILL';
+        if (result.error !== undefined && !timedOut) {
+            return { output: `sh -c failed: ${result.error.message}\n`, code: 1, timedOut: false };
         }
-        return { output: readFileSync(path, 'utf8'), code: result.status ?? 1 };
+        return { output: readFileSync(path, 'utf8'), code: result.status ?? 1, timedOut };
     } finally {
         closeSync(fd);
         rmSync(dir, { recursive: true, force: true });
@@ -1189,6 +1258,9 @@ export function runQualityGate(
     // contended-retry predicate reads the failed log's shape, and a post-truncation read is always
     // empty (the recheck truncates before the no-progress decision runs). A missing log reads ''.
     const priorLog = mode === 'recheck' && existsSync(abs(logFile)) ? readFileSync(abs(logFile), 'utf8') : '';
+    const timeoutMs = gateTimeoutMsFor(env, options);
+    /** Set once a spawn hits the deadline: the visit is BLOCKED, never a red gate (1319 R1). */
+    let timedOut: { cmd: string } | undefined;
 
     // run: `echo 0 > "$ATTEMPT_FILE" && : > "$LOG_FILE"`; recheck: truncate only.
     writeFileSync(abs(logFile), '');
@@ -1270,16 +1342,17 @@ export function runQualityGate(
 
     // recheck probe: a probe failure is the gate failure; the gate loop is skipped.
     if (mode === 'recheck' && gateRc === 0 && (env.gateProbeCmd ?? '').length > 0) {
-        const probe = runShellCommand(env.gateProbeCmd ?? '', cwd);
+        const probe = runShellCommand(env.gateProbeCmd ?? '', cwd, undefined, timeoutMs);
         writeFileSync(abs(`${logFile}.probe`), probe.output);
         gateRc = probe.code;
+        if (probe.timedOut) timedOut = { cmd: env.gateProbeCmd ?? '' };
         appendFileSync(abs(logFile), probe.output);
         rmSync(abs(`${logFile}.probe`), { force: true });
     }
 
     let gateRuntimeMs = 0;
     let queueWaitMs = 0;
-    if (gateRc === 0) {
+    if (gateRc === 0 && timedOut === undefined) {
         const delayMs = retryDelayMs(env);
         const lockLine = (line: string): void => {
             process.stdout.write(line); // tee: stdout and the log
@@ -1303,12 +1376,19 @@ export function runQualityGate(
                     env.qualityGateCmd ?? '',
                     cwd,
                     lock.token.length > 0 ? { [GATE_LOCK_TOKEN_ENV]: lock.token } : undefined,
+                    timeoutMs,
                 );
                 writeFileSync(abs(attemptLogPath), attempt.output);
                 const locked = isTransientLock(attempt.output);
                 appendFileSync(abs(logFile), attempt.output);
                 rmSync(abs(attemptLogPath), { force: true });
                 gateRc = attempt.code;
+                // 1319 R1: a deadline hit is BLOCKED, never a FAIL — stop the retry loop too, since
+                // retrying a hang only burns the remaining attempts.
+                if (attempt.timedOut) {
+                    timedOut = { cmd: env.qualityGateCmd ?? '' };
+                    break;
+                }
                 if (gateRc === 0 || !locked || gateAttempt >= MAX_GATE_ATTEMPTS) break;
                 const line = retryMessage(gateAttempt);
                 process.stdout.write(line); // tee: stdout and the log
@@ -1343,6 +1423,28 @@ export function runQualityGate(
                 }
             }
         }
+    }
+
+    // 1319 R1: a spawn that hit the deadline makes this visit BLOCKED — a third status token beside
+    // PASS/FAIL. It writes the findings header plus the log tail and NO receipt: a FAIL receipt keyed
+    // to the tree would arm the no-progress skip, so the same tree could never be re-gated after a
+    // transient hang. BLOCKED routes `gate → failed` in the pipeline and exits 2 here.
+    if (timedOut !== undefined) {
+        const header = `gate timeout after ${timeoutMs}ms: ${timedOut.cmd}\n`;
+        const tail = tailLines(readFileSync(abs(logFile), 'utf8'), 40);
+        writeFileSync(abs(findingsFile), `${header}${tail}`);
+        writeFileSync(abs(statusFile), 'BLOCKED\n');
+        appendFileSync(abs(logFile), `git-tree: ${tree.ok ? tree.tree : 'unbound'}\n`);
+        process.stderr.write(`quality gate BLOCKED — ${header}`);
+        return {
+            status: 'BLOCKED',
+            attempts: gateAttempt,
+            logFile,
+            findingsFile,
+            statusFile,
+            attemptFile,
+            receiptFile: undefined,
+        };
     }
 
     if (gateRc === 0) {
@@ -1429,14 +1531,23 @@ export function qualityGateMain(
         return 2;
     }
     const env: QualityGateEnv = { ...rawEnv, wbs };
+    // 1319 R1: a malformed bound is a usage error before any work runs, so an operator who tried to
+    // bound the gate never silently gets an unbounded one.
+    const timeout = resolveGateTimeoutMs(env);
+    if (!timeout.ok) {
+        process.stderr.write(`${timeout.error}\n`);
+        return 2;
+    }
+    const gateOptions: QualityGateOptions = { ...options, gateTimeoutMs: timeout.ms };
     if (mode === 'light') {
-        runLightGate(env, options);
-        return 0;
+        const light = runLightGate(env, gateOptions);
+        // 1319 R1: the tier could not decide (changed-path read timed out) — BLOCKED, not a pass.
+        return light.blocked === undefined ? 0 : 2;
     }
     if (mode === 'deferred') {
         // 1111 R1: light tier for per-task feedback, `DEFERRED`/`FAIL` for the status token —
         // exit 0 on DEFERRED so the YAML's `; exit 0` wrapper and the action result agree.
-        return runDeferredGate(env, options).status === 'DEFERRED' ? 0 : 1;
+        return runDeferredGate(env, gateOptions).status === 'DEFERRED' ? 0 : 1;
     }
     if (mode === 'status') {
         const runDir = join(options.cwd ?? '.', '.spur', 'run');
@@ -1460,7 +1571,10 @@ export function qualityGateMain(
         return 0;
     }
     try {
-        return runQualityGate(mode as 'run' | 'recheck', env, options).status === 'PASS' ? 0 : 1;
+        const result = runQualityGate(mode as 'run' | 'recheck', env, gateOptions);
+        // 1319 R1: BLOCKED is exit 2 (usage/undecidable), never a red gate's exit 1.
+        if (result.status === 'PASS') return 0;
+        return result.status === 'BLOCKED' ? 2 : 1;
     } catch (error) {
         // Fail closed (exit 2 = BLOCKED, never a gate verdict): the gate never runs beside a
         // holder it could not identify, and the holder is named on stderr.

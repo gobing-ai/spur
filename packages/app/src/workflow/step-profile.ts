@@ -42,6 +42,21 @@ export interface TraceActionEvent {
 export interface StepProfileRun {
     runId: string;
     events: readonly TraceActionEvent[];
+    /** 1319 R7: measured host pauses for this run (absent on legacy or never-paused runs). */
+    hostPauses?: readonly StepProfileHostPause[];
+}
+
+/** The part of a measured host pause this module reads (1319 R7); no import, twins stay standalone. */
+export interface StepProfileHostPause {
+    node: string;
+    hostDurationMs: number;
+}
+
+/** Total host-pause milliseconds per node. */
+function hostMsByNode(pauses: readonly StepProfileHostPause[]): Map<string, number> {
+    const totals = new Map<string, number>();
+    for (const pause of pauses) totals.set(pause.node, (totals.get(pause.node) ?? 0) + pause.hostDurationMs);
+    return totals;
 }
 
 /** A `spur workflow trace --json` list entry (the fields the profile needs). */
@@ -50,6 +65,7 @@ export interface TraceRunEntry {
     isDryRun?: boolean;
     status?: string;
     workflowName?: string;
+    hostPauses?: readonly StepProfileHostPause[];
 }
 
 /** How a run's agent sessions were started: all fresh, all resumed, or both. */
@@ -79,6 +95,13 @@ export interface StepProfileRow {
     idleGapMs: { p50: number | null };
     session: SessionMode | null;
     cacheHit: { p50: number | null; known: number; of: number };
+    /**
+     * 1319 R7: total measured host-pause wall clock for this node across the sampled runs. The
+     * action row reports ~2 ms because the work happened in the host session; this is what an
+     * operator actually waited. Omitted when no sampled run recorded a pause, so a run without
+     * host pauses keeps the unchanged row shape.
+     */
+    hostMs?: number;
     flags: string[];
 }
 
@@ -244,11 +267,22 @@ export function buildStepProfile(input: {
     runs: readonly StepProfileRun[];
 }): StepProfile {
     const executions = input.runs.flatMap((run) => extractExecutions(run.runId, run.events));
+    // 1319 R7: host-pause wall clock per node, folded across the sampled runs.
+    const hostTotals = new Map<string, number>();
+    for (const run of input.runs) {
+        for (const [node, ms] of hostMsByNode(run.hostPauses ?? [])) {
+            hostTotals.set(node, (hostTotals.get(node) ?? 0) + ms);
+        }
+    }
+    const rows = buildRows(executions, input.windowSec).map((row) => {
+        const hostMs = hostTotals.get(row.node);
+        return hostMs === undefined ? row : { ...row, hostMs };
+    });
     return {
         workflow: input.workflow,
         windowSec: input.windowSec,
         sampledRuns: input.runs.length,
-        rows: buildRows(executions, input.windowSec),
+        rows,
     };
 }
 
@@ -281,6 +315,9 @@ export function formatStepProfileHuman(profile: StepProfile): string {
                 `p50=${seconds(row.durationMs.p50)}`.padEnd(12),
                 `max=${seconds(row.durationMs.max)}`.padEnd(12),
                 `idle=${seconds(row.idleGapMs.p50)}`.padEnd(12),
+                // 1319 R7: only when a host pause was measured — the action row says ~2 ms while the
+                // operator waited hours, and an unmeasured row pays no extra column.
+                ...(row.hostMs === undefined ? [] : [`host=${seconds(row.hostMs)}`.padEnd(12)]),
                 `session=${row.session ?? '?'}`.padEnd(15),
                 `cacheHit=${ratio(row.cacheHit.p50)} (${row.cacheHit.known}/${row.cacheHit.of})`.padEnd(20),
                 `flags=${row.flags.length === 0 ? '-' : row.flags.join(',')}`,

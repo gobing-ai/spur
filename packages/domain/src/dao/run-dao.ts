@@ -57,6 +57,8 @@ export interface RunTraceRow {
     agent: string | null;
     started_at: string;
     completed_at: string | null;
+    /** 1319 R8: the pause anchor — the row is updated when the engine pauses the run. */
+    updated_at?: string | null;
     terminal_reason: string | null;
     metadata_json: string;
     pid: number | null;
@@ -128,7 +130,7 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
     /** Fetch a single run row by id for trace timeline / run-store detail. */
     traceRowById(runId: string): Promise<RunTraceRow | undefined> {
         return this.adapter.queryFirst(
-            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, terminal_reason, metadata_json, pid FROM runs WHERE id = ?',
+            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, updated_at, terminal_reason, metadata_json, pid FROM runs WHERE id = ?',
             runId,
         );
     }

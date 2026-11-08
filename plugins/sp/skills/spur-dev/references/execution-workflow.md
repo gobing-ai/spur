@@ -64,6 +64,17 @@ default. See the [inline-default execution-surface contract](cross-cutting.md#in
 
 > **Single-run & parse discipline (suite run cost control).** Run full quality/test suites (`bun run check` / `spur-check`) at most ONCE per task iteration (task 0436 R2). Parse failure details from the single retained command output rather than re-running full suites repeatedly to inspect errors. Re-run targeted/narrow test files (e.g. `bun test <file> --test-name-pattern <pattern>`) while iterating on fixes, and re-run the full suite only when all targeted fixes pass.
 
+## File mutation in a driven run (task 1319 R6/R9)
+
+The driver and every dispatched implement stage mutate files with `Edit`/`Write`. A `python3 - <<PY`
+heredoc, `sed -i` or `perl -pi` file mutation is a **defect**: it carries scaffolding through the
+context instead of a diff, and a silent no-op replace cannot be told apart from success. The
+credit-sentry run (2026-11-06→08) spent 291 such edits, 248 of them on source and tests, while the
+same work needed one edit call each.
+
+Focused verification inside implement is `spur task gate <wbs> light` — never a hand-rolled
+`bunfig.toml` and never the root-cwd `bun test`. The full gate belongs to the pipeline's `gate` state.
+
 ## Section ownership — one writer per evidence section (F92 0593 R1)
 
 | Section | Writer |

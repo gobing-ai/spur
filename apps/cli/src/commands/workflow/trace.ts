@@ -51,6 +51,15 @@ export function formatTraceTimeline(result: WorkflowTraceTimeline): string {
         `Outcome: ${run.outcome}   Events: ${events.length}`,
         '',
     ];
+    // 1319 R8: a paused run past its budget is LABELLED here with its pause duration and the
+    // resume hint; the persisted status stays `paused` so the hint still works.
+    if (run.stalled === true && run.stalledMs !== undefined) {
+        lines.splice(
+            4,
+            0,
+            `Stalled: paused ${Math.round(run.stalledMs / 1000)}s — resume: spur workflow continue ${run.runId}`,
+        );
+    }
     if (run.nextAction !== undefined) lines.splice(4, 0, `Next: ${run.nextAction.label} — ${run.nextAction.value}`);
     // Per-run agent-output capture (task 0414): point the operator at the live
     // artifact so a long-running agent.run step is observable mid-flight.

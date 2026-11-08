@@ -464,13 +464,20 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
         // G74 batch (2026-10-24) adds the pre-verdict shell that materialises the agent-written
         // `-review-cert.md` (falling back to the captured answer), so the verdict lint reads what
         // the reviewer WROTE rather than its final chat line.
+        // 1319 R5: two steps at each end of the visit. The first pair surfaces the PREVIOUS
+        // visit's verdict-lint findings for the prompt (shell + file.read.into-var, both writing
+        // only under `.spur/run`); the last sets the run-scoped `review → review` retry token,
+        // after the answer fold so deleting the stale cert/answer cannot make a fold read it.
         expect(kindsOf('review')).toEqual([
+            'shell',
+            'file.read.into-var',
             'agent.run',
             'shell',
             'command.gate',
             'shell',
             'shell',
             'hitl.confirm',
+            'shell',
             'shell',
         ]);
         const options = actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined;
@@ -489,8 +496,12 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
             // The cert file the reviewer writes itself; the shell above falls back to the captured
             // answer, so the lint no longer reads a narration-shaped stdout as the certification.
             `.spur/run/${VAR('__runId')}-review-cert.md`,
+            // 1319 R4: certification replays the test files its rows cite before PASS is durable.
+            '--replay',
         ]);
         expect(verdict?.softFail).toBe(true);
+        // 1319 R4: the replay runs up to 5 cited suites at 120 s each, so the action carries a bound.
+        expect(verdict?.timeoutMs).toBe('900000');
     });
 
     test('behavioral: MET rows certify PASS; an UNMET requirement cannot certify, so done is unreachable', () => {

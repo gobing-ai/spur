@@ -217,11 +217,13 @@ verdict lives in the status file. Flags default to the workflow env names.
 
 ```bash
 spur task record <wbs> [--verdict-file <path>] [--solution-from-diff] [--transition <status>] [--json]
-spur task verdict <wbs> [--from-answer <path>] [--json]
+spur task verdict <wbs> [--from-answer <path>] [--replay] [--json]
 ```
 
 `verdict` derives PASS/PARTIAL/FAIL/UNKNOWN from the verify answer text and writes
-`.spur/run/<wbs>-verdict.json`. `record` writes the Testing/Review sections from that verdict,
+`.spur/run/<wbs>-verdict.json`. `--replay` (task 1319) re-executes the test files the verdict rows
+cite — up to 5, 120 s each, from the owning workspace — and downgrades a derived PASS to PARTIAL
+when one is missing or fails; a non-PASS is never upgraded. `record` writes the Testing/Review sections from that verdict,
 optionally backfills `## Solution` from `git diff` (`--solution-from-diff`) and transitions
 status. `record` never transitions to `done` — that gate stays with `update`.
 

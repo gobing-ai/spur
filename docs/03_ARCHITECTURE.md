@@ -242,6 +242,18 @@ corpus audits are explicit and unsuppressed; workflow identity/progress reuse th
 and projections. The migration contracts are in
 [`essential-workflow-checks.md`](design/essential-workflow-checks.md).
 
+**Bounds and pause attribution (task 1319).** Three bounds, one per failure mode: a per-spawn
+`gateTimeoutMs` inside `runShellCommand` (the single spawn behind the full attempt, the recheck probe,
+the light tier and the changed-path read), a group-owned `gateBackstopMs` on the `command.gate` step,
+and the unchanged `agent.run` step budgets. A deadline is `BLOCKED`/exit 2, never a red gate, and
+writes no check receipt — a FAIL receipt keyed to the tree would arm the no-progress skip. Host
+pauses are measured by the resume (the only Spur-owned moment that sees both ends) into run metadata
+`hostPauses[]`, which `spur workflow profile`/`trace` read; a still-open pause past its budget gets a
+derived `stalled` label with the resume hint, never a status change. Verdict certification can
+re-execute the test files its rows cite (`spur task verdict --replay`, ≤5 files, 120 s each, outside
+the gate lock), downgrading an unearned PASS to PARTIAL. Contract:
+[`gate-bounds-and-pause-attribution.md`](design/gate-bounds-and-pause-attribution.md).
+
 Two execution models behind one host (ADR-009):
 
 - **State-machine** — states, transitions, guards; a single readable driver loop for linear/looping

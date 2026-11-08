@@ -191,6 +191,12 @@ Neither step takes the full project gate. The full gate is named only for the pi
   creep into every plugin edit.
 - Run the applicable rows, then stop: the single full project check belongs to the pipeline's
   `gate` state (`task-pipeline.yaml` `${vars.qualityGateCmd}`).
+
+**Focused runs and file mutation (1319 R6/R9).** Focused verification is `spur task gate <wbs> light` —
+never a hand-rolled `bunfig.toml`, never the root-cwd `bun test`. Mutate with `Edit`/`Write`; a
+`python3 - <<PY`, `sed -i` or `perl -pi` file mutation is a **defect** (it carries scaffolding through
+the context instead of a diff, and a silent no-op replace is indistinguishable from success).
+Contract: `docs/design/gate-bounds-and-pause-attribution.md`.
 - **Mirrored surfaces: an edit lands on all of them.** When the change is one instance of a repeated
   pattern — the same wiring rule on two runbooks, a signature in both a generator and its generated
   `.d.mts`, a command chain in both `spur-check` and `spur-check:full` — grep for the siblings and

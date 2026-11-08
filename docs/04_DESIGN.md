@@ -109,6 +109,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Task creation and readiness | [task-creation-readiness.md](design/task-creation-readiness.md) |
 | Task residual sweep | [task-residual-sweep.md](design/task-residual-sweep.md) |
 | Historical forensics measurement (2026-08-17; evidence, not a current contract) | [sqlite-forensics-token-time-per-step.md](design/sqlite-forensics-token-time-per-step.md) |
+| Gate bounds, verdict replay, and host-pause attribution (1319) | [gate-bounds-and-pause-attribution.md](design/gate-bounds-and-pause-attribution.md) |
 
 Existing section headings below forward to their detailed owners so historical references remain valid.
 

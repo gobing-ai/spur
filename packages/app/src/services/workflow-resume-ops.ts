@@ -1,5 +1,10 @@
 import { isAbsolute, join } from 'node:path';
-import { normalizePersistedWorkflowLayer, RunDao, type RunDefinitionSource } from '@gobing-ai/spur-domain';
+import {
+    ActionRunDao,
+    normalizePersistedWorkflowLayer,
+    RunDao,
+    type RunDefinitionSource,
+} from '@gobing-ai/spur-domain';
 import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
@@ -15,6 +20,7 @@ import {
     operatorPauseAt,
     withHostExecutorPause,
 } from '../workflow/host-executor';
+import { appendHostPause, HOST_PAUSES_KEY, hostDurationMs, isDegenerateReceiptInterval } from '../workflow/host-pause';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
 import {
     readReceipt,
@@ -212,8 +218,11 @@ export class WorkflowResumeOps {
         }
         // D65 1232: the run's durable evidence is the canonical receipt, not the path the
         // operator passed — persisted once the resume is known to proceed.
-        if (hostPause.receipt !== undefined) {
-            await writeReceipt(createNodeFileSystem(launchWorkdir), launchWorkdir, hostPause.receipt);
+        // 1319 R7: measure the pause BEFORE the receipt lands, so a host receipt that never measured
+        // its own interval is stamped with the real one instead of persisting startedAt == finishedAt.
+        const stamped = await this.recordHostPause(runId, hostPause.receipt, opts?.now);
+        if (stamped !== undefined) {
+            await writeReceipt(createNodeFileSystem(launchWorkdir), launchWorkdir, stamped);
         }
         const result = await withWorktreeRunLease(
             await this.ctx.getDb(),
@@ -278,6 +287,56 @@ export class WorkflowResumeOps {
      * because a gate can pause in the same state an earlier `agent.run` stage left its
      * (already-consumed) work item behind.
      */
+    /**
+     * 1319 R7: measure the host pause this resume ends and stamp a degenerate receipt with it.
+     *
+     * The paused `agent.run`/`hitl.confirm` row records the action's start; this resume is the other
+     * end. Both go into run metadata `hostPauses[]` so `workflow profile`/`cost` can report the wall
+     * clock the action row could never hold (it measures 2 ms — the work happened in the host
+     * session). A receipt that measured its own interval is persisted verbatim; a degenerate one
+     * (`startedAt` missing, equal or inverted) is stamped from the pause.
+     */
+    private async recordHostPause(
+        runId: string,
+        receipt: WorkItemReceipt | undefined,
+        now: Date | undefined,
+    ): Promise<WorkItemReceipt | undefined> {
+        const db = await this.ctx.getDb();
+        const rows = await new ActionRunDao(db).actionRowsByRunId(runId);
+        const paused = [...rows]
+            .reverse()
+            .find(
+                (row) =>
+                    row.status === 'paused' || (row.result_json !== null && /"pause"\s*:\s*true/.test(row.result_json)),
+            );
+        const pausedAt = paused?.started_at ?? null;
+        if (pausedAt === null) return receipt;
+        const resumedAt = (now ?? new Date()).toISOString();
+        const pauseMs = hostDurationMs(pausedAt, resumedAt);
+        if (pauseMs === null) return receipt;
+
+        const run = await new RunDao(db).traceRowById(runId);
+        let metadata: Record<string, unknown> = {};
+        try {
+            metadata = JSON.parse(run?.metadata_json ?? '{}') as Record<string, unknown>;
+        } catch {
+            metadata = {};
+        }
+        const pauses = appendHostPause(metadata, {
+            node: paused?.node ?? 'unknown',
+            action: paused?.kind ?? 'agent.run',
+            pausedAt,
+            resumedAt,
+            hostDurationMs: pauseMs,
+            executor: receipt?.executor ?? 'host',
+        });
+        await new RunDao(db).mergeMetadata(runId, { [HOST_PAUSES_KEY]: pauses });
+
+        if (receipt === undefined) return undefined;
+        if (!isDegenerateReceiptInterval(receipt.startedAt, receipt.finishedAt ?? undefined)) return receipt;
+        return { ...receipt, startedAt: pausedAt, finishedAt: resumedAt };
+    }
+
     private async resolveHostPauseReceipt(
         runId: string,
         workdir: string,

@@ -1,6 +1,7 @@
 import { basename, join, relative, resolve } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { redactAndBound } from '../observability/agent-execution';
+import { type HostPause, openPauseMs, readHostPauses, resolveStallThresholdMs } from '../workflow/host-pause';
 import { resolveRunRecordDir, runArtifactsDir } from './run-storage';
 import { type SystemEventAction, systemEventProjectContext } from './system-event-envelope';
 import type { TimelineActionDecision, WorkflowTraceEntry } from './workflow-service';
@@ -39,9 +40,12 @@ export function rowToTraceEntry(
         started_at: string;
         completed_at: string | null;
         metadata_json: string;
+        updated_at?: string | null;
         terminal_reason?: string | null;
     },
     cwd: string,
+    /** 1319 R8: the instant `stalled` is measured against (tests inject one). */
+    nowMs: number = Date.now(),
 ): WorkflowTraceEntry {
     let isDryRun = false;
     let failureReason: string | undefined;
@@ -49,6 +53,7 @@ export function rowToTraceEntry(
     let definitionDigest: string | undefined;
     let startState: string | undefined;
     let continuedFrom: string | undefined;
+    let hostPauses: HostPause[] | undefined;
     try {
         const meta = JSON.parse(row.metadata_json);
         isDryRun = meta.dryRun === true;
@@ -75,6 +80,10 @@ export function rowToTraceEntry(
         if (typeof meta.continuedFrom === 'string' && meta.continuedFrom !== '') {
             continuedFrom = meta.continuedFrom;
         }
+        // 1319 R7: measured host pauses travel with the entry so every projection (profile, cost,
+        // trace) reads the wall clock the paused action row cannot hold. Absent on legacy rows.
+        const pauses = readHostPauses(meta);
+        if (pauses.length > 0) hostPauses = pauses;
     } catch {
         // metadata_json unparseable — treat as not dry-run
     }
@@ -97,7 +106,17 @@ export function rowToTraceEntry(
         ...(definitionDigest !== undefined ? { definitionDigest } : {}),
         ...(startState !== undefined ? { startState } : {}),
         ...(continuedFrom !== undefined ? { continuedFrom } : {}),
+        ...(hostPauses !== undefined ? { hostPauses } : {}),
     };
+    // 1319 R8: a run still paused well past its budget is labelled, never failed. The runs row is
+    // updated when the engine pauses it, so `updated_at` is the pause anchor Spur can see; the
+    // label is derived, so the persisted status stays `paused` and `workflow continue` still works.
+    const pauseAgeMs =
+        row.status === 'paused' || row.status === 'interrupted' ? openPauseMs(row.updated_at ?? null, nowMs) : null;
+    if (pauseAgeMs !== null && pauseAgeMs > resolveStallThresholdMs()) {
+        entry.stalled = true;
+        entry.stalledMs = pauseAgeMs;
+    }
     const nextAction = traceNextAction(entry);
     if (nextAction !== undefined) entry.nextAction = nextAction;
     return entry;
@@ -174,7 +193,12 @@ export function traceNextAction(run: WorkflowTraceEntry, outputArtifact?: string
         return { label: 'Follow run', kind: 'command', value: `spur workflow trace ${run.runId} --follow` };
     }
     if (run.status === 'paused' || run.status === 'interrupted') {
-        return { label: 'Continue run', kind: 'command', value: `spur workflow continue ${run.runId}` };
+        // 1319 R8: the same resume command, labelled with the measured stall.
+        return {
+            label: run.stalled === true ? 'Resume stalled run' : 'Continue run',
+            kind: 'command',
+            value: `spur workflow continue ${run.runId}`,
+        };
     }
     if (run.status === 'failed' && outputArtifact !== undefined) {
         return { label: 'Inspect run log', kind: 'path', value: outputArtifact };

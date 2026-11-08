@@ -64,6 +64,13 @@ loop are the dominant verification cost on a long chain.
 Do not re-run the full suite per iteration, and do not run a full gate before the narrow target is
 green. Target: full `spur-check` runs ≤2 per task.
 
+## Temp dirs: never under `.spur/run` (task 1319 R9)
+
+A test that needs a scratch directory creates it under the OS temp dir (`mkdtempSync(join(tmpdir(),
+...))`), never under `.spur/run`. That path is the run's own evidence plane: test fixtures written
+there inflate the run directory (the credit-sentry tree reached 528 MB with 3656 entries in one
+task's directory), slow every glob over it, and re-trigger the pipeline's dirty-tree precheck.
+
 ## Composition with the discipline + implementation skills
 
 - **`sp:test-driven-development`** — they compose: TDD *designs* the tests (red-green-refactor, behavior naming,

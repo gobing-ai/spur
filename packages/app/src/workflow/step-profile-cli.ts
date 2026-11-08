@@ -136,7 +136,12 @@ export function runStepProfileCli(
         try {
             const parsed = JSON.parse(timeline.stdout) as { events?: unknown };
             if (!Array.isArray(parsed.events)) throw new Error('no "events" array');
-            runs.push({ runId: entry.runId, events: parsed.events as TraceActionEvent[] });
+            runs.push({
+                runId: entry.runId,
+                events: parsed.events as TraceActionEvent[],
+                // 1319 R7: the list entry carries the run's measured host pauses.
+                ...(entry.hostPauses !== undefined ? { hostPauses: entry.hostPauses } : {}),
+            });
         } catch (err) {
             return failure(`spur workflow trace ${entry.runId} output did not parse as JSON: ${String(err)}`);
         }

@@ -31,8 +31,15 @@ describe('shipped workflow defaults use the action map (1224 R3–R5)', () => {
     test('R4 — formatCmd resolves through the action map and stays best-effort', () => {
         expect(workflowVars('task-pipeline.yaml').formatCmd).toBe(`${SPUR_BIN_FALLBACK} self exec format`);
         const text = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
-        // A plain `$formatCmd` word would not expand the `${spurBin:-spur}` inside its value.
-        expect(text).toContain('command: \'sh -c "$formatCmd" ; exit 0\'');
+        // A plain `$formatCmd` word would not expand the `${spurBin:-spur}` inside its value, so the
+        // command is `sh -c "${vars.formatCmd}"`. 1319 R3: it is a bounded `command.gate` now — the
+        // generic `shell` action cannot carry a timeout (ts-runtime PipeProcessOptions) — while
+        // staying best-effort via `softFail`.
+        expect(text).toContain(`args: ["-c", "\${vars.formatCmd}"]`);
+        expect(text).not.toContain('command: \'sh -c "$formatCmd" ; exit 0\'');
+        const formatStep = text.slice(text.indexOf('id: implement-format'));
+        expect(formatStep.slice(0, 400)).toContain('softFail: true');
+        expect(formatStep.slice(0, 400)).toContain(`timeoutMs: "\${vars.stepTimeoutMs}"`);
     });
 
     test('R5 — feature verification defaults to the argv-split action call', () => {

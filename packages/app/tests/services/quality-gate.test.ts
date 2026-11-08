@@ -260,7 +260,7 @@ describe('quality-gate service (0823 d)', () => {
 
     test('runShellCommand preserves mixed stream order and captures output beyond the pipe buffer', () => {
         const result = runShellCommand('printf first; printf second >&2; printf third', undefined);
-        expect(result).toEqual({ code: 0, output: 'firstsecondthird' });
+        expect(result).toEqual({ code: 0, output: 'firstsecondthird', timedOut: false });
         const large = runShellCommand('head -c 2097152 /dev/zero', undefined);
         expect(large.code).toBe(0);
         expect(large.output.length).toBe(2097152);

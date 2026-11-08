@@ -29,6 +29,19 @@ export function commandGateOutcome(exitCode: number): CommandGateOutcome {
 }
 
 /**
+ * Coerce a `timeoutMs` option to a positive integer (1319 R2a): a numeric string is accepted because
+ * `${vars.*}` resolves to a string, and any other value is rejected so a declared bound can never be
+ * silently dropped (`ts-runtime` then bounds the process group).
+ */
+export function asOptionalTimeoutMs(value: unknown): { ok: true; ms: number | undefined } | { ok: false } {
+    if (value === undefined || value === null) return { ok: true, ms: undefined };
+    if (typeof value === 'string' && value.trim() === '') return { ok: true, ms: undefined };
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return { ok: false };
+    return { ok: true, ms: Math.trunc(parsed) };
+}
+
+/**
  * Retry policy options for command-gate action executions.
  */
 export interface CommandGateRetryOptions {
@@ -155,7 +168,17 @@ export class CommandGateActionRunner implements ActionRunner {
         const maxAttempts = Math.max(1, typeof retry.maxAttempts === 'number' ? retry.maxAttempts : 1);
         const delayMs = Math.max(0, typeof retry.delayMs === 'number' ? retry.delayMs : 1000);
         const retryOn = Array.isArray(retry.on) ? retry.on : [];
-        const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : undefined;
+        // 1319 R2(a): every `${vars.*}` template resolves to a STRING, and the old `typeof ===
+        // 'number'` check silently dropped it — a YAML-declared bound would have been a no-op.
+        // Accept a numeric string, reject anything else loudly.
+        const timeout = asOptionalTimeoutMs(options.timeoutMs);
+        if (!timeout.ok) {
+            return {
+                ok: false,
+                error: `command.gate: timeoutMs must be a positive number, got "${String(options.timeoutMs)}"`,
+            };
+        }
+        const timeoutMs = timeout.ms;
 
         const env = childProcessEnv(context.vars);
 
@@ -165,6 +188,9 @@ export class CommandGateActionRunner implements ActionRunner {
         let lastStderr = '';
         let lastExitCode = -1;
         let attemptsRun = 0;
+        // 1319 R2(b): ts-runtime reports a deadline hit as `outcome: 'timeout'`; the failure data
+        // must name it so a gate visit can route BLOCKED instead of reading a bare exit code.
+        let timedOut = false;
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             attemptsRun = attempt;
@@ -181,6 +207,7 @@ export class CommandGateActionRunner implements ActionRunner {
             lastStdout = res.stdout;
             lastStderr = res.stderr;
             lastExitCode = res.exitCode ?? -1;
+            timedOut = res.outcome === 'timeout';
 
             if (res.exitCode === 0) {
                 await this.fileSystem.writeFile(normalized, 'PASS\n');
@@ -221,6 +248,7 @@ export class CommandGateActionRunner implements ActionRunner {
             stdout: lastStdout,
             stderr: lastStderr,
             resultFile: normalized,
+            ...(timedOut ? { timedOut: true } : {}),
         };
         // Soft probes record the outcome and hand routing to the transition guards; the run only
         // aborts here when the caller wants the gate to be fatal.

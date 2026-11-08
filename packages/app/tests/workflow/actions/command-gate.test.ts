@@ -405,3 +405,69 @@ describe('CommandGateActionRunner', () => {
         }
     });
 });
+
+// ─── 1319 R2: the timeout bound (string coercion + group-owned kill) ───────────
+
+describe('CommandGateActionRunner timeoutMs (1319 R2)', () => {
+    const workdir = () => {
+        const base = join(tmpdir(), `gate-timeout-${crypto.randomUUID()}`);
+        mkdirSync(join(base, '.spur', 'run'), { recursive: true });
+        return base;
+    };
+
+    test('a numeric string bound is honoured and reported as timedOut', async () => {
+        const cwd = workdir();
+        try {
+            const result = await new CommandGateActionRunner().execute(
+                {
+                    executable: 'sleep',
+                    args: ['5'],
+                    resultFile: '.spur/run/t.status',
+                    softFail: true,
+                    timeoutMs: '300',
+                },
+                { runId: 'r1', stateOrNodeId: 's1', workdir: cwd, vars: {}, env: {} },
+            );
+
+            expect(result.ok).toBe(true);
+            expect((result.data as { timedOut?: boolean }).timedOut).toBe(true);
+            expect((result.data as { status?: string }).status).toBe('BLOCKED');
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('a malformed bound fails the action naming the option', async () => {
+        for (const timeoutMs of ['abc', 0, -5]) {
+            const result = await new CommandGateActionRunner().execute(
+                { executable: 'sleep', args: ['5'], resultFile: '.spur/run/t.status', timeoutMs },
+                { runId: 'r1', stateOrNodeId: 's1', workdir: workdir(), vars: {}, env: {} },
+            );
+
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('timeoutMs must be a positive number');
+        }
+    });
+
+    test('no descendant survives the deadline (group ownership)', async () => {
+        const cwd = workdir();
+        const marker = `gate-descendant-${crypto.randomUUID()}`;
+        try {
+            await new CommandGateActionRunner().execute(
+                {
+                    executable: 'sh',
+                    args: ['-c', `sh -c 'sleep 30 # ${marker}'`],
+                    resultFile: '.spur/run/t.status',
+                    softFail: true,
+                    timeoutMs: '300',
+                },
+                { runId: 'r1', stateOrNodeId: 's1', workdir: cwd, vars: {}, env: {} },
+            );
+
+            const survivors = Bun.spawnSync(['pgrep', '-f', marker]).stdout.toString().trim();
+            expect(survivors).toBe('');
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+});

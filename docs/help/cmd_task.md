@@ -384,6 +384,7 @@ spur task verdict [options] <wbs>
 | Flag | Description |
 |---|---|
 | `--from-answer <path>` | Path to the verify answer text file (default: `.spur/run/<wbs>-verify-answer.txt`) |
+| `--replay` | Re-execute the test files the verdict rows cite; a missing or failing file downgrades PASS to PARTIAL (task 1319) |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |
 

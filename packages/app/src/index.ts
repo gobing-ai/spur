@@ -966,6 +966,15 @@ export type {
     TokenLedgerWatchListener,
 } from './services/token-ledger-watcher';
 export { TokenLedgerWatcher } from './services/token-ledger-watcher';
+export type { ReplayFinding, ReplayResult, ReplayRow, VerdictReplayOptions } from './services/verdict-replay';
+export {
+    citedTestFiles,
+    formatReplayReport,
+    REPLAY_MAX_FILES,
+    REPLAY_TIMEOUT_MS,
+    replayCitedTests,
+    replayWorkspace,
+} from './services/verdict-replay';
 export type { AnswerLintFinding } from './services/verify-answer-lint';
 export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
 export { createWarmTurnDispatcher, type TurnSessionBinding } from './services/warm-turn-dispatch';

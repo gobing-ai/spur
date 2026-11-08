@@ -320,7 +320,10 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const certifyIdx = reviewSteps.findIndex((a) => String(a.options?.command ?? '').includes('-review.status'));
         expect(certifyIdx).toBeGreaterThanOrEqual(0);
         expect(hitlIdx).toBeGreaterThan(certifyIdx);
-        expect(reviewSteps.slice(hitlIdx + 1).map((a) => a.kind)).toEqual(['shell']);
+        // 1319 R5(b): the lint-retry token is decided in a second trailing shell, AFTER the answer
+        // fold, because removing the stale cert/answer earlier would let a fold read the previous
+        // visit's verdict. Order stays: ... hitl.confirm → answer fold → retry token.
+        expect(reviewSteps.slice(hitlIdx + 1).map((a) => a.kind)).toEqual(['shell', 'shell']);
         expect(String(hitl?.options?.prompt ?? '')).toContain(tpl('wbs'));
         // 1236: answered through the decision-point responder, not a `pause: true` state.
         expect(String(JSON.stringify(hitl?.options?.decision ?? {}))).toContain('"mode":"evidence"');
