@@ -187,6 +187,21 @@ generator runs. In this repo that is `apps/cli/config/` (from `bun run bundle:co
 directory (observed 2026-10-12, A91 batch). Run the generator once after a create-mode install, and
 again after a rebase or merge that touches the canonical workflow sources it is built from.
 
+**A fresh worktree cannot commit until its tool config is trusted (task 1320).** `proto` refuses to
+load a project's `.prototools` in a path it has not seen, so the repo's `cog` commit-msg hook cannot
+run and WT-3b's commit exits 1 with:
+
+    Unable to proceed, the plugin for cog is configured in <worktree>/.prototools, which has not been
+    trusted, so it was not loaded.
+
+Trust it once per created tree, best-effort and only when the project ships the file (a missing
+`.prototools` or a `proto` that does not prompt is not an error — the commit is what proves it):
+
+    cd "../<worktree-dir>" && [ ! -f .prototools ] || proto trust .prototools
+
+The trust decision is per absolute path, so a reuse-mode tree that was already trusted needs nothing
+and a re-cut tree always does.
+
 #### Reuse mode (`--worktree <name>`)
 
 Creation is **skipped entirely**. `$BRANCH` is the resolved worktree's already-checked-out branch; a

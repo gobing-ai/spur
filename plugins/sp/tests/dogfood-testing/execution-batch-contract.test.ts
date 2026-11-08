@@ -242,7 +242,7 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
 
     test('R4.1/R4.2 — FF-only merge; a non-FF base falls through to retention', () => {
         expect(SPEC).toContain(
-            'git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts',
+            'git merge --ff-only --no-edit "$BRANCH"   # FF-only: never rebase, merge-commit, or resolve conflicts',
         );
         expect(SPEC).toContain('WT-5 retains the worktree and branch whenever FF is impossible');
     });
@@ -322,7 +322,7 @@ describe('execution-batch spec contract (task 1059 — WT-4 fail-stop pins)', ()
         expect(spec).toContain('immediately before the sole mutation');
         expect(spec).toContain('git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || ANCESTRY_RC=$?');
         expect(spec).toContain('ancestry check could not run (git exit $ANCESTRY_RC) - failing closed');
-        expect(spec).toContain('git merge --ff-only "$BRANCH"');
+        expect(spec).toContain('git merge --ff-only --no-edit "$BRANCH"');
         expect(spec).toContain('the concurrent-writer race survives every precheck');
         // Landed verification of the captured tip after the merge.
         expect(spec).toContain('git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP"');
@@ -635,7 +635,7 @@ describe('task 1059 — WT-4 executable bash-shape cases (scratch git trees)', (
 
     /**
      * The canonical fail-stop WT-4 block shape: zero-commit guard, captured BATCH_TIP/BASE_TIP,
-     * ancestry check naming both tips, `git merge --ff-only` as the sole mutation, landed-tip
+     * ancestry check naming both tips, `git merge --ff-only --no-edit` as the sole mutation, landed-tip
      * verify, existence-guarded branch delete, marker write LAST (status retained keeps the
      * captured BATCH_TIP and never re-queries the removed branch). The write is read-modify-write
      * (F1): an existing marker's WT-3 fields survive; only status/mergeCommit change.
@@ -656,7 +656,7 @@ git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || {
   exit 1
 }
 ${o.race ?? ''}
-git merge --ff-only "$BRANCH"
+git merge --ff-only --no-edit "$BRANCH"
 LANDED_BASE_TIP="$(git rev-parse "$BASE_REF")"
 git merge-base --is-ancestor "$BATCH_TIP" "$LANDED_BASE_TIP" || { echo 'WT-4 halt: landed verify failed' >&2; exit 1; }
 if git rev-parse --verify --quiet "$BRANCH" >/dev/null; then git branch -D "$BRANCH"; fi

@@ -62,7 +62,7 @@ task from the main tree; integrations are **serialized** (one at a time) in comp
 integrate(t):
   git -C "$WT" rebase "$BASE_REF"                # replay onto the CURRENT base tip (re-read per integration)
   ├─ rebase fails → git -C "$WT" rebase --abort → conflict path (R4) below
-  └─ rebase clean → git checkout "$BASE_REF" → zero-commit guard → git merge --ff-only "$BRANCH"
+  └─ rebase clean → git checkout "$BASE_REF" → zero-commit guard → git merge --ff-only --no-edit "$BRANCH"
                     → WT-4a verdict persist → WT-4b holders → WT-4c registry
                     → git worktree remove → existence-guarded git branch -D → marker merged
 ```
@@ -82,7 +82,7 @@ commands:
 
 ```
 resume:  cd <worktree-path> && git rebase <BASE_REF>   # the operator resolves, never the driver
-merge:   git checkout <BASE_REF> && git merge --ff-only <branch>
+merge:   git checkout <BASE_REF> && git merge --ff-only --no-edit <branch>
 discard: git worktree remove <worktree-path> && git branch -D <branch> && spur projects remove <worktree-path>
 ```
 

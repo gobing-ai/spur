@@ -74,7 +74,9 @@ git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || ANCESTRY_RC=$?
   git log --oneline "$BASE_TIP..$BATCH_TIP" >&2   # batch-side divergent commits
   git log --oneline "$BATCH_TIP..$BASE_TIP" >&2   # base-side divergent commits
   exit 1; }   # -> WT-5: tree + branch retained, marker stays "active"
-git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
+git merge --ff-only --no-edit "$BRANCH"   # FF-only: never rebase, merge-commit, or resolve conflicts
+# `--no-edit` is load-bearing in agent environments (task 1320): a host policy blocks a bare
+# `git merge` because it could open an editor, even for a fast-forward that writes no message.
 [ $? -eq 0 ] \
   || { echo "WT-4 halt: FF-merge failed - the concurrent-writer race survives every precheck; marker stays \"active\"" >&2; exit 1; }   # -> WT-5
 # Landed verification before anything else runs: the captured BATCH_TIP must be an ancestor of
@@ -231,14 +233,14 @@ socket, and `lsof` port discovery failing must not hide the PIDs.
 #### Reuse mode — merge, retain
 
 The fail-stop merge sequence runs identically — same guard, captured `BATCH_TIP`/`BASE_TIP`,
-ancestry check immediately before FF, `git merge --ff-only`, landed verification (per-call pinned
+ancestry check immediately before FF, `git merge --ff-only --no-edit`, landed verification (per-call pinned
 to the invoking tree, task 1058) — but no WT-4a/4b/4c and no removal: the worktree and branch are
 **retained**. Pre-merge halts leave the marker `active`; a persistence failure after the landed
 merge records `retained` + `mergeCommit`:
 
 ```bash
 # Same fail-stop sequence as create mode (zero-commit guard -> BATCH_TIP/BASE_TIP -> ancestry
-# rc check -> git merge --ff-only -> landed verify); local refs only — no fetch.
+# rc check -> git merge --ff-only --no-edit -> landed verify); local refs only — no fetch.
 MARKER=".spur/run/worktree-<marker-id>.json"
 git checkout "$BASE_REF" \
   || { echo "WT-4 halt: checkout $BASE_REF failed - nothing merged, marker stays \"active\"" >&2; exit 1; }   # -> WT-5
@@ -255,7 +257,9 @@ git merge-base --is-ancestor "$BASE_TIP" "$BATCH_TIP" || ANCESTRY_RC=$?
   git log --oneline "$BASE_TIP..$BATCH_TIP" >&2
   git log --oneline "$BATCH_TIP..$BASE_TIP" >&2
   exit 1; }   # -> WT-5: tree + branch retained, marker stays "active"
-git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
+git merge --ff-only --no-edit "$BRANCH"   # FF-only: never rebase, merge-commit, or resolve conflicts
+# `--no-edit` is load-bearing in agent environments (task 1320): a host policy blocks a bare
+# `git merge` because it could open an editor, even for a fast-forward that writes no message.
 [ $? -eq 0 ] \
   || { echo "WT-4 halt: FF-merge failed - the concurrent-writer race survives every precheck; marker stays \"active\"" >&2; exit 1; }
 LANDED_BASE_TIP="$(git rev-parse "$BASE_REF")" \
@@ -301,7 +305,7 @@ invoking tree there too — after the Step 5 persistence, before the success mar
 appends the same stale-links warning to the persisted batch report, and the success marker still
 records `merged`.
 
-**Fast-forward only.** `git merge --ff-only` is the sole mutation of the terminal sequence; every
+**Fast-forward only.** `git merge --ff-only --no-edit` is the sole mutation of the terminal sequence; every
 other step is a read, a check, a persistence write, or a cleanup, and every tip/ancestry read uses
 local refs — no fetch runs anywhere in this lifecycle. If the fresh `BASE_TIP` is not an ancestor of
 `BATCH_TIP`, the ancestry check halts before the merge: the report names both tips and both

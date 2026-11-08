@@ -607,10 +607,10 @@ principles determine which gates route around HITL and which still pause.
    `--auto`. Irreversible is irreversible.
 
    **Exception — the worktree batch success path (`execution-batch.md` § WT-4).** The
-   `--worktree --auto` full-batch success sequence — `git merge --ff-only "$BRANCH"`, `git worktree
+   `--worktree --auto` full-batch success sequence — `git merge --ff-only --no-edit "$BRANCH"`, `git worktree
    remove`, `git branch -d "$BRANCH"` — does **not** pause, even though it performs a merge and a
    branch deletion. This is the single carve-out from Principle #6, and it is safe by construction:
-   `git merge --ff-only` refuses rather than rewriting history when the base ref has moved, and
+   `git merge --ff-only --no-edit` refuses rather than rewriting history when the base ref has moved, and
    `git branch -d` (lowercase) refuses to delete a branch that is not fully merged. Both fail closed,
    so no work can be lost — the property #6 exists to protect. When FF is impossible, WT-4 falls
    through to the WT-5 retention path, which leaves the worktree and branch intact. Every other

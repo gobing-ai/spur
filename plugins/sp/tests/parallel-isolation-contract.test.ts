@@ -77,7 +77,7 @@ describe('task 0931 — parallel isolation prose contract', () => {
 
     test('AC3 (R3) — integration is rebase then --ff-only; never a merge commit, never --no-ff', () => {
         expect(section).toContain('git -C "$WT" rebase "$BASE_REF"');
-        expect(section).toContain('git merge --ff-only "$BRANCH"');
+        expect(section).toContain('git merge --ff-only --no-edit "$BRANCH"');
         expect(prose).toContain('integrations are **serialized** (one at a time) in completion order');
         expect(prose).toContain(
             'The pipeline never creates a merge commit, and no conflict is ever resolved automatically',
@@ -96,7 +96,7 @@ describe('task 0931 — parallel isolation prose contract', () => {
         expect(section).toContain('outcome is `integration-conflict`');
         // The report row names path, branch, and the manual resume/merge/discard commands.
         expect(section).toContain('resume:  cd <worktree-path> && git rebase <BASE_REF>');
-        expect(section).toContain('merge:   git checkout <BASE_REF> && git merge --ff-only <branch>');
+        expect(section).toContain('merge:   git checkout <BASE_REF> && git merge --ff-only --no-edit <branch>');
         expect(section).toContain('discard: git worktree remove <worktree-path> && git branch -D <branch>');
         expect(prose).toContain('dependent subtree is blocked under the normal failure policy');
     });
