@@ -402,6 +402,66 @@ describe('task 0827 R1 — runStepProfileCli against a spur stub (in process)', 
         expect(out.stderr).not.toContain('(exit 9:');
     });
 
+    // 1319 R8 failure modes: a stalled run is invisible because the sample is done-only; a paused
+    // run still inside its budget is listed; the resume hint is lost; a failing paused-list call
+    // is swallowed instead of exiting 1.
+    test('runs paused past their budget are listed with the resume command; fresh pauses are not', () => {
+        writeIoFixtures();
+        const pausedList = join(SCRATCH, 'io-paused.json');
+        writeFileSync(
+            pausedList,
+            JSON.stringify({
+                entries: [
+                    { runId: 'run-stuck', status: 'paused', stalled: true, stalledMs: 7_200_000 },
+                    { runId: 'run-fresh', status: 'paused' },
+                    { runId: 'run-stuck-dry', status: 'paused', stalled: true, stalledMs: 9, isDryRun: true },
+                ],
+            }),
+        );
+        const stub = installStub(
+            'io-stub-paused',
+            `#!/bin/bash
+if [ "$3 $5 $6" = "--workflow --status paused" ]; then cat "${pausedList}"; exit 0; fi
+case "$3" in
+  --workflow) cat "${IO_LIST}" ;;
+  run-a) cat "${IO_RUN_A}" ;;
+  *) exit 65 ;;
+esac
+`,
+        );
+        const json = JSON.parse(runStepProfileCli(['idea-pipeline', '--json', '--spur-bin', stub]).stdout) as {
+            stalledRuns?: unknown;
+        };
+        expect(json.stalledRuns).toEqual([
+            { runId: 'run-stuck', stalledMs: 7_200_000, resume: 'spur workflow continue run-stuck' },
+        ]);
+        const human = runStepProfileCli(['idea-pipeline', '--spur-bin', stub]).stdout;
+        expect(human).toContain('run-stuck: stalled — paused 7200s; resume: spur workflow continue run-stuck');
+        expect(human).not.toContain('run-fresh');
+
+        // No stalled run: the envelope keeps its pre-1319 shape.
+        const plain = JSON.parse(
+            runStepProfileCli(['idea-pipeline', '--json', '--spur-bin', installStub('io-stub-np', ioStubBody())])
+                .stdout,
+        ) as Record<string, unknown>;
+        expect('stalledRuns' in plain).toBe(false);
+
+        const failing = installStub(
+            'io-stub-paused-fails',
+            `#!/bin/bash
+if [ "$5 $6" = "--status paused" ]; then echo "stub: paused boom" >&2; exit 4; fi
+case "$3" in
+  --workflow) cat "${IO_LIST}" ;;
+  run-a) cat "${IO_RUN_A}" ;;
+esac
+`,
+        );
+        const out = runStepProfileCli(['idea-pipeline', '--spur-bin', failing]);
+        expect(out.exitCode).toBe(1);
+        expect(out.stderr).toContain('--status paused');
+        expect(out.stderr).toContain('stub: paused boom');
+    });
+
     test('a timeline that is not JSON exits 1 and names the run', () => {
         writeIoFixtures();
         const out = runStepProfileCli([

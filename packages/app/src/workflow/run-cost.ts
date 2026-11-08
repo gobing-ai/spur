@@ -17,13 +17,22 @@ import { type DbAdapter, openExistingDb } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
 import { extractResolvedWorkflowFacts } from './composition-baseline';
-import { readStateMetrics, readWorkflowMetrics, type StateMetrics, type WorkflowMetrics } from './run-measurements';
+import { stalledLabel } from './host-pause';
+import {
+    readStateMetrics,
+    readWorkflowMetrics,
+    type StalledRun,
+    type StateMetrics,
+    type WorkflowMetrics,
+} from './run-measurements';
 import { isBookkeepingWorkflow } from './terminal-reason';
 
 export {
     nearestRankPercentile,
+    readStalledRuns,
     readStateMetrics,
     readWorkflowMetrics,
+    type StalledRun,
     type StateMetrics,
     type WorkflowMetrics,
 } from './run-measurements';
@@ -88,8 +97,14 @@ export async function buildReportJson(
 export function renderStateLines(rows: StateMetrics[]): string[] {
     return rows.map((s) => {
         const wall = s.wallMsP50 === null || s.wallMsP90 === null ? 'n/a' : `p50=${s.wallMsP50}ms p90=${s.wallMsP90}ms`;
-        return `${s.workflow}/${s.state}: visits=${s.visits} agent.run=${s.agentRunCount} wall=${wall} retries=${s.retries}`;
+        const host = s.hostMs === undefined ? '' : ` host=${s.hostMs}ms`;
+        return `${s.workflow}/${s.state}: visits=${s.visits} agent.run=${s.agentRunCount} wall=${wall}${host} retries=${s.retries}`;
     });
+}
+
+/** One text line per stalled run (1319 R8), naming its resume command. */
+export function renderStalledLines(rows: StalledRun[]): string[] {
+    return rows.map((r) => `${r.workflow}: ${stalledLabel(r.runId, r.stalledMs)}`);
 }
 
 /** One text line per workflow row (the default report). */

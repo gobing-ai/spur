@@ -6,6 +6,7 @@ import {
     hostPauseMsByNode,
     isDegenerateReceiptInterval,
     openPauseMs,
+    pausedNodeBudgetMs,
     readHostPauses,
     resolveStallThresholdMs,
     STALL_THRESHOLD_MS_DEFAULT,
@@ -77,4 +78,25 @@ test('an open pause ages from its start and a stalled run carries the resume hin
     // `runs.updated_at` is an INTEGER epoch-ms column; a numeric anchor must age, not read as unparsable.
     expect(openPauseMs(nowMs - 7_200_000, nowMs)).toBe(7_200_000);
     expect(stalledLabel('run-1', 7_200_000)).toBe('stalled — paused 7200s; resume: spur workflow continue run-1');
+});
+
+// Failure modes: an earlier pause's budget wins over the open one; a non-paused row's timeoutMs is
+// read; malformed JSON throws instead of falling back; a non-positive budget is honoured.
+test('pausedNodeBudgetMs reads the last paused row only and tolerates junk', () => {
+    const paused = (timeoutMs: unknown) =>
+        JSON.stringify({ ok: true, pause: true, data: { surface: 'host', timeoutMs } });
+    expect(
+        pausedNodeBudgetMs([
+            { status: 'paused', result_json: paused(5_000) },
+            { status: 'done', result_json: JSON.stringify({ ok: true, data: { timeoutMs: 1 } }) },
+            { status: 'paused', result_json: paused(90_000) },
+        ]),
+    ).toBe(90_000);
+    expect(pausedNodeBudgetMs([{ status: 'done', result_json: JSON.stringify({ data: { timeoutMs: 1 } }) }])).toBe(
+        undefined,
+    );
+    expect(pausedNodeBudgetMs([{ status: 'paused', result_json: '{"pause": true, nope' }])).toBeUndefined();
+    expect(pausedNodeBudgetMs([{ status: 'paused', result_json: paused(0) }])).toBeUndefined();
+    expect(pausedNodeBudgetMs([{ status: 'paused', result_json: null }])).toBeUndefined();
+    expect(pausedNodeBudgetMs([])).toBeUndefined();
 });

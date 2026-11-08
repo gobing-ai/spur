@@ -181,12 +181,16 @@ describe('workflow command (main)', () => {
             await main(['workflow', 'trace', '--follow', '--output'], { output: nullOutput(), dbUrl: ':memory:' }),
         ).toBe(1);
     });
-    test('trace subcommand accepts --status done', async () => {
-        const exitCode = await main(['workflow', 'trace', '--status', 'done'], {
-            output: nullOutput(),
-            dbUrl: ':memory:',
-        });
-        expect(exitCode).toBe(0);
+    // 1319 R8: `workflow profile` lists `--status paused` to surface stalled runs; rejecting it
+    // would make every real profile exit 1.
+    test('trace subcommand accepts every listable run status', async () => {
+        for (const status of ['done', 'failed', 'running', 'paused', 'interrupted']) {
+            const exitCode = await main(['workflow', 'trace', '--status', status], {
+                output: nullOutput(),
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(0);
+        }
     });
     test('trace subcommand (plain) lists runs and shows run-id timeline', async () => {
         const dir = await createTempProject();

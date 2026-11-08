@@ -177,7 +177,7 @@ export interface WorkflowListResult {
 export interface WorkflowTraceFilter {
     /** Filter by workflow name. */
     workflow?: string;
-    /** Filter by run status: done, failed, running. */
+    /** Filter by run status: done, failed, running, paused, interrupted. */
     status?: string;
     /** Lower bound on started_at (ISO 8601). */
     since?: string;

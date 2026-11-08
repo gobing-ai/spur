@@ -101,6 +101,52 @@ describe('WorkflowInspectOps traces and run records', () => {
         await expect(inspect.traceRun(db, 'missing')).rejects.toThrow('Run not found: missing');
     });
 
+    // 1319 R8 failure modes: the list query omits the pause anchor so a listed run is never
+    // stalled; the node's own budget is ignored in favour of the 30-minute default; the label
+    // appears on a run still inside its budget.
+    test('a paused run past its node budget is stalled in both traceList and traceRun', async () => {
+        writeFileSync(
+            join(wfDir, 'gate.yaml'),
+            `name: gate
+kind: state-machine
+initialState: ask
+states:
+  - id: ask
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve?"
+  - id: done
+transitions:
+  - from: ask
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`,
+        );
+        expect((await runOps.run(join(wfDir, 'gate.yaml'), { runId: 'ins-p' })).status).toBe('paused');
+        const db = await ctx.getDb();
+        // Inside the default budget, no node budget: not stalled.
+        await db.run('UPDATE runs SET updated_at = ? WHERE id = ?', [Date.now() - 10_000, 'ins-p']);
+        expect((await inspect.traceList(db, { workflow: 'gate' })).entries[0]?.stalled).toBeUndefined();
+        expect((await inspect.traceRun(db, 'ins-p')).run.stalled).toBeUndefined();
+
+        // The paused action carries a 1 s node budget (what the host surface records): 10 s is stalled.
+        await db.run(
+            `UPDATE action_runs SET result_json = json_set(COALESCE(result_json, '{}'), '$.pause', json('true'),
+                 '$.data.timeoutMs', 1000) WHERE run_id = ?`,
+            ['ins-p'],
+        );
+        const listed = (await inspect.traceList(db, { workflow: 'gate' })).entries[0];
+        expect(listed?.stalled).toBe(true);
+        expect(listed?.stalledMs).toBeGreaterThanOrEqual(10_000);
+        const traced = (await inspect.traceRun(db, 'ins-p')).run;
+        expect(traced.stalled).toBe(true);
+        expect(traced.nextAction?.value).toBe('spur workflow continue ins-p');
+    });
+
     test('inspectRunRecord reports a run with no record as missing', () => {
         expect(inspect.inspectRunRecord('never-ran')).toEqual({ status: 'missing' });
     });

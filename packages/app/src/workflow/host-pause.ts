@@ -114,6 +114,28 @@ export function openPauseMs(pausedAt: string | number | null | undefined, nowMs:
     return Math.max(0, nowMs - start);
 }
 
+/**
+ * The paused node's own budget: `data.timeoutMs` on the LAST paused action row (the host surface
+ * records it on the pause). Undefined when absent or malformed, so the stall check falls back to
+ * env/default (1319 R8).
+ */
+export function pausedNodeBudgetMs(
+    rows: ReadonlyArray<{ status: string; result_json: string | null }>,
+): number | undefined {
+    for (let i = rows.length - 1; i >= 0; i--) {
+        const row = rows[i];
+        if (row === undefined || row.result_json === null) continue;
+        if (row.status !== 'paused' && !/"pause"\s*:\s*true/.test(row.result_json)) continue;
+        try {
+            const budget = (JSON.parse(row.result_json) as { data?: { timeoutMs?: unknown } })?.data?.timeoutMs;
+            return typeof budget === 'number' && Number.isFinite(budget) && budget > 0 ? budget : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+    return undefined;
+}
+
 /** The one-line stalled label the projections print, with the resume hint (1319 R8). */
 export function stalledLabel(runId: string, pauseMs: number): string {
     return `stalled — paused ${Math.round(pauseMs / 1000)}s; resume: spur workflow continue ${runId}`;

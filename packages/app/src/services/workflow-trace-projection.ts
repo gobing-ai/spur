@@ -46,6 +46,8 @@ export function rowToTraceEntry(
     cwd: string,
     /** 1319 R8: the instant `stalled` is measured against (tests inject one). */
     nowMs: number = Date.now(),
+    /** 1319 R8: the paused node's own budget (`pausedNodeBudgetMs`); env/default when absent. */
+    nodeBudgetMs?: number,
 ): WorkflowTraceEntry {
     let isDryRun = false;
     let failureReason: string | undefined;
@@ -113,7 +115,7 @@ export function rowToTraceEntry(
     // label is derived, so the persisted status stays `paused` and `workflow continue` still works.
     const pauseAgeMs =
         row.status === 'paused' || row.status === 'interrupted' ? openPauseMs(row.updated_at ?? null, nowMs) : null;
-    if (pauseAgeMs !== null && pauseAgeMs > resolveStallThresholdMs()) {
+    if (pauseAgeMs !== null && pauseAgeMs > resolveStallThresholdMs(nodeBudgetMs)) {
         entry.stalled = true;
         entry.stalledMs = pauseAgeMs;
     }

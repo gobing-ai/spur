@@ -222,6 +222,19 @@ describe('1306 shared completion finalization', () => {
         expect(data(result).surface).toBe('host');
         expect(data(result).failureSignal).toBeUndefined();
         expect(existsSync(receiptPath(dir, 'run-1', 'implement'))).toBe(false);
+        // No node budget declared: the pause carries none, so the stall check uses env/default.
+        expect(data(result).timeoutMs).toBeUndefined();
+    });
+
+    // 1319 R8: the pause must carry the node's own budget or `trace` labels against the default.
+    test('host pause records the node timeoutMs as its stall budget', async () => {
+        const dir = workdir();
+        const result = await new AgentRunActionRunner(svc({})).execute(
+            { role: 'coder', input: 'go', timeoutMs: 90_000 },
+            makeCtx(dir, { executor: 'host' }),
+        );
+        expect(result.pause).toBe(true);
+        expect(data(result).timeoutMs).toBe(90_000);
     });
 
     test('fleet fallback: one shared stamp names why the subprocess ran, on success and on a violation', async () => {

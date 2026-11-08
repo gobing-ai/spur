@@ -470,4 +470,51 @@ describe('CommandGateActionRunner timeoutMs (1319 R2)', () => {
             rmSync(cwd, { recursive: true, force: true });
         }
     });
+
+    // 1319 AC3: the real executor's finite deadline owns the process group. Failure modes: the
+    // grandchild `sleep 3600` survives the timeout (the orphan the post-mortem found); the step
+    // reports FAIL/PASS instead of BLOCKED; `timedOut` is missing from the action data.
+    test('a timed-out command.gate reaps its grandchild and records BLOCKED with timedOut', async () => {
+        const workdir = join(tmpdir(), `test-gate-reap-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+        const pidFile = join(workdir, 'grandchild.pid');
+        try {
+            const runner = new CommandGateActionRunner(new NodeProcessExecutor(), fs);
+            const res = await runner.execute(
+                {
+                    id: 'reap',
+                    executable: 'sh',
+                    args: ['-c', `sleep 3600 & echo $! > ${pidFile}; wait`],
+                    resultFile: '.spur/run/reap.status',
+                    timeoutMs: 2000,
+                },
+                { runId: 'r-reap', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+            );
+            expect(res.ok).toBe(false);
+            const data = res.data as { status?: string; timedOut?: boolean; timeoutMs?: number } | undefined;
+            expect(data?.status).toBe('BLOCKED');
+            expect(data?.timedOut).toBe(true);
+            expect(data?.timeoutMs).toBe(2000);
+            expect((await fs.readFile(join(workdir, '.spur/run/reap.status'))).trim()).toBe('BLOCKED');
+
+            const pid = Number((await fs.readFile(pidFile)).trim());
+            expect(pid).toBeGreaterThan(0);
+            // `ps` is unavailable in some sandboxes; signal 0 is the liveness probe. Allow the
+            // SIGTERM → grace → SIGKILL escalation to finish.
+            const alive = (): boolean => {
+                try {
+                    process.kill(pid, 0);
+                    return true;
+                } catch {
+                    return false;
+                }
+            };
+            const deadline = Date.now() + 5000;
+            while (alive() && Date.now() < deadline) await Bun.sleep(50);
+            expect(alive()).toBe(false);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    }, 15_000);
 });

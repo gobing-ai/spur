@@ -1,11 +1,20 @@
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
+    readWorkflowHostPauseRows,
+    readWorkflowOpenPauseRows,
     readWorkflowRuns,
     readWorkflowStateActionRows,
     readWorkflowStateVisitRows,
     TERMINAL_RUN_STATUSES,
     type WorkflowRunRow,
 } from '@gobing-ai/spur-domain';
+import {
+    hostPauseMsByNode,
+    openPauseMs,
+    pausedNodeBudgetMs,
+    readHostPauses,
+    resolveStallThresholdMs,
+} from './host-pause';
 import { isTerminalReason, type TerminalReason } from './terminal-reason';
 
 /**
@@ -188,6 +197,11 @@ export interface StateMetrics {
     wallMsP50: number | null;
     wallMsP90: number | null;
     retries: number;
+    /**
+     * 1319 R7: measured host-pause wall clock summed over the cohort. Omitted when no run paused in
+     * this state, so the byte-stable payload of a workflow without host pauses is unchanged.
+     */
+    hostMs?: number;
 }
 
 interface StateFold {
@@ -195,6 +209,7 @@ interface StateFold {
     retries: number;
     agentRunCount: number;
     wallSamples: number[];
+    hostMs?: number;
 }
 
 /** Read per-state metrics over the terminal non-dry runs (same run population and
@@ -233,6 +248,18 @@ export async function readStateMetrics(
         row.visits += t.visitsInRun;
         row.retries += Math.max(0, t.visitsInRun - 1);
     }
+    for (const h of await readWorkflowHostPauseRows(db, workflows, opts)) {
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(h.hostPausesJson);
+        } catch {
+            continue;
+        }
+        for (const [node, ms] of hostPauseMsByNode(readHostPauses({ hostPauses: parsed }))) {
+            const row = rowFor(h.workflow, node);
+            row.hostMs = (row.hostMs ?? 0) + ms;
+        }
+    }
     const rows: StateMetrics[] = [];
     for (const [workflow, states] of byWorkflow) {
         for (const [state, row] of states) {
@@ -244,6 +271,7 @@ export async function readStateMetrics(
                 wallMsP50: nearestRankPercentile(row.wallSamples, 50),
                 wallMsP90: nearestRankPercentile(row.wallSamples, 90),
                 retries: row.retries,
+                ...(row.hostMs !== undefined ? { hostMs: row.hostMs } : {}),
             });
         }
     }
@@ -258,4 +286,32 @@ export async function readStateMetrics(
               ? -1
               : 1,
     );
+}
+
+/** One open pause past its stall budget (1319 R8): labelled, never failed or killed. */
+export interface StalledRun {
+    workflow: string;
+    runId: string;
+    stalledMs: number;
+}
+
+/**
+ * The cohort's paused/interrupted non-dry runs whose open pause exceeds its budget (the paused
+ * node's own `timeoutMs`, then env, then the default). Depends on `nowMs`, so it never enters the
+ * byte-stable `--json` payload; the text report prints it.
+ */
+export async function readStalledRuns(
+    db: DbAdapter,
+    workflows: string[],
+    nowMs: number = Date.now(),
+): Promise<StalledRun[]> {
+    const stalled: StalledRun[] = [];
+    for (const row of await readWorkflowOpenPauseRows(db, workflows)) {
+        const ageMs = openPauseMs(row.updatedAt, nowMs);
+        const budget = pausedNodeBudgetMs([{ status: 'paused', result_json: row.pausedResultJson }]);
+        if (ageMs !== null && ageMs > resolveStallThresholdMs(budget)) {
+            stalled.push({ workflow: row.workflow, runId: row.runId, stalledMs: ageMs });
+        }
+    }
+    return stalled;
 }

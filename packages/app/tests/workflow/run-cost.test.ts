@@ -11,6 +11,7 @@ import {
     parseSince,
     readStateMetrics as readStateMetricsWithDb,
     readWorkflowMetrics as readWorkflowMetricsWithDb,
+    renderStalledLines,
     renderStateLines,
     renderWorkflowLines,
     scopedWorkflows as scopedWorkflowsFs,
@@ -614,5 +615,17 @@ describe('text renderers (legacy real-run-cost line formats)', () => {
             'w/s: visits=2 agent.run=1 wall=p50=5ms p90=9ms retries=1',
             'w/s: visits=2 agent.run=1 wall=n/a retries=1',
         ]);
+    });
+
+    // 1319 R7/R8: host time only when measured; a stalled line names the resume command.
+    test('state lines carry host= only when measured; stalled lines name the resume command', () => {
+        const row = { workflow: 'w', state: 's', visits: 1, agentRunCount: 1, wallMsP50: 2, wallMsP90: 2, retries: 0 };
+        expect(renderStateLines([{ ...row, hostMs: 36_675_000 }])).toEqual([
+            'w/s: visits=1 agent.run=1 wall=p50=2ms p90=2ms host=36675000ms retries=0',
+        ]);
+        expect(renderStalledLines([{ workflow: 'w', runId: 'r9', stalledMs: 7_200_000 }])).toEqual([
+            'w: stalled — paused 7200s; resume: spur workflow continue r9',
+        ]);
+        expect(renderStalledLines([])).toEqual([]);
     });
 });

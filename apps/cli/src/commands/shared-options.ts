@@ -70,7 +70,7 @@ export const SHARED_OPTIONS = {
         'pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all',
     ] as const,
     statusDoneFailed: ['--status <status>', 'Filter by status: done, failed'] as const,
-    statusDoneFailedRunning: ['--status <status>', 'Filter by status: done, failed, running'] as const,
+    statusWorkflowRun: ['--status <status>', 'Filter by status: done, failed, running, paused, interrupted'] as const,
     untilAgent: ['--until <state>', 'Lifecycle state to wait for (repeatable OR)'] as const,
     untilMessage: ['--until <state>', 'Wait target for --wait: injected|invoke-exit'] as const,
     verboseWorkflow: ['--verbose', 'Include transitions and correlation diagnostics in human progress'] as const,

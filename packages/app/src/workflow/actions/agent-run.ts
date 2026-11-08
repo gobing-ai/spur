@@ -584,7 +584,18 @@ export class AgentRunActionRunner implements ActionRunner {
                 error: `agent.run: work item for '${context.stateOrNodeId}' could not be written: ${(error as Error).message}`,
             };
         }
-        return { ok: true, pause: true, data: { surface: 'host', workItem, reason: 'host-work-item' } };
+        // The node's own budget rides on the pause so `workflow trace` can label it stalled against
+        // that budget rather than the global default (1319 R8).
+        return {
+            ok: true,
+            pause: true,
+            data: {
+                surface: 'host',
+                workItem,
+                reason: 'host-work-item',
+                ...(invocation.timeoutMs !== undefined ? { timeoutMs: invocation.timeoutMs } : {}),
+            },
+        };
     }
 
     async execute(

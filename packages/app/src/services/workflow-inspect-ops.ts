@@ -23,6 +23,7 @@ import {
     collectUndeclaredShellVarViolations,
     hasCatalogDecideAction,
 } from '../workflow/composition-lint';
+import { pausedNodeBudgetMs } from '../workflow/host-pause';
 import { validatePhaseTable } from '../workflow/plan-projection';
 import { inspectWorkflowRunRecord, type WorkflowRunRecordInspection } from '../workflow/run-record';
 import {
@@ -266,10 +267,21 @@ export class WorkflowInspectOps {
             since: filter.since,
             limit: filter.last ?? 20,
         });
-        return {
-            entries: rows.map((row) => rowToTraceEntry(row, this.ctx.cwd)),
-            total: rows.length,
-        };
+        // Only an open pause can be stalled, so only those rows pay for the action read (1319 R8).
+        const actionDao = new ActionRunDao(db);
+        const entries = await Promise.all(
+            rows.map(async (row) =>
+                rowToTraceEntry(
+                    row,
+                    this.ctx.cwd,
+                    Date.now(),
+                    row.status === 'paused' || row.status === 'interrupted'
+                        ? pausedNodeBudgetMs(await actionDao.actionRowsByRunId(row.id))
+                        : undefined,
+                ),
+            ),
+        );
+        return { entries, total: rows.length };
     }
 
     /**
@@ -280,11 +292,11 @@ export class WorkflowInspectOps {
         const runDao = new RunDao(db);
         const row = preloadedRow ?? (await runDao.traceRowById(runId));
         if (!row) throw new Error(`Run not found: ${runId}`);
-        const run = rowToTraceEntry(row, this.ctx.cwd);
+        const actionRows = await new ActionRunDao(db).actionRowsByRunId(runId);
+        const run = rowToTraceEntry(row, this.ctx.cwd, Date.now(), pausedNodeBudgetMs(actionRows));
 
         const phaseRows = await new PhaseRunDao(db).phaseRowsByRunId(runId);
         const transitionRows = await new TransitionRunDao(db).transitionRowsByRunId(runId);
-        const actionRows = await new ActionRunDao(db).actionRowsByRunId(runId);
 
         // Pre-compute per-step cost for agent.run actions via the run→session mapping
         // (task 0559): `history_run_session` maps the run to (source, session_id) pairs,

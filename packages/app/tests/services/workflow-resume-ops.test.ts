@@ -149,7 +149,7 @@ describe('WorkflowResumeOps', () => {
         expect(rowToTraceEntry(after, dir, pausedSince + 10 * 60 * 60 * 1000).stalled).toBeUndefined();
     });
 
-    test('the step profile folds measured host pauses into hostMs on the paused node only', () => {
+    test('the step profile folds measured host pauses into hostMs on the paused action row only', () => {
         const profile = buildStepProfile({
             workflow: 'confirm-gate',
             windowSec: 3600,
@@ -158,16 +158,24 @@ describe('WorkflowResumeOps', () => {
                     runId: 'rs-5',
                     events: [
                         { kind: 'action', node: 'gate', actionKind: 'hitl.confirm', durationMs: 2 },
+                        { kind: 'action', node: 'gate', actionKind: 'agent.run', durationMs: 2 },
+                        { kind: 'action', node: 'gate', actionKind: 'shell', durationMs: 3 },
                         { kind: 'action', node: 'start', actionKind: 'note', durationMs: 1 },
                     ],
                     hostPauses: [
-                        { node: 'gate', hostDurationMs: 60_000 },
-                        { node: 'gate', hostDurationMs: 5_000 },
+                        { node: 'gate', action: 'hitl.confirm', hostDurationMs: 60_000 },
+                        { node: 'gate', action: 'hitl.confirm', hostDurationMs: 5_000 },
+                        // A legacy record without `action` was an agent.run pause.
+                        { node: 'gate', hostDurationMs: 7_000 },
                     ],
                 },
             ],
         });
-        expect(profile.rows.find((row) => row.node === 'gate')?.hostMs).toBe(65_000);
+        const gate = (kind: string) => profile.rows.find((row) => row.node === 'gate' && row.actionKind === kind);
+        expect(gate('hitl.confirm')?.hostMs).toBe(65_000);
+        // The sibling action of the same node never inherits another action's pause.
+        expect(gate('agent.run')?.hostMs).toBe(7_000);
+        expect(gate('shell')?.hostMs).toBeUndefined();
         expect(profile.rows.find((row) => row.node === 'start')?.hostMs).toBeUndefined();
     });
 });

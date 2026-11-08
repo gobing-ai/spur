@@ -103,10 +103,12 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
             started_at: string;
             completed_at: string | null;
             metadata_json: string;
+            /** 1319 R8: pause anchor, so a listed paused run can be labelled stalled (epoch ms). */
+            updated_at: number | string | null;
         }>
     > {
         return this.adapter.queryAll(
-            `SELECT id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json
+            `SELECT id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json, updated_at
              FROM runs
              WHERE (?1 IS NULL OR workflow_name = ?1)
                AND (?2 IS NULL OR status = ?2)

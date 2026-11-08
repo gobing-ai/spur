@@ -17,6 +17,7 @@ import { toEnvelopeJson, writeJsonError } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
 import { makeWorkflowService } from './shared';
 
+const TRACE_STATUSES = ['done', 'failed', 'running', 'paused', 'interrupted'];
 function formatTraceList(result: WorkflowTraceListResult): string {
     if (result.entries.length === 0) {
         return 'No workflow runs.';
@@ -411,7 +412,7 @@ export function registerWorkflowTraceCommand(workflow: Command, context: CliCont
         .description('Show persisted workflow run history.')
         .argument('[run-id]', 'Run ID for per-run timeline detail')
         .option('--workflow <name>', 'Filter by workflow name')
-        .option(...SHARED_OPTIONS.statusDoneFailedRunning)
+        .option(...SHARED_OPTIONS.statusWorkflowRun)
         .option(...SHARED_OPTIONS.since)
         .option(...SHARED_OPTIONS.last, '20')
         .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
@@ -487,11 +488,12 @@ export function registerWorkflowTraceCommand(workflow: Command, context: CliCont
                 context.setExitCode(1);
                 return;
             }
-            if (options.status !== undefined && !['done', 'failed', 'running'].includes(options.status)) {
+            // 1319 R8: paused/interrupted are listable so `workflow profile` can surface stalled runs.
+            if (options.status !== undefined && !TRACE_STATUSES.includes(options.status)) {
                 writeJsonError(
                     context.output,
                     options,
-                    '--status must be one of: done, failed, running',
+                    `--status must be one of: ${TRACE_STATUSES.join(', ')}`,
                     'VALIDATION_FAILED',
                 );
                 context.setExitCode(1);

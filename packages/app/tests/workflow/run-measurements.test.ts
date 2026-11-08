@@ -10,7 +10,12 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
-import { nearestRankPercentile, readStateMetrics, readWorkflowMetrics } from '../../src/workflow/run-measurements';
+import {
+    nearestRankPercentile,
+    readStalledRuns,
+    readStateMetrics,
+    readWorkflowMetrics,
+} from '../../src/workflow/run-measurements';
 
 /** In-memory history plane shaped like the live one: text run bounds, `metadata_json` dry
  * flags, epoch-ms `created_at`, transition hops and `action_runs`. */
@@ -205,6 +210,101 @@ describe('readStateMetrics (1178 R1 per-state fold)', () => {
             expect(rows[0]?.visits).toBe(1);
             expect(rows[0]?.agentRunCount).toBe(1);
             expect(rows[0]?.wallMsP50).toBe(100); // 999/888 excluded with their runs
+        } finally {
+            close();
+        }
+    });
+});
+
+// 1319 R7/R8 failure modes: host time lands on a state that never paused, is summed from a dry
+// or non-terminal run, crashes on malformed metadata, or adds a `hostMs` key to a workflow with
+// no pauses (breaking the byte-stable payload); a stalled run is missed, a fresh/terminal/dry one
+// is labelled, or the node budget is ignored for the default.
+describe('host pauses in workflow cost (1319 R7/R8)', () => {
+    const pauses = (entries: Array<[string, number]>) =>
+        JSON.stringify({
+            hostPauses: entries.map(([node, hostDurationMs]) => ({
+                node,
+                action: 'agent.run',
+                pausedAt: '2026-09-01T00:00:00.000Z',
+                resumedAt: '2026-09-01T01:00:00.000Z',
+                hostDurationMs,
+            })),
+        });
+
+    test('hostMs folds measured pauses onto the paused state of real terminal runs only', async () => {
+        const { db, close } = await seedDb(async (d) => {
+            const insert = (id: string, status: string, metadata: string) =>
+                d.run(
+                    "INSERT INTO runs (id, workflow_name, status, started_at, completed_at, metadata_json, created_at) VALUES (?, 'pr-review', ?, '2026-09-01T00:00:00.000Z', '2026-09-01T02:00:00.000Z', ?, 1)",
+                    id,
+                    status,
+                    metadata,
+                );
+            await insert('h1', 'done', pauses([['implement', 60_000]]));
+            await insert(
+                'h2',
+                'failed',
+                pauses([
+                    ['implement', 5_000],
+                    ['review', 1_000],
+                ]),
+            );
+            await insert('hdry', 'done', JSON.stringify({ dryRun: true, ...JSON.parse(pauses([['implement', 9e6]])) }));
+            await insert('hrun', 'running', pauses([['implement', 9e6]]));
+            await insert('hbad', 'done', '{"hostPauses": "nope"}');
+            for (const runId of ['h1', 'h2']) {
+                await d.run("INSERT INTO transition_runs VALUES (?, ?, 'prev', 'implement', 1)", `t-${runId}`, runId);
+            }
+            await d.run("INSERT INTO transition_runs VALUES ('t-x', 'h1', 'prev', 'check', 1)");
+        });
+        try {
+            const rows = await readStateMetrics(db, ['pr-review']);
+            const byState = new Map(rows.map((r) => [r.state, r]));
+            expect(byState.get('implement')?.hostMs).toBe(65_000);
+            expect(byState.get('review')?.hostMs).toBe(1_000);
+            expect('hostMs' in (byState.get('check') ?? {})).toBe(false);
+            // A workflow with no pauses keeps the pre-1319 row shape.
+            const plain = await readStateMetrics(db, ['task-pipeline']);
+            expect(plain.every((r) => !('hostMs' in r))).toBe(true);
+        } finally {
+            close();
+        }
+    });
+
+    test('readStalledRuns labels open pauses past their node budget, then env/default', async () => {
+        const now = Date.parse('2026-09-02T00:00:00.000Z');
+        const { db, close } = await seedDb(async (d) => {
+            await d.exec('ALTER TABLE runs ADD COLUMN updated_at INTEGER');
+            await d.exec('ALTER TABLE action_runs ADD COLUMN result_json TEXT');
+            await d.exec('ALTER TABLE action_runs ADD COLUMN created_at INTEGER');
+            const insert = (id: string, status: string, ageMs: number, metadata = '{}') =>
+                d.run(
+                    "INSERT INTO runs (id, workflow_name, status, started_at, completed_at, metadata_json, updated_at) VALUES (?, 'pr-review', ?, '2026-09-01T00:00:00.000Z', NULL, ?, ?)",
+                    id,
+                    status,
+                    metadata,
+                    now - ageMs,
+                );
+            const pausedAction = (runId: string, timeoutMs?: number) =>
+                d.run(
+                    "INSERT INTO action_runs (id, run_id, node, kind, status, duration_ms, result_json, created_at) VALUES (?, ?, 'implement', 'agent.run', 'paused', 2, ?, 1)",
+                    `a-${runId}`,
+                    runId,
+                    JSON.stringify({ ok: true, pause: true, data: { surface: 'host', timeoutMs } }),
+                );
+            await insert('s-old', 'paused', 2 * 3_600_000); // > 30 min default
+            await insert('s-fresh', 'paused', 60_000); // < default, no node budget
+            await insert('s-budget', 'interrupted', 60_000); // > its 10 s node budget
+            await pausedAction('s-budget', 10_000);
+            await insert('s-done', 'done', 9 * 3_600_000);
+            await insert('s-dry', 'paused', 9 * 3_600_000, '{"dryRun":true}');
+        });
+        try {
+            expect(await readStalledRuns(db, ['pr-review'], now)).toEqual([
+                { workflow: 'pr-review', runId: 's-budget', stalledMs: 60_000 },
+                { workflow: 'pr-review', runId: 's-old', stalledMs: 2 * 3_600_000 },
+            ]);
         } finally {
             close();
         }

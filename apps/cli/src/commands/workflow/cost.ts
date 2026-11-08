@@ -5,8 +5,10 @@ import {
     type DbOpener,
     defaultDbOpener,
     parseSince,
+    readStalledRuns,
     readStateMetrics,
     readWorkflowMetrics,
+    renderStalledLines,
     renderStateLines,
     renderWorkflowLines,
     runBudgetGate,
@@ -94,6 +96,12 @@ export function registerWorkflowCostCommand(workflow: Command, context: CliConte
                         }
                     } else {
                         for (const line of renderWorkflowLines(await readWorkflowMetrics(db, targets, opts))) {
+                            context.output.write(line);
+                        }
+                    }
+                    // 1319 R8: time-dependent, so text-only — the --json payload stays byte-stable.
+                    if (options.json !== true) {
+                        for (const line of renderStalledLines(await readStalledRuns(db, targets))) {
                             context.output.write(line);
                         }
                     }

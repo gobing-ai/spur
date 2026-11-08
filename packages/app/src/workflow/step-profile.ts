@@ -10,6 +10,7 @@
  * Moved from `plugins/sp/scripts/workflow-step-profile.ts` (task 1005 R1, ADR-130 lib rule); the
  * argv/IO glue is `./step-profile-cli.ts` behind `spur workflow profile` (script-absorption PR-6).
  */
+import { stalledLabel } from './host-pause';
 // ── Input shapes (a subset of the live `spur workflow trace --json` payload) ─────────────
 
 /** One `cost.exact` / `cost.estimated` bucket; only `cacheHit` is read. */
@@ -49,13 +50,23 @@ export interface StepProfileRun {
 /** The part of a measured host pause this module reads (1319 R7); no import, twins stay standalone. */
 export interface StepProfileHostPause {
     node: string;
+    /** The paused action kind; absent on early records, which were all `agent.run`. */
+    action?: string;
     hostDurationMs: number;
 }
 
-/** Total host-pause milliseconds per node. */
-function hostMsByNode(pauses: readonly StepProfileHostPause[]): Map<string, number> {
+/** (node, actionKind) row key — a pause belongs to the action that paused, not its siblings. */
+function rowKey(node: string, actionKind: string): string {
+    return `${node}\u0000${actionKind}`;
+}
+
+/** Total host-pause milliseconds per (node, action) row. */
+function hostMsByRow(pauses: readonly StepProfileHostPause[]): Map<string, number> {
     const totals = new Map<string, number>();
-    for (const pause of pauses) totals.set(pause.node, (totals.get(pause.node) ?? 0) + pause.hostDurationMs);
+    for (const pause of pauses) {
+        const key = rowKey(pause.node, pause.action ?? 'agent.run');
+        totals.set(key, (totals.get(key) ?? 0) + pause.hostDurationMs);
+    }
     return totals;
 }
 
@@ -66,6 +77,9 @@ export interface TraceRunEntry {
     status?: string;
     workflowName?: string;
     hostPauses?: readonly StepProfileHostPause[];
+    /** 1319 R8: derived by `workflow trace` for a run paused past its budget. */
+    stalled?: boolean;
+    stalledMs?: number;
 }
 
 /** How a run's agent sessions were started: all fresh, all resumed, or both. */
@@ -96,7 +110,7 @@ export interface StepProfileRow {
     session: SessionMode | null;
     cacheHit: { p50: number | null; known: number; of: number };
     /**
-     * 1319 R7: total measured host-pause wall clock for this node across the sampled runs. The
+     * 1319 R7: total measured host-pause wall clock for this node's action across the sampled runs. The
      * action row reports ~2 ms because the work happened in the host session; this is what an
      * operator actually waited. Omitted when no sampled run recorded a pause, so a run without
      * host pauses keeps the unchanged row shape.
@@ -111,6 +125,18 @@ export interface StepProfile {
     windowSec: number;
     sampledRuns: number;
     rows: StepProfileRow[];
+    /**
+     * 1319 R8: runs still paused past their stall budget, with the resume command. Omitted when
+     * none, so a workflow without a stalled run keeps the unchanged envelope.
+     */
+    stalledRuns?: StepProfileStalledRun[];
+}
+
+/** One stalled run: never failed or killed, only surfaced with how to resume it. */
+export interface StepProfileStalledRun {
+    runId: string;
+    stalledMs: number;
+    resume: string;
 }
 
 // ── Aggregation ────────────────────────────────────────────────────────────────────────
@@ -265,24 +291,34 @@ export function buildStepProfile(input: {
     workflow: string;
     windowSec: number;
     runs: readonly StepProfileRun[];
+    /** `workflow trace --status paused` entries; only those labelled `stalled` are kept. */
+    paused?: readonly TraceRunEntry[];
 }): StepProfile {
     const executions = input.runs.flatMap((run) => extractExecutions(run.runId, run.events));
-    // 1319 R7: host-pause wall clock per node, folded across the sampled runs.
+    // 1319 R7: host-pause wall clock per (node, action), folded across the sampled runs.
     const hostTotals = new Map<string, number>();
     for (const run of input.runs) {
-        for (const [node, ms] of hostMsByNode(run.hostPauses ?? [])) {
-            hostTotals.set(node, (hostTotals.get(node) ?? 0) + ms);
+        for (const [key, ms] of hostMsByRow(run.hostPauses ?? [])) {
+            hostTotals.set(key, (hostTotals.get(key) ?? 0) + ms);
         }
     }
     const rows = buildRows(executions, input.windowSec).map((row) => {
-        const hostMs = hostTotals.get(row.node);
+        const hostMs = hostTotals.get(rowKey(row.node, row.actionKind));
         return hostMs === undefined ? row : { ...row, hostMs };
     });
+    const stalledRuns = nonDryRuns(input.paused ?? [])
+        .filter((entry) => entry.stalled === true)
+        .map((entry) => ({
+            runId: entry.runId,
+            stalledMs: entry.stalledMs ?? 0,
+            resume: `spur workflow continue ${entry.runId}`,
+        }));
     return {
         workflow: input.workflow,
         windowSec: input.windowSec,
         sampledRuns: input.runs.length,
         rows,
+        ...(stalledRuns.length > 0 ? { stalledRuns } : {}),
     };
 }
 
@@ -324,5 +360,6 @@ export function formatStepProfileHuman(profile: StepProfile): string {
             ].join(' '),
         );
     }
+    for (const run of profile.stalledRuns ?? []) lines.push(`${run.runId}: ${stalledLabel(run.runId, run.stalledMs)}`);
     return `${lines.join('\n')}\n`;
 }

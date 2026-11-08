@@ -233,6 +233,68 @@ export async function readWorkflowStateVisitRows(
     return rows;
 }
 
+/** One terminal run's raw `hostPauses[]` metadata (1319 R7). */
+export interface WorkflowHostPauseRow {
+    workflow: string;
+    hostPausesJson: string;
+}
+
+/**
+ * Read the measured host pauses of the terminal non-dry runs (same population and window as
+ * {@link readWorkflowStateActionRows}); runs without a pause are not returned.
+ */
+export async function readWorkflowHostPauseRows(
+    db: DbAdapter,
+    workflows: string[],
+    opts: { sinceMs?: number } = {},
+): Promise<WorkflowHostPauseRow[]> {
+    const sql = `SELECT json_extract(r.metadata_json, '$.hostPauses') AS hostPausesJson
+               FROM runs r
+              WHERE r.workflow_name = ?
+                AND ${perStatePopulation(opts.sinceMs)}
+                AND json_extract(r.metadata_json, '$.hostPauses') IS NOT NULL`;
+    const rows: WorkflowHostPauseRow[] = [];
+    for (const workflow of workflows) {
+        const found = await db.queryAll<{ hostPausesJson: string }>(
+            sql,
+            workflow,
+            ...TERMINAL_RUN_STATUSES,
+            ...(opts.sinceMs !== undefined ? [opts.sinceMs] : []),
+        );
+        for (const r of found) rows.push({ workflow, hostPausesJson: r.hostPausesJson });
+    }
+    return rows;
+}
+
+/** One still-open (paused/interrupted) non-dry run: its pause anchor and last paused action. */
+export interface WorkflowOpenPauseRow {
+    workflow: string;
+    runId: string;
+    /** `runs.updated_at` (epoch ms): the instant the engine paused the run. */
+    updatedAt: number | string | null;
+    /** `result_json` of the run's last paused action, carrying the node budget (1319 R8). */
+    pausedResultJson: string | null;
+}
+
+/** Read every open pause of the cohort — the input of the stalled label (1319 R8). */
+export async function readWorkflowOpenPauseRows(db: DbAdapter, workflows: string[]): Promise<WorkflowOpenPauseRow[]> {
+    const sql = `SELECT r.id AS runId, r.updated_at AS updatedAt,
+                    (SELECT a.result_json FROM action_runs a
+                      WHERE a.run_id = r.id AND (a.status = 'paused' OR a.result_json LIKE '%"pause":true%')
+                      ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1) AS pausedResultJson
+               FROM runs r
+              WHERE r.workflow_name = ?
+                AND r.status IN ('paused', 'interrupted')
+                AND json_extract(r.metadata_json, '$.dryRun') IS NOT 1
+              ORDER BY r.id`;
+    const rows: WorkflowOpenPauseRow[] = [];
+    for (const workflow of workflows) {
+        const found = await db.queryAll<Omit<WorkflowOpenPauseRow, 'workflow'>>(sql, workflow);
+        for (const r of found) rows.push({ workflow, ...r });
+    }
+    return rows;
+}
+
 /** Per-run `agent.run` action count and summed duration over terminal non-dry runs. */
 export interface AgentRunHistoryRow {
     runId: string;

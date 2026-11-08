@@ -248,7 +248,7 @@ export class CommandGateActionRunner implements ActionRunner {
             stdout: lastStdout,
             stderr: lastStderr,
             resultFile: normalized,
-            ...(timedOut ? { timedOut: true } : {}),
+            ...(timedOut ? { timedOut: true, timeoutMs } : {}),
         };
         // Soft probes record the outcome and hand routing to the transition guards; the run only
         // aborts here when the caller wants the gate to be fatal.

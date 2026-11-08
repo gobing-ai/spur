@@ -94,6 +94,12 @@ function runFailure(spurBin: string, result: SpawnResult, what: string): StepPro
     return failure(`${what} failed (exit ${result.exitCode}${detail === '' ? '' : `: ${detail}`}) [${spurBin}]`);
 }
 
+function parseTraceEntries(stdout: string): TraceRunEntry[] {
+    const parsed = JSON.parse(stdout) as { entries?: unknown };
+    if (!Array.isArray(parsed.entries)) throw new Error('no "entries" array');
+    return parsed.entries as TraceRunEntry[];
+}
+
 /** Run one profile; `defaultSpurBin` is the spur invocation used when `--spur-bin` is absent. */
 export function runStepProfileCli(
     argv: string[],
@@ -121,9 +127,7 @@ export function runStepProfileCli(
 
     let entries: TraceRunEntry[];
     try {
-        const parsed = JSON.parse(list.stdout) as { entries?: unknown };
-        if (!Array.isArray(parsed.entries)) throw new Error('no "entries" array');
-        entries = parsed.entries as TraceRunEntry[];
+        entries = parseTraceEntries(list.stdout);
     } catch (err) {
         return failure(`spur workflow trace output did not parse as JSON: ${String(err)}`);
     }
@@ -147,7 +151,19 @@ export function runStepProfileCli(
         }
     }
 
-    const profile = buildStepProfile({ workflow: args.workflow, windowSec: args.windowSec, runs });
+    // 1319 R8: stalled runs are paused, so the done-only sample above never sees them.
+    const pausedArgs = [...listArgs];
+    pausedArgs[pausedArgs.indexOf('done')] = 'paused';
+    const pausedList = runSpurJson(args.spurBin, pausedArgs, spurArgv);
+    if (!pausedList.ok) return runFailure(args.spurBin, pausedList, `spur ${pausedArgs.join(' ')}`);
+    let paused: TraceRunEntry[];
+    try {
+        paused = parseTraceEntries(pausedList.stdout);
+    } catch (err) {
+        return failure(`spur workflow trace output did not parse as JSON: ${String(err)}`);
+    }
+
+    const profile = buildStepProfile({ workflow: args.workflow, windowSec: args.windowSec, runs, paused });
     return {
         exitCode: 0,
         stdout: args.json ? `${JSON.stringify(profile, null, 2)}\n` : formatStepProfileHuman(profile),

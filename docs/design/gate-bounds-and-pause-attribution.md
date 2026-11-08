@@ -98,13 +98,25 @@ whose interval is missing, equal or inverted are stamped `startedAt = pausedAt`,
 Consumers:
 
 - `spur workflow trace` entries carry `hostPauses`, so `spur workflow profile` prints a `host=` figure
-  per node beside `p50`/`max`/`idle`.
+  beside `p50`/`max`/`idle`. Host time is attributed per (node, action) row — a pause recorded on
+  `hitl.confirm` never inflates the sibling `agent.run` row of the same node; a legacy record
+  without `action` counts as `agent.run`.
+- `spur workflow cost --by-state` folds the same `hostPauses[]` into a per-state `host=` figure
+  (optional `hostMs`, absent when no pause was measured, so the JSON is unchanged without pauses).
 - A run whose status is `paused`/`interrupted` and whose open pause exceeds the stall budget gets a
   **derived** `stalled` flag plus its pause duration; the human trace prints
   `Stalled: paused <n>s — resume: spur workflow continue <runId>`. The persisted status stays
   `paused`, no row is failed, and `workflow clean`'s stale finalization (running/pending only) is
   unchanged — auto-failing a resumable run would destroy the state the hint points at.
-- Stall budget resolution: explicit node budget → `SPUR_WORKFLOW_STALL_MS` → 30 min.
+- Stall budget resolution: the paused node's own budget → `SPUR_WORKFLOW_STALL_MS` → 30 min. The
+  host surface records the node's `timeoutMs` on the pause row (`data.timeoutMs`), and the trace,
+  profile and cost readers take it from the last paused action row (`pausedNodeBudgetMs`).
+- `spur workflow profile` lists stalled runs (`stalledRuns[]` in JSON, omitted when none) by also
+  reading `spur workflow trace --status paused`; `trace --status` therefore accepts
+  `done|failed|running|paused|interrupted`. `spur workflow cost` prints stalled lines in text mode
+  only: the label is time-dependent, and `cost --json` stays byte-stable.
+- `runs.updated_at` is INTEGER epoch ms; the pause-age reader accepts a number or an all-digit
+  string, since `Date.parse` on it is NaN and would suppress every label.
 
 ## Deferred (upstream, `/Users/robin/xprojects/ts-libs`)
 
