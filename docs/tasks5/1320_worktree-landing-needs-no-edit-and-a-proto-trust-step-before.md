@@ -4,7 +4,7 @@ name: Worktree landing needs --no-edit and a proto-trust step before the commit 
 status: done
 template: issue
 created_at: 2026-11-08T19:23:29.481Z
-updated_at: "2026-11-08T23:08:45.122Z"
+updated_at: "2026-11-08T23:31:19.195Z"
 feature_id: D3
 
 priority: P2
@@ -49,13 +49,12 @@ Both are runbook gaps, not code gaps: the machinery works, the documented comman
 - [x] 3. Grep the rest of the sp skill tree for `git merge --ff-only` and fix the siblings in the same pass (mirrored-surface rule).
 - [x] 4. Prove on the next `--worktree` run; record the transcript lines in `## Testing`.
 
-#### Root Cause
-
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
-
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+Both failures are environment gaps in the runbook commands, not code defects:
+
+1. **Merge:** the WT-4 landing commands ran a bare `git merge --ff-only "$BRANCH"` (before the fix, `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:77` and `:260`). Agent hosts block any `git merge` that could open an editor, and a fast-forward is still refused without `--no-edit` or `-m`, so the documented step could not run unattended.
+2. **Proto trust:** `proto` loads the `cog` commit-msg hook only from a trusted `.prototools`, and trust is recorded per absolute path. A new worktree is a new path, so its first commit failed until `proto trust .prototools` ran. The WT-2 setup list (`plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:190-202`, now fixed) never included that step.
 
 ### Solution
 
