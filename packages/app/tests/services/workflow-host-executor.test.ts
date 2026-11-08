@@ -225,3 +225,43 @@ describe('host pause resume (D65 1232 R2)', () => {
         expect(await actionRowCount(db, 'run-twice')).toBe(beforeRows);
     });
 });
+
+// 1319 R7/AC8 on the real host path. Failure modes: no pause recorded on resume; the duration is
+// not measured paused-row → resume instant; a degenerate receipt (startedAt == finishedAt) is
+// persisted as-is; a receipt that measured its own interval is overwritten.
+describe('host pause attribution (1319 R7)', () => {
+    test('a resume records hostPauses, stamps a degenerate receipt, and keeps a valid one verbatim', async () => {
+        const { svc, dir, db, file } = await harness();
+        await svc.run(file, { runId: 'run-attr', vars: { executor: 'host' } });
+        const paused = (await new ActionRunDao(db).actionRowsByRunId('run-attr')).find((r) => r.node === 'work');
+        if (paused?.started_at == null) throw new Error('no paused work row');
+        const resumedAt = new Date(Date.parse(paused.started_at) + 60_000);
+
+        writeArtifact(dir, '.spur/run/host-artifact.txt');
+        const receipt = writeHostReceipt(dir, { runId: 'run-attr', state: 'work' });
+        const degenerate = JSON.parse(readFileSync(receipt, 'utf8'));
+        degenerate.finishedAt = degenerate.startedAt;
+        writeFileSync(receipt, JSON.stringify(degenerate));
+        await svc.continuePaused('run-attr', { answerText: receipt, now: resumedAt });
+
+        const meta = JSON.parse((await new RunDao(db).traceRowById('run-attr'))?.metadata_json ?? '{}');
+        expect(meta.hostPauses).toEqual([
+            {
+                node: 'work',
+                action: 'agent.run',
+                pausedAt: paused.started_at,
+                resumedAt: resumedAt.toISOString(),
+                hostDurationMs: 60_000,
+                executor: 'host',
+            },
+        ]);
+        const stamped = JSON.parse(readFileSync(receiptPath(dir, 'run-attr', 'work'), 'utf8'));
+        expect([stamped.startedAt, stamped.finishedAt]).toEqual([paused.started_at, resumedAt.toISOString()]);
+
+        writeArtifact(dir, '.spur/run/host-review.txt');
+        const valid = writeHostReceipt(dir, { runId: 'run-attr', state: 'review' });
+        await svc.continuePaused('run-attr', { answerText: valid });
+        const kept = JSON.parse(readFileSync(receiptPath(dir, 'run-attr', 'review'), 'utf8'));
+        expect([kept.startedAt, kept.finishedAt]).toEqual(['2026-10-17T10:00:00.000Z', '2026-10-17T10:05:00.000Z']);
+    });
+});

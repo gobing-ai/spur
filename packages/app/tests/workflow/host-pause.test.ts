@@ -74,5 +74,7 @@ test('an open pause ages from its start and a stalled run carries the resume hin
 
     expect(openPauseMs('2026-11-07T16:08:52.000Z', nowMs)).toBe(7_200_000);
     expect(openPauseMs(null, nowMs)).toBeNull();
+    // `runs.updated_at` is an INTEGER epoch-ms column; a numeric anchor must age, not read as unparsable.
+    expect(openPauseMs(nowMs - 7_200_000, nowMs)).toBe(7_200_000);
     expect(stalledLabel('run-1', 7_200_000)).toBe('stalled — paused 7200s; resume: spur workflow continue run-1');
 });

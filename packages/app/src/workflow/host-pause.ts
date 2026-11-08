@@ -101,10 +101,15 @@ export function resolveStallThresholdMs(
     return STALL_THRESHOLD_MS_DEFAULT;
 }
 
-/** Age of a still-open pause, or null when the run is not paused or the instant is unparsable. */
-export function openPauseMs(pausedAt: string | null | undefined, nowMs: number): number | null {
+/**
+ * Age of a still-open pause, or null when the run is not paused or the instant is unparsable.
+ * `runs.updated_at` is an INTEGER epoch-ms column, so a number (or all-digit string) is taken as
+ * epoch ms; `Date.parse` on it would be NaN and silently suppress every stalled label.
+ */
+export function openPauseMs(pausedAt: string | number | null | undefined, nowMs: number): number | null {
     if (pausedAt === null || pausedAt === undefined) return null;
-    const start = Date.parse(pausedAt);
+    const start =
+        typeof pausedAt === 'number' ? pausedAt : /^\d+$/.test(pausedAt) ? Number(pausedAt) : Date.parse(pausedAt);
     if (!Number.isFinite(start)) return null;
     return Math.max(0, nowMs - start);
 }

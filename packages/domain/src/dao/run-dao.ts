@@ -57,8 +57,8 @@ export interface RunTraceRow {
     agent: string | null;
     started_at: string;
     completed_at: string | null;
-    /** 1319 R8: the pause anchor — the row is updated when the engine pauses the run. */
-    updated_at?: string | null;
+    /** 1319 R8: the pause anchor — the row is updated when the engine pauses the run (epoch ms). */
+    updated_at?: number | string | null;
     terminal_reason: string | null;
     metadata_json: string;
     pid: number | null;

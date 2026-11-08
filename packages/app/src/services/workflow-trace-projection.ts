@@ -40,7 +40,7 @@ export function rowToTraceEntry(
         started_at: string;
         completed_at: string | null;
         metadata_json: string;
-        updated_at?: string | null;
+        updated_at?: number | string | null;
         terminal_reason?: string | null;
     },
     cwd: string,
