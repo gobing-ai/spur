@@ -416,7 +416,7 @@ landed-but-incomplete: the batch merge LANDED as <batch-tip-sha> on <base-ref>; 
 Resume, merge, or discard:
 
   resume:  cd <worktree-path> && <command> --continue --worktree <worktree-path>
-  merge:   git checkout <base-ref> && git merge <branch>     # resolve conflicts manually
+  merge:   git checkout <base-ref> && git merge --no-edit <branch>   # resolve conflicts manually
   discard: git worktree remove <worktree-path> && git branch -D <branch> && spur projects remove <worktree-path>
 ```
 

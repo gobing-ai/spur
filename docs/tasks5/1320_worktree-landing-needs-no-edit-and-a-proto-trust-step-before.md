@@ -4,7 +4,7 @@ name: Worktree landing needs --no-edit and a proto-trust step before the commit 
 status: done
 template: issue
 created_at: 2026-11-08T19:23:29.481Z
-updated_at: "2026-11-08T22:16:18.285Z"
+updated_at: "2026-11-08T23:08:45.122Z"
 feature_id: D3
 
 priority: P2
@@ -76,9 +76,9 @@ Proof for R3 as a real run is this run itself: the tree was created with the tru
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:77` and `:260` carry `git merge --ff-only --no-edit "$BRANCH"` with the reason at `:78`/`:261`; the mirrors are updated at `plugins/sp/skills/spur-dev/references/cross-cutting.md:610`, `:613` and `plugins/sp/skills/spur-dev/references/execution-parallel-isolation.md:65`, `:85`. Pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:245` and `plugins/sp/tests/parallel-isolation-contract.test.ts:80`. |
-| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:190-202` adds the trust step, quoting the observed `cog` refusal and the best-effort command `cd "../<worktree-dir>" && [ ! -f .prototools ] |
-| R3 | MET | `bun test plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts plugins/sp/tests/parallel-isolation-contract.test.ts plugins/sp/tests/commit-guard-docs.test.ts` → 73 pass / 0 fail; and this run is the real-world proof (trust applied from the doc before the first commit; the landing merge ran the flagged command). |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:77` and `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:260` run the FF merge with --no-edit, reason at `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:78`; the WT-5 manual merge hint gained --no-edit this run at `plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:419`; mirrors at `plugins/sp/skills/spur-dev/references/cross-cutting.md:610` and `plugins/sp/skills/spur-dev/references/execution-parallel-isolation.md:65`; pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:245` and `plugins/sp/tests/parallel-isolation-contract.test.ts:80` (73 pass) |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:190-202` quotes the cog refusal and gives the best-effort proto trust step, guarded on .prototools existing, before the first commit |
+| R3 | MET | Real create-mode landing: reflog `f9b8ad6df HEAD@{2026-11-08 14:16:33 -0800}: merge sp/run-1320-a7d3: Fast-forward`; the 1320 commit was made inside that worktree (cog hook ran), marker `.spur/run/worktree-dev-run-1320-a7d3.json` status merged |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
