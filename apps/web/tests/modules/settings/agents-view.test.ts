@@ -1,6 +1,7 @@
 registerHappyDom();
 
 import { afterAll, afterEach, expect, test } from 'bun:test';
+import { REGISTERED_CANONICAL_STAGES } from '@gobing-ai/spur-domain';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
@@ -81,17 +82,23 @@ test('fallback stages name the registry reasoning skills', async () => {
         input.url.endsWith('/project/fleet') ? json(FLEET) : json({ processes: [] })) as typeof fetch);
     const view = render(createElement(AgentsView, { pollMs: 60_000 }));
     await waitFor(() => expect(view.container.textContent).toContain('sp:code-implementation'));
-    const text = view.container.textContent ?? '';
-    for (const skill of [
-        'sp:spur-dev',
-        'sp:code-verification',
-        'sp:code-testing',
-        'sp:brainstorm',
-        'sp:dogfood-testing',
-    ]) {
-        expect(text).toContain(skill);
-    }
-    for (const stale of ['sp:super-planner', 'sp:super-coder', 'sp:super-reviewer', 'sp:doc-evolve']) {
-        expect(text).not.toContain(stale);
+    const expectedStageIds = [
+        'plan',
+        'refine',
+        'brainstorm',
+        'implement',
+        'test',
+        'review',
+        'verify',
+        'dogfood',
+        'wrap',
+        'changelog',
+    ];
+    const registrySkills = new Map(REGISTERED_CANONICAL_STAGES.map((stage) => [stage.id, stage.reasoning_skill]));
+    const cards = [...view.container.querySelectorAll('[data-stage-card]')];
+    expect(cards.map((card) => card.getAttribute('data-stage-card'))).toEqual(expectedStageIds);
+    for (const id of expectedStageIds) {
+        const badge = view.container.querySelector(`[data-stage-card="${id}"] [title^="Reasoning skill: "]`);
+        expect(badge?.getAttribute('title')).toBe(`Reasoning skill: ${registrySkills.get(id)}`);
     }
 });

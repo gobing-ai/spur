@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Fix stale command references in verdict hints and Board stage fallback
-status: testing
+status: done
 template: issue
 created_at: 2026-11-09T02:39:17.956Z
-updated_at: "2026-11-09T03:12:38.365Z"
+updated_at: "2026-11-09T23:00:44.399Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1321-verdict.json
 ---
 
 ## 1321. Fix stale command references in verdict hints and Board stage fallback
@@ -23,7 +25,7 @@ Found by `/sp:dev-find-conflict --scope packages,apps,plugins,scripts --pillar a
 
 - [x] R1. Every `readVerdictClassified` remediation hint names `/sp:dev-verify <wbs>` instead of the nonexistent `spur task verify <wbs>`.
 - [x] R2. The Board fallback brainstorm stage alias reads `/sp:dev-brainstorm`.
-- [ ] R3. Every Board fallback stage `skill` equals the canonical registry `reasoning_skill` the live server path renders.
+- [x] R3. Every Board fallback stage `skill` equals the canonical registry `reasoning_skill` the live server path renders.
 
 ### Acceptance Criteria
 
@@ -66,9 +68,10 @@ Scenario: AC3 — Board fallback skills mirror the registry (req: R3)
 
 ### Solution
 
-- `packages/app/src/services/task-record.ts:205,214,227,236,254,266`: all six verdict hints now name `/sp:dev-verify ${fallbackWbs}`.
-- `apps/web/src/modules/settings/AgentsView.tsx:51`: the fallback brainstorm alias is now `/sp:dev-brainstorm`.
-- `apps/web/src/modules/settings/AgentsView.tsx:39,47,63,79,103,111`: the fallback `skill` values now equal the registry `reasoning_skill`. plan/refine/wrap → `sp:spur-dev`, implement → `sp:code-implementation`, review → `sp:code-verification`, changelog → `inline`. The registry is the authority because the live path's tooltip reads "Reasoning skill" and the server fills it from `reasoning_skill`.
+- `packages/app/src/services/task-record.ts:205-266`: all six verdict hints now name `/sp:dev-verify ${fallbackWbs}`.
+- `packages/app/tests/services/task-record.test.ts:2526-2527`: the missing-artifact regression asserts the shipped hint and rejects the nonexistent `spur task verify` verb.
+- `apps/web/src/modules/settings/AgentsView.tsx:27-114`: the fallback brainstorm alias is `/sp:dev-brainstorm`; every fallback `skill` equals the canonical registry `reasoning_skill` rendered by the live server path.
+- `apps/web/tests/modules/settings/agents-view.test.ts:68-104`: AC2 checks the shipped alias; AC3 now compares every rendered fallback card with `REGISTERED_CANONICAL_STAGES`, strengthened during forced verify `--fix all` so a wrong per-stage mapping cannot pass on page-wide substrings.
 
 ### Testing
 
@@ -78,13 +81,15 @@ Scenario: AC3 — Board fallback skills mirror the registry (req: R3)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-record.ts:205` six hints now name `/sp:dev-verify` (lines 205,214,227,236,254,266); `packages/app/tests/services/task-record.test.ts:2526-2527` asserts presence and absence; bun test task-record.test.ts 148 pass / 0 fail |
-| R2 | MET | `apps/web/src/modules/settings/AgentsView.tsx:51` alias `/sp:dev-brainstorm`; `apps/web/tests/modules/settings/agents-view.test.ts:68-75`; bun test agents-view.test.ts 3 pass / 0 fail |
+| R1 | MET | `packages/app/src/services/task-record.ts:205-266`: all six remediation hints name `/sp:dev-verify`; `packages/app/tests/services/task-record.test.ts:2526-2527` asserts presence and absence. The packages/app task-record suite: 148 pass / 0 fail |
+| R2 | MET | `apps/web/src/modules/settings/AgentsView.tsx:50-55`: fallback brainstorm alias is `/sp:dev-brainstorm`; `apps/web/tests/modules/settings/agents-view.test.ts:68-76` checks the shipped alias and rejects `/sp:brainstorm`. The apps/web agents-view suite: 4 pass / 0 fail |
+| R3 | MET | `apps/web/src/modules/settings/AgentsView.tsx:27-114` defines all ten fallback skills; `packages/domain/src/stage-registry/schema.ts:726-1000` owns their canonical `reasoning_skill` values and `apps/server/src/modules/health/index.ts:342-367` renders that field as `skill`. `apps/web/tests/modules/settings/agents-view.test.ts:80-104` compares every card with the registry: 4 pass / 0 fail; deliberate plan-skill mutation exited 1 as expected |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: AC1 — missing verdict hint names a real command (req: R1) | MET | test | `packages/app/tests/services/task-record.test.ts:2526` — 148 pass / 0 fail; fails 1 with source fix reverted |
-| Scenario: AC2 — Board fallback alias names the shipped command (req: R2) | MET | test | `apps/web/tests/modules/settings/agents-view.test.ts:73` — 3 pass / 0 fail; fails 1 with source fix reverted |
+| Scenario: AC1 — missing verdict hint names a real command (req: R1) | MET | test | `packages/app/tests/services/task-record.test.ts:2513-2533` invokes record without an artifact and asserts `/sp:dev-verify` present plus `spur task verify` absent: 148 pass / 0 fail |
+| Scenario: AC2 — Board fallback alias names the shipped command (req: R2) | MET | test | `apps/web/tests/modules/settings/agents-view.test.ts:68-76` renders fallback stages and asserts `/sp:dev-brainstorm` present plus `/sp:brainstorm` absent: 4 pass / 0 fail |
+| Scenario: AC3 — Board fallback skills mirror the registry (req: R3) | MET | test | `apps/web/tests/modules/settings/agents-view.test.ts:78-104` derives expected skills from `REGISTERED_CANONICAL_STAGES` and compares every stage card: 4 pass / 0 fail; changing only plan to `sp:super-planner` produced the expected assertion failure and restoration passed |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -95,7 +100,7 @@ Scenario: AC3 — Board fallback skills mirror the registry (req: R3)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | full-suite | — | 12532 pass / 10 fail — all 10 are 1279 process-table fixtures; sandbox blocks `ps`; unrelated to this diff |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -105,4 +110,5 @@ Scenario: AC3 — Board fallback skills mirror the registry (req: R3)
 
 - 2026-11-09T02:39:38.631Z todo → wip (system)
 - 2026-11-09T02:55:32.722Z wip → testing (system)
+- 2026-11-09T23:00:43.891Z testing → done (system)
 
