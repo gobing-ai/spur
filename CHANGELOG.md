@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.28] - 2026-11-08
+
+### Added
+- bound a hung shell gate and replay verdict evidence — `gateTimeoutMs` bounds the full and light quality-gate tiers (BLOCKED with the findings tail, no receipt), a group's `gateBackstopMs` bounds the pipeline gate visit and reaps its grandchildren, and a timed-out visit carries `timedOut` plus the bound `timeoutMs`; host pauses are attributed per node so `workflow profile` reports `hostMs` (1319) (bd97d0b51)
+  <!-- src: packages/app/src/services/quality-gate.ts:1433, packages/app/src/workflow/actions/command-gate.ts:36, config/workflows/task-pipeline.yaml:545, packages/app/src/workflow/host-pause.ts:15 · confidence: HIGH -->
+- list stalled runs and per-action host time — `spur workflow profile` adds `stalledRuns[]` with the resume command, `spur workflow cost` prints stalled lines in text mode and a per-state `host=`, host time is attributed to the (node, action) row that paused, and `trace --status` also accepts `paused`/`interrupted` so a stalled run is reachable (1319) (886e49bc7)
+  <!-- src: packages/app/src/workflow/step-profile.ts:309, packages/app/src/workflow/run-measurements.ts:303, packages/app/src/workflow/run-cost.ts:107, apps/cli/src/commands/workflow/trace.ts:20 · confidence: HIGH -->
+
+### Fixed
+- fire the stalled label by reading `runs.updated_at` as INTEGER epoch ms — `Date.parse` on it was NaN and suppressed every label (1319) (c02bfa31e)
+  <!-- src: packages/domain/src/dao/run-dao.ts:111, packages/app/src/workflow/host-pause.ts:109 · confidence: HIGH -->
+- replay the project's own test binding and skip coverage-threshold workspaces — verdict replay renders the cited tests from the project action binding, and a workspace whose bunfig declares `coverageThreshold` is skipped visibly instead of failing the suite run (1319) (60620ecfd)
+  <!-- src: packages/app/src/services/verdict-replay.ts:57, packages/app/src/services/verdict-replay.ts:146 · confidence: HIGH -->
+
+### Other
+- require `--no-edit` on the worktree landing merge and a `proto trust` step — an agent host refuses a bare `git merge` even for a fast-forward, and `proto` records trust per absolute path so a fresh worktree needs `proto trust .prototools` before its first commit (1320) (f9b8ad6df)
+  <!-- src: plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:77, plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:200 · confidence: HIGH -->
+- add `--no-edit` to the WT-5 landing hint so the documented resume command runs unattended (b1683b990)
+  <!-- src: plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:419 · confidence: HIGH -->
+- record 1320's root cause: both landing gaps were missing runbook steps, not code defects (9df3f1bd4)
+- file 1320 — worktree landing needs `--no-edit` and a proto trust step (f4e3e081e)
+- file 1319 — bound hung shell gate actions, time host pauses, replay verdict evidence (b41d3fd8e)
+
 ## [0.4.27] - 2026-11-07
 
 ### Added
