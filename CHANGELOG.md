@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.29] - 2026-11-08
+
+### Fixed
+- correct stale command references in verdict hints and Board (1321) (b9d2f9a04)
+  <!-- src: docs/tasks5/1321_fix-stale-command-references-in-verdict-hints-and-board-stag.md:67 · confidence: HIGH -->
+
 ## [0.4.28] - 2026-11-08
 
 ### Added
