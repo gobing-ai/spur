@@ -202,7 +202,7 @@ export async function readVerdictClassified(
             verdict: unknownStub(fallbackWbs),
             message:
                 `verdict artifact not readable at ${path}. ` +
-                `Run \`spur task verify ${fallbackWbs}\` to produce a PASS verdict, then re-run \`spur task record ${fallbackWbs}\`.`,
+                `Run \`/sp:dev-verify ${fallbackWbs}\` to produce a PASS verdict, then re-run \`spur task record ${fallbackWbs}\`.`,
         };
     }
     if (raw.trim() === '') {
@@ -211,7 +211,7 @@ export async function readVerdictClassified(
             verdict: unknownStub(fallbackWbs),
             message:
                 `verdict artifact at ${path} is empty. ` +
-                `Run \`spur task verify ${fallbackWbs}\` to produce a PASS verdict, then re-run \`spur task record ${fallbackWbs}\`.`,
+                `Run \`/sp:dev-verify ${fallbackWbs}\` to produce a PASS verdict, then re-run \`spur task record ${fallbackWbs}\`.`,
         };
     }
 
@@ -224,7 +224,7 @@ export async function readVerdictClassified(
             verdict: unknownStub(fallbackWbs),
             message:
                 `verdict artifact at ${path} is malformed JSON (${(err as Error).message}). ` +
-                `Re-run \`spur task verify ${fallbackWbs}\` to regenerate it, then re-record.`,
+                `Re-run \`/sp:dev-verify ${fallbackWbs}\` to regenerate it, then re-record.`,
         };
     }
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -233,7 +233,7 @@ export async function readVerdictClassified(
             verdict: unknownStub(fallbackWbs),
             message:
                 `verdict artifact at ${path} is invalid: root must be a JSON object. ` +
-                `Re-run \`spur task verify ${fallbackWbs}\` to regenerate it, then re-record.`,
+                `Re-run \`/sp:dev-verify ${fallbackWbs}\` to regenerate it, then re-record.`,
         };
     }
     const record = parsed as Record<string, unknown>;
@@ -251,7 +251,7 @@ export async function readVerdictClassified(
                 message:
                     `artifact identity mismatch at ${path}: expected wbs '${fallbackWbs}', actual ${actual}. ` +
                     `This task cannot use another task's verdict artifact. ` +
-                    `Run \`spur task verify ${fallbackWbs}\` to produce this task's own PASS verdict, then re-record.`,
+                    `Run \`/sp:dev-verify ${fallbackWbs}\` to produce this task's own PASS verdict, then re-record.`,
             };
         }
     }
@@ -263,7 +263,7 @@ export async function readVerdictClassified(
         verdict: unknownStub(fallbackWbs),
         message:
             `verdict artifact at ${path} is invalid: ${outcome.kind === 'invalid' ? outcome.reason : outcome.kind}. ` +
-            `Re-run \`spur task verify ${fallbackWbs}\` to regenerate it, then re-record.`,
+            `Re-run \`/sp:dev-verify ${fallbackWbs}\` to regenerate it, then re-record.`,
     };
 }
 

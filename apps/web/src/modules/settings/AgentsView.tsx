@@ -36,7 +36,7 @@ const DEFAULT_STAGE_DEFS: Array<{
         description: 'Intake and decompose feature into spec and tasks',
         role: 'planner',
         tier: 'capable-2',
-        skill: 'sp:super-planner',
+        skill: 'sp:spur-dev',
     },
     {
         id: 'refine',
@@ -44,11 +44,11 @@ const DEFAULT_STAGE_DEFS: Array<{
         description: 'Clarify task ambiguity and acceptance criteria',
         role: 'planner',
         tier: 'capable-2',
-        skill: 'sp:super-planner',
+        skill: 'sp:spur-dev',
     },
     {
         id: 'brainstorm',
-        alias: '/sp:brainstorm',
+        alias: '/sp:dev-brainstorm',
         description: 'Structured ideation with trade-offs and options',
         role: 'planner',
         tier: 'capable-2',
@@ -60,7 +60,7 @@ const DEFAULT_STAGE_DEFS: Array<{
         description: 'Transform requirements into production code',
         role: 'coder',
         tier: 'standard',
-        skill: 'sp:super-coder',
+        skill: 'sp:code-implementation',
     },
     {
         id: 'test',
@@ -76,7 +76,7 @@ const DEFAULT_STAGE_DEFS: Array<{
         description: 'Multi-dimensional SECUA code review',
         role: 'reviewer',
         tier: 'capable-1',
-        skill: 'sp:super-reviewer',
+        skill: 'sp:code-verification',
     },
     {
         id: 'verify',
@@ -100,7 +100,7 @@ const DEFAULT_STAGE_DEFS: Array<{
         description: 'Capture learnings, metrics, and documentation sync',
         role: 'coder',
         tier: 'standard',
-        skill: 'sp:doc-evolve',
+        skill: 'sp:spur-dev',
     },
     {
         id: 'changelog',
@@ -108,7 +108,7 @@ const DEFAULT_STAGE_DEFS: Array<{
         description: 'Generate conventional release notes and summaries',
         role: 'scribe',
         tier: 'cheap',
-        skill: 'sp:dev-changelog',
+        skill: 'inline',
     },
 ];
 

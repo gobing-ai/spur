@@ -64,3 +64,34 @@ test('a feed slower than the poll interval still renders instead of reporting fa
     await waitFor(() => expect(view.container.textContent).toContain('auditor'), { timeout: 1000 });
     expect(view.container.querySelector('[data-roster-fetch-failed]')).toBeNull();
 });
+
+// Regression (1321): the fallback stage table named `/sp:brainstorm`, a command that does not exist.
+test('fallback stages name the shipped brainstorm command', async () => {
+    setFetchForTesting((async (input: Request) =>
+        input.url.endsWith('/project/fleet') ? json(FLEET) : json({ processes: [] })) as typeof fetch);
+    const view = render(createElement(AgentsView, { pollMs: 60_000 }));
+    await waitFor(() => expect(view.container.textContent).toContain('/sp:dev-brainstorm'));
+    expect(view.container.textContent).not.toContain('/sp:brainstorm');
+});
+
+// Regression (1321): fallback skills must mirror the registry's `reasoning_skill`
+// (packages/domain/src/stage-registry/schema.ts), which the live server path renders.
+test('fallback stages name the registry reasoning skills', async () => {
+    setFetchForTesting((async (input: Request) =>
+        input.url.endsWith('/project/fleet') ? json(FLEET) : json({ processes: [] })) as typeof fetch);
+    const view = render(createElement(AgentsView, { pollMs: 60_000 }));
+    await waitFor(() => expect(view.container.textContent).toContain('sp:code-implementation'));
+    const text = view.container.textContent ?? '';
+    for (const skill of [
+        'sp:spur-dev',
+        'sp:code-verification',
+        'sp:code-testing',
+        'sp:brainstorm',
+        'sp:dogfood-testing',
+    ]) {
+        expect(text).toContain(skill);
+    }
+    for (const stale of ['sp:super-planner', 'sp:super-coder', 'sp:super-reviewer', 'sp:doc-evolve']) {
+        expect(text).not.toContain(stale);
+    }
+});

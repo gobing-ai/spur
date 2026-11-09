@@ -2523,7 +2523,8 @@ describe('1040 — record re-pulls verdict state and reconciles close metadata',
 
             expect(result.verdictState).toBe('missing');
             expect(result.verdictMessage).toContain(verdictPath);
-            expect(result.verdictMessage).toContain('spur task verify');
+            expect(result.verdictMessage).toContain('/sp:dev-verify');
+            expect(result.verdictMessage).not.toContain('spur task verify');
             expect(result.testingWritten).toBe(true);
         } finally {
             db.close();
