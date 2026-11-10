@@ -470,6 +470,25 @@ implement stage then conflated. The pipeline precheck prints a WARNING with the 
 tree has uncommitted non-corpus changes; treat it as a stop-and-commit, not noise. It warns rather
 than blocks because a legitimately in-progress tree is the operator's call.
 
+## Long-running commands: launch detached, wait bounded
+
+Applies whenever a step runs a command that takes minutes — full gates, coverage passes, e2e
+rehearsals, engine runs. KK's post-0.4.30 history analysis (2026-11-10) shows the failure mode:
+implement sessions spent **88 minutes in literal `sleep` calls plus 28 poll loops** babysitting
+~18-minute gates, and one rehearsal session emitted **3,455 near-identical poll messages over 14.5
+hours** while hand-dispatching LLM stages as background tasks.
+
+- **Start it detached, then wait once, bounded.** Background the process with a log file
+  (`cmd > .spur/run/<name>.log 2>&1 &`), then use a single bounded wait — one tail after the
+  expected duration, or `spur workflow trace <run> --follow --timeout 600000` for engine runs.
+  Never loop `sleep 30` turns or re-report the same wait in a fresh message.
+- **Multi-dispatch flows run as a workflow DAG.** A rehearsal driving several LLM stages
+  (curate → write → judge → revise) belongs in `spur workflow run` so the engine owns dispatch,
+  timeout, and retry — the session orchestrates, it does not babysit.
+- **Cheap tiers between phases, full gate at the boundary.** A full-repo gate costs 15–19 minutes
+  in a mid-size monorepo; interleave the light tier and reserve the full pass for the quality
+  boundary (see [`../spur-check/SKILL.md`](../spur-check/SKILL.md)).
+
 ## Iron Laws
 
 Seven non-negotiable invariants for the spur-dev lifecycle. These are laws, not guidelines — a
