@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E6"
 name: "Run-to-session correlation and cost-path repair"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-14T02:43:12.670Z"
-updated_at: "2026-11-07T02:22:08.580Z"
+updated_at: "2026-11-10T07:34:40.278Z"
 ---
 
 # E6: Run-to-session correlation and cost-path repair
@@ -164,6 +164,7 @@ Feature: Run-to-session and task-to-session correlation
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1308 | Show verified outcomes and reconcilable measured cost through current run links | done |
+| 1324 | History provenance and capture fidelity: worktree run merge and antigravity ETL | todo |
 | 0558 | Correlate existing history retroactively by time window, marked estimated | done |
 | 0722 | Recover task attribution from imported agent sessions | done |
 | 0559 | Repoint cost attribution at typed columns and retire the dead ETL path | done |
@@ -228,4 +229,5 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 - 2026-10-08T08:15:26.777Z active → verifying (system)
 - 2026-11-05T19:58:50.475Z verifying → active (system)
 - 2026-11-07T02:22:08.580Z active → verifying (system)
+- 2026-11-10T07:34:40.278Z verifying → active (system)
 

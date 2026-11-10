@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H16"
 name: "Faster default quality gate while keeping per-file 90/90 coverage"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-11-07T02:28:15.928Z"
+updated_at: "2026-11-10T07:34:39.168Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -114,6 +114,7 @@ Feature: Faster default quality gate while keeping per-file 90/90 coverage
 | 1295 | Restore ordinary-suite execution of real-renderer Markdown security proofs | done |
 | 1316 | Reduce duplicated test mocks behind retained behavioral and gate evidence | done |
 | 1154 | Implement the faster default gate without lowering the 90/90 coverage floor | done |
+| 1322 | Task-pipeline gate efficiency: detached execution and affected-scope test selection | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -142,4 +143,5 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 Open conflict for the owner: **R3** still requires the default invocation to *not* pass `--parallel`, so R3 currently fails against `main`. Re-scoping the feature or retiring R3 against a measured bar is an owner decision, not a mechanical sync.
 - 2026-11-05T23:21:03.914Z backlog → active (system)
 - 2026-11-07T02:28:15.928Z active → verifying (system)
+- 2026-11-10T07:34:39.168Z verifying → active (system)
 
