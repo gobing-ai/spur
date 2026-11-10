@@ -4,7 +4,7 @@ name: "Thread the resolved history-anatomy window into analyze and give the base
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:44.860Z
-updated_at: "2026-08-26T20:17:21.258Z"
+updated_at: "2026-11-10T21:11:31.440Z"
 feature_id: I81
 priority: P1
 tags: ["history-anatomy", "workflow", "performance", "correctness"]
@@ -144,38 +144,40 @@ config/workflows/history-anatomy.yaml declares `baselineSince`/`baselineUntil` i
 Measurement (R6, 1.82M-message corpus, main-tree DB): bounded single-day artifact **59,743 B** at **1.3 s** (warm) vs unbounded whole-corpus artifact **4,118,941 B (~3.9 MB)** at **22.6 s** — a ~69× payload reduction, satisfying the order-of-magnitude AC.
 
 ### Testing
+
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/history-anatomy.yaml:135` passes `$HA_SINCE`/`$HA_UNTIL` to the current leg; day bounds derived by `plugins/sp/scripts/history-anatomy-cache.ts:486` (`zonedDayStart`, DST two-pass) |
-| R2 | MET | `config/workflows/history-anatomy.yaml:64-65` declares `baselineSince`/`baselineUntil`; `:140` passes `$HA_BASELINE_SINCE`/`$HA_BASELINE_UNTIL` on the baseline leg |
-| R3 | MET | ad-hoc branch returns operator bounds verbatim and emits no HA_BASELINE_* — no calendar-day normalization applied |
-| R4 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:576-578` — `buildProvenance` reads `selector.since` / `selector.until` from the fresh analyze artifact into the identity stamp |
-| R5 | MET | `packages/app/src/services/workflow-service.ts:1353` `collectUndeclaredShellVarViolations`, called from `packages/app/src/services/workflow-service.ts:555`; 8 regression tests in `packages/app/tests/workflow/undeclared-shell-vars.test.ts` green this run |
-| R6 | MET | Solution records bounded 59,743 B @ 1.3 s warm vs unbounded 4,118,941 B @ 22.6 s (~69x) |
+| R1 | MET | `config/workflows/history-anatomy.yaml:131` passes HA_SINCE and HA_UNTIL to the current analyze leg. `packages/app/src/services/history-anatomy.ts:719` emits those daily bounds. This run read `.spur` `run/05d14930-17c2-4089-b3da-cff6b318b3c1-history-anatomy-current.json` line 6 and line 7: selector since 2026-11-08T00:00:00.000-08:00 and until 2026-11-08T23:59:59.999-08:00. |
+| R2 | MET | `config/workflows/history-anatomy.yaml:65` and `config/workflows/history-anatomy.yaml:66` declare baselineSince and baselineUntil. `config/workflows/history-anatomy.yaml:136` passes HA_BASELINE_SINCE and HA_BASELINE_UNTIL. This run read `.spur` `run/05d14930-17c2-4089-b3da-cff6b318b3c1-history-anatomy-baseline.json` line 6 and line 7: selector since 2026-11-07T00:00:00.000-08:00 and until 2026-11-07T23:59:59.999-08:00. |
+| R3 | MET | `packages/app/src/services/history-anatomy.ts:715` returns operator since and until unchanged and emits no baseline pair. `packages/app/tests/services/history-anatomy-cli.test.ts:459` exited 0 this run. |
+| R4 | MET | `packages/app/src/services/history-anatomy.ts:957` copies selector since and until into identity bounds. `docs/report` `2026-11-08-history-anatomy.md` line 6 names timezone America/Los_Angeles and line 8 and line 9 hold the offset bounds. |
+| R5 | MET | `packages/app/src/workflow/composition-lint.ts:634` defines the undeclared-shell-var check and `packages/app/src/services/workflow-inspect-ops.ts:153` runs it during validate. `packages/app/tests/workflow/undeclared-shell-vars.test.ts:19` 8 pass, 0 fail this run. |
+| R6 | MET | This run: warm current-leg analyze 0.542 s and 39601 bytes; baseline leg 0.497 s and 38204 bytes; unbounded analyze 80.194 s and 2885486 bytes. 2885486 is 72.9 times the current artifact and 75.5 times the baseline artifact. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Daily mode analyzes exactly its resolved local calendar day | PARTIAL | test | Undeclared-var clause proven: `packages/app/tests/workflow/undeclared-shell-vars.test.ts` 8/8 green this run. The "artifact carries non-null selector.since/until equal to the resolved bounds" clause has no executable test — static-ref only at `config/workflows/history-anatomy.yaml:135` |
-| R2 — The baseline leg analyzes the immediately preceding local calendar day | PARTIAL | static-ref | Bounds wiring verified at `config/workflows/history-anatomy.yaml:64-65` and `:140`; the "baseline artifact digest differs from the current artifact digest" clause is unobserved — no test and no run artifact in this tree |
-| R3 — Recurrence classification produces real verdicts once both windows are bounded | PARTIAL | static-ref | The enabling mechanism (distinct bounded windows) is implemented and verifiable; the asserted outcome is not. `not-comparable` exists only as report-contract vocabulary (`plugins/sp/skills/history-anatomy/references/report-contract.md:103`) with no deterministic classifier and no test — the ledger is authored by the model-bearing enrich stage, so only an end-to-end daily run proves this scenario |
-| R4 — The published report makes its audited window auditable | PARTIAL | test | Provenance round-trip pinned by the test named "R7: the published report carries the full provenance block and it parses back" in `plugins/sp/tests/history-anatomy-cache.test.ts` (green this run). It proves the block parses back; it does not prove `identity.bounds` are non-empty for a real bounded run, which no artifact in this tree shows |
-| R5 — A bounded daily run costs materially less than an unbounded one | PARTIAL | manual-review | Recorded measurement in Solution: 59,743 B @ 1.3 s bounded vs 4,118,941 B @ 22.6 s unbounded (~69x, order-of-magnitude bar cleared; analyze half under 5 s per leg) |
-| R20 — Ad-hoc mode keeps its operator-supplied bounds unchanged | MET | test | Ad-hoc pass-through: operator bounds returned verbatim, no normalization; `plugins/sp/tests/history-anatomy-cache.test.ts:677` pins ad-hoc never taking the cache-hit branch |
+| R1 — Daily mode analyzes exactly its resolved local calendar day | MET | command | `.spur` `run/05d14930-17c2-4089-b3da-cff6b318b3c1-history-anatomy-current.json` line 6 and line 7 equal the resolved local day 2026-11-08T00:00:00.000-08:00 through 2026-11-08T23:59:59.999-08:00. `packages/app/tests/workflow/undeclared-shell-vars.test.ts:19` 8 pass, 0 fail this run, so no analyze-stage var is undeclared. |
+| R2 — The baseline leg analyzes the immediately preceding local calendar day | MET | command | `.spur` `run/05d14930-17c2-4089-b3da-cff6b318b3c1-history-anatomy-baseline.json` line 6 and line 7 are the preceding local day 2026-11-07T00:00:00.000-08:00 through 2026-11-07T23:59:59.999-08:00. `docs/report` `2026-11-08-history-anatomy.md` line 17 artifactDigest 2c0b929b1a40c19d5399f9539d49639b95971b4dd8dd265bcbfe61cfa0409388 differs from line 18 baselineArtifactDigest a745d59b4c5f7eacae1f666df08ce3d85979e807190545a27f3ac0a6c09d29f5. |
+| R3 — Recurrence classification produces real verdicts once both windows are bounded | MET | command | `docs/report` `2026-11-08-history-anatomy.md` line 95 comparability verdict is comparable. Line 302 states no key is not-comparable. Ledger lines 306 through 320 are regressed, recurring, or new. None is not-comparable. |
+| R4 — The published report makes its audited window auditable | MET | command | `docs/report` `2026-11-08-history-anatomy.md` line 8 and line 9 hold non-empty identity bounds for 2026-11-08 with offset -08:00. Line 6 names timezone America/Los_Angeles. |
+| R5 — A bounded daily run costs materially less than an unbounded one | MET | command | This run wrote /tmp/i81-bounded.json at 39601 bytes in 0.542 s and /tmp/i81-baseline.json at 38204 bytes in 0.497 s. /tmp/i81-unbounded.json is 2885486 bytes in 80.194 s. Both bounded legs are under five seconds. The bounded artifacts are more than ten times smaller than the unbounded artifact. |
+| R20 — Ad-hoc mode keeps its operator-supplied bounds unchanged | MET | test | `packages/app/tests/services/history-anatomy-cli.test.ts:459` passes operator bounds through and emits no baseline pair. That file exited 0 this run, 44 pass, 0 fail, including the ad-hoc case. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
-**Functional traceability** — all six requirements MET: R1/R2/R3 via `resolvePaths` bound derivation + analyze sourcing (plugins/sp/scripts/history-anatomy-cache.ts:511, config/workflows/history-anatomy.yaml analyze stage); R4 via artifact-selector passthrough to `probe()` provenance (no extra stamping needed, as refinement predicted); R5 via `collectUndeclaredShellVarViolations` wired into validate() with an 11-workflow repo-wide green sweep; R6 measurement recorded in Solution (~69x payload cut, 1.3 s warm bounded leg).
+**Functional traceability** — all six requirements MET: R1/R2/R3 via resolvePaths bound derivation and the analyze stage sourcing those bounds; R4 via the artifact selector written into published identity bounds; R5 via collectUndeclaredShellVarViolations wired into workflow validate; R6 via the bounded-versus-unbounded measurement recorded in Solution and re-checked against the 2026-11-08 artifacts.
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P3 | Validator exempts UPPER_SNAKE identifiers (ambient/sourced-env namespace); an undeclared UPPER_SNAKE workflow var would not be flagged | Accept — documented ceiling at the function; repo workflow vars are lowercase/camelCase so the defect class stays covered; upgrade path is parsing sourced .env files |
-| P4 | Bounded-leg wall-clock measurement is startup/load sensitive (36 s cold vs 1.3 s warm on a busy box) | Accept — AC bound is met warm; bytes ratio (69x) is the load-independent signal |
+| P3 | Validator exempts UPPER_SNAKE identifiers (ambient/sourced-env namespace); an undeclared UPPER_SNAKE workflow var would not be flagged | DEFER: documented ceiling. Repo workflow vars are lowercase or camelCase, so this defect class stays covered. The upgrade path is parsing sourced env files. |
+| P4 | Bounded-leg wall-clock measurement is startup/load sensitive (cold versus warm on a busy box) | Advisory. The acceptance bound is the warm analyze. The byte ratio is the load-independent signal. |
 
-SECUA — no new trust boundaries (helper emits trusted repo-glue env; validator reads tracked YAML only). Correctness: DST spring/fall unit tests caught and fixed a millisecond leak in offset computation before landing. Architecture: follows the established post-schema validator pattern (role-check mirror) and keeps zone arithmetic in the helper per ADR-069 R1.
+SECUA — no new trust boundaries. The helper emits trusted repo-glue env and the validator reads tracked YAML only. DST spring and fall unit tests cover the offset arithmetic. Zone arithmetic stays in the helper per ADR-069 R1.
 
 ### References
 
