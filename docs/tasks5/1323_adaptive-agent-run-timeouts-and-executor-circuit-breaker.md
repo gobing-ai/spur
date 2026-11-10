@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Adaptive agent-run timeouts and executor circuit breaker
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-10T07:34:39.575Z
-updated_at: "2026-11-10T21:38:50.399Z"
+updated_at: "2026-11-10T22:10:45.756Z"
 feature_id: D3
 
 priority: P1
 ac_altitude: task-local
 estimate_hours: 12
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1323-verdict.json
 ---
 
 ## 1323. Adaptive agent-run timeouts and executor circuit breaker
@@ -102,9 +104,22 @@ Every breaker decision, derived budget, and ordering rationale is written to the
 
 ### Testing
 
-- `(cd packages/app && bunx tsc --noEmit -p tsconfig.json)` — clean.
-- `bun test tests/services/adaptive-timeout.test.ts tests/services/agent-run-executor-d3.test.ts tests/services/agent-resolver-d3.test.ts` — 17 pass / 0 fail (AC1 zero repeat dispatches + breaker-exhausted exit 2; AC2 pre-dispatch failover + derived budget visible; R3 measured ordering + empty-history degradation).
-- Regression: `bun test tests/services/agent-run-executor.test.ts tests/services/agent-resolver.test.ts tests/services/agent-service.test.ts tests/services/agent-routing-attribution.test.ts tests/services/failure-classification.test.ts` — 277 pass; `bun test tests/workflow/actions/agent-run*.test.ts tests/workflow/agent-run-fleet.test.ts tests/workflow/session-pinned-dispatch.test.ts tests/workflow/fleet-work-item.test.ts` — 270 pass.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Run-scoped breaker map bounded at 256 with oldest-eviction `packages/app/src/services/agent-run-executor.ts:184-201`; run-id keying the action correlates retries with `packages/app/src/services/agent-run-executor.ts:416` + `packages/app/src/workflow/actions/agent-run.ts:997`; completed-dispatch exit-2/unavailable-signal trip `packages/app/src/services/agent-run-executor.ts:943-954` via `packages/app/src/services/failure-classification.ts:184-190`; pre-loop breaker-skip re-resolve so retry-bound nodes never re-dispatch the dead executor `packages/app/src/services/agent-run-executor.ts:570-613`; honest exit-2 chain exhaustion `packages/app/src/services/agent-run-executor.ts:584-593`; escalation-seam union exclusion (prior-fix verification) `packages/app/src/services/agent-run-executor.ts:1010-1019`. Tests: `packages/app/tests/services/agent-run-executor-d3.test.ts:91,112,132,227,274` — 19 pass / 0 fail fresh. |
+| R2 | MET | `resolveAdaptiveTimeoutMs` with YAML hard cap (never grown, healthy budgets never shrunk), 30s floor, mean×3 / p95×1.5 headroom, no-history static fallback `packages/app/src/services/adaptive-timeout.ts:47-105`; per-attempt wiring with latency cache `packages/app/src/services/agent-run-executor.ts:625-649`; budget stamped on the traced invocation `packages/app/src/services/agent-run-executor.ts:795-801`; domain read degrading to empty on any failure `packages/domain/src/analytics/executor-latency.ts:37-66`. Tests: `packages/app/tests/services/adaptive-timeout.test.ts:18-75`, `packages/domain/tests/analytics/executor-latency.test.ts:41-85` — all pass fresh. |
+| R3 | MET | `orderEligibleByMeasuredLatency` orders stage-funnel and sideways failover candidates measured-first (ladderScore = latency ÷ clamped success, lower wins), records `ordering` for the trace, degrades to declaration order with empty history `packages/app/src/services/agent-resolver.ts:442-443,549-550,598-631`; `ladderScore` `packages/app/src/services/adaptive-timeout.ts:107-114`. Tests: `packages/app/tests/services/agent-resolver-d3.test.ts:60,78` — pass fresh. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Dead-first ladder dispatches the dead executor exactly once then fails over (`packages/app/tests/services/agent-run-executor-d3.test.ts:91`), a retry-bound node in the same run performs zero further dispatches and records `breaker-skip` (`packages/app/tests/services/agent-run-executor-d3.test.ts:112`), breaker-exhausted runs fail honestly with exit 2 (`packages/app/tests/services/agent-run-executor-d3.test.ts:132`), and the escalation walk never re-selects a breaker-dead executor — zero dead re-dispatches with `chain-exhausted` instead (`packages/app/tests/services/agent-run-executor-d3.test.ts:227,274`). Fresh: 19 pass / 0 fail. |
+| AC2 | MET | test | Slow-executor node with measured latency beyond the static cap is skipped pre-dispatch with zero wasted dispatches and a visible derived budget in the decision detail (`packages/app/tests/services/agent-run-executor-d3.test.ts:150`); with no alternative, the node dispatches under the operator cap with the budget visible on the traced invocation `fits:false appliedMs:1000 derivedMs:30000` (`packages/app/tests/services/agent-run-executor-d3.test.ts:170`, wiring at `packages/app/src/services/agent-run-executor.ts:795-801`); no history keeps the static budget unchanged (`packages/app/tests/services/agent-run-executor-d3.test.ts:192`). |
+| AC3 | MET | test | Every adaptive decision (`breaker-trip`/`breaker-skip`/`timeout-exhausted-skip`/`escalation`/`chain-exhausted`) is recorded with a reason + timestamp and mirrored onto `agent.invoke.ladder` (`packages/app/src/services/agent-run-executor.ts:204-222`, decisions returned at `packages/app/src/services/agent-run-executor.ts:1177`) and persisted onto the action result row (`packages/app/src/workflow/actions/agent-run.ts:1634`); derived budgets ride the traced invocation `timeoutBudget` (`packages/app/src/services/agent-service.ts:210-216`). Tests assert `traced.ladder` kinds and `invocation.timeoutBudget` (`packages/app/tests/services/agent-run-executor-d3.test.ts:79-89,158-190`). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -159,5 +174,6 @@ Verdict: PASS
 ### History
 
 - 2026-11-10T16:31:02.654Z backlog → todo (system)
-
+- 2026-11-10T22:10:41.499Z wip → testing (system)
+- 2026-11-10T22:10:45.746Z testing → done (system)
 
