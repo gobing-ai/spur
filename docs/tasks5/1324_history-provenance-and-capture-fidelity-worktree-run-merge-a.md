@@ -44,11 +44,9 @@ this repo on 2026-11-10).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — (req: R1; R4): A change touching one workspace's source selects only that workspace's test files plus any
-  dependent-workspace tests, verified on a two-workspace fixture.
-- [ ] AC2 — (req: R2): A change touching a shared package falls back to the full suite.
-- [ ] AC3 — (req: R3): Selected-scope gate runs record the selection rationale (files + reason) in the check receipt
-  so PASS evidence stays auditable.
+- [ ] AC1 — (req: R1; R4): A worktree run's provenance rows (runs, phase_runs, task_run_links, run_sessions) land in the project DB with ids preserved and a worktree-origin mechanism marker; re-merge is idempotent (second merge changes no rows), and `history analyze` counts worktree runs in the verifiedOutcome task denominator instead of a false 0.
+- [ ] AC2 — (req: R2): An antigravity session import populates `history_message.model` and usage token fields (cost where derivable) and `history_tool_call.args_raw`/`args_digest`; vendor-unavailable fields carry an explicit unavailable disposition, not empty strings — agy steps stop showing as zero-usage unattributed time.
+- [ ] AC3 — (req: R3): Verbatim-duplicate consecutive assistant messages (same normalized text, same session, contiguous) collapse into one record with a repeat count or an excluded disposition, and loop/latency aggregators exclude them from their denominators.
 
 ### Q&A
 
