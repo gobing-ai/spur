@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Adaptive agent-run timeouts and executor circuit breaker
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-10T07:34:39.575Z
-updated_at: "2026-11-10T16:31:02.654Z"
+updated_at: "2026-11-10T20:21:39.670Z"
 feature_id: D3
 
 priority: P1
@@ -100,6 +100,17 @@ Every breaker decision, derived budget, and ordering rationale is written to the
 - `packages/app/src/workflow/actions/agent-run.ts` — persists `traced.ladder` onto the action result row.
 - Tests: `tests/services/adaptive-timeout.test.ts`, `tests/services/agent-run-executor-d3.test.ts` (AC1/AC2), `tests/services/agent-resolver-d3.test.ts` (R3).
 
+### Solution
+
+Change map (commit 6953e495c):
+- `packages/app/src/services/adaptive-timeout.ts:7` (new) — R2/R3 core: `resolveAdaptiveTimeoutMs` (3×mean / 1.5×p95, 30s floor, YAML cap; no history → static), `ladderScore` (latency ÷ success, clamp ≥0.1), `readExecutorLatency`/`loadExecutorLatency` (history_board_model_stats; failure → empty, never throws).
+- `packages/app/src/services/agent-run-executor.ts:174` — R1 run-scoped breaker keyed by flags run-id; unavailability evidence (exit 2 / unavailable) trips it; retry-bound re-resolution excludes tripped set (zero dead dispatches); breaker-exhausted → exitCode 2; per-attempt derived budget + pre-dispatch timeout-exhausted failover; ladder decisions + `agent.invoke.ladder` events.
+- `packages/app/src/services/agent-resolver.ts:442` — measured-latency escalation ordering (`orderEligibleByMeasuredLatency`), `ordering` rows on resolve result; empty history → declaration order.
+- `packages/app/src/services/agent-service.ts` — `AgentLadderDecision`, `LadderOrderingEntry`, traced `ladder`, `timeoutBudget`, `historyLatency` seam.
+- `packages/app/src/services/failure-classification.ts` — `executorUnavailabilityEvidence`.
+- `packages/app/src/workflow/actions/agent-run.ts` — persists `traced.ladder` on the action result row (AC3 trace evidence).
+- 2026-11-10T20:21:39.670Z todo → wip (system)
+
 ### Testing
 
 - `(cd packages/app && bunx tsc --noEmit -p tsconfig.json)` — clean.
@@ -119,12 +130,3 @@ Every breaker decision, derived budget, and ordering rationale is written to the
 - 2026-11-10T16:31:02.654Z backlog → todo (system)
 
 
-## Solution
-
-Change map (commit 6953e495c):
-- `packages/app/src/services/adaptive-timeout.ts` (new) — R2/R3 core: `resolveAdaptiveTimeoutMs` (3×mean / 1.5×p95, 30s floor, YAML cap; no history → static), `ladderScore` (latency ÷ success, clamp ≥0.1), `readExecutorLatency`/`loadExecutorLatency` (history_board_model_stats; failure → empty, never throws).
-- `packages/app/src/services/agent-run-executor.ts` — R1 run-scoped breaker keyed by flags run-id; unavailability evidence (exit 2 / unavailable) trips it; retry-bound re-resolution excludes tripped set (zero dead dispatches); breaker-exhausted → exitCode 2; per-attempt derived budget + pre-dispatch timeout-exhausted failover; ladder decisions + `agent.invoke.ladder` events.
-- `packages/app/src/services/agent-resolver.ts` — measured-latency escalation ordering (`orderEligibleByMeasuredLatency`), `ordering` rows on resolve result; empty history → declaration order.
-- `packages/app/src/services/agent-service.ts` — `AgentLadderDecision`, `LadderOrderingEntry`, traced `ladder`, `timeoutBudget`, `historyLatency` seam.
-- `packages/app/src/services/failure-classification.ts` — `executorUnavailabilityEvidence`.
-- `packages/app/src/workflow/actions/agent-run.ts` — persists `traced.ladder` on the action result row (AC3 trace evidence).
