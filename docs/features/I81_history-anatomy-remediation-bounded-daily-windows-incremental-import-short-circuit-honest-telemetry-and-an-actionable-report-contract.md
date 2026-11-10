@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I81"
 name: "History-anatomy remediation: bounded daily windows, incremental import short-circuit, honest telemetry, and an actionable report contract"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-26T05:33:47.266Z"
-updated_at: "2026-08-26T18:20:24.169Z"
+updated_at: "2026-11-10T17:58:26.847Z"
 ---
 
 # I81: History-anatomy remediation: bounded daily windows, incremental import short-circuit, honest telemetry, and an actionable report contract
@@ -237,3 +237,5 @@ Feature: History-anatomy remediation: bounded daily windows, incremental import 
 
 - 2026-08-26T18:20:23.771Z backlog → active (system)
 - 2026-08-26T18:20:24.169Z active → verifying (system)
+- 2026-11-10T17:58:26.847Z verifying → active (system)
+
