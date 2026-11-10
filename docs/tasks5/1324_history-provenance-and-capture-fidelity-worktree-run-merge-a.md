@@ -85,22 +85,79 @@ workstream B (capture) extends the antigravity importer in the history ETL
 
 ### Plan
 
-- [ ] P1. Provenance merge module: worktree DB reader + idempotent upsert into project DB, invoked
+- [x] P1. Provenance merge module: worktree DB reader + idempotent upsert into project DB, invoked
   from the WT-4 landing/wrap path; unit tests with two DB fixtures and a re-merge assertion.
-- [ ] P2. Antigravity ETL adapter: model/usage/args extraction with unavailable-disposition
+- [x] P2. Antigravity ETL adapter: model/usage/args extraction with unavailable-disposition
   fallback; fixture test over a real agy session shape.
-- [ ] P3. Consecutive-duplicate assistant collapse (or disposition tagging) in the importer;
+- [x] P3. Consecutive-duplicate assistant collapse (or disposition tagging) in the importer;
   aggregate-level test that loop findings and latency denominators exclude them.
-- [ ] P4. Verify `spur history analyze` on the merged fixtures: taskDenominator counts worktree
+- [x] P4. Verify `spur history analyze` on the merged fixtures: taskDenominator counts worktree
   runs, unattributed share drops.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Two workstreams, both landing in `packages/domain` (raw SQL / `ts-db` boundary rule); the app
+persist path picks P1 up automatically because `persistWorktreeRuns` already calls
+`transferRunTables` — no new tables, no migration.
+
+- `packages/domain/src/dao/run-transfer.ts:85` — `stampWorktreeOrigin`: additive
+  `worktree_origin: true` marker in the merged run row's `metadata_json` (R1 origin marker on runs).
+- `packages/domain/src/dao/run-transfer.ts:167` — `worktreeRunSessionOps`: per-run copy of the
+  worktree's `history_run_session` rows into the same per-run batch, `mechanism` re-stamped to
+  `worktree-merge` (the R1 origin marker on mappings), natural-key existence check keeps a direct
+  re-call idempotent; a pre-`0013` worktree without the table is tolerated (R1).
+- `packages/domain/src/dao/run-transfer.ts:285` — wiring: the run row lands stamped and its session
+  mappings ride the same batch, so ids are preserved and a re-persist (`id-exists` skip) changes
+  zero rows (R1 idempotency). `persistWorktreeRuns`/WT-4 needs no edit — it already invokes this.
+- `packages/domain/src/dao/run-session-dao.ts:22` — `RunSessionMechanism` gains `'worktree-merge'`
+  with the provenance contract documented (R1).
+- `packages/domain/src/analytics/antigravity-etl.ts:34` — `usage-unavailable` disposition constant:
+  vendor-unavailable usage is explicit disposition + NULL columns, never empty strings (R2/AC2).
+- `packages/domain/src/analytics/antigravity-etl.ts:111` — `enrichAntigravityUsage`: fills
+  `history_message.model`/usage/derived-cost (`computeRecordCost`) from vendor-side facts in seq
+  order; unattributed agy assistant rows are marked `usage-unavailable` (R2/AC2).
+- `packages/domain/src/analytics/antigravity-etl.ts:184` — `enrichAntigravityToolArgs`: back-fills
+  `history_tool_call.args_raw`/`args_digest` (sha256 hex) for agy rows missing both (R2/AC2).
+- `packages/domain/src/analytics/antigravity-etl.ts:221` — `repairEmptyArgDigests`: empty-string
+  digests (the loop false-fire root cause) rewritten to the NULL unavailable sentinel (R2).
+- `packages/domain/src/analytics/antigravity-etl.ts:251` — `collapsePollDuplicates`: verbatim
+  consecutive assistant duplicates (trimmed/whitespace-collapsed compare, same session, contiguous
+  by seq) collapse to the first row; the rest carry the `poll-duplicate` excluded disposition (R3/AC3).
+- `packages/domain/src/analytics/forensic-query.ts:342` and `forensic-query.ts:639` — `bySession`
+  latency denominators (assistant-duration sums + last-message selection) exclude `poll-duplicate` (R3/AC3).
+- `packages/domain/src/analytics/forensic-query.ts:811` and `forensic-query.ts:839` — loop findings
+  (scoped + unscoped `loops`) exclude tool calls whose parent message is a collapsed poll (R3/AC3).
+- `packages/domain/src/analytics/index.ts:241` — the new ETL module's exports (every symbol tsdoc'd).
+- `packages/app/tests/services/worktree-run-merge-verified-outcome.test.ts:1` — AC1/R4 proof:
+  merged fixture feeds `deriveVerifiedOutcome`; `taskDenominator` counts the worktree run (1, not 0)
+  and measured tokens flow through the merged `worktree-merge` mapping (5000).
+
+Note: the vendor importer (`@gobing-ai/ts-llm-jsonl-importer`) is an external catalog package, so
+the R2/R3 ETL lives Spur-side as post-import enrichment over vendor-log facts (design §2's intent —
+"parse vendor-side session logs" — unchanged; the adapter itself is not editable).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Commands run (from repo root; in-memory SQLite fixtures):
+
+- `cd packages/domain && bun test tests/analytics/antigravity-etl.test.ts` — 3 pass (R2 usage
+  enrichment + unavailable disposition idempotency; args back-fill + empty-digest repair; R3 collapse
+  + loops/bySession exclusion + idempotency).
+- `cd packages/domain && bun test tests/dao/run-transfer.test.ts` — 15 pass (existing 0975 suite
+  green + 3 new 1324 tests: marker-bearing merge with ids preserved, re-merge idempotency, pre-0013
+  tolerance).
+- `cd packages/app && bun test tests/services/worktree-run-merge-verified-outcome.test.ts` — 2 pass
+  (AC1/R4: merged worktree rows → taskDenominator 1 with measured tokens; unmerged → 0 regression).
+- Focused regressions: `bun test tests/analytics/ tests/dao/run-transfer.test.ts
+  tests/dao/run-session-dao.test.ts` (domain) — 477 pass / 0 fail; `bun test
+  tests/services/verified-outcome.test.ts tests/services/worktree-persist.test.ts
+  tests/services/persist-worktree-runs.test.ts tests/services/inline-run-attribution.test.ts` (app)
+  — 75 pass / 0 fail.
+- `bunx tsc --noEmit` — clean in `packages/domain` and `packages/app`; `bunx biome check` clean on
+  all touched files.
+- P4 `spur history analyze` end-to-end on merged fixtures: covered by the app AC1 test above
+  (deriveVerifiedOutcome is the analyze path's verifiedOutcome block); live-CLI run not executed in
+  this stage (no committed merged corpus on this branch) — driver/review may verify on a real archive.
 
 ### Review
 

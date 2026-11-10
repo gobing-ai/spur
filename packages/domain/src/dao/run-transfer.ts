@@ -81,6 +81,27 @@ const TERMINAL_STATUSES = new Set(['done', 'failed', 'cancelled']);
 /** Row shape as `SELECT *` returns it — column names come from the migrated schema. */
 type RawRow = { readonly [column: string]: unknown };
 
+/**
+ * Stamp a source run row's `metadata_json` with the worktree-origin marker (task 1324 R1).
+ * The original metadata keys are preserved; the marker is additive, so the engine's
+ * `definitionDigest` / `resumeDefinitionDigest` readers keep working unchanged. A
+ * malformed or non-object `metadata_json` resets to an object holding only the marker —
+ * the source value is untrusted worktree output and must never crash a persist.
+ */
+function stampWorktreeOrigin(row: RawRow): RawRow {
+    let meta: Record<string, unknown> = {};
+    try {
+        const parsed: unknown = JSON.parse(String(row.metadata_json ?? '{}'));
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            meta = parsed as Record<string, unknown>;
+        }
+    } catch {
+        meta = {};
+    }
+    meta.worktree_origin = true;
+    return { ...row, metadata_json: JSON.stringify(meta) };
+}
+
 function insertIfAbsentOps(
     table: string,
     rows: readonly RawRow[],
@@ -138,6 +159,54 @@ async function ledgerOps(
             continue;
         }
         ops.push(...insertIfAbsentOps(table, rows, columns));
+    }
+    return ops;
+}
+
+/**
+ * Build the insert ops for one run's worktree `history_run_session` rows (task 1324 R1).
+ *
+ * The mapping table has no `id` primary key (its natural key is the full row), so the
+ * shared `ON CONFLICT(id)` helper does not apply. Instead each row is copied with its
+ * `mechanism` replaced by the `worktree-merge` origin marker and is skipped when the
+ * natural key `(run_id, source, session_id, exactness, resolved_at)` already exists in
+ * the target — a re-persist of the same worktree leaves every target row unchanged
+ * (idempotent). The original mechanism is intentionally NOT preserved on the merged row:
+ * the marker is the provenance contract consumers read (R1's exactness/mechanism marker).
+ *
+ * A source DB older than migration `0013` has no such table; skipping keeps a pre-ledger
+ * worktree transferable instead of refusing teardown on a missing table (same tolerance
+ * as {@link ledgerOps}).
+ */
+async function worktreeRunSessionOps(from: DbAdapter, to: DbAdapter, runId: string) {
+    const present = await from.queryFirst<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        'history_run_session',
+    );
+    if (present === undefined) return [];
+    const rows = await from.queryAll<RawRow>('SELECT * FROM history_run_session WHERE run_id = ?', runId);
+    if (rows.length === 0) return [];
+    const targetColumns = await tableColumns(to, 'history_run_session');
+    const ops: { sql: string; params: readonly unknown[] }[] = [];
+    for (const row of rows) {
+        const exists = await to.queryFirst(
+            `SELECT run_id FROM history_run_session
+             WHERE run_id = ? AND source IS ? AND session_id IS ? AND exactness IS ? AND resolved_at IS ?
+             LIMIT 1`,
+            row.run_id,
+            row.source ?? null,
+            row.session_id ?? null,
+            row.exactness ?? null,
+            row.resolved_at ?? null,
+        );
+        if (exists !== undefined) continue;
+        const columns = Object.keys(row).filter((column) => targetColumns.has(column));
+        ops.push({
+            sql:
+                `INSERT INTO history_run_session (${columns.join(', ')}) ` +
+                `VALUES (${columns.map(() => '?').join(', ')})`,
+            params: columns.map((column) => (column === 'mechanism' ? 'worktree-merge' : row[column])),
+        });
     }
     return ops;
 }
@@ -213,7 +282,12 @@ export async function transferRunTables(from: DbAdapter, to: DbAdapter): Promise
                 continue;
             }
         }
-        const ops = insertIfAbsentOps('runs', [row], targetRunsColumns);
+        // 1324 R1: the run row lands with its worktree-origin metadata stamp, and the
+        // worktree's run→session mappings ride the same per-run batch (mechanism
+        // re-stamped to 'worktree-merge' by the op builder) so cost attribution keeps
+        // its exact mappings after the tree is removed.
+        const ops = insertIfAbsentOps('runs', [stampWorktreeOrigin(row)], targetRunsColumns);
+        ops.push(...(await worktreeRunSessionOps(from, to, id)));
         for (const table of CHILD_TABLES) {
             ops.push(
                 ...insertIfAbsentOps(

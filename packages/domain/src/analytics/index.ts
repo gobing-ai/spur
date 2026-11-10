@@ -1,4 +1,16 @@
 export {
+    AGY_USAGE_UNAVAILABLE_DISPOSITION,
+    type AntigravityEnrichmentResult,
+    type AntigravityToolArgsRecord,
+    type AntigravityUsageRecord,
+    collapsePollDuplicates,
+    enrichAntigravityToolArgs,
+    enrichAntigravityUsage,
+    POLL_DUPLICATE_DISPOSITION,
+    type PollDuplicateCollapse,
+    repairEmptyArgDigests,
+} from './antigravity-etl';
+export {
     type ArtifactSelector,
     type ArtifactWarning,
     type CacheWasteStat,

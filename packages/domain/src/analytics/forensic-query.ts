@@ -339,8 +339,8 @@ export async function bySession(
                     SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
                     SUM(COALESCE(output_tokens, 0)) AS output_tokens,
                     SUM(cost_usd) AS cost_usd,
-                    SUM(CASE WHEN role = 'assistant' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
-                    SUM(CASE WHEN role = 'assistant' AND duration_ms IS NULL THEN 1 ELSE 0 END) AS assistant_duration_unmeasured
+                    SUM(CASE WHEN role = 'assistant' AND disposition <> 'poll-duplicate' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS assistant_duration_ms,
+                    SUM(CASE WHEN role = 'assistant' AND duration_ms IS NULL AND disposition <> 'poll-duplicate' THEN 1 ELSE 0 END) AS assistant_duration_unmeasured
              FROM selected m
              GROUP BY source, session_id
          ), last_messages AS (
@@ -348,7 +348,7 @@ export async function bySession(
                     ROW_NUMBER() OVER (
                         PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC
                     ) AS rank
-             FROM selected WHERE disposition != 'meta'
+             FROM selected WHERE disposition NOT IN ('meta', 'poll-duplicate') -- 1324 R3: latency denominator excludes collapsed polls
          )
          SELECT ms.session_id AS sessionId, ms.source AS source, ms.model AS model,
                 ms.started_at AS startedAt, ms.ended_at AS endedAt, ms.messages AS messages,
@@ -636,7 +636,7 @@ export async function bySessionPage(
          last_messages AS (
              SELECT source, session_id, record_hash, role,
                     ROW_NUMBER() OVER (PARTITION BY source, session_id ORDER BY seq DESC, source_rowid DESC) AS rank
-             FROM selected WHERE disposition != 'meta'
+             FROM selected WHERE disposition NOT IN ('meta', 'poll-duplicate') -- 1324 R3: latency denominator excludes collapsed polls
          )
          SELECT ms.session_id AS sessionId, ms.source AS source, ms.model AS model,
                 ms.started_at AS startedAt, ms.ended_at AS endedAt, ms.messages AS messages,
@@ -807,6 +807,8 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQue
              WHERE tc.session_id IN (${placeholders})
                AND tc.args_digest IS NOT NULL AND tc.args_digest <> ''
                AND tc.session_id NOT IN ('', 'unknown', 'session')
+               -- 1324 R3: tool calls hanging off a collapsed poll duplicate are loop noise.
+               AND COALESCE(m.disposition, '') <> 'poll-duplicate'
              GROUP BY tc.source, tc.session_id, tc.tool_name, tc.args_digest
              HAVING COUNT(*) >= 3
              ORDER BY repeats DESC`,
@@ -820,7 +822,7 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQue
     const wm = applyWatermarkToWhere(where, opts?.watermark);
     return db.queryAll<LoopRow>(
         `WITH filtered_messages AS (
-             SELECT m.record_hash, m.source, m.model, m.ts
+             SELECT m.record_hash, m.source, m.model, m.ts, m.disposition
              FROM history_message m
              ${wm.where}
          )
@@ -834,6 +836,7 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQue
          FROM filtered_messages fm
          CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
          WHERE tc.args_digest IS NOT NULL AND tc.args_digest <> '' AND tc.session_id NOT IN ('', 'unknown', 'session')
+           AND COALESCE(fm.disposition, '') <> 'poll-duplicate' -- 1324 R3: collapsed poll noise
          GROUP BY fm.source, tc.session_id, tc.tool_name, tc.args_digest
          HAVING COUNT(*) >= 3
          ORDER BY repeats DESC`,
