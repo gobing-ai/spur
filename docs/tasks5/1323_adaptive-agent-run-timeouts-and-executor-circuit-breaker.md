@@ -92,24 +92,13 @@ Every breaker decision, derived budget, and ordering rationale is written to the
 
 ### Solution
 
-- `packages/app/src/services/adaptive-timeout.ts` — new: `resolveAdaptiveTimeoutMs` (R2: derived budget = max(3×mean, 1.5×p95) with a 30s floor, YAML `timeoutMs` is the hard cap — never grown, healthy budgets never shrunk; no history → static behavior), `ladderScore` (R3: latency ÷ clamped success rate, lower wins), `readExecutorLatency`/`loadExecutorLatency` (reads `history_board_model_stats`; read failure → empty, never throws).
-- `packages/app/src/services/agent-run-executor.ts` — R1: run-scoped breaker (keyed by the flags' `run-id`, the id the action correlates retries with; bounded, no cross-run persistence); completed-dispatch unavailability (exit 2 / unavailable signal) trips it via `executorUnavailabilityEvidence`, a retry-bound node's next dispatch re-resolves through the stage funnel with the breaker set excluded (breaker-skip), breaker-dead run fails honestly with exitCode 2. R2: per-attempt `resolveAdaptiveTimeoutMs` → `timeoutBudget` on the traced invocation; measured latency beyond the cap fails over pre-dispatch (timeout-exhausted-skip) instead of burning the timeout. AC3: decisions (`breaker-trip`/`breaker-skip`/`timeout-exhausted-skip`/escalation/chain-exhausted) recorded on the result + `agent.invoke.ladder` events.
-- `packages/app/src/services/agent-resolver.ts` — R3: `orderEligibleByMeasuredLatency` orders escalation-ladder candidates measured-first by latency × success (unmeasured keep declaration order); result carries `ordering` for the trace; empty history → static order unchanged.
+- `packages/app/src/services/adaptive-timeout.ts:7` — new: `resolveAdaptiveTimeoutMs` (R2: derived budget = max(3×mean, 1.5×p95) with a 30s floor, YAML `timeoutMs` is the hard cap — never grown, healthy budgets never shrunk; no history → static behavior), `ladderScore` (R3: latency ÷ clamped success rate, lower wins), `readExecutorLatency`/`loadExecutorLatency` (reads `history_board_model_stats`; read failure → empty, never throws).
+- `packages/app/src/services/agent-run-executor.ts:174` — R1: run-scoped breaker (keyed by the flags' `run-id`, the id the action correlates retries with; bounded, no cross-run persistence); completed-dispatch unavailability (exit 2 / unavailable signal) trips it via `executorUnavailabilityEvidence`, a retry-bound node's next dispatch re-resolves through the stage funnel with the breaker set excluded (breaker-skip), breaker-dead run fails honestly with exitCode 2. R2: per-attempt `resolveAdaptiveTimeoutMs` → `timeoutBudget` on the traced invocation; measured latency beyond the cap fails over pre-dispatch (timeout-exhausted-skip) instead of burning the timeout. AC3: decisions (`breaker-trip`/`breaker-skip`/`timeout-exhausted-skip`/escalation/chain-exhausted) recorded on the result + `agent.invoke.ladder` events.
+- `packages/app/src/services/agent-resolver.ts:442` — R3: `orderEligibleByMeasuredLatency` orders escalation-ladder candidates measured-first by latency × success (unmeasured keep declaration order); result carries `ordering` for the trace; empty history → static order unchanged.
 - `packages/app/src/services/agent-service.ts` — types: `AgentLadderDecision`, `LadderOrderingEntry`, `AgentRunTracedResult.ladder`, `AgentRunInvocation.timeoutBudget`, `historyLatency` context seam; `runTraced` threads `ladder`.
 - `packages/app/src/services/failure-classification.ts` — `executorUnavailabilityEvidence` (exit 2 / unavailable-signal evidence string).
 - `packages/app/src/workflow/actions/agent-run.ts` — persists `traced.ladder` onto the action result row.
 - Tests: `tests/services/adaptive-timeout.test.ts`, `tests/services/agent-run-executor-d3.test.ts` (AC1/AC2), `tests/services/agent-resolver-d3.test.ts` (R3).
-
-### Solution
-
-Change map (commit 6953e495c):
-- `packages/app/src/services/adaptive-timeout.ts:7` (new) — R2/R3 core: `resolveAdaptiveTimeoutMs` (3×mean / 1.5×p95, 30s floor, YAML cap; no history → static), `ladderScore` (latency ÷ success, clamp ≥0.1), `readExecutorLatency`/`loadExecutorLatency` (history_board_model_stats; failure → empty, never throws).
-- `packages/app/src/services/agent-run-executor.ts:174` — R1 run-scoped breaker keyed by flags run-id; unavailability evidence (exit 2 / unavailable) trips it; retry-bound re-resolution excludes tripped set (zero dead dispatches); breaker-exhausted → exitCode 2; per-attempt derived budget + pre-dispatch timeout-exhausted failover; ladder decisions + `agent.invoke.ladder` events.
-- `packages/app/src/services/agent-resolver.ts:442` — measured-latency escalation ordering (`orderEligibleByMeasuredLatency`), `ordering` rows on resolve result; empty history → declaration order.
-- `packages/app/src/services/agent-service.ts` — `AgentLadderDecision`, `LadderOrderingEntry`, traced `ladder`, `timeoutBudget`, `historyLatency` seam.
-- `packages/app/src/services/failure-classification.ts` — `executorUnavailabilityEvidence`.
-- `packages/app/src/workflow/actions/agent-run.ts` — persists `traced.ladder` on the action result row (AC3 trace evidence).
-- 2026-11-10T20:21:39.670Z todo → wip (system)
 
 ### Testing
 
