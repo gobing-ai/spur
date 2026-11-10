@@ -92,8 +92,10 @@ function digestArgs(args: unknown): string | null {
     return createHash('sha256').update(json, 'utf8').digest('hex');
 }
 
-/** SQL `source IN (…)` fragment + params binding {@link AGY_SOURCES}. */
-const AGY_SOURCE_FILTER = `source IN (${AGY_SOURCES.map(() => '?').join(', ')})`;
+/** SQL `source IN (…)` fragment for {@link AGY_SOURCES} (built at call site — no module-scope calls). */
+function agySourceFilter(): string {
+    return `source IN (${AGY_SOURCES.map(() => '?').join(', ')})`;
+}
 const AGY_SOURCE_PARAMS: readonly string[] = AGY_SOURCES;
 
 /**
@@ -117,7 +119,7 @@ export async function enrichAntigravityUsage(
     for (const record of records) {
         const target = await db.queryFirst<{ record_hash: string }>(
             `SELECT record_hash FROM history_message
-             WHERE ${AGY_SOURCE_FILTER} AND session_id = ? AND role = 'assistant'
+             WHERE ${agySourceFilter()} AND session_id = ? AND role = 'assistant'
                AND model IS NULL AND input_tokens IS NULL AND output_tokens IS NULL
                AND disposition NOT IN (?, ?, ?)
              ORDER BY seq, rowid LIMIT 1`,
@@ -156,7 +158,7 @@ export async function enrichAntigravityUsage(
     }
     // Explicit unavailable disposition (R2): assistant rows the vendor log never
     // attributed, left with NULL usage columns — never empty strings.
-    const unavailableWhere = `WHERE ${AGY_SOURCE_FILTER} AND role = 'assistant'
+    const unavailableWhere = `WHERE ${agySourceFilter()} AND role = 'assistant'
            AND model IS NULL AND input_tokens IS NULL AND output_tokens IS NULL
            AND disposition NOT IN ('meta', '${POLL_DUPLICATE_DISPOSITION}', '${AGY_USAGE_UNAVAILABLE_DISPOSITION}')`;
     messagesUnavailable =
@@ -192,7 +194,7 @@ export async function enrichAntigravityToolArgs(
         if (digest === null) continue;
         const hit = await db.queryFirst<{ record_hash: string }>(
             `SELECT record_hash FROM history_tool_call
-             WHERE ${AGY_SOURCE_FILTER} AND session_id = ? AND seq = ? AND tool_name = ?
+             WHERE ${agySourceFilter()} AND session_id = ? AND seq = ? AND tool_name = ?
                AND args_raw IS NULL AND args_digest IS NULL
              LIMIT 1`,
             ...AGY_SOURCE_PARAMS,
@@ -221,7 +223,7 @@ export async function enrichAntigravityToolArgs(
 export async function repairEmptyArgDigests(db: DbAdapter): Promise<number> {
     const hits = await db.queryAll<{ record_hash: string }>(
         `SELECT record_hash FROM history_tool_call
-         WHERE ${AGY_SOURCE_FILTER} AND args_digest = ''`,
+         WHERE ${agySourceFilter()} AND args_digest = ''`,
         ...AGY_SOURCE_PARAMS,
     );
     for (const hit of hits) {
