@@ -3,8 +3,8 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-11-06
-related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081"]
+updated_at: 2026-11-10
+related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081", "1326"]
 tags: [contract, cli, agent]
 ---
 
@@ -1090,6 +1090,12 @@ expansion. Windows batch launchers (`.cmd` / `.bat`) and NUL-containing argument
 - `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
   newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
   per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.
+  The supplied id may be any unique prefix of a run id — progress lines print the 8-char prefix, so a
+  prefix must resolve. An exact full id wins over a prefix; a unique prefix resolves to that run;
+  several matches fail as `Ambiguous run id prefix: <input>; candidates: <ids…>` (at most 20 ids, the
+  lookup itself bounded to 21 rows, `substr` not `LIKE`); no match fails as `Run not found: <input>`.
+  Resolution runs once, before `--follow` or `--follow --output` opens a record path or starts polling,
+  so both watches read the resolved run's durable record.
   The run summary carries `terminalReason` — the authoritative `runs.terminal_reason` (`done`,
   `cancelled`, `failed-check`, `interrupted`, …) — alongside `failureReason`, which is only present
   when the run metadata recorded one.

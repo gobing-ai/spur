@@ -3,8 +3,8 @@ kind: design
 title: "History CLI and refresh contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-09
-related: []
+updated_at: 2026-11-10
+related: ["1326"]
 tags: [contract, history, cli]
 ---
 
@@ -239,6 +239,12 @@ unchanged, and `daily` bucket labels stay UTC), `--source <s>` / `all` (`source`
 attribution recovered at import (task 0722) — never through `run_id`/`task_wbs` message columns,
 which are reserved for boundary promotion; task+run selection intersects through the run chain), and `--top <n>` (default 20; bounds `bySession`/`byTool` only — never
 `totals`/`bySource`/`byModel`/`daily`).
+
+**Sargable time windows.** The parsed predicate alone is not sargable, so the instant grain also
+emits a TEXT range on the raw column — a UTC-normalized bound widened by one second on each side —
+ahead of the exact comparison. It restores the covering-index range plan and never changes the
+selected rows; a bound that is not a parseable instant falls back to the exact predicate alone, so
+correctness never depends on the widening.
 
 **Unmatched `--session`.** The flag is an exact `history_message.session_id` predicate
 (`sessionMatchLookup` counts `session_id = ?`). When `--session` is set and that count is zero,

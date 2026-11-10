@@ -3,8 +3,8 @@ kind: design
 title: "Workflow run observability"
 status: implemented
 created_at: 2026-06-25
-updated_at: 2026-10-21
-related: [D2, D3, D9, "0109", "0114", "0365", "0597", "0603", "0604", "1064"]
+updated_at: 2026-11-10
+related: [D2, D3, D9, "0109", "0114", "0365", "0597", "0603", "0604", "1064", "1326"]
 tags: [system, D2, D9, workflow, observability]
 ---
 
@@ -47,8 +47,12 @@ Released upstream seams consumed by Spur:
 - `@gobing-ai/ts-dual-workflow-engine@0.4.14`: persisted `ActionRunContext.actionId` reaches action runners.
 
 Resolved action options cross the engine's optional `saveActionStart(..., options?)` seam. Engine
-persistence ignores that argument. Spur projects an allow-list (`agent`, `model`, `timeoutMs`, invocation
-summary) before emitting; prompt bodies and shell commands never enter the bus.
+persistence ignores that argument. Spur projects an allow-list (`agent`, `model`, `role`, `timeoutMs`,
+`maxTokens`, `maxCostUsd`, invocation summary) before emitting; prompt bodies and shell commands never
+enter the bus. `timeoutMs` accepts a finite positive number or numeric string (`${vars.stepTimeoutMs}`
+arrives as a string) and is truncated to integer milliseconds, so the rendered action line states the
+effective budget (`timeout=60m 0s`); anything else is omitted rather than rendered as a budget, and
+execution is unaffected.
 
 ## Producer/subscriber/persistence audit (0365)
 

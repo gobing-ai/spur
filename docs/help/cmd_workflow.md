@@ -271,7 +271,7 @@ spur workflow trace [options] [run-id]
 
 | Argument | Description |
 |---|---|
-| `run-id` | Run ID for per-run timeline detail |
+| `run-id` | Run ID for per-run timeline detail; any unique prefix resolves (an exact id wins, an ambiguous prefix lists up to 20 candidates, an absent one reports `Run not found`) |
 
 | Flag | Default | Description |
 |---|---|---|

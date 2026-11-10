@@ -4,7 +4,7 @@ title: "History anatomy: daily cache, ad-hoc diagnosis, and bounded migration"
 status: implemented
 created_at: 2026-08-24
 updated_at: 2026-11-10
-related: [I8, "0657", "0658", "0659", "0660", "0661", "0669"]
+related: [I8, "0657", "0658", "0659", "0660", "0661", "0669", "1326"]
 tags: [system, I8, history]
 ---
 
@@ -25,8 +25,11 @@ Baseline artifacts: `.spur/run/7fa52fa5-…-idea-eval-report.md` (idea evaluatio
 3. **A bounded ranking is never a population** (ADR-080). Unknown populations render `not available`.
 4. **Evidence over assertion.** Observation and inference are separate fields; causality needs two
    independent signals; unsupported dimensions read `not available`, never zero, never omitted.
-5. **No new `spur history` verb or flag.** HA-S1 is additive work inside the shipped `analyze`
-   artifact and `report --mode forensics` renderer. A new verb or flag is a separate consent decision.
+5. **No new report verb or flag.** HA-S1 is additive work inside the shipped `analyze` artifact and
+   `report --mode forensics` renderer; a new report verb or flag is a separate consent decision.
+   Additive helper-stage inputs — `anatomy-stamp --validation`/`--trace` (1326) — stay inside the
+   existing `anatomy-stamp` surface, keep the pre-1326 invocation working when omitted, and add no
+   public noun or verb.
 6. **Import stays where it is.** `bun run load-history` and the History module's **Import & Analyze**
    action remain the only import owners, unchanged.
 
