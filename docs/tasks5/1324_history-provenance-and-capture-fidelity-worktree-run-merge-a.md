@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: "History provenance and capture fidelity: worktree run merge and antigravity ETL"
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-10T07:34:40.105Z
-updated_at: "2026-11-10T22:24:39.368Z"
+updated_at: "2026-11-10T22:53:02.941Z"
 feature_id: E6
 
 priority: P2
 ac_altitude: task-local
 estimate_hours: 16
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1324-verdict.json
 ---
 
 ## 1324. History provenance and capture fidelity: worktree run merge and antigravity ETL
@@ -138,26 +140,23 @@ the R2/R3 ETL lives Spur-side as post-import enrichment over vendor-log facts (d
 
 ### Testing
 
-Commands run (from repo root; in-memory SQLite fixtures):
+**Pipeline verify results**
 
-- `cd packages/domain && bun test tests/analytics/antigravity-etl.test.ts` — 3 pass (R2 usage
-  enrichment + unavailable disposition idempotency; args back-fill + empty-digest repair; R3 collapse
-  + loops/bySession exclusion + idempotency).
-- `cd packages/domain && bun test tests/dao/run-transfer.test.ts` — 15 pass (existing 0975 suite
-  green + 3 new 1324 tests: marker-bearing merge with ids preserved, re-merge idempotency, pre-0013
-  tolerance).
-- `cd packages/app && bun test tests/services/worktree-run-merge-verified-outcome.test.ts` — 2 pass
-  (AC1/R4: merged worktree rows → taskDenominator 1 with measured tokens; unmerged → 0 regression).
-- Focused regressions: `bun test tests/analytics/ tests/dao/run-transfer.test.ts
-  tests/dao/run-session-dao.test.ts` (domain) — 477 pass / 0 fail; `bun test
-  tests/services/verified-outcome.test.ts tests/services/worktree-persist.test.ts
-  tests/services/persist-worktree-runs.test.ts tests/services/inline-run-attribution.test.ts` (app)
-  — 75 pass / 0 fail.
-- `bunx tsc --noEmit` — clean in `packages/domain` and `packages/app`; `bunx biome check` clean on
-  all touched files.
-- P4 `spur history analyze` end-to-end on merged fixtures: covered by the app AC1 test above
-  (deriveVerifiedOutcome is the analyze path's verifiedOutcome block); live-CLI run not executed in
-  this stage (no committed merged corpus on this branch) — driver/review may verify on a real archive.
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/dao/run-transfer.ts:91` (stampWorktreeOrigin, additive `worktree_origin` metadata marker); `packages/domain/src/dao/run-transfer.ts:181` + `packages/domain/src/dao/run-transfer.ts:208` (worktreeRunSessionOps copies run_sessions with mechanism re-stamped `worktree-merge`, NULL-safe natural-key idempotency, pre-0013 tolerance); wired into the run batch at `packages/domain/src/dao/run-transfer.ts:285`; invoked unchanged via the WT-4 path `packages/app/src/services/worktree-persist.ts:384` (`transferRunTables` inside `persistWorktreeRuns`, reached from wrapup at `packages/app/src/services/worktree-persist.ts:575`); ids-preserved/origin-marker test `packages/domain/tests/dao/run-transfer.test.ts:334`, re-merge idempotency test `packages/domain/tests/dao/run-transfer.test.ts:392`, pre-0013 tolerance test `packages/domain/tests/dao/run-transfer.test.ts:423` — all pass |
+| R2 | MET | `packages/domain/src/analytics/antigravity-etl.ts:34` (`usage-unavailable` disposition, NULL columns never empty strings); `packages/domain/src/analytics/antigravity-etl.ts:113` (enrichAntigravityUsage: model/usage/cost via shared pricing, remainder explicitly unavailable); `packages/domain/src/analytics/antigravity-etl.ts:186` (enrichAntigravityToolArgs back-fills args_raw + sha256 digest); `packages/domain/src/analytics/antigravity-etl.ts:223` (repairEmptyArgDigests rewrites the empty-digest false-fire root cause to NULL); tests `packages/domain/tests/analytics/antigravity-etl.test.ts:81` (NULL-not-empty-string + derived-cost + idempotency assertions) and `packages/domain/tests/analytics/antigravity-etl.test.ts:123` — pass |
+| R3 | MET | `packages/domain/src/analytics/antigravity-etl.ts:253` (collapsePollDuplicates: normalized-verbatim, same-session, contiguous collapse to `poll-duplicate` disposition); loop denominators exclude at `packages/domain/src/analytics/forensic-query.ts:811` and `packages/domain/src/analytics/forensic-query.ts:839`; bySession latency denominators exclude at `packages/domain/src/analytics/forensic-query.ts:342` and `packages/domain/src/analytics/forensic-query.ts:351`, `packages/domain/src/analytics/forensic-query.ts:639` (bySessionPage); test `packages/domain/tests/analytics/antigravity-etl.test.ts:149` proves collapse, `loops` → [], and bySession unmeasured drop — pass (one second-order latency aggregator still counts them — finding 1) |
+| R4 | MET | `packages/app/tests/services/worktree-run-merge-verified-outcome.test.ts:92` — merged worktree rows → `taskDenominator = 1` with measured tokens (5000) flowing through the merged `worktree-merge` mapping; regression `packages/app/tests/services/worktree-run-merge-verified-outcome.test.ts:150` — without the merge the same tree yields 0 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | merge idempotency + ids + markers `packages/domain/tests/dao/run-transfer.test.ts:334` and `packages/domain/tests/dao/run-transfer.test.ts:392`; denominator counts worktree runs `packages/app/tests/services/worktree-run-merge-verified-outcome.test.ts:92` |
+| AC2 | MET | test | fields filled with explicit unavailable dispositions, never empty strings — `packages/domain/tests/analytics/antigravity-etl.test.ts:81` (asserts NULL model/tokens + `usage-unavailable` + cost > 0 + second-pass no-op) and `packages/domain/tests/analytics/antigravity-etl.test.ts:123` (args back-fill + empty digest → NULL) |
+| AC3 | MET | test | dupes collapse and aggregators exclude — `packages/domain/tests/analytics/antigravity-etl.test.ts:149` (4 verbatim repeats → 1 kept + 3 `poll-duplicate`; idempotent; `loops` → []; bySession unmeasured = 2 kept rows only) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -218,4 +217,6 @@ Verdict: PASS
 
 - 2026-11-10T16:31:02.983Z backlog → todo (system)
 - 2026-11-10T22:24:36.146Z todo → wip (system)
+- 2026-11-10T22:52:58.672Z wip → testing (system)
+- 2026-11-10T22:53:02.929Z testing → done (system)
 
