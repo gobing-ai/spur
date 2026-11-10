@@ -201,3 +201,116 @@ describe('1323 AC2 — adaptive timeout budgets (R2)', () => {
         expect(traced.invocation?.timeoutBudget?.fits).toBe(true);
     });
 });
+
+describe('1323 review finding 1 — escalation walk excludes run-scoped breaker-dead executors', () => {
+    /**
+     * A capable-1 ladder on the `implement` stage (whose model_policy carries the
+     * `timeout` fallback tier): the dispatch pin drives node 1/2 onto DIFFERENT
+     * first choices, which is what strands a breaker-dead executor mid-ladder.
+     */
+    function capableLadderService(executors: Array<{ name: string; agent: 'pi' | 'codex' | 'claude' }>): AgentService {
+        return new AgentService({
+            cwd: '/tmp',
+            env: {},
+            output: { write: () => {}, error: () => {} },
+            agentConfig: {
+                executors: executors.map((executor) => ({
+                    name: executor.name,
+                    agent: executor.agent,
+                    tier: 'capable-1',
+                    disabled: false,
+                })),
+            },
+        });
+    }
+
+    test('node 2 escalation on a timeout picks the next live executor, never the breaker-dead one', async () => {
+        let codexDispatches = 0;
+        const seen = stubSpawn(async (options) => {
+            if (options.command === 'pi') {
+                return { ...ok(options), exitCode: 2, stderr: 'dispatch result carried no usage' };
+            }
+            if (options.command === 'codex') {
+                codexDispatches += 1;
+                // Node 1's codex dispatch succeeds; node 2's dies on a NON-unavailability
+                // signal (timeout) so only the post-failure escalation walk re-resolves.
+                return codexDispatches === 1
+                    ? ok(options, 'codex finished node 1')
+                    : { ...ok(options), exitCode: null, signal: 'timeout' };
+            }
+            return ok(options, 'claude finished the work');
+        });
+        const svc = capableLadderService([
+            { name: 'pi-flash', agent: 'pi' },
+            { name: 'codex-main', agent: 'codex' },
+            { name: 'claude-main', agent: 'claude' },
+        ]);
+        // Node 1: pi-flash trips the breaker (exit 2, no usage); the run lands on codex-main.
+        const first = await svc.runTraced(
+            'first node',
+            d3Flags('d3-run-7', { stage: 'implement' }),
+            usableForAllDeps(),
+            { heartbeatMs: 0 },
+        );
+        expect(first.exitCode).toBe(0);
+        expect(first.invocation?.executor).toBe('codex-main');
+        // Node 2: pinned to codex-main on the SAME run id — pi-flash now sits mid-ladder.
+        // codex-main times out (no breaker trip), so the escalation walk re-resolves.
+        const traced = await svc.runTraced(
+            'second node',
+            d3Flags('d3-run-7', { agent: 'codex-main', stage: 'implement' }),
+            usableForAllDeps(),
+            { heartbeatMs: 0 },
+        );
+        // The breaker-dead executor received ZERO further dispatches: the only pi
+        // dispatch in the whole run is node 1's trip.
+        expect(seen.filter((options) => options.command === 'pi')).toHaveLength(1);
+        // The walk failed over to the next LIVE executor and finished the node.
+        expect(traced.exitCode).toBe(0);
+        expect(traced.invocation?.executor).toBe('claude-main');
+        expect((traced.ladder ?? []).some((d) => d.kind === 'escalation' && d.toExecutor === 'claude-main')).toBe(true);
+    });
+
+    test('node 2 escalation with every ladder candidate dead records chain-exhausted, never a dead re-dispatch', async () => {
+        let codexDispatches = 0;
+        const seen = stubSpawn(async (options) => {
+            if (options.command === 'pi') {
+                return { ...ok(options), exitCode: 2, stderr: 'dispatch result carried no usage' };
+            }
+            codexDispatches += 1;
+            // Node 1's codex dispatch succeeds; node 2's dies on a NON-unavailability
+            // signal (timeout) so only the post-failure escalation walk re-resolves.
+            return codexDispatches === 1
+                ? ok(options, 'codex finished node 1')
+                : { ...ok(options), exitCode: null, signal: 'timeout' };
+        });
+        const svc = capableLadderService([
+            { name: 'pi-flash', agent: 'pi' },
+            { name: 'codex-main', agent: 'codex' },
+        ]);
+        // Node 1: pi-flash trips the breaker; codex-main finishes the node.
+        const first = await svc.runTraced(
+            'first node',
+            d3Flags('d3-run-8', { stage: 'implement' }),
+            usableForAllDeps(),
+            { heartbeatMs: 0 },
+        );
+        expect(first.exitCode).toBe(0);
+        expect(first.invocation?.executor).toBe('codex-main');
+        // Node 2: codex-main times out (non-unavailability). pi-flash is breaker-dead and
+        // codex-main is already attempted — the ladder minus both is empty, so the walk
+        // must report honest exhaustion instead of re-dispatching the dead executor.
+        const traced = await svc.runTraced(
+            'second node',
+            d3Flags('d3-run-8', { agent: 'codex-main', stage: 'implement' }),
+            usableForAllDeps(),
+            { heartbeatMs: 0 },
+        );
+        expect(seen.filter((options) => options.command === 'pi')).toHaveLength(1);
+        expect(traced.exitCode).toBe(3);
+        expect((traced.ladder ?? []).some((d) => d.kind === 'chain-exhausted' && d.executor === 'codex-main')).toBe(
+            true,
+        );
+        expect((traced.ladder ?? []).some((d) => d.kind === 'escalation' && d.toExecutor === 'pi-flash')).toBe(false);
+    });
+});

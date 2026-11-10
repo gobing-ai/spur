@@ -998,13 +998,24 @@ export class AgentRunExecutor {
                 // R3: exclude executors already attempted this run so the ladder
                 // walks to the next eligible candidate instead of re-selecting the
                 // same dead executor and breaking on attemptedExecutors.has(...).
+                // 1323 R1 (review finding 1): the run-scoped breaker set joins the
+                // exclusion — a breaker-dead executor from an earlier node stays
+                // unavailable for the whole run, so re-selecting it here would
+                // re-dispatch into a guaranteed failure. A resolve that still comes
+                // back breaker-dead (pinned fallthrough) is chain exhaustion,
+                // mirroring the pre-loop breaker-skip seam above.
                 runFlags.signal = escalationSignal;
                 runFlags['from-executor'] = currentStage.executorName;
-                const nextResolved = await this.resolver.resolveAgent(runFlags, doctorRunner, attemptedExecutors);
+                const nextResolved = await this.resolver.resolveAgent(
+                    runFlags,
+                    doctorRunner,
+                    new Set([...attemptedExecutors, ...breaker.executors]),
+                );
                 if (
                     !nextResolved.ok ||
                     nextResolved.stage === undefined ||
-                    attemptedExecutors.has(nextResolved.stage.executorName)
+                    attemptedExecutors.has(nextResolved.stage.executorName) ||
+                    breaker.executors.has(nextResolved.stage.executorName)
                 ) {
                     // Chain exhausted (R4 / 0540 R2) — name the stage, the
                     // tiers attempted, and the executors tried. The run then
