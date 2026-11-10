@@ -265,6 +265,24 @@ async function seedFixture(db: DbAdapter): Promise<void> {
         duration_ms: null,
         result_bytes: 0,
     });
+    // Empty-digest repeats (vendors that import no args) — must not read as loops.
+    for (const [hash, seq] of [
+        ['tc6', 6],
+        ['tc7', 7],
+        ['tc8', 8],
+    ] as const) {
+        await insertToolCall(db, {
+            record_hash: hash,
+            message_hash: 'm4',
+            session_id: 'sess-1',
+            seq,
+            tool_name: 'run_command',
+            args_digest: '',
+            status: 'success',
+            duration_ms: 10,
+            result_bytes: 0,
+        });
+    }
 }
 
 describe('forensic queries', () => {
@@ -363,8 +381,8 @@ describe('forensic queries', () => {
         const db = await setup();
         await seedFixture(db);
         const rows = await toolRollup(db, SESSION);
-        expect(rows.reduce((n, r) => n + r.toolCalls, 0)).toBe(5);
-        expect(rows.reduce((n, r) => n + (r.durationMs ?? 0), 0)).toBe(540);
+        expect(rows.reduce((n, r) => n + r.toolCalls, 0)).toBe(8); // tc1-tc5 + three empty-digest run_command calls
+        expect(rows.reduce((n, r) => n + (r.durationMs ?? 0), 0)).toBe(570); // 540 + 3×10 empty-digest calls
         db.close();
     });
 
@@ -403,7 +421,7 @@ describe('forensic queries', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0]?.sessionId).toBe('sess-1');
         expect(rows[0]?.messages).toBe(4);
-        expect(rows[0]?.toolCalls).toBe(5);
+        expect(rows[0]?.toolCalls).toBe(8); // 5 seeded + three empty-digest run_command calls
         expect(rows[0]?.tokens).toBe(2300);
         expect(rows[0]?.costUsd).toBeCloseTo(0.07);
         expect(rows[0]?.topTool).toBe('Read');
@@ -448,7 +466,7 @@ describe('forensic queries', () => {
         const rows = await bySession(db, runSel, 10);
         expect(rows).toHaveLength(1);
         expect(rows[0]?.messages).toBe(4);
-        expect(rows[0]?.toolCalls).toBe(5);
+        expect(rows[0]?.toolCalls).toBe(8); // 5 seeded + three empty-digest run_command calls
         expect(rows[0]?.topTool).toBe('Read');
         db.close();
     });
@@ -463,6 +481,12 @@ describe('forensic queries', () => {
         expect(rows[0]?.repeats).toBe(3);
         expect(rows[0]?.firstSeq).toBe(1);
         expect(rows[0]?.lastSeq).toBe(4);
+        // Empty args digests (importers with no args capture) are not loops (KK antigravity regression).
+        expect(rows.map((r) => r.argsDigest)).not.toContain('');
+        // Same exclusion on the session-scoped derivation path.
+        const scoped = await loops(db, ALL, { sessionScope: ['sess-1'] });
+        expect(scoped).toHaveLength(1);
+        expect(scoped.map((r) => r.argsDigest)).not.toContain('');
         db.close();
     });
 

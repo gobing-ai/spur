@@ -805,7 +805,7 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQue
              FROM history_tool_call tc
              JOIN history_message m ON m.record_hash = tc.message_hash
              WHERE tc.session_id IN (${placeholders})
-               AND tc.args_digest IS NOT NULL
+               AND tc.args_digest IS NOT NULL AND tc.args_digest <> ''
                AND tc.session_id NOT IN ('', 'unknown', 'session')
              GROUP BY tc.source, tc.session_id, tc.tool_name, tc.args_digest
              HAVING COUNT(*) >= 3
@@ -833,7 +833,7 @@ export async function loops(db: DbAdapter, sel: ArtifactSelector, opts?: LoopQue
                 MAX(tc.seq) AS lastSeq
          FROM filtered_messages fm
          CROSS JOIN history_tool_call tc ON tc.message_hash = fm.record_hash
-         WHERE tc.args_digest IS NOT NULL AND tc.session_id NOT IN ('', 'unknown', 'session')
+         WHERE tc.args_digest IS NOT NULL AND tc.args_digest <> '' AND tc.session_id NOT IN ('', 'unknown', 'session')
          GROUP BY fm.source, tc.session_id, tc.tool_name, tc.args_digest
          HAVING COUNT(*) >= 3
          ORDER BY repeats DESC`,
