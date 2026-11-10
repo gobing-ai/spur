@@ -1006,8 +1006,9 @@ describe('1309 history parity evidence', () => {
 
         traced.queries.length = 0;
         await messageRollup(traced.db, selector({ since: DAY_SINCE, until: DAY_UNTIL }));
-        expect(observed(traced.queries, 'm.ts >= ?')).toBe(true);
-        expect(observed(traced.queries, 'm.ts <= ?')).toBe(true);
+        // 1326: the message plane selects instants, so both sides parse (see message-where.ts).
+        expect(observed(traced.queries, 'julianday(m.ts) >= julianday(?)')).toBe(true);
+        expect(observed(traced.queries, 'julianday(m.ts) <= julianday(?)')).toBe(true);
         expect(observed(traced.queries, 'DATE(?)')).toBe(false);
 
         traced.queries.length = 0;

@@ -228,7 +228,12 @@ drift) — never by loading the corpus into memory. Reads the contract tables po
 converted sources (claude, codex, pi, omp, grok, agy) plus the generic ETL sources.
 
 Six composable `AND` selectors, each resolving against an indexed column: `--since`/`--until`
-(`history_message.ts`), `--source <s>` / `all` (`source`; `all` = no source predicate), `--session`,
+(`history_message.ts`; **1326: both bounds are compared as parsed instants** —
+`julianday(<column>) >= julianday(?)` — because stored values mix millisecond and seconds-only `Z`
+forms while a daily selector carries a local UTC offset, and TEXT order then shifts the window by
+that offset. The same instant semantics apply to `system_events.occurred_at` (pairings/escalations)
+and to `runs.started_at` on the verified-outcome path; selector text and `selectorDigest` are
+unchanged, and `daily` bucket labels stay UTC), `--source <s>` / `all` (`source`; `all` = no source predicate), `--session`,
 `--run`, `--task` (task-only selection resolves through the mapping authorities — the
 `task_run_links` → `history_run_session` run chain plus the direct `history_task_session`
 attribution recovered at import (task 0722) — never through `run_id`/`task_wbs` message columns,
@@ -487,7 +492,7 @@ are never consulted, task 0970); and
 vocabulary was deferred as it has never drifted.
 
 **Helper verb surface and stage order (0659/0660, corrected 2026-08-25).** The helper's CLI is
-`paths | probe | stamp | refresh | digest | check | publish` — every stage in the workflow is one
+`paths | probe | stamp | refresh | digest | check | publish`— every stage in the workflow is one
 invocation of one of these (ADR-069 R1 glue length). Stage order is
 `resolve-scope → resolve-paths → analyze → cache-probe → {hit: refresh-provenance | miss: render →
 enrich → structure-gate → validate → stamp} → publish`. **`analyze` precedes `cache-probe`
@@ -496,17 +501,34 @@ fresh artifact, never from the cached report being judged. Publication is reacha
 (guarded on `Verdict: PASS`) or `refresh-provenance` (whose model half was itself published through
 a passing validation).
 
-**Frontmatter provenance block (0660 R7).** `stamp` writes, and `parseProvenance` reads back, the
+**Frontmatter provenance block (0660 R7; final receipts 1326 R5/R6).** `stamp` writes, and `parseProvenance` reads back, the
 full block: `identity` (contract version, mode, date, IANA timezone, normalized inclusive bounds,
 sources), `windowState` (`provisional` until the local calendar day closes, then `closed`),
 `generatedAt`/`validatedAt`, `artifactDigest` + `baselineArtifactDigest`, `contractDigest` /
 `skillDigest` / `workflowDigest`, per-source `coverage` with `lastImportedAt`, `runId`,
 `currentArtifactPath`/`baselineArtifactPath`, `spurVersion`, `schemaVersion`, `executor`, `model`,
-and `cacheDisposition`. Audit fields round-trip through `parseProvenance` so a cache-hit republish
-never strips them. A logic path that cannot be resolved digests to `not available` (which compares
-equal to itself, so an unresolvable path degrades to "no invalidation signal", never a false match).
+`executorProfile`, `dispatches[]`, and `cacheDisposition`. Audit fields round-trip through
+`parseProvenance` so a cache-hit republish never strips them. A logic path that cannot be resolved
+digests to `not available` (which compares equal to itself, so an unresolvable path degrades to "no
+invalidation signal", never a false match).
+
 The banner renders the **earliest** per-source `lastImportedAt`, so the report never claims a source
 was imported later than its own recorded timestamp.
+
+**Final-receipt provenance (task 1326).** `generatedAt` is probe time — it means "artifact built",
+which is true. `validatedAt` is NOT: it comes from the validation artifact whose last line is
+exactly `Verdict: PASS`, read after verdict normalization/rescue, so a run that spent 48 minutes in
+enrich/correct cannot claim it was validated at probe time. `stamp` therefore takes two additive
+inputs, `--validation <v.txt>` and `--trace <trace.json>`, and the workflow writes the trace
+with `spur workflow trace "$__runId" --json` immediately before stamping. `dispatches[]` carries
+one row per successful `agent.run` action — `node`, `actionId`, canonical `agent`, executor profile,
+`model`, and `timeoutMs` (a positive number or `unbounded`) — read from the run's own action
+receipts. Top-level `executor`/`model` name the FINAL validation invocation and `executorProfile`
+keeps its profile; an absent value renders a stated reason (`not available: invocation model
+absent`), never a bare `not available`. The `auto` selector is never provenance: `cache-probe` no
+longer passes `--executor "$agent"`. A miss that did model work but cannot produce a passing
+validation receipt fails closed at stamp. Omitting both flags preserves the pre-1326 stamp surface
+for unit use.
 
 <a id="history-nightly-loop--scheduling-surface-and-observability-task-0471"></a>
 

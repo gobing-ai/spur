@@ -8,6 +8,7 @@ import type {
     StateMachineWorkflowDef,
     TransitionFlowWorkflowDef,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import { projectActionMetadata } from '../../src/workflow/observability';
 import {
     buildStepLabels,
     buildWorkflowSteps,
@@ -86,6 +87,19 @@ describe('renderStepLine', () => {
             '[run r1] → implement/agent.run · agent=omp · model=zai · role=coder => /sp:dev-run · timeout=10m 0s',
         );
         expect(renderStepLine(finished)).toBe('[run r1] ✓ implement/agent.run (4s)');
+    });
+
+    // 1326 R9: the history-anatomy pipeline declares `${vars.stepTimeoutMs}` = "3600000"; the
+    // rendered action line must name the real budget instead of `timeout=unbounded`.
+    test('R9: a numeric-string budget renders as its real duration', () => {
+        const event: StepEvent = {
+            ...envelope,
+            actionId: 'a1',
+            node: 'enrich',
+            kind: 'agent.run',
+            metadata: projectActionMetadata('agent.run', { agent: 'grok', timeoutMs: '3600000' }),
+        };
+        expect(renderStepLine(event)).toBe('[run r1] → enrich/agent.run · agent=grok · timeout=60m 0s');
     });
 
     test('action.finished renders minutes for long steps (the 5-9min blind spot)', () => {

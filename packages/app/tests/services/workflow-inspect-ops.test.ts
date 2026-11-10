@@ -101,6 +101,28 @@ describe('WorkflowInspectOps traces and run records', () => {
         await expect(inspect.traceRun(db, 'missing')).rejects.toThrow('Run not found: missing');
     });
 
+    // 1326 R10: progress lines print the 8-char id prefix, so `spur workflow trace <prefix>`
+    // must resolve it — uniquely, exactly, or not at all.
+    test('R10: resolveRunId accepts an exact id, a unique prefix, and refuses an ambiguous one', async () => {
+        await runOps.run(join(wfDir, 'linear.yaml'), { runId: 'aaaa1111-2222-3333-4444-555555555555' });
+        await runOps.run(join(wfDir, 'linear.yaml'), { runId: 'aaaa9999-2222-3333-4444-555555555555' });
+        await runOps.run(join(wfDir, 'linear.yaml'), { runId: 'bbbb1111-2222-3333-4444-555555555555' });
+        const db = await ctx.getDb();
+
+        // exact id wins even though it is also a prefix of nothing else
+        expect(await inspect.resolveRunId(db, 'aaaa1111-2222-3333-4444-555555555555')).toBe(
+            'aaaa1111-2222-3333-4444-555555555555',
+        );
+        // a unique prefix resolves to the same run the full id does
+        expect(await inspect.resolveRunId(db, 'bbbb')).toBe('bbbb1111-2222-3333-4444-555555555555');
+        // an ambiguous prefix names its candidates instead of guessing
+        await expect(inspect.resolveRunId(db, 'aaaa')).rejects.toThrow(
+            /Ambiguous run id prefix: aaaa; candidates: aaaa1111/,
+        );
+        // an absent prefix is a distinct failure
+        await expect(inspect.resolveRunId(db, 'cccc')).rejects.toThrow('Run not found: cccc');
+    });
+
     // 1319 R8 failure modes: the list query omits the pause anchor so a listed run is never
     // stalled; the node's own budget is ignored in favour of the 30-minute default; the label
     // appears on a run still inside its budget.

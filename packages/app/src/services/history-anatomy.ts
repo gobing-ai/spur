@@ -43,6 +43,18 @@ export interface CacheIdentity {
     sources: string[];
 }
 
+/** One successful `agent.run` action, as the run trace records it (task 1326 R6). */
+export interface DispatchProvenance {
+    node: string;
+    actionId: string;
+    /** Canonical agent that ran the action (`grok`, `pi`, …). */
+    agent: string;
+    /** Configured executor profile, or a stated absence reason — never the `auto` selector. */
+    executor: string;
+    model: string;
+    timeoutMs: number | 'unbounded';
+}
+
 /** Full provenance for a history-anatomy report: identity, digests, coverage, and disposition. */
 export interface CacheProvenance {
     identity: CacheIdentity;
@@ -66,6 +78,10 @@ export interface CacheProvenance {
     schemaVersion?: number;
     executor?: string;
     model?: string;
+    /** 1326 R6: executor profile of the final PASS validation invocation (agent is separate). */
+    executorProfile?: string;
+    /** 1326 R6: every successful `agent.run` action, from the run's own receipts. */
+    dispatches?: DispatchProvenance[];
     cacheDisposition?: CacheDisposition;
 }
 
@@ -250,6 +266,18 @@ export function parseProvenance(reportMarkdown: string): CacheProvenance | null 
             schemaVersion: obj.schemaVersion == null ? undefined : Number(obj.schemaVersion),
             executor: optionalString(obj.executor),
             model: optionalString(obj.model),
+            executorProfile: optionalString(obj.executorProfile),
+            dispatches: Array.isArray(obj.dispatches)
+                ? (obj.dispatches as Array<Record<string, unknown>>).map((d) => ({
+                      node: String(d.node ?? ''),
+                      actionId: String(d.actionId ?? ''),
+                      agent: String(d.agent ?? ''),
+                      executor: String(d.executor ?? ''),
+                      model: String(d.model ?? ''),
+                      // Render/parse symmetry: the literal survives as a string, a budget as a number.
+                      timeoutMs: d.timeoutMs === 'unbounded' ? ('unbounded' as const) : Number(d.timeoutMs ?? 0),
+                  }))
+                : undefined,
             cacheDisposition: DISPOSITIONS.includes(obj.cacheDisposition as CacheDisposition)
                 ? (obj.cacheDisposition as CacheDisposition)
                 : undefined,
@@ -307,6 +335,109 @@ export function decideCache(
 }
 
 // ── 4. Structure gate ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * 1326 R7: a field that makes a comparison/delta/ratio claim must carry its arithmetic. Detection
+ * is deterministic (a closed vocabulary of comparative signals plus `%`), so an implementer never
+ * chooses their own heuristic: a bare artifact field name like `totals.inputTokens` is NOT a
+ * derived claim, while "larger", "gap", "share", "%" are.
+ */
+const DERIVED_SIGNAL =
+    /%|\b(larger|smaller|higher|lower|more than|less than|above|below|exceeds|dominates|gap|delta|difference|sum|sums|sum of|share|ratio|mean|average)\b/i;
+
+const NUM = '-?\\d+(?:\\.\\d+)?';
+
+/**
+ * Evaluate one `calc:` assertion against the frozen grammar. Returns `undefined` for a grammar
+ * failure (reported separately) and `true`/`false` for a checkable relation. Integer relations are
+ * exact; a division that yields a non-integer uses a relative tolerance of 1e-9.
+ */
+export function evaluateCalcAssertion(expr: string): boolean | undefined {
+    const text = expr
+        .trim()
+        .replace(/^`?calc`?\s*:\s*/i, '')
+        .trim();
+    const cmp = text.match(new RegExp(`^(${NUM})\\s*(<=|>=|<|>)\\s*(${NUM})$`));
+    if (cmp !== null) {
+        const left = Number(cmp[1]);
+        const right = Number(cmp[3]);
+        switch (cmp[2]) {
+            case '<':
+                return left < right;
+            case '<=':
+                return left <= right;
+            case '>':
+                return left > right;
+            default:
+                return left >= right;
+        }
+    }
+    const eq = text.match(new RegExp(`^(${NUM}(?:\\s*[-+*/]\\s*${NUM})+)\\s*=\\s*(${NUM})$`));
+    if (eq === null) return undefined;
+    const tokens = (eq[1] ?? '').split(/\s*([-+*/])\s*/);
+    // tokens = [number, op, number, op, number …]
+    let acc = Number(tokens[0]);
+    let exact = Number.isInteger(acc);
+    let divided = false;
+    for (let i = 1; i < tokens.length; i += 2) {
+        const op = tokens[i];
+        const operand = Number(tokens[i + 1]);
+        if (op === '+') acc += operand;
+        else if (op === '-') acc -= operand;
+        else if (op === '*') acc *= operand;
+        else {
+            if (operand === 0) return false;
+            acc /= operand;
+            divided = true;
+        }
+        exact = exact && Number.isInteger(operand);
+    }
+    const expected = Number(eq[2]);
+    if (!divided && exact && Number.isInteger(expected)) return acc === expected;
+    const scale = Math.max(Math.abs(acc), Math.abs(expected), 1);
+    return Math.abs(acc - expected) <= 1e-9 * scale;
+}
+
+/** `calc:` may be written bare or as an inline-code `calc` label — both are the same assertion. */
+const CALC_LINE = /`?calc`?\s*:\s*\S/i;
+
+/**
+ * 1326 R7: scan the findings bodies for `calc:` assertions and for derived claims that lack one.
+ * The validator's job (operands belong to the cited artifact) stays with the model hop; this is
+ * the deterministic arithmetic half.
+ */
+function auditArithmetic(findingsBody: string, problems: string[]): void {
+    const blockList = findingsBody.split(/^###\s+/m).slice(1);
+    for (const block of blockList) {
+        const lines = block.split('\n');
+        const calcLines = lines.filter((l) => CALC_LINE.test(l));
+        for (const line of calcLines) {
+            const expr = line.slice(line.search(/calc/i));
+            const verdict = evaluateCalcAssertion(expr);
+            // Report the assertion itself, not the markdown label around it.
+            const shown = expr.replace(/^`?calc`?\s*:\s*/i, '').trim();
+            if (verdict === undefined) problems.push(`arithmetic-invalid-assertion:${shown}`);
+            else if (!verdict) problems.push(`arithmetic-contradiction:${shown}`);
+        }
+        // Field spans: a derived claim needs a `calc:` assertion inside its own field text.
+        const fieldNames = ['observation', 'inference'] as const;
+        for (const field of fieldNames) {
+            const start = lines.findIndex((l) => new RegExp(`^[-*\\s]*\\*{0,2}\`?${field}\`?\\*{0,2}\\s*:`).test(l));
+            if (start === -1) continue;
+            let end = lines.length;
+            for (let i = start + 1; i < lines.length; i++) {
+                if (/^[-*]\s*`?[a-zA-Z]+`?\s*:/.test(lines[i] ?? '')) {
+                    end = i;
+                    break;
+                }
+            }
+            const span = lines.slice(start, end).join('\n');
+            if (DERIVED_SIGNAL.test(span) && !CALC_LINE.test(span)) {
+                problems.push(`arithmetic-evidence-missing:${field}`);
+            }
+        }
+    }
+}
 
 function escapeRe(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -395,6 +526,9 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
                 problems.push(`finding-invalid-key-category:${firstSegment}`);
             }
         }
+
+        // 1326 R7: arithmetic evidence, checked before independent validation can be fooled.
+        auditArithmetic(findingsBody, problems);
     }
 
     const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
@@ -696,6 +830,94 @@ export interface ProbeOptions {
     now?: Date;
 }
 
+/** Inputs the `stamp` state supplies so provenance describes the RUN, not the selector (1326 R5/R6). */
+export interface FinalProvenanceInput {
+    validationPath: string;
+    tracePath: string;
+}
+
+/** The subset of a `spur workflow trace --json` action this normalizer reads. */
+interface TraceAction {
+    node?: string;
+    actionId?: string;
+    actionKind?: string;
+    ok?: boolean | null;
+    invocation?: {
+        agent?: string | null;
+        executor?: string | null;
+        model?: string | null;
+        timeoutMs?: number | null;
+    } | null;
+}
+
+/** Depth-first collect of successful `agent.run` actions, in the trace's own order. */
+function collectAgentRuns(node: unknown, out: TraceAction[]): void {
+    if (Array.isArray(node)) {
+        for (const item of node) collectAgentRuns(item, out);
+        return;
+    }
+    if (node === null || typeof node !== 'object') return;
+    const obj = node as TraceAction & Record<string, unknown>;
+    if (obj.actionKind === 'agent.run' && obj.ok === true) out.push(obj);
+    for (const value of Object.values(obj)) collectAgentRuns(value, out);
+}
+
+/**
+ * Overlay the final receipts onto a probe-time provenance: the validation PASS instant from the
+ * artifact itself, plus one dispatch row per successful `agent.run` action from the run trace.
+ * Fails closed — a run that did model work but cannot prove a final PASS must not be published
+ * behind a probe-time timestamp or an unresolved `auto` selector.
+ */
+export function applyFinalProvenance(p: CacheProvenance, input: FinalProvenanceInput): CacheProvenance {
+    const lines = readFileSync(input.validationPath, 'utf8').trimEnd().split('\n');
+    if ((lines[lines.length - 1] ?? '').trim() !== 'Verdict: PASS') {
+        throw new Error(`final validation artifact does not end with "Verdict: PASS": ${input.validationPath}`);
+    }
+    const validatedAt = statSync(input.validationPath).mtime.toISOString();
+
+    let trace: unknown;
+    try {
+        trace = JSON.parse(readFileSync(input.tracePath, 'utf8'));
+    } catch (err) {
+        throw new Error(`could not parse run trace at ${input.tracePath}: ${(err as Error).message}`);
+    }
+    const collected: TraceAction[] = [];
+    collectAgentRuns(trace, collected);
+    const seen = new Set<string>();
+    const dispatches: DispatchProvenance[] = [];
+    for (const action of collected) {
+        const actionId = action.actionId ?? '';
+        if (actionId !== '' && seen.has(actionId)) continue;
+        if (actionId !== '') seen.add(actionId);
+        const inv = action.invocation ?? {};
+        dispatches.push({
+            node: action.node ?? '',
+            actionId,
+            agent: inv.agent != null && inv.agent !== '' ? inv.agent : 'not available: invocation agent absent',
+            executor:
+                inv.executor != null && inv.executor !== ''
+                    ? inv.executor
+                    : 'not available: invocation executor absent',
+            model: inv.model != null && inv.model !== '' ? inv.model : 'not available: invocation model absent',
+            timeoutMs: typeof inv.timeoutMs === 'number' && inv.timeoutMs > 0 ? inv.timeoutMs : 'unbounded',
+        });
+    }
+    if (dispatches.length === 0) {
+        throw new Error(`run trace records no successful agent.run action: ${input.tracePath}`);
+    }
+    // Top-level names the FINAL validation invocation; repeated `validate` visits stay ordered.
+    const finalValidation =
+        [...dispatches].reverse().find((d) => d.node === 'validate') ?? dispatches[dispatches.length - 1];
+    return {
+        ...p,
+        validatedAt,
+        dispatches,
+        executor: finalValidation?.agent ?? NOT_AVAILABLE,
+        model: finalValidation?.model ?? NOT_AVAILABLE,
+        executorProfile: finalValidation?.executor ?? NOT_AVAILABLE,
+    };
+}
+
 /**
  * Build the provenance describing the run that just produced `artifact`. Everything here is
  * derived from the fresh analyze artifact and the on-disk logic files — never from the cached
@@ -706,6 +928,7 @@ export function buildProvenance(opts: ProbeOptions): CacheProvenance {
         selector?: { since?: string | null; until?: string | null };
         coverage?: Array<{ source?: unknown; status?: unknown; lastImportedAt?: unknown }>;
         schemaVersion?: unknown;
+        spurVersion?: unknown;
     };
     try {
         raw = JSON.parse(readFileSync(opts.artifact, 'utf8'));
@@ -754,10 +977,18 @@ export function buildProvenance(opts: ProbeOptions): CacheProvenance {
         runId: opts.runId,
         currentArtifactPath: opts.artifact,
         baselineArtifactPath: opts.baseline ?? null,
-        spurVersion: opts.spurVersion ?? NOT_AVAILABLE,
+        spurVersion:
+            opts.spurVersion !== undefined && opts.spurVersion !== ''
+                ? opts.spurVersion
+                : typeof raw.spurVersion === 'string' && raw.spurVersion !== ''
+                  ? raw.spurVersion
+                  : NOT_AVAILABLE,
         schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : undefined,
-        executor: opts.executor ?? NOT_AVAILABLE,
-        model: opts.model ?? NOT_AVAILABLE,
+        // 1326 R6: the selector is not provenance. Left as a STATED reason here; the stamp state's
+        // `applyFinalProvenance` overwrites both from the run's own action receipts, so an
+        // unresolved `auto` can never be stamped as if it were an executor.
+        executor: opts.executor ?? 'not available: probe did not receive an executor',
+        model: opts.model ?? 'not available: probe did not receive a model',
     };
 }
 
@@ -794,6 +1025,7 @@ const YAML_KEYS: Array<keyof CacheProvenance> = [
     'spurVersion',
     'schemaVersion',
     'executor',
+    'executorProfile',
     'model',
     'cacheDisposition',
 ];
@@ -826,6 +1058,15 @@ export function renderProvenanceFrontmatter(p: CacheProvenance): string {
     lines.push('coverage:');
     for (const c of p.coverage) {
         lines.push(`  - source: ${c.source}, status: ${c.status}, lastImportedAt: ${c.lastImportedAt ?? 'null'}`);
+    }
+    // 1326 R6: flat list items the same parser already reads (`- k: v, k: v`).
+    if (p.dispatches !== undefined && p.dispatches.length > 0) {
+        lines.push('dispatches:');
+        for (const d of p.dispatches) {
+            lines.push(
+                `  - node: ${d.node}, actionId: ${d.actionId}, agent: ${d.agent}, executor: ${d.executor}, model: ${d.model}, timeoutMs: ${d.timeoutMs}`,
+            );
+        }
     }
     lines.push('---');
     return lines.join('\n');

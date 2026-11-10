@@ -376,6 +376,18 @@ export function bounded(value: string, maxLength = MAX_FIELD_LENGTH): string {
 }
 
 /**
+ * 1326 R9: `${vars.stepTimeoutMs}` resolves to the STRING `3600000`, so a number-only read dropped
+ * a real budget and the action line printed `timeout=unbounded`. Accept finite positive numeric
+ * strings, truncating to integer milliseconds exactly as `command-gate` does; anything else is
+ * omitted rather than rendered as a valid budget. Execution behavior is untouched.
+ */
+function positiveMs(value: unknown): number | undefined {
+    const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+    if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return undefined;
+    return Math.trunc(n);
+}
+
+/**
  * Project resolved action options into an intentionally small allow-list. Prompt
  * bodies and shell commands are summarized, never copied to an event payload.
  */
@@ -390,9 +402,8 @@ export function projectActionMetadata(
     if (kind === 'agent.run' && typeof options.role === 'string' && options.role !== '') {
         metadata.role = bounded(options.role);
     }
-    if (typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs)) {
-        metadata.timeoutMs = Math.max(0, options.timeoutMs);
-    }
+    const timeoutMs = positiveMs(options.timeoutMs);
+    if (timeoutMs !== undefined) metadata.timeoutMs = timeoutMs;
     if (typeof options.maxTokens === 'number' && Number.isFinite(options.maxTokens)) {
         metadata.maxTokens = Math.max(0, options.maxTokens);
     }

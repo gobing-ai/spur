@@ -16,15 +16,34 @@ describe('message-where', () => {
 
     test('scalar + list filters are alias-parameterized', () => {
         const { clauses, params } = buildMessageWhereClauses(
-            { ...BASE, since: '1', until: '2', sources: ['claude'], models: ['x', 'y'], sessionId: 's1' },
+            {
+                ...BASE,
+                since: '2026-11-08T00:00:00.000-08:00',
+                until: '2026-11-08T23:59:59.999-08:00',
+                sources: ['claude'],
+                models: ['x', 'y'],
+                sessionId: 's1',
+            },
             'm2',
         );
+        // 1326: an instant bound is a sargable TEXT range on the raw column plus the exact parse.
         expect(clauses).toContain('m2.ts >= ?');
+        expect(clauses).toContain('julianday(m2.ts) >= julianday(?)');
         expect(clauses).toContain('m2.ts <= ?');
+        expect(clauses).toContain('julianday(m2.ts) <= julianday(?)');
         expect(clauses).toContain('m2.source IN (?)');
         expect(clauses).toContain('m2.model IN (?, ?)');
         expect(clauses).toContain('m2.session_id = ?');
-        expect(params).toEqual(['1', '2', 'claude', 'x', 'y', 's1']);
+        expect(params).toEqual([
+            '2026-11-08T07:59:59.000Z',
+            '2026-11-08T00:00:00.000-08:00',
+            '2026-11-09T08:00:00.999Z',
+            '2026-11-08T23:59:59.999-08:00',
+            'claude',
+            'x',
+            'y',
+            's1',
+        ]);
     });
 
     test('tools and skills become EXISTS subqueries; skills are LIKE-escaped', () => {

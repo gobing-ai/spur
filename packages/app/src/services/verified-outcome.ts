@@ -113,7 +113,11 @@ export async function deriveVerifiedOutcome(
         const linkDao = new TaskRunLinkDao(deps.db);
         linkRows = [];
         for (const run of runs) {
-            if (window.until !== null && window.until !== undefined && (run.started_at ?? '') > window.until) continue;
+            // 1326: parse, don't order text — an offset bound and its UTC equivalent must admit
+            // the same rows. Unparseable/NULL starts stay excluded, as in the SQL predicate.
+            const startedAt = Date.parse(run.started_at ?? '');
+            if (!Number.isFinite(startedAt)) continue;
+            if (window.until !== null && window.until !== undefined && startedAt > Date.parse(window.until)) continue;
             for (const link of await linkDao.listByRun(run.id, 100)) {
                 linkRows.push({
                     wbs: link.wbs,

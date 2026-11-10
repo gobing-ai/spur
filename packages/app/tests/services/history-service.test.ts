@@ -23,6 +23,7 @@ import {
     RunSessionDao,
 } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
+import { resolvePaths } from '../../src/services/history-anatomy';
 import {
     assertPiImporterSafe,
     DEFAULT_SOURCE_TIMEOUT_MS,
@@ -224,6 +225,108 @@ describe('HistoryService', () => {
             const artifact = await svc.analyze(ALL);
             expect('verifiedOutcome' in artifact).toBe(false);
             expect(artifact.schemaVersion).toBe(1);
+        });
+
+        // 1326 R1/R2/AC1: the same instants expressed with a local offset and in UTC must select
+        // the same rows across every plane analyze reads — including a seconds-only timestamp at
+        // the inclusive upper-bound second, which selector-only normalization would miss.
+        test('R1: offset-form and Z-form selectors analyze the same rows', async () => {
+            const ctx = makeCtx();
+            const db = await ctx.getDb();
+            const svc = new HistoryService(ctx);
+            const rows: Array<{ hash: string; ts: string }> = [
+                { hash: 'ms-inside', ts: '2026-11-08T10:00:00.000Z' },
+                { hash: 'sec-inside', ts: '2026-11-08T11:00:00Z' },
+                { hash: 'sec-at-upper', ts: '2026-11-09T07:59:59Z' },
+                { hash: 'shifted-before', ts: '2026-11-08T05:00:00.000Z' },
+                { hash: 'after-upper', ts: '2026-11-09T08:00:01.000Z' },
+            ];
+            for (const [i, row] of rows.entries()) {
+                await insertMessage(db, {
+                    record_hash: row.hash,
+                    session_id: 'sess-day',
+                    seq: i + 1,
+                    ts: row.ts,
+                    model: 'claude-opus-5',
+                    input: 10,
+                });
+            }
+            await insertMessage(db, {
+                record_hash: 'null-ts',
+                session_id: 'sess-day',
+                seq: rows.length + 1,
+                ts: '2026-11-08T10:00:00.000Z',
+                model: 'claude-opus-5',
+                input: 10,
+            });
+            await db.run(`UPDATE history_message SET ts = NULL WHERE record_hash = 'null-ts'`);
+
+            const offsetForm = await svc.analyze({
+                ...ALL,
+                since: '2026-11-08T00:00:00.000-08:00',
+                until: '2026-11-08T23:59:59.999-08:00',
+            });
+            const utcForm = await svc.analyze({
+                ...ALL,
+                since: '2026-11-08T08:00:00.000Z',
+                until: '2026-11-09T07:59:59.999Z',
+            });
+
+            expect(utcForm.totals.messages).toBe(offsetForm.totals.messages);
+            expect(utcForm.coverage).toEqual(offsetForm.coverage);
+            expect(utcForm.bySource).toEqual(offsetForm.bySource);
+            expect(utcForm.pairings).toEqual(offsetForm.pairings);
+            expect(utcForm.verifiedOutcome).toEqual(offsetForm.verifiedOutcome);
+            // millisecond row, seconds-only row, and the seconds-only row at the upper bound.
+            expect(offsetForm.totals.messages).toBe(3);
+        });
+
+        // 1326 R3/AC2: the DST-aware bounds resolvePaths emits must actually drive the query — a
+        // spring-forward local day selects 23 hourly rows and a fall-back day selects 25, not a
+        // fixed 24 h slice.
+        test('R3: DST day bounds from resolvePaths select 23 h and 25 h populations', async () => {
+            const boundsFor = (date: string): { since: string; until: string } => {
+                const env = resolvePaths({ helper: '/p/h.mjs', reportDir: 'r', date, tz: 'America/Los_Angeles' });
+                const get = (k: string): string =>
+                    env
+                        .split('\n')
+                        .find((l) => l.startsWith(`${k}=`))
+                        ?.slice(k.length + 1) ?? '';
+                return { since: get('HA_SINCE'), until: get('HA_UNTIL') };
+            };
+            const hourlyCount = async (date: string, startIso: string, hours: number, outsideIso: string) => {
+                const ctx = makeCtx();
+                const db = await ctx.getDb();
+                const start = Date.parse(startIso);
+                for (let h = 0; h < hours; h++) {
+                    await insertMessage(db, {
+                        record_hash: `h-${h}`,
+                        session_id: 'sess-dst',
+                        seq: h + 1,
+                        ts: new Date(start + h * 3_600_000).toISOString(),
+                        model: 'claude-opus-5',
+                    });
+                }
+                await insertMessage(db, {
+                    record_hash: 'h-outside',
+                    session_id: 'sess-dst',
+                    seq: hours + 1,
+                    ts: outsideIso,
+                    model: 'claude-opus-5',
+                });
+                const bounds = boundsFor(date);
+                const artifact = await new HistoryService(ctx).analyze({ ...ALL, ...bounds });
+                return artifact.totals.messages;
+            };
+
+            // 2026-03-08 spring-forward: 08:00Z … next-day 06:00Z is 23 hourly rows.
+            expect(await hourlyCount('2026-03-08', '2026-03-08T08:00:00.000Z', 23, '2026-03-09T07:00:00.000Z')).toBe(
+                23,
+            );
+            // 2026-11-01 fall-back: 07:00Z … next-day 07:00Z is 25 hourly rows.
+            expect(await hourlyCount('2026-11-01', '2026-11-01T07:00:00.000Z', 25, '2026-11-02T08:00:00.000Z')).toBe(
+                25,
+            );
         });
 
         test('analyze materializes all 11 rollup tables once and stamps the matching history version', async () => {

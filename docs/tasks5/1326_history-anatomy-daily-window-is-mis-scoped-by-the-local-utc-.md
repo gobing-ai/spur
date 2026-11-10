@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: history-anatomy daily window is mis-scoped by the local UTC offset; validatedAt, executor, model and spurVersion provenance are false or missing
-status: todo
+status: done
 template: issue
 created_at: 2026-11-10T16:34:29.083Z
-updated_at: "2026-11-10T18:12:40.159Z"
+updated_at: "2026-11-10T20:01:23.625Z"
 feature_id: I81
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P1
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1326-verdict.json
 ---
 
 ## 1326. history-anatomy daily window is mis-scoped by the local UTC offset; validatedAt, executor, model and spurVersion provenance are false or missing
@@ -92,16 +94,16 @@ rows carry numeric `started_at` values and remain outside ISO windows as they ar
 
 ### Requirements
 
-- [ ] R1. `spur history analyze` must apply equivalent ISO instants identically across every data plane it reads: `history_message.ts`, `system_events.occurred_at`, and `runs.started_at`. For example, `2026-11-08T00:00:00.000-08:00` and `2026-11-08T08:00:00.000Z` must select the same rows. Selector text, selector digests, stored timestamps, and cache identity must remain unchanged; only predicate evaluation changes.
-- [ ] R2. Regression coverage must run the offset and `Z` forms through real query seams and prove identical row sets for messages/coverage, pairings, and verified outcomes. Fixtures must include millisecond `….SSSZ`, seconds-only `…Z`, rows immediately inside/outside both bounds, and NULL timestamps. The tests must fail on the current text predicates, including a seconds-only row at the inclusive upper-bound second that selector-only normalization would miss.
-- [ ] R3. A daily report's provenance `identity.date` and analyze `coverage[]` must describe its local calendar day. Existing `resolvePaths` 23 h/25 h DST bounds must feed real analyze queries and select corresponding 23 h/25 h fixture populations. On the audited 2026-11-10 database, 2026-11-08 direct-SQL coverage is agy 1, claude 3,279, pi 5,513; if a later import changes the DB before E2E, fresh direct SQL at run time is the authority and the drift is recorded. UTC `daily` bucket labels remain unchanged and are not part of this requirement.
-- [ ] R4. After R1-R3 and the provenance/report fixes land, regenerate only the 2026-11-08 report through the workflow with `recompute=true`; do not hand-edit it or re-import history. F1 (`coverage:history-analyze:codex-row-absent`), F2 (`telemetry:history-import:agy-import-watermark`), F4/F10, and the comparability verdict must be re-derived from the corrected artifacts. Stale shifted-window evidence must be withdrawn or re-anchored; a true current-window absence may remain only with new evidence and an honest causal label. No particular finding removal or comparability outcome is preordained.
-- [ ] R5. On the cache-miss/model-work path, `validatedAt` must come from the final validation artifact whose last line is exactly `Verdict: PASS`, after verdict normalization/rescue completes, and must be later than `generatedAt`. On the cache-hit path, only `validatedAt`, cache disposition, and the banner change; the original generated time, artifact evidence, and dispatch provenance remain intact. Both paths need focused tests.
-- [ ] R6. Published provenance must carry `spurVersion` from the analyze artifact and a `dispatches[]` entry for every successful `agent.run` action: `node`, `actionId`, canonical `agent`, resolved executor profile, `model`, and `timeoutMs` (a number or `unbounded`). The legacy top-level `executor`/`model` fields must describe the final PASS validation invocation, with executor profile retained separately. Values must come from the run's final action receipts, never from re-resolving `auto` or assuming the initial attempt. A genuinely absent executor/model must use a stated unavailable reason; a resolved value may not render `not available`.
-- [ ] R7. Enrich and correct must express every derived numeric comparison, delta, ratio, or sum used in an observation/inference as an adjacent machine-checkable `calc:` assertion. `spur history anatomy-check` must reject a false assertion and a derived comparison missing its required assertion before independent validation, using exact integer arithmetic and a documented relative tolerance for ratios. The observed inversion (`719,838,772` claimed larger than `725,707,709`) must be a failing fixture; the correct relation and gap `5,868,937` must pass. Independent model validation remains the artifact-ownership check; no second model gate is added.
-- [ ] R8. When the existing fallback ladder fires, its `Escalating: <from> failed with <signal>; retrying on <to>` line must reach the run record even when agent output is JSON. JSON stdout must remain machine-parseable and the existing `agent.invoke.escalated` event must remain unchanged. A hermetic two-attempt test must prove the line, final successful executor, valid JSON, and unchanged event. Do not invent another provider-429 classifier.
-- [ ] R9. `projectActionMetadata` must preserve finite positive numeric and numeric-string `timeoutMs` values so an `agent.run` action line prints the effective budget (`timeout=60m 0s` for 3,600,000 ms). Invalid values must not be rendered as valid budgets, and execution behavior must remain unchanged. A metadata test and a rendered-line test are required.
-- [ ] R10. `spur workflow trace` must resolve a unique run-id prefix to the same run as the full id, prefer an exact full-id match, reject an ambiguous prefix with candidate ids, and report absence distinctly. `--follow` and `--follow --output` must resolve the full id before polling or opening run records. Tests must cover unique, exact, ambiguous, absent, and log-follow behavior. Prefix lookup is capped at 21 rows and ambiguity diagnostics at 20 candidate ids to keep broad prefixes bounded.
+- [x] R1. `spur history analyze` must apply equivalent ISO instants identically across every data plane it reads: `history_message.ts`, `system_events.occurred_at`, and `runs.started_at`. For example, `2026-11-08T00:00:00.000-08:00` and `2026-11-08T08:00:00.000Z` must select the same rows. Selector text, selector digests, stored timestamps, and cache identity must remain unchanged; only predicate evaluation changes.
+- [x] R2. Regression coverage must run the offset and `Z` forms through real query seams and prove identical row sets for messages/coverage, pairings, and verified outcomes. Fixtures must include millisecond `….SSSZ`, seconds-only `…Z`, rows immediately inside/outside both bounds, and NULL timestamps. The tests must fail on the current text predicates, including a seconds-only row at the inclusive upper-bound second that selector-only normalization would miss.
+- [x] R3. A daily report's provenance `identity.date` and analyze `coverage[]` must describe its local calendar day. Existing `resolvePaths` 23 h/25 h DST bounds must feed real analyze queries and select corresponding 23 h/25 h fixture populations. On the audited 2026-11-10 database, 2026-11-08 direct-SQL coverage is agy 1, claude 3,279, pi 5,513; if a later import changes the DB before E2E, fresh direct SQL at run time is the authority and the drift is recorded. UTC `daily` bucket labels remain unchanged and are not part of this requirement.
+- [x] R4. After R1-R3 and the provenance/report fixes land, regenerate only the 2026-11-08 report through the workflow with `recompute=true`; do not hand-edit it or re-import history. F1 (`coverage:history-analyze:codex-row-absent`), F2 (`telemetry:history-import:agy-import-watermark`), F4/F10, and the comparability verdict must be re-derived from the corrected artifacts. Stale shifted-window evidence must be withdrawn or re-anchored; a true current-window absence may remain only with new evidence and an honest causal label. No particular finding removal or comparability outcome is preordained.
+- [x] R5. On the cache-miss/model-work path, `validatedAt` must come from the final validation artifact whose last line is exactly `Verdict: PASS`, after verdict normalization/rescue completes, and must be later than `generatedAt`. On the cache-hit path, only `validatedAt`, cache disposition, and the banner change; the original generated time, artifact evidence, and dispatch provenance remain intact. Both paths need focused tests.
+- [x] R6. Published provenance must carry `spurVersion` from the analyze artifact and a `dispatches[]` entry for every successful `agent.run` action: `node`, `actionId`, canonical `agent`, resolved executor profile, `model`, and `timeoutMs` (a number or `unbounded`). The legacy top-level `executor`/`model` fields must describe the final PASS validation invocation, with executor profile retained separately. Values must come from the run's final action receipts, never from re-resolving `auto` or assuming the initial attempt. A genuinely absent executor/model must use a stated unavailable reason; a resolved value may not render `not available`.
+- [x] R7. Enrich and correct must express every derived numeric comparison, delta, ratio, or sum used in an observation/inference as an adjacent machine-checkable `calc:` assertion. `spur history anatomy-check` must reject a false assertion and a derived comparison missing its required assertion before independent validation, using exact integer arithmetic and a documented relative tolerance for ratios. The observed inversion (`719,838,772` claimed larger than `725,707,709`) must be a failing fixture; the correct relation and gap `5,868,937` must pass. Independent model validation remains the artifact-ownership check; no second model gate is added.
+- [x] R8. When the existing fallback ladder fires, its `Escalating: <from> failed with <signal>; retrying on <to>` line must reach the run record even when agent output is JSON. JSON stdout must remain machine-parseable and the existing `agent.invoke.escalated` event must remain unchanged. A hermetic two-attempt test must prove the line, final successful executor, valid JSON, and unchanged event. Do not invent another provider-429 classifier.
+- [x] R9. `projectActionMetadata` must preserve finite positive numeric and numeric-string `timeoutMs` values so an `agent.run` action line prints the effective budget (`timeout=60m 0s` for 3,600,000 ms). Invalid values must not be rendered as valid budgets, and execution behavior must remain unchanged. A metadata test and a rendered-line test are required.
+- [x] R10. `spur workflow trace` must resolve a unique run-id prefix to the same run as the full id, prefer an exact full-id match, reject an ambiguous prefix with candidate ids, and report absence distinctly. `--follow` and `--follow --output` must resolve the full id before polling or opening run records. Tests must cover unique, exact, ambiguous, absent, and log-follow behavior. Prefix lookup is capped at 21 rows and ambiguity diagnostics at 20 candidate ids to keep broad prefixes bounded.
 
 ### Acceptance Criteria
 
@@ -390,15 +392,134 @@ Prefix resolution must be unique and must precede both liveness checks and recor
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+<!-- body-only: Solution section -->
+
+**R1/R2 — instant selection (one seam, three planes).** `packages/domain/src/analytics/selector-time-range.ts:9-31` adds `grain: 'instant'` (`julianday(col) >= julianday(?)`) plus a `COLUMN_SQL` map so only the instant grain transforms the column. Consumers:
+`packages/domain/src/analytics/message-where.ts:20-30` routes `since`/`until` through it (message/coverage/totals plane);
+`packages/domain/src/analytics/pairings.ts:377-390` (`eventWindow`) does the same for `system_events.occurred_at` (pairings + escalations);
+`packages/domain/src/dao/run-dao.ts:115` compares `julianday(started_at) >= julianday(?3)` (verified-outcome plane) while the keyset `before` cursor stays untouched;
+`packages/app/src/services/verified-outcome.ts:113-118` replaces the in-memory TEXT `until` comparison with `Date.parse`, dropping unparseable/NULL starts exactly as the SQL predicate does.
+Selector text, artifact shape and `selectorDigest` are unchanged, so no cache comparison shifts; `daily` `DATE(ts)` buckets stay UTC.
+
+**R5/R6 — final-receipt provenance.** `packages/app/src/services/history-anatomy.ts`:
+`DispatchProvenance` + `CacheProvenance.dispatches[]`/`executorProfile` (59-77),
+`applyFinalProvenance` (700-780) — requires the validation artifact's last line to be exactly `Verdict: PASS`, takes `validatedAt` from its mtime, collects successful `agent.run` actions from `spur workflow trace --json` (deduped by `actionId`, failed attempts excluded), states a reason for an absent executor/model, and fails closed when the receipt is missing;
+`buildProvenance` now reads `spurVersion` from the analyze artifact and stamps `executor`/`model` as a stated probe-time absence (the selector is never provenance) (764-786);
+`renderProvenanceFrontmatter`/`parseProvenance` round-trip `dispatches[]` as flat list items.
+`packages/app/src/services/history-anatomy-cli.ts:236-258` adds `--validation`/`--trace` to `anatomy-stamp` (both optional, so the pre-1326 stamp surface still works).
+`config/workflows/history-anatomy.yaml`: `cache-probe` no longer passes `--executor "$agent"`; `stamp` writes `.spur/run/$__runId-trace.json` via `spur workflow trace "$__runId" --json`, then stamps with `--validation` and `--trace`.
+
+**R7 — deterministic arithmetic.** `packages/app/src/services/history-anatomy.ts:441-520` adds `evaluateCalcAssertion` (frozen grammar: left-associative `+`/`-` chains, `*`, `/`, and `<|<=|>|>=`; exact integers, `1e-9` relative tolerance for ratios; no `eval`, no parentheses, no units) and `auditArithmetic`, invoked from `checkReportStructure` over the findings bodies. Codes: `arithmetic-contradiction`, `arithmetic-invalid-assertion`, `arithmetic-evidence-missing`. Derived-field detection is the closed vocabulary from the contract (`%` or one of larger/smaller/gap/share/ratio/…), so a raw artifact field name alone is not policed. Contract and rubric updated in `plugins/sp/skills/history-anatomy/references/report-contract.md` (§ Arithmetic assertions) and `operations.md` (enrich item 3, validate rubric).
+
+**R8 — escalation visibility.** `packages/app/src/services/agent-run-executor.ts:828-838` appends the existing `Escalating: <from> … retrying on <to>` line through `AgentRunLog.append('stderr', …)` at the ladder hop, so JSON-mode runs record it; the human stderr write stays behind `!jsonOutput` and the `agent.invoke.escalated` event is unchanged (no new classifier).
+
+**R9 — effective budget.** `packages/app/src/workflow/observability.ts:381-404` adds `positiveMs`, which accepts finite positive numbers and numeric strings and truncates to integer milliseconds (mirroring `command-gate`), omitting anything else; `projectActionMetadata` uses it, so `stepTimeoutMs: "3600000"` renders `timeout=60m 0s`.
+
+**R10 — safe prefix resolution.** `packages/domain/src/dao/run-dao.ts:143-153` adds `traceRowsByIdPrefix` (`substr` comparison, `LIMIT 21`, no `LIKE` wildcards);
+`packages/app/src/services/workflow-inspect-ops.ts:290-301` adds `resolveRunId` (exact → unique prefix → `Ambiguous run id prefix: … candidates:` capped at 20 → `Run not found: …`);
+`packages/app/src/services/workflow-service.ts` exposes it and calls it in `trace()` only on the exact-miss path, so a followed run's poll still costs ONE row read (1319 R1);
+`apps/cli/src/commands/workflow/trace.ts:455-470` resolves once, before `--follow`/`--follow --output` open a record path or poll loop.
+
+**Docs (T3, same change):** `docs/design/history-cli-contracts.md` (analyze instant semantics; stamp flags; `dispatches[]`), `docs/design/history-anatomy.md` (final-receipt provenance block, stamp step in the workflow shape).
+
+**Review follow-up — sargability (found in D1 review, fixed).** The parsed predicate alone is not
+sargable: `EXPLAIN QUERY PLAN` showed `SCAN m USING COVERING INDEX idx_history_message_ts`, and a
+bounded daily analyze of 2026-11-08 measured **25,736 ms / 20,588 ms** (the pre-fix run: 1,241 ms /
+733 ms). `packages/domain/src/analytics/selector-time-range.ts:47-80` therefore emits a sargable
+TEXT range on the raw column, widened by one second on each side, ahead of the exact `julianday`
+comparison — `SEARCH m USING COVERING INDEX idx_history_message_ts (ts>? AND ts<?)`. The same file
+degrades to the exact predicate alone when a bound is not a parseable instant, so correctness never
+depends on the widening. Re-measured after the fix: **0.49 s** with byte-identical coverage
+(`agy 1/1, claude 3279/4, pi 5513/13`).
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/analytics/selector-time-range.ts:47-80` emits an instant grain; `packages/domain/src/analytics/message-where.ts:20-30`, `packages/domain/src/analytics/pairings.ts:377-390`, `packages/domain/src/dao/run-dao.ts:115`, `packages/app/src/services/verified-outcome.ts:113-118` route the message, pairing, run-start and verified-outcome planes through it. Selector text/`selectorDigest` unchanged. `packages/domain` 1461 pass / 0 fail; `packages/app` 6029 pass / 0 fail |
+| R2 | MET | `packages/domain/tests/analytics/selector-time-range.test.ts` (prefilter shape + exact-predicate fallback), `packages/domain/tests/analytics/message-where.test.ts`, `forensic-query.test.ts`, `pairings.test.ts`, `packages/domain/tests/dao/run-dao.test.ts`, `packages/app/tests/services/history-service.test.ts` (mixed precision, both inclusive bounds, NULL ts, seconds-only upper-bound row), `verified-outcome.test.ts`. Driving both predicate forms over one fixture set pre-fix selects different sets (`OLD offset: ms-inside,sec-inside,shifted` vs `OLD utc: ms-inside,sec-inside`); post-fix both select `ms-inside,sec-inside,sec-upper` |
+| R3 | MET | `packages/app/tests/services/history-service.test.ts` → `R3: DST day bounds from resolvePaths select 23 h and 25 h populations` feeds real `resolvePaths` bounds (`packages/app/src/services/history-anatomy.ts:532-560`) into `analyze` and asserts 23 and 25 hourly rows. Live: analyze of 2026-11-08 returns `agy 1/1, claude 3279/4, pi 5513/13`, equal to direct `julianday` SQL at run time (`.spur/run/1326-history-anatomy-e2e.json`); UTC `DATE(ts)` buckets untouched |
+| R4 | MET | Workflow rerun `05d14930-17c2-4089-b3da-cff6b318b3c1` republished `docs/report/2026-11-08-history-anatomy.md`: comparability now **comparable** (codex absent from BOTH corrected windows), `agy` recorded as a 1-message/zero-usage asymmetry instead of an import defect. No hand-edit, no import. Receipt `.spur/run/1326-history-anatomy-e2e.json` |
+| R5 | MET | `packages/app/src/services/history-anatomy.ts` `applyFinalProvenance` + `packages/app/src/services/history-anatomy-cli.ts:236-258` `--validation`; tests in `history-anatomy-final-provenance.test.ts` (7 cases). Live: `generatedAt 19:13:43.180Z` → `validatedAt 19:40:25.437Z` |
+| R6 | MET | `DispatchProvenance`/`dispatches[]`/`executorProfile` (`packages/app/src/services/history-anatomy.ts:59-77`, render/parse round-trip), `config/workflows/history-anatomy.yaml` `cache-probe` drops `--executor "$agent"` and `stamp` writes the trace then stamps with both receipts. Live frontmatter: `executor: grok`, `model: grok-4.7`, `spurVersion: 0.4.30`, `executorProfile: not available: invocation executor absent`, 2 `dispatches[]` rows with `timeoutMs: 3600000`, no `auto` |
+| R7 | MET | `evaluateCalcAssertion` + `auditArithmetic` in `checkReportStructure` (`packages/app/src/services/history-anatomy.ts:441-520`); 6 gate cases in `history-anatomy.test.ts` pin the observed inversion as `arithmetic-contradiction`, the correct gap as passing, and `arithmetic-evidence-missing`. Contract/rubric updated. Live report carries 68 `calc:` assertions and the gate PASSed first pass with 0 corrections |
+| R8 | MET | `packages/app/src/services/agent-run-executor.ts:828-838` appends through `AgentRunLog`; `agent-service.test.ts` → `R8: JSON mode keeps the Escalating line in the durable run record` (stderr silent, durable record carries `Escalating: std-exec`/`retrying on capable-exec`, one unchanged event, stdout JSON). Not exercised live: the E2E run had no resource exhaustion |
+| R9 | MET | `positiveMs` in `packages/app/src/workflow/observability.ts:381-404`; `observability.test.ts` + `step-reporter.test.ts` pin `'3600000'` → `3600000`, invalid values omitted, and the rendered `timeout=60m 0s`. Live run record line: `agent.run · agent=auto · role=reviewer => [prompt 452 chars] · timeout=60m 0s` |
+| R10 | MET | `traceRowsByIdPrefix` (`packages/domain/src/dao/run-dao.ts:143-153`), `resolveRunId` (`packages/app/src/services/workflow-inspect-ops.ts:290-301`), `WorkflowAppService.resolveRunId` + miss-only resolution in `trace()` preserving the one-read poll, CLI resolution before `--follow`/`--follow --output`. Tests: `workflow-inspect-ops.test.ts`, `apps/cli/tests/commands/workflow/trace.test.ts` (4 cases), `workflow-clean-ops.test.ts` one-read invariant still green. Live: `spur workflow trace 05d14930` resolved the full run id |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: AC1 — Equivalent selectors return identical rows on every plane (req: R1, R2) | MET | test | `history-service.test.ts` → `R1: offset-form and Z-form selectors analyze the same rows` (totals, coverage, bySource, pairings, verifiedOutcome equal; 3 messages including the seconds-only upper-bound row); `pairings.test.ts` → `R1: offset-form and Z-form windows return the same pairings`; `run-dao.test.ts` → `traceRows \`since\` selects instants across offset form and stored precision`. `packages/domain` 1461 pass / 0 fail, `packages/app` 6029 pass / 0 fail |
+| Scenario: AC2 — Daily coverage follows local and DST calendar days (req: R3) | MET | test | `history-service.test.ts` → `R3: DST day bounds from resolvePaths select 23 h and 25 h populations` (23 and 25); real data `bun apps/cli/src/index.ts history analyze --since 2026-11-08T00:00:00.000-08:00 --until 2026-11-08T23:59:59.999-08:00` returns `agy 1, claude 3279, pi 5513` = direct SQL; existing `resolvePaths` 23 h/25 h bound tests still green |
+| Scenario: AC3 — The regenerated report re-derives evidence without window artifacts (req: R4) | MET | command | Live run `05d14930-17c2-4089-b3da-cff6b318b3c1` (status `done`, 26m39s, 0 corrections) republished the report; receipt `.spur/run/1326-history-anatomy-e2e.json` records the run id, report path, direct-SQL baseline, artifact coverage, comparability verdict and every assertion |
+| Scenario: AC4 — Provenance records validation time and actual dispatches (req: R5, R6) | MET | test | `history-anatomy-final-provenance.test.ts` (7 cases: PASS mtime, per-action rows, repeats distinct, final-validation top-level, absent-value reasons, fail-closed, cache-hit preservation); live frontmatter `generatedAt 19:13:43.180Z` / `validatedAt 19:40:25.437Z`, `executor: grok`, `model: grok-4.7`, 2 dispatch rows |
+| Scenario: AC5 — False arithmetic fails the deterministic gate (req: R7) | MET | test | `history-anatomy.test.ts` → `checkReportStructure arithmetic assertions (1326 R7 / AC5)` (6 cases) including `calc: 719838772 > 725707709` → `arithmetic-contradiction` and `calc: 725707709 - 719838772 = 5868937` → pass |
+| Scenario: AC6 — Escalation and effective timeout are visible in JSON workflow records (req: R8, R9) | MET | test | `agent-service.test.ts` R8 case (two attempts: 429 then success; durable `Escalating:` line with both executors; one unchanged `agent.invoke.escalated` event; JSON stdout); `observability.test.ts` + `step-reporter.test.ts` R9 cases and live `timeout=60m 0s` |
+| Scenario: AC7 — Trace resolves prefixes safely (req: R10) | MET | test | `workflow-inspect-ops.test.ts` (exact / unique / ambiguous / absent); `apps/cli/tests/commands/workflow/trace.test.ts` (4 cases incl. `--follow` and `--follow --output`); live `spur workflow trace 05d14930` = full id |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+**Focused suites (all run in-tree at `spur-new-run-1326-32d9`, after the sargability fix).**
+
+| Command | Result |
+| --- | --- |
+| `(cd packages/domain && bun test)` | 1461 pass, 0 fail (101 files) |
+| `(cd packages/app && bun test)` | 6029 pass, 0 fail (319 files) |
+| `(cd plugins/sp && bun test)` | 1315 pass, 0 fail (38 files) |
+| `(cd apps/cli && bun test)` | 1801 pass, 0 fail (191 files) |
+| `bunx tsc --noEmit` in domain / app / cli | clean |
+| `bunx biome check` over every touched path | clean |
+
+**Red-first evidence for R1/R2.** Both predicate forms over one fixture set (millisecond row,
+seconds-only row, seconds-only row at the inclusive upper-bound second, a row in the shifted slice,
+a row after the bound):
+
+```text
+OLD offset: ms-inside,sec-inside,shifted      OLD utc: ms-inside,sec-inside
+NEW offset: ms-inside,sec-inside,sec-upper    NEW utc: ms-inside,sec-inside,sec-upper
+```
+
+The old text predicate admitted a row from the wrong 8-hour slice AND dropped the seconds-only row
+at the bound; the parsed predicate is identical across forms and keeps that row.
+
+**Performance re-measurement (R3's query-timing clause).** `history analyze --since
+2026-11-08T00:00:00.000-08:00 --until 2026-11-08T23:59:59.999-08:00` against the real store:
+
+| Predicate | Wall time | Plan |
+| --- | --- | --- |
+| pre-fix run (text compare, shifted window) | 1.24 s / 0.73 s | index range |
+| parsed `julianday` only | 22.95 s (legs 25.7 s / 20.6 s) | covering-index SCAN |
+| parsed + one-second-widened TEXT prefilter | 0.49 s | `SEARCH … (ts>? AND ts<?)` |
+
+Coverage identical across all three (`agy 1/1, claude 3279/4, pi 5513/13`), so the prefilter changes
+the plan, not the answer.
+
+**Gate.** `spur task gate 1326 run --cmd "bun run spur-check"` → `quality gate PASS (attempts: 1)`,
+token `PASS` in `.spur/run/1326-test-gate.status`.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Disposition: PASS.** `spur task verdict 1326 --from-answer .spur/run/1326-verify-answer.txt` →
+`verdict: PASS` over 10/10 requirements and 7/7 ACs; answer lint clean. Review dimensions:
+functional traceability (every R-item has code + a named test or a live assertion), SECUA, and
+architecture (one predicate seam, one provenance owner, no new public verb).
+
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P2 | Performance | `packages/domain/src/analytics/selector-time-range.ts` | The parsed-only predicate is not sargable — `EXPLAIN QUERY PLAN` degraded to a covering-index SCAN and a bounded daily analyze measured 25.7 s / 20.6 s (pre-fix 1.2 s / 0.7 s). **Fixed before the gate run**: a one-second-widened TEXT range on the raw column precedes the exact comparison (`SEARCH … (ts>? AND ts<?)`), re-measured 0.49 s with identical coverage, pinned by `selector-time-range.test.ts` |
+| P3 | Correctness (residual) | `history-anatomy.ts` `evaluateCalcAssertion` | Left-associative grammar, no operator precedence, so a mixed-precedence chain (`2 + 3 * 4`) fails as a contradiction. Documented in `report-contract.md`; the rubric does not use such chains, but a model writing one burns a correction pass |
+| P3 | Correctness (residual) | `history-anatomy.ts` `auditArithmetic` | Field-span detection keys on the contract's bullet layout; a table-shaped finding is skipped. False-negative path only — a derived claim can escape the gate, never a false failure |
+| P3 | Behavior change | `packages/app/src/services/verified-outcome.ts` | An unparseable `runs.started_at` (the three legacy numeric rows) is now excluded from a windowed denominator, matching the SQL plane's `julianday` NULL semantics; text comparison previously admitted them |
+| P4 | Observability | `history-anatomy.ts` `applyFinalProvenance` | On the Grok path `executorProfile` reads `not available: invocation executor absent`; honest, and `dispatches[]` carries the same value. No requirement asks for the ladder to be recorded |
+
+**Residual risk.** R8's durable escalation line has hermetic coverage only — this E2E run hit no
+resource exhaustion (0 `RESOURCE_EXHAUSTED` lines), so the live path is unproven. The report
+regenerated here is gitignored (`docs/report/*-history-anatomy.md`); its fixed copy is copied into
+the invoking tree at landing, and the durable evidence is the receipt
+`.spur/run/1326-history-anatomy-e2e.json` plus run `05d14930-17c2-4089-b3da-cff6b318b3c1`.
 
 ### References
 
@@ -418,3 +539,8 @@ Prefix resolution must be unique and must precede both liveness checks and recor
 - Concurrent ownership audit: one worktree at 2026-11-10; no `wip` tasks. Starting tree had only the untracked 1322 task and the deliberate I81 status change made during this refine.
 
 ### History
+
+- 2026-11-10T19:42:14.913Z todo → wip (system)
+- 2026-11-10T20:01:04.132Z wip → testing (system)
+- 2026-11-10T20:01:23.510Z testing → done (system)
+

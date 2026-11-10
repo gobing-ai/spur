@@ -3,7 +3,7 @@ kind: design
 title: "History anatomy: daily cache, ad-hoc diagnosis, and bounded migration"
 status: implemented
 created_at: 2026-08-24
-updated_at: 2026-08-28
+updated_at: 2026-11-10
 related: [I8, "0657", "0658", "0659", "0660", "0661", "0669"]
 tags: [system, I8, history]
 ---
@@ -88,6 +88,19 @@ bounds, source scope)`.
 - Spur/schema version, skill digest, workflow digest, executor and model identity, run id
 - `cache_disposition: hit | miss | forced-recompute`
 
+**Final-receipt provenance (task 1326).** `generated_at` is probe time ("the artifact was built",
+which is true); `validated_at` is the mtime of the validation artifact whose last line is exactly
+`Verdict: PASS`, read after verdict normalization/rescue — never probe time, which in the 2026-11-08
+run overstated validation by 48.5 minutes. `stamp` takes `--validation <v.txt>` and `--trace
+<trace.json>`; the workflow writes the trace with `spur workflow trace "$__runId" --json` just
+before stamping. The appended `dispatches[]` list carries one row per successful `agent.run` action
+(`node`, `actionId`, canonical `agent`, executor profile, `model`, `timeoutMs` as a positive number
+or `unbounded`), and top-level `executor`/`model` name the FINAL validation invocation with
+`executorProfile` kept separately. The `auto` selector is never provenance — `cache-probe` no longer
+passes `--executor "$agent"` — and a miss that cannot produce a passing receipt fails closed rather
+than stamping an unresolved executor. A genuinely absent value renders a stated reason
+(`not available: invocation model absent`), never a bare `not available`.
+
 **The semantic digest** is SHA-256 over the artifact JSON normalized to exclude only volatile
 generation fields (`generatedAt`, absolute paths, the artifact's own digest field). It deliberately
 does not include corpus state; a corpus-version field is added only if this proves inadequate, under
@@ -129,7 +142,7 @@ resolve scope
           → deterministic structure gate (helper)
               → FAIL: correction (max two total) → gate re-runs | terminal failure
           → independent evidence validation (sp:history-anatomy validate)
-              → PASS: atomic publish
+              → PASS: stamp final receipts (validation mtime + trace dispatches) → atomic publish
               → FAIL: correction within the same two-pass budget → gate re-runs | terminal failure
 ```
 

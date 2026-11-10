@@ -1,4 +1,5 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
+import { buildTimeRangeClauses } from './selector-time-range';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -380,15 +381,11 @@ async function loadFolds(db: DbAdapter, spec: PairingSummaryOptions): Promise<Fo
  * default, and a caller wanting a bounded window supplies the bounds.
  */
 function eventWindow(spec: PairingSummaryOptions): { where: string; params: unknown[] } {
-    const clauses: string[] = [];
-    const params: unknown[] = [];
-    if (spec.since !== undefined) {
-        clauses.push('occurred_at >= ?');
-        params.push(spec.since);
-    }
-    if (spec.until !== undefined) {
-        clauses.push('occurred_at <= ?');
-        params.push(spec.until);
-    }
+    // 1326: same instant semantics as the message plane — pairing markets must not answer a
+    // different window than the totals they are reported beside.
+    const { clauses, params } = buildTimeRangeClauses(
+        { since: spec.since ?? null, until: spec.until ?? null },
+        { column: 'occurred_at', grain: 'instant' },
+    );
     return { where: clauses.length > 0 ? `AND ${clauses.join(' AND ')}` : '', params };
 }

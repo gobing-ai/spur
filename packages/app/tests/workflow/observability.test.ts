@@ -255,6 +255,20 @@ describe('projectActionMetadata', () => {
         expect(metadata?.role).toBe('coder');
         expect(projectActionMetadata('shell', { command: 'true', role: 'coder' })?.role).toBeUndefined();
     });
+
+    // 1326 R9: `${vars.stepTimeoutMs}` resolves to the STRING `3600000`. A number-only read dropped
+    // it, so a 60-minute budget rendered as `timeout=unbounded` in the run record.
+    test('R9: keeps finite positive numeric-string budgets, truncating to integer milliseconds', () => {
+        expect(projectActionMetadata('agent.run', { timeoutMs: '3600000' })?.timeoutMs).toBe(3_600_000);
+        expect(projectActionMetadata('agent.run', { timeoutMs: '1500.9' })?.timeoutMs).toBe(1500);
+        expect(projectActionMetadata('agent.run', { timeoutMs: 3_600_000 })?.timeoutMs).toBe(3_600_000);
+    });
+
+    test('R9: an invalid budget is omitted rather than rendered as a real one', () => {
+        for (const bad of ['unbounded', '', '   ', '-5', '0', Number.NaN, Number.POSITIVE_INFINITY, null, {}]) {
+            expect(projectActionMetadata('agent.run', { timeoutMs: bad })?.timeoutMs).toBeUndefined();
+        }
+    });
 });
 
 describe('workflow identity (R3)', () => {

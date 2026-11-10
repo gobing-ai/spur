@@ -1,4 +1,5 @@
 import type { ArtifactSelector } from './artifact';
+import { buildTimeRangeClauses } from './selector-time-range';
 import { toolSelectionSql } from './tool-alias';
 
 // Selector → WHERE clause builder shared by forensic-query and watermark. Extracted from
@@ -18,13 +19,15 @@ export function buildMessageWhereClauses(
 ): { clauses: string[]; params: unknown[] } {
     const clauses: string[] = [];
     const params: unknown[] = [];
-    if (sel.since != null) {
-        clauses.push(`${alias}.ts >= ?`);
-        params.push(sel.since);
-    }
-    if (sel.until != null) {
-        clauses.push(`${alias}.ts <= ?`);
-        params.push(sel.until);
+    if (sel.since != null || sel.until != null) {
+        // 1326: instants, not TEXT order — a daily selector's local offset bound must select the
+        // same rows as its UTC equivalent, and stored precision varies (ms and seconds-only).
+        const range = buildTimeRangeClauses(
+            { since: sel.since ?? null, until: sel.until ?? null },
+            { column: `${alias}.ts`, grain: 'instant' },
+        );
+        clauses.push(...range.clauses);
+        params.push(...range.params);
     }
     if (sel.sources != null && sel.sources.length > 0) {
         clauses.push(`${alias}.source IN (${sel.sources.map(() => '?').join(', ')})`);

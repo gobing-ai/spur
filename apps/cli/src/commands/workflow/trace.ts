@@ -499,14 +499,26 @@ export function registerWorkflowTraceCommand(workflow: Command, context: CliCont
                 context.setExitCode(1);
                 return;
             }
-            if (options.follow === true && runId !== undefined) {
+            // 1326 R10: resolve the id once, before any watch opens a record path or poll loop —
+            // progress lines print the 8-char prefix, so a prefix must resolve for --follow too.
+            let resolvedRunId = runId;
+            if (runId !== undefined) {
+                try {
+                    resolvedRunId = await svc.resolveRunId(runId);
+                } catch (err) {
+                    writeJsonError(context.output, options, (err as Error).message, 'NOT_FOUND');
+                    context.setExitCode(1);
+                    return;
+                }
+            }
+            if (options.follow === true && resolvedRunId !== undefined) {
                 // 0930 R1: a deadline expiry stops the watch with a checkpoint; the run itself
                 // is never cancelled or relaunched — exit 1 is the watcher's, not the run's.
                 const timedOut =
                     options.output === true
                         ? await followRunLog(
                               svc,
-                              runId,
+                              resolvedRunId,
                               context.cwd,
                               pollMs,
                               (line) => context.output.write(line),
@@ -516,7 +528,7 @@ export function registerWorkflowTraceCommand(workflow: Command, context: CliCont
                           )
                         : await followTrace(
                               svc,
-                              runId,
+                              resolvedRunId,
                               pollMs,
                               (line) => context.output.write(line),
                               undefined,
@@ -526,8 +538,8 @@ export function registerWorkflowTraceCommand(workflow: Command, context: CliCont
                 if (timedOut) context.setExitCode(1);
                 return;
             }
-            const result = runId
-                ? await svc.trace(runId)
+            const result = resolvedRunId
+                ? await svc.trace(resolvedRunId)
                 : await svc.trace({
                       workflow: options.workflow,
                       status: options.status,

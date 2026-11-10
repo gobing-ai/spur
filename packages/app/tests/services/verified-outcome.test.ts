@@ -148,6 +148,29 @@ describe('deriveVerifiedOutcome (app derivation smoke)', () => {
         db.close();
     });
 
+    // 1326 R1: bounds compare as instants, not as text. The run below starts 2026-08-30T02:00Z,
+    // which is 2026-08-29 19:00 in America/Los_Angeles but sorts AFTER a
+    // `2026-08-29T23:59:59.999-07:00` upper bound as text — the local evening is dropped unless
+    // the upper bound is parsed.
+    test('R1: an offset-form window admits the rows its UTC equivalent admits', async () => {
+        const { db, cwd } = await makeEnv();
+        db.run(
+            `UPDATE runs SET started_at = '2026-08-30T02:00:00.000Z', completed_at = '2026-08-30T03:00:00.000Z' WHERE id = 'run_0701'`,
+        );
+        const deps = { db, cwd, locator: stubLocator(cwd), fs: stubFs() };
+        const localDay = await deriveVerifiedOutcome(deps, {
+            since: '2026-08-29T00:00:00.000-07:00',
+            until: '2026-08-29T23:59:59.999-07:00',
+        });
+        const utcDay = await deriveVerifiedOutcome(deps, {
+            since: '2026-08-29T07:00:00.000Z',
+            until: '2026-08-30T06:59:59.999Z',
+        });
+        expect(localDay?.taskDenominator).toBe(utcDay?.taskDenominator);
+        expect(localDay?.taskDenominator).toBe(1);
+        db.close();
+    });
+
     test('window outside the run start excludes the task from the denominator (R7)', async () => {
         const { db, cwd } = await makeEnv();
         const stat = await deriveVerifiedOutcome(
