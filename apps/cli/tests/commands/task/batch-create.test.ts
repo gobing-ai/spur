@@ -280,8 +280,56 @@ describe('spur task batch-create — flag conflicts', () => {
             expect(parsed.wbs).toEqual(['0101', '0102']);
             expect(parsed.normalized).toEqual([{ wbs: '0101', normalized: ['status: Backlog → backlog'] }]);
             expect(parsed.featureReopened).toEqual([null, { featureId: 'F1', from: 'verifying', to: 'in_progress' }]);
+            // 1325 remediation: the `warnings` projection is additive-only — absent when no child carries advisories.
+            expect('warnings' in parsed).toBe(false);
         } finally {
             batchCreate.mockRestore();
         }
+    });
+
+    // 1325 remediation: an oversize child's write-time size advisory must survive
+    // the CLI boundary — per-child `warnings` rows in the `--json` payload and
+    // WBS-prefixed stderr lines in human mode (mirrors single `create`).
+    const oversizeReqs = Array.from({ length: 11 }, (_, i) => `- [ ] **R${i + 1}.** Requirement ${i + 1}`).join('\n');
+
+    test('oversize batch child surfaces warnings rows in --json (1325 remediation)', async () => {
+        const batchFile = join(cwd, 'batch-oversize-json.json');
+        await Bun.write(batchFile, JSON.stringify([{ name: 'Oversize batch JSON child', requirements: oversizeReqs }]));
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile, '--json'], {
+            cwd,
+            output,
+        });
+
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.created).toBe(1);
+        const rows = parsed.warnings as Array<{ wbs: string; warnings: string[] }>;
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.wbs).toBe(parsed.wbs[0]);
+        expect(rows[0]?.warnings.join('\n')).toContain('Task has 11 R-items (max 10)');
+        expect(output.errors).toEqual([]);
+    });
+
+    test('oversize batch child prints size advisory to stderr in human mode (1325 remediation)', async () => {
+        const batchFile = join(cwd, 'batch-oversize-human.json');
+        await Bun.write(
+            batchFile,
+            JSON.stringify([{ name: 'Oversize batch human child', requirements: oversizeReqs }]),
+        );
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'batch-create', '--skip-ready', '--file', batchFile], { cwd, output });
+
+        expect(exitCode).toBe(0);
+        const childLine = output.messages.find((m) => /^ {2}\d{4} {2}/.test(m));
+        expect(childLine).toBeDefined();
+        const wbs = childLine?.trim().split(/\s{2}/)[0] ?? '';
+        expect(output.errors).toEqual([
+            `${wbs}: Task has 11 R-items (max 10). Consider decomposing into smaller tasks.`,
+        ]);
+        // Warnings ride stderr only — stdout keeps the created report clean.
+        expect(output.messages.join('')).not.toContain('R-items');
     });
 });

@@ -64,10 +64,13 @@ spur task show 1325 --summary --json                # index only, no bodies
 
 `create` and `batch-create` (and the service-level `updateBody` write path) report the written
 file's size against the precheck budget at write time: a task at or over the R-item /
-prose-paragraph threshold gets a `Task has N R-items (max 10)`-style advisory merged into its
-`warnings[]` (human mode prints it to stderr; `update --section` section writes carried this
-advisory already). The advisory **never blocks the write** — it is the authoring-time early
-warning that `task check --precheck` enforces as a gate later.
+prose-paragraph threshold gets a `Task has N R-items (max 10)`-style advisory in the write
+result's `warnings[]`. The advisory **never blocks the write** — it is the authoring-time early
+warning that `task check --precheck` enforces as a gate later. Rendering: single `create`
+surfaces top-level `warnings` in `--json` and prints each advisory bare to stderr in human
+mode; `batch-create` surfaces per-child `warnings` rows (`[{"wbs", "warnings"}]`, present only
+when non-empty) in `--json` and prints `<wbs>: <warning>` lines to stderr in human mode;
+`update --section` section writes carried this advisory already.
 
 ## Verb map
 
