@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add sectioned and summary output to spur task show
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-10T07:34:40.665Z
-updated_at: "2026-11-10T16:31:03.319Z"
+updated_at: "2026-11-10T23:15:24.070Z"
 feature_id: F22
 
 priority: P2
@@ -141,4 +141,5 @@ the four plan items.
 ### History
 
 - 2026-11-10T16:31:03.319Z backlog → todo (system)
+- 2026-11-10T23:15:24.070Z todo → wip (system)
 
