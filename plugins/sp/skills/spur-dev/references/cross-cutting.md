@@ -487,7 +487,14 @@ hours** while hand-dispatching LLM stages as background tasks.
   timeout, and retry — the session orchestrates, it does not babysit.
 - **Cheap tiers between phases, full gate at the boundary.** A full-repo gate costs 15–19 minutes
   in a mid-size monorepo; interleave the light tier and reserve the full pass for the quality
-  boundary (see [`../spur-check/SKILL.md`](../spur-check/SKILL.md)).
+  boundary (see [`../spur-check/SKILL.md`](../spur-check/SKILL.md)). The task pipeline does this
+  deterministically (1322): recheck visits triage through the affected-scope light tier first —
+  a red tier fails the visit without paying the full chain, and a selection that touches a shared
+  package or an unmapped path falls back to the full suite rather than trusting the tier.
+- **Gate output persists at a known path.** The pipeline's gate step tees its output to
+  `.spur/run/<wbs>-gate.log` (1322 R1); wait once, bounded, then read the log — never sleep-poll
+  a running gate. A failing gate carries that resolved path in its step result (`data.logFile`),
+  so remediation reads evidence without re-running anything (1322 R4).
 
 ## Iron Laws
 

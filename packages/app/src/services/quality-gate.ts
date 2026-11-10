@@ -494,6 +494,124 @@ export interface LightScope {
     files: string[];
     workspaces: string[];
     tests: string[];
+    /**
+     * Set when affected-scope selection refuses the tier (1322 R3): the change set touches a
+     * shared package with workspace dependents, or a path no workspace owns. The value is the
+     * rationale; the caller falls back to the full suite (the light tier refuses to decide).
+     */
+    fallback?: string;
+}
+
+/** One workspace's identity plus its internal package dependencies, as read from its package.json (1322 R3). */
+export interface WorkspaceInfo {
+    /** Workspace directory, repo-relative (`apps/cli`). */
+    dir: string;
+    /** The workspace package's own name (`@scope/pkg`); absent names are ignored. */
+    name: string;
+    /** Package names this workspace declares (dependencies + devDependencies + peerDependencies). */
+    dependencies: string[];
+}
+
+/**
+ * The workspace dependency graph for affected-scope selection (1322 R3): package name → owning
+ * workspace dir, and package name → the workspace dirs that depend on it. A workspace whose
+ * package has dependents is *shared* — changes to it can break consumers the light tier would
+ * not check, so selection falls back to the full suite.
+ */
+export interface WorkspaceGraph {
+    byName: Map<string, string>;
+    dependents: Map<string, string[]>;
+}
+
+/** Pure graph constructor over workspace descriptors (tests inject; the fs reader is real). */
+export function workspaceGraphFrom(workspaces: WorkspaceInfo[]): WorkspaceGraph {
+    const byName = new Map<string, string>();
+    for (const workspace of workspaces) {
+        if (workspace.name.length > 0) byName.set(workspace.name, workspace.dir);
+    }
+    const dependents = new Map<string, string[]>();
+    for (const workspace of workspaces) {
+        for (const dependency of new Set(workspace.dependencies)) {
+            if (dependency === workspace.name || !byName.has(dependency)) continue;
+            const dirs = dependents.get(dependency) ?? [];
+            if (!dirs.includes(workspace.dir)) dirs.push(workspace.dir);
+            dependents.set(dependency, dirs);
+        }
+    }
+    return { byName, dependents };
+}
+
+/** The workspace dirs that depend on the package owned by `dir` (empty for leaf packages). */
+export function dependentsOf(graph: WorkspaceGraph, dir: string): string[] {
+    for (const [name, owner] of graph.byName) {
+        if (owner !== dir) continue;
+        return graph.dependents.get(name) ?? [];
+    }
+    return [];
+}
+
+function workspaceDependenciesOf(abs: (p: string) => string, dir: string): { name: string; dependencies: string[] } {
+    let name = '';
+    const dependencies: string[] = [];
+    try {
+        const pkg = JSON.parse(readFileSync(abs(`${dir}/package.json`), 'utf8')) as {
+            name?: unknown;
+            dependencies?: Record<string, unknown>;
+            devDependencies?: Record<string, unknown>;
+            peerDependencies?: Record<string, unknown>;
+        };
+        if (typeof pkg.name === 'string') name = pkg.name;
+        for (const section of [pkg.dependencies, pkg.devDependencies, pkg.peerDependencies]) {
+            if (section !== null && typeof section === 'object') dependencies.push(...Object.keys(section));
+        }
+    } catch {
+        // unreadable package.json — the workspace contributes no identity
+    }
+    return { name, dependencies };
+}
+
+/**
+ * fs-backed graph reader (1322 R3): the root package.json's `workspaces` globs (`apps/*`,
+ * `packages/*`, or literal dirs) expand to workspace dirs; each contributes its package name and
+ * internal dependency edges. Any unreadable root or workspace is skipped; a graph with no
+ * workspaces classifies nothing (legacy behavior — selection never falls back on a repo the
+ * graph cannot see).
+ */
+export function readWorkspaceGraph(cwd: string | undefined): WorkspaceGraph {
+    const abs = (p: string): string => (cwd ? join(cwd, p) : p);
+    const info: WorkspaceInfo[] = [];
+    let globs: string[] = [];
+    try {
+        const root = JSON.parse(readFileSync(abs('package.json'), 'utf8')) as { workspaces?: unknown };
+        const declared = Array.isArray(root.workspaces)
+            ? root.workspaces
+            : (root.workspaces as { packages?: unknown } | undefined)?.packages;
+        if (Array.isArray(declared)) globs = declared.filter((g): g is string => typeof g === 'string');
+    } catch {
+        return { byName: new Map(), dependents: new Map() };
+    }
+    const dirs = new Set<string>();
+    for (const glob of globs) {
+        if (glob.endsWith('/*')) {
+            const parent = glob.slice(0, -2);
+            let entries: string[] = [];
+            try {
+                entries = readdirSync(abs(parent));
+            } catch {
+                continue;
+            }
+            for (const entry of entries) {
+                if (existsSync(abs(`${parent}/${entry}/package.json`))) dirs.add(`${parent}/${entry}`);
+            }
+        } else if (existsSync(abs(`${glob}/package.json`))) {
+            dirs.add(glob);
+        }
+    }
+    for (const dir of [...dirs].sort()) {
+        const { name, dependencies } = workspaceDependenciesOf(abs, dir);
+        info.push({ dir, name, dependencies });
+    }
+    return workspaceGraphFrom(info);
 }
 
 /**
@@ -516,8 +634,18 @@ function workspaceOf(file: string, exists: (p: string) => boolean): string | nul
  * deterministic and cheap; the import graph is not consulted), and a changed `*.test.ts` under a
  * workspace includes itself. The full tier stays the safety net for everything the mapping
  * misses. Unmapped-but-existing candidates are dropped by the `exists` check.
+ *
+ * With a `graph` (1322 R3) selection also refuses the tier — it returns a `fallback` rationale —
+ * when any changed file is owned by a shared package (its package has workspace dependents) or by
+ * no workspace at all (and is not a `plugins/sp/**` path, which the 1142 mapping owns). Without a
+ * graph the mapping behaves exactly as before (no fallback classification), so legacy callers and
+ * fixtures keep today's results.
  */
-export function lightScope(changedFiles: string[], exists: (p: string) => boolean = existsSync): LightScope {
+export function lightScope(
+    changedFiles: string[],
+    exists: (p: string) => boolean = existsSync,
+    graph?: WorkspaceGraph,
+): LightScope {
     const files: string[] = [];
     const workspaces = new Set<string>();
     const tests = new Set<string>();
@@ -575,7 +703,30 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
             tests.add(file);
         }
     }
-    return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
+    let fallback: string | undefined;
+    if (graph !== undefined) {
+        for (const file of changedFiles) {
+            // plugins/sp has no package and no compiled dependents — the 1142 structure-test
+            // mapping owns those paths, so they never trigger the shared-package fallback.
+            if (file.startsWith('plugins/sp/')) continue;
+            const owner = workspaceOf(file, exists);
+            if (owner === null) {
+                fallback = `unmapped path ${file} (no owning workspace package.json) — full suite required`;
+                break;
+            }
+            const dependents = dependentsOf(graph, owner);
+            if (dependents.length > 0) {
+                fallback = `shared package ${owner} (depended on by ${dependents.join(', ')}) — full suite required`;
+                break;
+            }
+        }
+    }
+    return {
+        files,
+        workspaces: [...workspaces].sort(),
+        tests: [...tests].sort(),
+        ...(fallback !== undefined ? { fallback } : {}),
+    };
 }
 
 /** One planned light check: a stable id plus the shell command to run. */
@@ -649,11 +800,27 @@ export function planLightChecks(
     return plans;
 }
 
-/** Changed paths for the light tier: `git diff --name-only HEAD` plus untracked; existing only. */
-function gitChangedFiles(cwd: string | undefined, timeoutMs?: number): string[] | null {
+/**
+ * The change-set base for the light tier (1322 R3): `.spur/run/<wbs>-base.sha` when the caller
+ * recorded a base commit, else `HEAD`. A recorded base folds commits landed since that ref into
+ * the diff, so a detached recheck visit sees the same scope the implement worker verified.
+ */
+export function readBaseSha(path: string | undefined): string | null {
+    if (path === undefined) return null;
+    try {
+        const line = readFileSync(path, 'utf8').trim();
+        return /^[0-9a-f]{7,64}$/i.test(line) ? line : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Changed paths for the light tier: `git diff --name-only <base|HEAD>` plus untracked; existing only. */
+function gitChangedFiles(cwd: string | undefined, timeoutMs?: number, baseShaPath?: string): string[] | null {
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
     const changed = new Set<string>();
-    for (const cmd of ['git diff --name-only HEAD', 'git ls-files --others --exclude-standard']) {
+    const base = readBaseSha(baseShaPath) ?? 'HEAD';
+    for (const cmd of [`git diff --name-only ${base}`, 'git ls-files --others --exclude-standard']) {
         const result = runShellCommand(cmd, cwd, undefined, timeoutMs);
         // 1319 R1: a timed-out changed-path read cannot scope the light tier — report it as
         // undecidable so the caller exits BLOCKED instead of checking an empty scope.
@@ -679,6 +846,8 @@ export interface LightGateResult {
     receiptFile: string;
     /** Set when the tier could not decide (a changed-path `git diff` timed out) — exit 2 (1319 R1). */
     blocked?: string;
+    /** Set when affected-scope selection refused the tier (1322 R3) — same exit-2 surface. */
+    fallback?: string;
 }
 
 /** Deferred-tier result (task 1111): the light verdict plus the status token written. */
@@ -710,7 +879,9 @@ export function runDeferredGate(env: QualityGateEnv, options: QualityGateOptions
     const note =
         status === 'DEFERRED'
             ? `deferred gate: light tier PASS — the integrated full gate is owed on the batch base ref (1111 R3)\n`
-            : `deferred gate: light tier FAIL — the task's bounded fix lane runs; the integrated full gate stays owed (1111 R3)\n`;
+            : light.blocked !== undefined
+              ? `deferred gate: light tier BLOCKED (${light.blocked}) — no scoped tier could decide; the integrated full gate stays owed (1111 R3; 1322 R3)\n`
+              : `deferred gate: light tier FAIL — the task's bounded fix lane runs; the integrated full gate stays owed (1111 R3)\n`;
     appendFileSync(abs(light.logFile), note);
     process.stdout.write(`quality gate ${status} (deferred tier; log: ${light.logFile})\n`);
     return { status, light, statusFile };
@@ -732,7 +903,9 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     writeFileSync(abs(logFile), '');
     const timeoutMs = gateTimeoutMsFor(env, options);
 
-    const changed = gitChangedFiles(cwd, timeoutMs);
+    // 1322 R3: the change set folds commits since a recorded base ref (`.spur/run/<wbs>-base.sha`,
+    // written by the caller when the visit starts from a detached/base ref) into the diff.
+    const changed = gitChangedFiles(cwd, timeoutMs, abs(join(runDir, `${env.wbs}-base.sha`)));
     if (changed === null) {
         const line = `--- light gate BLOCKED: changed-path git read timed out after ${timeoutMs}ms\n`;
         appendFileSync(abs(logFile), line);
@@ -752,7 +925,33 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     if (!capture.ok) {
         appendFileSync(abs(logFile), `--- light receipt: no git tree identity — ${capture.error}\n`);
     }
-    const scope = lightScope(changed, (p) => existsSync(abs(p)));
+    // 1322 R3: affected-scope selection over the workspace dependency graph. The rationale is the
+    // log's opening lines (receipt rows point back at this path), so a light receipt always
+    // carries the selection evidence — which files were in scope and why the tier refused.
+    const scope = lightScope(changed, (p) => existsSync(abs(p)), readWorkspaceGraph(cwd));
+    const scopeHeader =
+        scope.fallback !== undefined
+            ? `--- light scope: full-suite-fallback — ${scope.fallback}\n--- light scope files (${changed.length}): ${changed.join(' ')}\n`
+            : `--- light scope: selected — workspaces: ${scope.workspaces.join(' ') || '(none)'}; related tests: ${scope.tests.length}; files: ${changed.length}\n--- light scope files (${changed.length}): ${changed.join(' ')}\n`;
+    appendFileSync(abs(logFile), scopeHeader);
+    if (scope.fallback !== undefined) {
+        // The tier refuses to decide a scope it cannot cover: a shared package's dependents or an
+        // unmapped root path can only be certified by the full suite (1322 R3). No checks run, no
+        // receipt is written (a light receipt here would overwrite standing boundary evidence),
+        // and the caller exits BLOCKED (2) naming the rationale — the fallback IS to the full gate.
+        const line = `--- light gate BLOCKED: affected-scope fallback — full gate owns this tree\n`;
+        appendFileSync(abs(logFile), line);
+        process.stdout.write(`light gate BLOCKED — ${scope.fallback}\n`);
+        return {
+            status: 'FAIL',
+            scope,
+            checks: [],
+            logFile,
+            receiptFile,
+            blocked: scope.fallback,
+            fallback: scope.fallback,
+        };
+    }
     // Bind the fs predicates to the gate cwd, not the process cwd (tests run gates in fixtures).
     const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)), options.builder);
 
@@ -825,6 +1024,15 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
         process.stdout.write(
             `light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` +
                 ` skipped: ${skipped}, unbound: ${unbound}; receipt: ${receiptFile} preserved (full tier); log: ${logFile})\n`,
+        );
+    } else if (!capture.ok) {
+        // 0976 R1 symmetry (1322 R4): a receipt without tree identity can never be safely reused
+        // (1234 — reuse is refused, never assumed) and would occupy the full-tier receipt path,
+        // forging boundary state for a visit that could not bind its tree. Log why; write nothing.
+        appendFileSync(abs(logFile), `--- light receipt: not written — git tree capture failed (${capture.error})\n`);
+        process.stdout.write(
+            `light gate ${receipt.status} (${scope.files.length} changed files; checks: ${checks.length},` +
+                ` skipped: ${skipped}, unbound: ${unbound}; receipt: none (git tree capture failed); log: ${logFile})\n`,
         );
     } else {
         writeFileSync(abs(receiptFile), `${JSON.stringify(receipt, null, 2)}\n`);
@@ -1338,6 +1546,43 @@ export function runQualityGate(
         process.stdout.write(line); // tee: stdout and the log
         appendFileSync(abs(logFile), line);
         gateRc = 1;
+    }
+
+    // 1322 P2 — recheck visits triage through the affected-scope light tier BEFORE the probe and
+    // the full chain: a first visit (`run`) stays the once-per-task full gate at the quality
+    // boundary, but a recheck (post-remediation, post-review-fix) only needs to know whether the
+    // bounded repair fixed what was red. When selection admits a scope and the tier goes red, the
+    // gate fails here — findings/status/verdict from the merged log, no probe, no full chain, no
+    // full receipt (none ran; the tier's own receipt stays the tree identity). A green tier, or a
+    // full-suite fallback, falls through to the probe and full gate exactly as before.
+    if (mode === 'recheck' && commandPresent && gateRc === 0) {
+        const light = runLightGate(env, options);
+        appendFileSync(
+            abs(logFile),
+            `--- gate visit ${mode}: affected-scope light tier (1322) — ${light.status}\n${readFileSync(abs(light.logFile), 'utf8')}`,
+        );
+        if (light.fallback === undefined) {
+            if (light.status === 'FAIL') {
+                writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), 'utf8')));
+                writeFileSync(abs(statusFile), 'FAIL\n');
+                appendFileSync(abs(logFile), `git-tree: ${tree.ok ? tree.tree : 'unbound'}\n`);
+                process.stdout.write(`quality gate FAIL (light tier) — last 40 lines follow (full log: ${logFile})\n`);
+                process.stdout.write(tailLines(readFileSync(abs(logFile), 'utf8'), 40));
+                return {
+                    status: 'FAIL',
+                    attempts: 0,
+                    logFile,
+                    findingsFile,
+                    statusFile,
+                    attemptFile,
+                    receiptFile: light.receiptFile,
+                };
+            }
+        } else {
+            const line = `check.scope-fallback — ${light.fallback}; probe + full gate follow\n`;
+            process.stdout.write(line); // tee: stdout and the log
+            appendFileSync(abs(logFile), line);
+        }
     }
 
     // recheck probe: a probe failure is the gate failure; the gate loop is skipped.

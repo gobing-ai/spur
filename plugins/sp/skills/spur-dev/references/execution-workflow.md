@@ -155,6 +155,11 @@ background and let its exit report the terminal verdict. Use `spur workflow trac
 Synchronous invocation (`--json` without `--async`) is acceptable **only** for short pipelines
 (< 2 min, e.g. precheck-only or a dry-run). Do not use it for the full task pipeline.
 
+Gate steps are the >5-minute case (1322): the gate's output persists at
+`.spur/run/<wbs>-gate.log`, and a failing gate's step result carries that resolved path
+(`logFile`), so the wait is one `--follow` call and the evidence read is one file read — never a
+`sleep`/`trace` poll loop (0421).
+
 On the subprocess path, when `--agent <value>` is set (passed through from the thin wrapper), merge it into the vars as
 **both** `agent` and `implementAgent` (task 0483 R2):
 `--vars '{"wbs":"<wbs>","agent":"<value>","implementAgent":"<value>"}'`. The pipeline YAML reads

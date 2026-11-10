@@ -539,6 +539,11 @@ states:
                 executable: "${vars.spurBin}"
                 args: ["task", "gate", "${vars.wbs}", "${vars.gateMode}", "--no-logo"]
                 resultFile: .spur/run/${vars.__runId}-gate.status
+                # 1322 R1/R4: the step's own output persists at the gate log (`.spur/run/<wbs>-gate.log`),
+                # so the driver's single bounded wait reads evidence from a known path instead of
+                # sleep-polling, and a failing gate carries the resolved path in its step result
+                # (`data.logFile`) — remediation reads evidence without re-running anything.
+                logFile: .spur/run/${vars.wbs}-gate.log
                 softFail: true
                 # 1319 R2(c): group-owned backstop. The gate's own per-spawn bound (R1) bounds
                 # each command; this bounds the action and reaps any surviving descendant.

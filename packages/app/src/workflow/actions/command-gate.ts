@@ -70,6 +70,14 @@ export interface CommandGateOptions {
     /** Target status file path relative to repository root beneath `.spur/run/`. */
     resultFile: string;
     /**
+     * Persisted step-log path relative to repository root beneath `.spur/run/` (1322 R1/R4).
+     * When declared, the step's captured output (stdout+stderr, every attempt) is written here
+     * once the process finishes, and the outcome data carries the resolved path — so a long
+     * gate's output is reachable at a known log path (AC1) and a failing gate hands remediation
+     * the evidence pointer in the step result instead of stdout scraping (AC2).
+     */
+    logFile?: string;
+    /**
      * Treat a non-zero exit as a recorded outcome rather than an action failure.
      *
      * The shipped action schema has no `onError`, so a hard-failing action aborts the run
@@ -158,6 +166,23 @@ export class CommandGateActionRunner implements ActionRunner {
             };
         }
 
+        // 1322 R1: same confinement as the status token — the step log must not escape `.spur/run/`
+        // (a `${vars.*}` template that collapses to empty means the option is undeclared).
+        let logNormalized: string | undefined;
+        if (options.logFile !== undefined && options.logFile !== null && options.logFile !== '') {
+            if (typeof options.logFile !== 'string') {
+                return { ok: false, error: 'Action option "logFile" must be a string resolving under .spur/run/' };
+            }
+            try {
+                logNormalized = await resolveRunArtifactPath(this.fileSystem, workdir, options.logFile);
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: `logFile ${(error as Error).message}`,
+                };
+            }
+        }
+
         const split = splitLaunchCommand(executable, 'command.gate "executable"');
         if ('error' in split) {
             return { ok: false, error: split.error };
@@ -191,6 +216,9 @@ export class CommandGateActionRunner implements ActionRunner {
         // 1319 R2(b): ts-runtime reports a deadline hit as `outcome: 'timeout'`; the failure data
         // must name it so a gate visit can route BLOCKED instead of reading a bare exit code.
         let timedOut = false;
+        // 1322 R1: every attempt's output accumulates here and persists to the step log once the
+        // gate finishes — a bounded waiter reads the file instead of sleep-polling the process.
+        let capturedLog = '';
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             attemptsRun = attempt;
@@ -208,8 +236,13 @@ export class CommandGateActionRunner implements ActionRunner {
             lastStderr = res.stderr;
             lastExitCode = res.exitCode ?? -1;
             timedOut = res.outcome === 'timeout';
+            capturedLog += `--- attempt ${attempt} exit ${lastExitCode}${timedOut ? ' (timeout)' : ''}\n${lastStdout}${lastStderr}`;
 
             if (res.exitCode === 0) {
+                if (logNormalized !== undefined) {
+                    await this.fileSystem.ensureDir(normalize(join(logNormalized, '..')));
+                    await this.fileSystem.writeFile(logNormalized, `${capturedLog}gate outcome: PASS (exit 0)\n`);
+                }
                 await this.fileSystem.writeFile(normalized, 'PASS\n');
                 return {
                     ok: true,
@@ -220,6 +253,7 @@ export class CommandGateActionRunner implements ActionRunner {
                         stdout: lastStdout,
                         stderr: lastStderr,
                         resultFile: normalized,
+                        ...(logNormalized !== undefined ? { logFile: logNormalized } : {}),
                     },
                 };
             }
@@ -240,6 +274,13 @@ export class CommandGateActionRunner implements ActionRunner {
             break;
         }
 
+        if (logNormalized !== undefined) {
+            await this.fileSystem.ensureDir(normalize(join(logNormalized, '..')));
+            await this.fileSystem.writeFile(
+                logNormalized,
+                `${capturedLog}gate outcome: ${commandGateOutcome(lastExitCode)} (exit ${lastExitCode})\n`,
+            );
+        }
         await this.fileSystem.writeFile(normalized, `${commandGateOutcome(lastExitCode)}\n`);
         const failureData = {
             status: commandGateOutcome(lastExitCode),
@@ -248,6 +289,7 @@ export class CommandGateActionRunner implements ActionRunner {
             stdout: lastStdout,
             stderr: lastStderr,
             resultFile: normalized,
+            ...(logNormalized !== undefined ? { logFile: logNormalized } : {}),
             ...(timedOut ? { timedOut: true, timeoutMs } : {}),
         };
         // Soft probes record the outcome and hand routing to the transition guards; the run only

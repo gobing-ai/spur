@@ -107,11 +107,35 @@ Out of scope: a new detached gate daemon, engine FSM changes, and any change to 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Design kept: `command.gate` stays synchronous; wait-asynchrony moves to the driver (bounded follow + persisted log), and cost shrinks via affected-scope light tiering (R1-R4).
+
+| File:Line | Change |
+| --- | --- |
+| packages/app/src/services/quality-gate.ts:503 | `WorkspaceInfo`/`WorkspaceGraph` + `workspaceGraphFrom`/`dependentsOf` — pure workspace dependency graph (R3) |
+| packages/app/src/services/quality-gate.ts:580 | `readWorkspaceGraph` — fs-backed graph reader over root `workspaces` globs (R3) |
+| packages/app/src/services/quality-gate.ts:644 | `lightScope` graph param — shared-package/unmapped-path `fallback` refusal (R3) |
+| packages/app/src/services/quality-gate.ts:808 | `readBaseSha` + `gitChangedFiles` base fold — `.spur/run/<wbs>-base.sha` change-set base (R3) |
+| packages/app/src/services/quality-gate.ts:870 | `runDeferredGate` — BLOCKED note carries the fallback rationale (R3) |
+| packages/app/src/services/quality-gate.ts:896 | `runLightGate` — graph-driven affected scope, selection rationale opens the log, base-sha diff (R3/R4) |
+| packages/app/src/services/quality-gate.ts:1028 | light receipt write guarded on tree identity — `!capture.ok` writes no receipt and logs why (0976 R1 symmetry; R4) |
+| packages/app/src/services/quality-gate.ts:1558 | `runQualityGate` recheck triage — affected-scope light tier before probe/full chain; red tier FAILs the visit without minting a full receipt, fallback falls through (P2/AC3) |
+| packages/app/src/workflow/actions/command-gate.ts:79 | `logFile` step option — persisted step-log path (R1/R4) |
+| packages/app/src/workflow/actions/command-gate.ts:171 | logFile confinement via `resolveRunArtifactPath` under `.spur/run/` (R1) |
+| packages/app/src/workflow/actions/command-gate.ts:221 | per-attempt output capture into one step log (R1) |
+| packages/app/src/workflow/actions/command-gate.ts:242 | PASS persists the log; `data.logFile` lands in the step result (AC1/AC2) |
+| packages/app/src/workflow/actions/command-gate.ts:277 | FAIL persists the log with the outcome trailer (AC2) |
+| config/workflows/task-pipeline.yaml:542 | gate step declares `logFile: .spur/run/<wbs>-gate.log` (R1/R4) |
+| packages/app/tests/services/quality-gate-affected-scope.test.ts:1 | NEW — 15 tests: graph, fallback/refusal, selection evidence, base-sha change sets, both recheck-triage outcomes on a mid-size monorepo fixture (P5) |
+| packages/app/tests/workflow/actions/command-gate.test.ts:524 | 24 `logFile` tests: confinement, PASS/FAIL persistence, `data.logFile` (P5) |
+| packages/app/tests/services/run-storage.test.ts:981 | pinned expectation updated to the 1322 R4 contract: a capture-less light gate logs why and writes no receipt |
+| plugins/sp/skills/spur-dev/references/cross-cutting.md:489 | tier discipline + persisted gate log / `data.logFile` guidance (P4) |
+| plugins/sp/skills/spur-dev/references/execution-workflow.md:157 | gate steps: one bounded follow + one log read, never sleep/poll (P4) |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `cd packages/app && bun test tests/services/ tests/workflow/` → 5804 pass / 5 fail; the 5 failures are byte-identical to the pre-change baseline (stash-verified) and root-caused to the environment: the proto shim intercepts `bunx biome` and fails version detection inside /tmp fixtures (`proto::detect::failed`; the biome plugin is repo-local `file://.moon/plugins/biome.yml`).
+- Targeted: `bun test tests/services/quality-gate-affected-scope.test.ts tests/workflow/actions/command-gate.test.ts tests/services/quality-gate-timeout.test.ts tests/services/quality-gate.test.ts tests/services/run-storage.test.ts` → all green (39 + 60 + 38 pass).
+- `bun run typecheck` clean; `bunx biome check` clean on every touched file.
 
 ### Review
 
