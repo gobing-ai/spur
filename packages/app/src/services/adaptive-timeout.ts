@@ -122,6 +122,11 @@ export interface LatencyHistorySource {
     getDb?: () => Promise<DbAdapter>;
 }
 
+/**
+ * Resolve per-executor latency stats for the run's executor keys (1323 R2/R3):
+ * the injected `historyLatency` hook wins; otherwise the DB path delegates to
+ * domain `readExecutorLatency`. Any source failure → empty map (static behavior).
+ */
 export async function loadExecutorLatency(
     source: LatencyHistorySource,
     keys: readonly string[],
