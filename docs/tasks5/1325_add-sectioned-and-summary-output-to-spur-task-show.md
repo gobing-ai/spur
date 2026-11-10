@@ -74,21 +74,61 @@ No new flags on other nouns; no change to the task file schema.
 
 ### Plan
 
-- [ ] P1. Section filter on `spur task show`: flag parsing, section extraction, JSON + human
+- [x] P1. Section filter on `spur task show`: flag parsing, section extraction, JSON + human
   output, unknown-name error.
-- [ ] P2. Summary mode: section index with byte counts and total size, no bodies.
-- [ ] P3. Size-budget warning on the task write path (create/update/refine) using the existing
+- [x] P2. Summary mode: section index with byte counts and total size, no bodies.
+- [x] P3. Size-budget warning on the task write path (create/update/refine) using the existing
   precheck-size threshold.
-- [ ] P4. Tests: filtered output byte-identity, summary byte counts, oversize write warning;
+- [x] P4. Tests: filtered output byte-identity, summary byte counts, oversize write warning;
   update spur-cli reference docs.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Domain: `markdown-document.ts` gains `MarkdownSectionContent` + `sectionContent(name)` — the
+byte-exact heading+body slice of a section (null when absent; no canonical re-validation).
+
+App (`packages/app/src/services/`):
+- `task-query-ops.ts` — `showSections(wbs, requested)` (validates names → `VALIDATION_FAILED`
+  error listing the file's sections; returns file-order entries `{name, headingLine, byteCount,
+  content}` + `totalBytes`) and `showSummary(wbs)` (all sections, byte counts, no `content`);
+  both share a private `readTaskSummary()` with `show()`. `TaskService` delegates via
+  `task-service.ts` (types `TaskShowSectionEntry`/`TaskShowSectionsResult` exported from the
+  package index).
+- `task-files.ts` — `sizeBudgetWarnings(filePath)` evaluates the existing
+  `evaluateTaskSize` precheck (`task-size-precheck.ts`) against the current file and returns
+  advisory strings (errors swallowed → `[]`).
+- `task-create-ops.ts` / `task-update-ops.ts` — merge those advisories into `create` /
+  `batchCreate` children / `updateBody` result `warnings[]`. Warning-only, never blocking.
+
+CLI (`apps/cli/src/commands/`): `task/show.ts` adds `--section` (repeatable, via a `collect`
+collector), `--sections` (CSV), `--summary`; `--summary` + section flags is a usage error
+(exit 2); unknown section exits 3 (`VALIDATION_FAILED`), mirroring `task sections`; human mode
+prints summary lines (`### Name — N bytes` + total) or the verbatim section content; `--json`
+envelopes the new result shapes. `task/create.ts` surfaces write-time warnings to stderr
+(human) / `warnings[]` (JSON). `shared-options.ts` registers the new `--section` homonym
+(parity test green).
+
+Docs: `plugins/sp/skills/spur-cli/references/tasks.md` — fast-path block, verb-map row, and new
+"Sectioned and summary reads" / "Write-time size advisory" sections.
+
+Scope note (R3): the decomposition guidance requirement is delivered as documentation (Design §3
+and the reference-doc advisory section), matching the staged scope; no behavior change outside
+the four plan items.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `packages/app/tests/services/task-show-sections.test.ts` (new, 9 pass): filtered
+  byte-identity vs an independently computed file slice (incl. multi-byte bodies), file-order +
+  dedupe, unknown-name `VALIDATION_FAILED` listing valid names, summary index with byte counts
+  and no `content` keys, oversize batch-create/updateBody warnings (non-blocking), conforming
+  write silent.
+- `apps/cli/tests/commands/task/show.test.ts` (+7, 12 pass): `--section` JSON byte-identity,
+  repeatable + CSV file order, `--summary` byte counts/total, human summary + section output,
+  unknown-name exit 3, `--summary` + `--section` exit 2.
+- Regression: domain suite 1469 pass; `task-service.test.ts` 133 pass; CLI
+  show/create/update/sections + shared-option parity 104 pass.
+- `bunx tsc --noEmit` clean in domain, app, cli; `bunx biome check` clean on all 12 touched
+  files.
 
 ### Review
 

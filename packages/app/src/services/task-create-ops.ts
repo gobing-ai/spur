@@ -398,11 +398,16 @@ export class TaskCreateOps {
         });
         // 1132 R1/R2: surface normalizations recorded on the shape and the guarded
         // parent reopen without changing the write-service return contract.
-        if (featureReopened === undefined && shape.normalized === undefined) return created;
+        // 1325 P3: and the write-time size-budget advisory (precheck-size evaluation).
+        const sizeWarnings = await this.files.sizeBudgetWarnings(created.ref.filePath);
+        if (featureReopened === undefined && shape.normalized === undefined && sizeWarnings.length === 0) {
+            return created;
+        }
         return {
             ...created,
             ...(featureReopened !== undefined ? { featureReopened } : {}),
             ...(shape.normalized !== undefined ? { normalized: shape.normalized } : {}),
+            ...(sizeWarnings.length > 0 ? { warnings: [...(created.warnings ?? []), ...sizeWarnings] } : {}),
         };
     }
 
@@ -586,7 +591,14 @@ export class TaskCreateOps {
             return { ref, content };
         });
         // 1132 R1: report the write-time normalizations for this batch item.
-        return shape.normalized !== undefined ? { ...created, normalized: shape.normalized } : created;
+        // 1325 P3: plus the write-time size-budget advisory for the landed file.
+        const sizeWarnings = await this.files.sizeBudgetWarnings(created.ref.filePath);
+        if (shape.normalized === undefined && sizeWarnings.length === 0) return created;
+        return {
+            ...created,
+            ...(shape.normalized !== undefined ? { normalized: shape.normalized } : {}),
+            ...(sizeWarnings.length > 0 ? { warnings: [...(created.warnings ?? []), ...sizeWarnings] } : {}),
+        };
     }
 
     private async deriveBackground(featureId: string): Promise<string> {

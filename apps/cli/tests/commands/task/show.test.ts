@@ -6,7 +6,7 @@
  * golden paths, the `--json` envelope shape, and exit codes 0/1/2 (design §10, R5).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { apiErrorSchema } from '@gobing-ai/spur-contracts';
@@ -103,5 +103,130 @@ describe('spur task CLI', () => {
         const exitCode = await main(['task', 'get', wbs], { cwd, output });
         expect(exitCode).toBe(0);
         expect(output.messages.join('')).toContain('Alias me');
+    });
+
+    // ── 1325 P1/P2: section filter + summary mode ──
+
+    /** Byte-exact slice a section occupies in the file on disk, computed independently of the CLI. */
+    function rawSectionSlice(raw: string, name: string): string {
+        const heading = `### ${name}`;
+        const start = raw.indexOf(heading);
+        if (start === -1) throw new Error(`no section ${name}`);
+        // A section's extent runs to the next heading's line start (includes the preceding newline).
+        const next = raw.slice(start + 1).indexOf('\n### ');
+        const end = next === -1 ? raw.length : start + 1 + next + 1;
+        return raw.slice(start, end);
+    }
+
+    test('show --section returns only that section, byte-identical to the file (AC1)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Section filter me'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const raw = readFileSync(createdPath(cOut), 'utf-8');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', wbs, '--section', 'Background', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.sections).toHaveLength(1);
+        expect(parsed.sections[0].name).toBe('Background');
+        expect(parsed.sections[0].headingLine).toBe('### Background');
+        expect(parsed.sections[0].content).toBe(rawSectionSlice(raw, 'Background'));
+        expect(parsed.sections[0].byteCount).toBe(Buffer.byteLength(rawSectionSlice(raw, 'Background')));
+        // Frontmatter metadata still rides along.
+        expect(parsed.frontmatter.status).toBe('backlog');
+        expect(parsed.wbs).toBe(wbs);
+    });
+
+    test('show --section is repeatable and --sections takes a CSV, in file order', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Section combos'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const repeated = createCapturedOutput();
+        let exitCode = await main(['task', 'show', wbs, '--section', 'Plan', '--section', 'Background', '--json'], {
+            cwd,
+            output: repeated,
+        });
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(lastMessage(repeated)).sections.map((s: { name: string }) => s.name)).toEqual([
+            'Background',
+            'Plan',
+        ]);
+
+        const csv = createCapturedOutput();
+        exitCode = await main(['task', 'show', wbs, '--sections', 'Design, History', '--json'], { cwd, output: csv });
+        expect(exitCode).toBe(0);
+        expect(JSON.parse(lastMessage(csv)).sections.map((s: { name: string }) => s.name)).toEqual([
+            'Design',
+            'History',
+        ]);
+    });
+
+    test('show --summary returns the section index with byte counts and no bodies (AC2)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Summary mode'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const raw = readFileSync(createdPath(cOut), 'utf-8');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', wbs, '--summary', '--json'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lastMessage(output));
+        expect(parsed.sections.length).toBeGreaterThan(0);
+        expect(parsed.totalBytes).toBe(Buffer.byteLength(raw));
+        for (const entry of parsed.sections) {
+            expect(entry.byteCount).toBe(Buffer.byteLength(rawSectionSlice(raw, entry.name)));
+            expect(entry.content).toBeUndefined();
+        }
+    });
+
+    test('show --summary human output prints heading lines and byte counts', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Summary human'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', wbs, '--summary'], { cwd, output });
+        expect(exitCode).toBe(0);
+        const text = output.messages.join('');
+        expect(text).toContain('— summary');
+        expect(text).toContain('### Background — ');
+        expect(text).toMatch(/total: \d+ bytes/);
+    });
+
+    test('show --section human output prints the byte-exact section content', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Human section'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const raw = readFileSync(createdPath(cOut), 'utf-8');
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', wbs, '--section', 'Background'], { cwd, output });
+        expect(exitCode).toBe(0);
+        expect(output.messages.join('')).toContain(rawSectionSlice(raw, 'Background').trimEnd());
+    });
+
+    test('show --section with an unknown name exits 3 and lists the valid names', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Unknown section'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', wbs, '--section', 'Nonexistent', '--json'], { cwd, output });
+        expect(exitCode).toBe(3);
+        const message = output.messages.join('') + output.errors.join('');
+        expect(message).toContain('"Nonexistent"');
+        expect(message).toContain('Background');
+    });
+
+    test('show --summary cannot be combined with --section (exit 2)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Summary conflict'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'show', wbs, '--summary', '--section', 'Background'], { cwd, output });
+        expect(exitCode).toBe(2);
     });
 });

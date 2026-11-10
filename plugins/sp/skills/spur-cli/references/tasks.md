@@ -28,18 +28,53 @@ spur task get  <wbs> --json  # alias of `show` — same output, no separate code
 spur task path <wbs> --json  # absolute path only
 ```
 
+Sectioned and summary reads (task 1325) stay on the same resolution path — see
+[Sectioned and summary reads](#sectioned-and-summary-reads-task-1325).
+
 Do not search `docs/tasks*` or guess `--folder` to locate a known WBS. `show` is the default when an
 agent needs to read a task; use `path` only when another filesystem command needs the absolute path.
 Both commands resolve across configured task folders. Add `--folder` only when deliberately limiting
 the lookup to one non-default corpus. Capture `show` once per run and reuse its response instead of
 re-reading or re-tokenizing the task.
 
+## Sectioned and summary reads (task 1325)
+
+`show` can return part of a task instead of the whole body — useful when an agent only needs one
+section or an index:
+
+- **`--section <name>`** (repeatable) and **`--sections "A,B"`** (CSV) return only the named
+  sections. Each entry carries `name`, `headingLine`, `byteCount` (Buffer bytes, multi-byte aware),
+  and `content` — the section byte-exact as it sits in the file (heading line through the line
+  before the next heading), suitable for exact `--from-file`-style reuse. Frontmatter metadata and
+  `filePath` ride along; `totalBytes` is the whole file's byte size. Sections return in **file
+  order**, duplicates collapse. Unknown names exit `3` (same channel as `sections list`) and name
+  the valid sections.
+- **`--summary`** returns the full section index (`name`/`headingLine`/`byteCount` per section plus
+  `totalBytes`) with **no** `content` fields — the cheap table-of-contents probe. `--summary` cannot
+  be combined with `--section`/`--sections` (exit `2`).
+
+```bash
+spur task show 1325 --section Plan --json           # one section, byte-exact
+spur task show 1325 --section Plan --section Q&A    # repeatable, file order
+spur task show 1325 --sections "Plan,History" --json
+spur task show 1325 --summary --json                # index only, no bodies
+```
+
+## Write-time size advisory (task 1325)
+
+`create` and `batch-create` (and the service-level `updateBody` write path) report the written
+file's size against the precheck budget at write time: a task at or over the R-item /
+prose-paragraph threshold gets a `Task has N R-items (max 10)`-style advisory merged into its
+`warnings[]` (human mode prints it to stderr; `update --section` section writes carried this
+advisory already). The advisory **never blocks the write** — it is the authoring-time early
+warning that `task check --precheck` enforces as a gate later.
+
 ## Verb map
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
 | `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--no-reopen` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--skip-ready` `--agent <selector>` `--folder` `--json` |
-| `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
+| `show <wbs>` | Print one task's frontmatter + body; section-filtered or summary mode (1325) | `--section <name>` `--sections <csv>` `--summary` `--folder` `--json` |
 | `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--no-reopen` `--priority <p>` `--ac-numbering task-local` `--ac-altitude <a>` `--estimate-hours <n>` `--no-lifecycle` `--force-done` `--reason <text>` `--provenance-bypass` `--verdict-dir <path>` `--folder` `--json` |
 | `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |
 | `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (ops: `init`, `add`, `list`) | `--folder` `--json` |

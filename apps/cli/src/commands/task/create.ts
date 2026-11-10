@@ -94,6 +94,10 @@ export function registerTaskCreateCommand(task: Command, context: CliContext): v
                         cwd: context.cwd,
                     });
                 }
+                // 1325 P3: write-time size-budget advisory — surfaced on stderr in
+                // human mode (same channel as `task update --section`) and inside
+                // the `--json` payload; advisory only, the write has landed.
+                const warnings = result.warnings ?? [];
                 if (options.json) {
                     // Additive top-level `wbs`/`filePath` mirror `ref.id`/`ref.filePath`
                     // (task 0510 post-mortem): the envelope's WBS lives under `ref.id`,
@@ -101,12 +105,21 @@ export function registerTaskCreateCommand(task: Command, context: CliContext): v
                     // projecting `wbs` saw nulls and misread success as failure.
                     context.output.write(
                         toEnvelopeJson(
-                            { ...result, wbs: result.ref.id, filePath: result.ref.filePath, ...readiness },
+                            {
+                                ...result,
+                                wbs: result.ref.id,
+                                filePath: result.ref.filePath,
+                                ...readiness,
+                                ...(warnings.length > 0 ? { warnings } : {}),
+                            },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );
                 } else {
                     context.output.write(`Created task ${result.ref.id}: ${result.ref.filePath}`);
+                    for (const warning of warnings) {
+                        context.output.error(warning);
+                    }
                     if (readiness.readiness.status === 'ready') {
                         context.output.write(
                             `Ready: checklist + post-check passed (${result.ref.id} promoted to todo)`,

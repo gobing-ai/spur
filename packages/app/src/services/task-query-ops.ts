@@ -5,7 +5,15 @@ import type { TaskFiles } from './task-files';
 import type { TaskLocator } from './task-locator';
 import { taskMetadata } from './task-metadata';
 import { ROSTER_END, ROSTER_REGION_RE, ROSTER_START, renderRosterTable } from './task-roster-table';
-import type { TaskListFilters, TaskService, TaskServiceContext, TaskShowResult, TaskSummary } from './task-service';
+import type {
+    TaskListFilters,
+    TaskService,
+    TaskServiceContext,
+    TaskShowResult,
+    TaskShowSectionEntry,
+    TaskShowSectionsResult,
+    TaskSummary,
+} from './task-service';
 
 /**
  * Read-side task verbs for {@link TaskService}: `task show`, `task list`, path resolution and the
@@ -19,8 +27,11 @@ export class TaskQueryOps {
         private readonly files: TaskFiles,
     ) {}
 
-    /** Implementation of {@link TaskService.show} (see its doc comment for the contract). */
-    async show(wbs: string): Promise<TaskShowResult> {
+    /**
+     * Shared read behind `show`/`showSections`/`showSummary`: resolve the file,
+     * parse once, and project the metadata summary every variant returns.
+     */
+    private async readTaskSummary(wbs: string): Promise<{ summary: TaskSummary; doc: MarkdownDocument; raw: string }> {
         const filePath = await this.files.resolveTaskFile(wbs);
         const raw = await this.ctx.fs.readFile(filePath);
         const doc = MarkdownDocument.parse(raw, 'task');
@@ -28,19 +39,78 @@ export class TaskQueryOps {
         const { status, featureId } = taskMetadata(fm);
 
         return {
-            wbs,
-            name: (fm.name as string) ?? '',
-            status,
-            filePath,
-            // The same two promotions `list()` makes, so `task show --json` and
-            // `task list --json` project the same shape (session review).
-            dependencies: Array.isArray(fm.dependencies)
-                ? (fm.dependencies as unknown[]).filter((dep): dep is string => typeof dep === 'string')
-                : [],
-            feature_id: featureId,
-            frontmatter: fm as Record<string, unknown>,
-            content: doc.bodyWithoutFrontmatter,
+            summary: {
+                wbs,
+                name: (fm.name as string) ?? '',
+                status,
+                filePath,
+                // The same two promotions `list()` makes, so `task show --json` and
+                // `task list --json` project the same shape (session review).
+                dependencies: Array.isArray(fm.dependencies)
+                    ? (fm.dependencies as unknown[]).filter((dep): dep is string => typeof dep === 'string')
+                    : [],
+                feature_id: featureId,
+                frontmatter: fm as Record<string, unknown>,
+            },
+            doc,
+            raw,
         };
+    }
+
+    /** Implementation of {@link TaskService.show} (see its doc comment for the contract). */
+    async show(wbs: string): Promise<TaskShowResult> {
+        const { summary, doc } = await this.readTaskSummary(wbs);
+        return { ...summary, content: doc.bodyWithoutFrontmatter };
+    }
+
+    /**
+     * Implementation of {@link TaskService.showSections} (see its doc comment for
+     * the contract). Unknown names fail BEFORE any output with the present
+     * section names, so a caller can correct itself in one round-trip.
+     */
+    async showSections(wbs: string, requested: readonly string[]): Promise<TaskShowSectionsResult> {
+        const { summary, doc, raw } = await this.readTaskSummary(wbs);
+        const present = doc.sectionNames;
+        const unknown = requested.filter((name) => !present.includes(name));
+        if (unknown.length > 0) {
+            const err: Error & { cliCode?: string } = new Error(
+                `Unknown section(s): ${unknown.map((n) => `"${n}"`).join(', ')}. ` +
+                    `Sections in task ${wbs}: ${present.join(', ') || '(none)'}`,
+            );
+            err.cliCode = 'VALIDATION_FAILED';
+            throw err;
+        }
+        // File order; `present` is already deduped by the parser, so repeated
+        // flags naming the same section collapse to one entry.
+        const sections = present
+            .filter((name) => requested.includes(name))
+            .map((name): TaskShowSectionEntry => {
+                const content = doc.sectionContent(name);
+                return {
+                    name,
+                    headingLine: content?.headingLine ?? '',
+                    // Byte counts are bytes (UTF-8), never characters.
+                    byteCount: Buffer.byteLength(content?.text ?? ''),
+                    content: content?.text ?? '',
+                };
+            });
+        return { ...summary, sections, totalBytes: Buffer.byteLength(raw) };
+    }
+
+    /** Implementation of {@link TaskService.showSummary} (see its doc comment for the contract). */
+    async showSummary(wbs: string): Promise<TaskShowSectionsResult> {
+        const { summary, doc, raw } = await this.readTaskSummary(wbs);
+        const sections = doc.sectionNames.map((name): TaskShowSectionEntry => {
+            const content = doc.sectionContent(name);
+            return {
+                name,
+                headingLine: content?.headingLine ?? '',
+                byteCount: Buffer.byteLength(content?.text ?? ''),
+                // Summary mode carries NO bodies — the whole point is reading the
+                // index without paying for the section text.
+            };
+        });
+        return { ...summary, sections, totalBytes: Buffer.byteLength(raw) };
     }
 
     /** Implementation of {@link TaskService.refresh} (see its doc comment for the contract). */

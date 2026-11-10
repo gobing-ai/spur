@@ -378,7 +378,13 @@ export class TaskUpdateOps {
     async updateBody(wbs: string, body: string, _actor?: string): Promise<WriteResult> {
         const filePath = await this.files.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        return this.writeService.updateBody(ref, body);
+        const result = await this.writeService.updateBody(ref, body);
+        // 1325 P3: write-time size-budget advisory on the landed file — same
+        // evaluation as `task check --precheck`, advisory only (never blocks).
+        const sizeWarnings = await this.files.sizeBudgetWarnings(filePath);
+        return sizeWarnings.length > 0
+            ? { ...result, warnings: [...(result.warnings ?? []), ...sizeWarnings] }
+            : result;
     }
 
     /** Implementation of {@link TaskService.updateSection} (see its doc comment for the contract). */

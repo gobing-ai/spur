@@ -25,6 +25,14 @@ export interface ParsedFrontmatter {
     readonly data: Record<string, unknown>;
 }
 
+/** Byte-exact read view of one parsed section (task 1325). */
+export interface MarkdownSectionContent {
+    /** Full heading line as written in the file (e.g. `### Background`). */
+    readonly headingLine: string;
+    /** Heading line + body, byte-identical to the source slice (or modified text). */
+    readonly text: string;
+}
+
 /**
  * Canonical task body sections (DD-08). Templates select from this vocabulary;
  * no template or agent may invent synonym sections.
@@ -345,6 +353,21 @@ export class MarkdownDocument {
     /** All section names present in the document (canonical and non-canonical). */
     get sectionNames(): string[] {
         return this._sections.map((s) => s.name);
+    }
+
+    /**
+     * Byte-exact raw content of a named section — heading line + body — exactly
+     * as the parser split it from the source (or as modified by a write).
+     * `null` when the section is absent. Unlike {@link getSection} this performs
+     * no canonical-name validation, so any section the parser found is readable
+     * by its exact name — the filtered/summary read path (task 1325) must surface
+     * byte-identical content, not a re-render.
+     */
+    sectionContent(name: string): MarkdownSectionContent | null {
+        const section = this.findSection(name);
+        if (section === undefined) return null;
+        const text = section.modifiedText ?? section.originalText;
+        return { headingLine: section.headingLine, text };
     }
 
     /**
