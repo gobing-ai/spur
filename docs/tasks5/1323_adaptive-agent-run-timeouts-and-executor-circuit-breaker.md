@@ -4,7 +4,7 @@ name: Adaptive agent-run timeouts and executor circuit breaker
 status: wip
 template: feature-impl
 created_at: 2026-11-10T07:34:39.575Z
-updated_at: "2026-11-10T20:23:41.373Z"
+updated_at: "2026-11-10T21:38:50.399Z"
 feature_id: D3
 
 priority: P1
@@ -34,7 +34,7 @@ reviewer 40% and scribe 37.5%. Both Nov 9 kk-daily-ai-voice3 production runs fai
 - [x] R2. Adaptive timeout: per-node `timeoutMs` may be derived from the executor's observed latency
    history (e.g. `history_board_model_stats` mean/p95 step and dispatch durations) with the YAML
    value as the hard cap, so slow executors get a workable budget instead of a guaranteed timeout.
-- [ ] R3. Ladder ordering may use measured latency × success rate (not price alone) when choosing the next
+- [x] R3. Ladder ordering may use measured latency × success rate (not price alone) when choosing the next
    executor after a timeout or unavailability failure.
 
 ### Acceptance Criteria
@@ -108,7 +108,49 @@ Every breaker decision, derived budget, and ordering rationale is written to the
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1323 (feature D3: adaptive agent-run timeouts and executor circuit breaker)
+**Scope:** `git diff 54bf29d0f..HEAD`, task-1323 substance: `packages/app/src/services/adaptive-timeout.ts`, `agent-run-executor.ts`, `agent-resolver.ts`, `agent-service.ts`, `failure-classification.ts`, `packages/app/src/workflow/actions/agent-run.ts`, `packages/domain/src/analytics/executor-latency.ts` (+ tests). Diff-range files owned by sibling task 1322 (`quality-gate.ts`, `command-gate.ts`, `forensic-query.ts` loop-detection) are out of this task's scope and were not deep-reviewed here.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Prior-fix verification (independent):** the run-5d544858 finding (escalation seam re-selecting breaker-dead executors) is confirmed FIXED at HEAD — the post-failure re-resolve excludes the union `attemptedExecutors ∪ breaker.executors` and treats a breaker-dead resolve as chain exhaustion (`packages/app/src/services/agent-run-executor.ts:1010-1019`), mirroring the pre-loop breaker-skip seam (`packages/app/src/services/agent-run-executor.ts:570-613`); the two new mid-ladder tests exist and pass fresh (`packages/app/tests/services/agent-run-executor-d3.test.ts:227`, `packages/app/tests/services/agent-run-executor-d3.test.ts:274`). Verified from source, not from the commit claim.
+
+**Fresh test evidence (run this session, HEAD 20496e62f):**
+- `packages/app` `bunx tsc --noEmit -p tsconfig.json` — clean (exit 0).
+- `bun test tests/services/adaptive-timeout.test.ts tests/services/agent-run-executor-d3.test.ts tests/services/agent-resolver-d3.test.ts` — 19 pass / 0 fail (17 original + 2 review-finding-1 tests).
+- `packages/domain` `bun test tests/analytics/executor-latency.test.ts` — 6 pass / 0 fail.
+- Regression services: 277 pass / 0 fail (agent-run-executor, agent-resolver, agent-service, agent-routing-attribution, failure-classification).
+- Regression workflow: 270 pass / 0 fail (agent-run*.test, agent-run-admission/completion/receipt, agent-run-fleet, session-pinned-dispatch, fleet-work-item).
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P3 (minor) | correctness | A `timeout-exhausted-skip` on the node's first attempt `continue`s the loop before any dispatch, so the first real dispatch runs at `attempt >= 1` and `lifecycle.start` (guarded `attempt === 0`) never executes: the run emits no `started` lifecycle event and no progress heartbeats for that entire dispatch. `finish` still emits (its guards tolerate a missing start), dispatch behavior and all recorded ladder/budget decisions are unaffected — observability-only. Suggested fix: a start-once flag instead of the `attempt === 0` guard. | `packages/app/src/services/agent-run-executor.ts:689`, `packages/app/src/services/agent-run-executor.ts:812`, `packages/app/src/observability/agent-execution.ts:291` | DEFER(follow-up task recommended; no AC impact, observability-only, narrow trigger) |
+| 2 | P4 (advisory) | security | The breaker trips on ANY completed exit-2 dispatch. The rationale — "a completed dispatch can only end 2 when the shim/dispatch layer failed before any agent work; agent failures are 3" — is an external ts-ai-runner/shim contract stated in-repo at `packages/app/src/services/failure-classification.ts:180-186` and corroborated by the KK evidence at `docs/tasks5/1323_adaptive-agent-run-timeouts-and-executor-circuit-breaker.md:24`, but not verifiable from in-repo source (the runner dist passes exitCode through). If a shim ever ended agent-level failures with exit 2, the breaker would over-trip (failover instead of a possibly-successful retry). Assumption named; misfire cost is bounded to a run-scoped failover. | `packages/app/src/services/agent-run-executor.ts:943-954` | ACCEPTED |
+| 3 | P4 (advisory) | correctness | Unavailability that manifests as a thrown dispatch (e.g. spawn ENOENT) returns exit 2 without tripping the breaker, so retry-bound nodes each re-pay one thrown dispatch against such an executor. Deliberate narrowness: the same throw path carries cancellation (aborted controller), which must not trip a breaker. Outside the measured KK failure shape (completed exit 2 / no usage). | `packages/app/src/services/agent-run-executor.ts:904-916` | ACCEPTED |
+| 4 | P4 (advisory) | usability | The "run-scoped only" property (no cross-run breaker persistence, per Q&A) is structurally guaranteed by run-id keying (`packages/app/src/services/agent-run-executor.ts:416`, action stamping at `packages/app/src/workflow/actions/agent-run.ts:997`) but no test pins it — every D3 test shares one run id per scenario. A two-run-id test would lock the boundary. | `packages/app/tests/services/agent-run-executor-d3.test.ts:205-315` | ACCEPTED |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Run-scoped breaker map bounded at 256 with oldest-eviction `packages/app/src/services/agent-run-executor.ts:184-201`; run-id keying the action correlates retries with `packages/app/src/services/agent-run-executor.ts:416` + `packages/app/src/workflow/actions/agent-run.ts:997`; completed-dispatch exit-2/unavailable-signal trip `packages/app/src/services/agent-run-executor.ts:943-954` via `packages/app/src/services/failure-classification.ts:184-190`; pre-loop breaker-skip re-resolve so retry-bound nodes never re-dispatch the dead executor `packages/app/src/services/agent-run-executor.ts:570-613`; honest exit-2 chain exhaustion `packages/app/src/services/agent-run-executor.ts:584-593`; escalation-seam union exclusion (prior-fix verification) `packages/app/src/services/agent-run-executor.ts:1010-1019`. Tests: `packages/app/tests/services/agent-run-executor-d3.test.ts:91,112,132,227,274` — 19 pass / 0 fail fresh. |
+| R2 | MET | `resolveAdaptiveTimeoutMs` with YAML hard cap (never grown, healthy budgets never shrunk), 30s floor, mean×3 / p95×1.5 headroom, no-history static fallback `packages/app/src/services/adaptive-timeout.ts:47-105`; per-attempt wiring with latency cache `packages/app/src/services/agent-run-executor.ts:625-649`; budget stamped on the traced invocation `packages/app/src/services/agent-run-executor.ts:795-801`; domain read degrading to empty on any failure `packages/domain/src/analytics/executor-latency.ts:37-66`. Tests: `packages/app/tests/services/adaptive-timeout.test.ts:18-75`, `packages/domain/tests/analytics/executor-latency.test.ts:41-85` — all pass fresh. |
+| R3 | MET | `orderEligibleByMeasuredLatency` orders stage-funnel and sideways failover candidates measured-first (ladderScore = latency ÷ clamped success, lower wins), records `ordering` for the trace, degrades to declaration order with empty history `packages/app/src/services/agent-resolver.ts:442-443,549-550,598-631`; `ladderScore` `packages/app/src/services/adaptive-timeout.ts:107-114`. Tests: `packages/app/tests/services/agent-resolver-d3.test.ts:60,78` — pass fresh. |
+
+| AC | Status | Evidence Type | Evidence |
+|----|--------|---------------|----------|
+| AC1 | MET | test | Dead-first ladder dispatches the dead executor exactly once then fails over (`packages/app/tests/services/agent-run-executor-d3.test.ts:91`), a retry-bound node in the same run performs zero further dispatches and records `breaker-skip` (`packages/app/tests/services/agent-run-executor-d3.test.ts:112`), breaker-exhausted runs fail honestly with exit 2 (`packages/app/tests/services/agent-run-executor-d3.test.ts:132`), and the escalation walk never re-selects a breaker-dead executor — zero dead re-dispatches with `chain-exhausted` instead (`packages/app/tests/services/agent-run-executor-d3.test.ts:227,274`). Fresh: 19 pass / 0 fail. |
+| AC2 | MET | test | Slow-executor node with measured latency beyond the static cap is skipped pre-dispatch with zero wasted dispatches and a visible derived budget in the decision detail (`packages/app/tests/services/agent-run-executor-d3.test.ts:150`); with no alternative, the node dispatches under the operator cap with the budget visible on the traced invocation `fits:false appliedMs:1000 derivedMs:30000` (`packages/app/tests/services/agent-run-executor-d3.test.ts:170`, wiring at `packages/app/src/services/agent-run-executor.ts:795-801`); no history keeps the static budget unchanged (`packages/app/tests/services/agent-run-executor-d3.test.ts:192`). |
+| AC3 | MET | test | Every adaptive decision (`breaker-trip`/`breaker-skip`/`timeout-exhausted-skip`/`escalation`/`chain-exhausted`) is recorded with a reason + timestamp and mirrored onto `agent.invoke.ladder` (`packages/app/src/services/agent-run-executor.ts:204-222`, decisions returned at `packages/app/src/services/agent-run-executor.ts:1177`) and persisted onto the action result row (`packages/app/src/workflow/actions/agent-run.ts:1634`); derived budgets ride the traced invocation `timeoutBudget` (`packages/app/src/services/agent-service.ts:210-216`). Tests assert `traced.ladder` kinds and `invocation.timeoutBudget` (`packages/app/tests/services/agent-run-executor-d3.test.ts:79-89,158-190`). |
+
+Confidence: MEDIUM
+
+Architecture note: the feature extends the existing escalation ladder rather than adding a parallel retry controller (per Design), keeps the breaker run-scoped and bounded, and degrades to static behavior on any history-read failure (`packages/app/src/services/adaptive-timeout.ts:130-152`, `packages/domain/src/analytics/executor-latency.ts:43-66`) — deep-module shape with one shared policy seam (`adaptive-timeout.ts`) consumed by both the executor (R2) and the resolver (R3). Residual risks: finding 1's observability gap will fire in the KK target scenario (history exceeding static cap with an alternative executor present) once history accumulates — cosmetic but worth the follow-up; the exit-2 trip breadth rests on the named external shim contract (finding 2).
+
+**Next:** file the follow-up task for finding 1 (lifecycle start-once on the timeout-exhausted-skip path); optionally pin run-scoped isolation with a two-run-id test.
+
+Verdict: PASS
+
 
 ### References
 
