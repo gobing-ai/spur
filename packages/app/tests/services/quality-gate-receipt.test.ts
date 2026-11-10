@@ -20,6 +20,15 @@ import {
 } from '../../src/services/quality-gate';
 import { shQuote } from '../../src/services/shell-quote';
 
+/**
+ * The repo root's `node_modules` carries the pinned `biome` binary the fixtures' `bunx biome`
+ * resolves against. Anchored to this file's location — never `${process.cwd()}` — because under
+ * `bun test <path>` the cwd is the workspace, whose hoisted `.bin` has no `biome`; the symlink
+ * then misses and `bunx` falls through PATH to a proto shim whose version detection fails inside
+ * a /tmp fixture (`proto::detect::failed` — red at base on shim-managed machines).
+ */
+const REPO_ROOT_NODE_MODULES = join(import.meta.dir, '..', '..', '..', '..', 'node_modules');
+
 /** Injected `exists` predicate over a fixed path set — keeps the scope helpers pure. */
 function existsFrom(paths: Iterable<string>): (p: string) => boolean {
     const set = new Set(paths);
@@ -373,6 +382,8 @@ describe('runDeferredGate (1111 R1/R2)', () => {
         git('add .');
         git('commit -qm init');
         writeFileSync(join(dir, 'pkg-a/src/m.ts'), "export const one = 1;\nexport const label = 'one';\n");
+        // Resolve bunx biome against the repo's pinned binary; the fixture has no node_modules.
+        runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
         return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
     }
 
@@ -442,6 +453,8 @@ describe('runLightGate (temp git repo)', () => {
         // One tracked edit + one untracked file after the baseline commit.
         writeFileSync(join(dir, 'pkg-a/src/m.ts'), "export const one = 1;\nexport const label = 'one';\n");
         writeFileSync(join(dir, 'pkg-a/src/extra.ts'), 'export const extra = true;\n');
+        // Resolve bunx biome against the repo's pinned binary; the fixture has no node_modules.
+        runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
         return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
     }
 
@@ -457,8 +470,6 @@ describe('runLightGate (temp git repo)', () => {
     test('runs changed scope, writes a tier-light receipt, and never reports reuse', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
-            // Resolve bunx biome against the repo's pinned binary; the fixture has no node_modules.
-            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
             const result = light(dir, PASSING_TEST);
             expect(result.status).toBe('PASS');
             expect(result.scope.files.sort()).toEqual(['pkg-a/src/extra.ts', 'pkg-a/src/m.ts']);
@@ -496,7 +507,7 @@ describe('runLightGate (temp git repo)', () => {
     test('accumulates: PASS rows at the same digest are skipped, not re-run (AC1)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
-            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
+            runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
             const first = light(dir, PASSING_TEST);
             const second = light(dir, PASSING_TEST);
             expect(second.checks).toEqual(first.checks); // prior rows reused verbatim (durations unchanged)
@@ -510,7 +521,7 @@ describe('runLightGate (temp git repo)', () => {
     test('a tree change re-runs and can flip the receipt to FAIL; soft exit stays 0-shaped', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
-            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
+            runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
             light(dir, PASSING_TEST);
             const rerun = light(dir, FAILING_TEST);
             expect(rerun.status).toBe('FAIL');
@@ -526,7 +537,7 @@ describe('runLightGate (temp git repo)', () => {
     test('AC3/R4: light tier catches format-lint failure on an unformatted file', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
-            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
+            runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
             // Seed a biome diff (unformatted file with extra semicolons and irregular spacing)
             writeFileSync(join(dir, 'pkg-a/src/extra.ts'), 'export const  badFormat  =   "double-quotes";;;;\n');
             const result = light(dir, PASSING_TEST);
@@ -541,7 +552,7 @@ describe('runLightGate (temp git repo)', () => {
     test('preserves a full-tier receipt at the same tree — light never demotes boundary evidence (P3#1)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
-            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
+            runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
             const full: CheckReceipt = {
                 schemaVersion: RECEIPT_SCHEMA_VERSION,
                 wbs: '0939t',
@@ -584,7 +595,7 @@ describe('runLightGate (temp git repo)', () => {
     test('accumulation reuse emits check.reused in the light log and on stdout (0940 R3)', () => {
         const { dir, cleanup } = gitRepoFixture();
         try {
-            runShellCommand(`ln -s ${process.cwd()}/node_modules ${dir}/node_modules`, undefined);
+            runShellCommand(`ln -s ${REPO_ROOT_NODE_MODULES} ${dir}/node_modules`, undefined);
             light(dir, PASSING_TEST);
             const { out } = captureStdout(() => runLightGate({ wbs: '0939t' }, { cwd: dir }));
             expect(out).toContain('check.reused');

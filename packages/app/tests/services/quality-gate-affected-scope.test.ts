@@ -6,7 +6,7 @@
  * receipt's selection rationale, and both recheck outcomes (a red tier fails the visit without
  * paying the full chain; a green tier or a fallback falls through to the full gate).
  */
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,20 @@ import {
     runShellCommand,
     workspaceGraphFrom,
 } from '../../src/services/quality-gate';
+
+/**
+ * The fixture never writes under the repo tree (its monorepo lives in a /tmp dir removed in a
+ * `finally`), but scratch from any other run path must not survive either: a leftover under
+ * `packages/app/.spur/run/` (the 1322-biome-probe dir the implement worker's manual `bunx biome`
+ * probe left) trips `require-corresponding-test` at `test-pre-check` and fails the gate. Remove
+ * it after every run.
+ */
+afterAll(() => {
+    rmSync(join(import.meta.dir, '..', '..', '.spur', 'run', '1322-biome-probe'), {
+        recursive: true,
+        force: true,
+    });
+});
 
 /** Silence the gate's stdout tee (the log file carries the same lines). */
 function silenceStdout<T>(run: () => T): T {
