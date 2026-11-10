@@ -4,7 +4,7 @@ name: Adaptive agent-run timeouts and executor circuit breaker
 status: wip
 template: feature-impl
 created_at: 2026-11-10T07:34:39.575Z
-updated_at: "2026-11-10T20:21:39.670Z"
+updated_at: "2026-11-10T20:23:41.373Z"
 feature_id: D3
 
 priority: P1

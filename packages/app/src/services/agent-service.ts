@@ -5,6 +5,7 @@ import {
     type CoordinationRun,
     CoordinationRunDao,
     type DbAdapter,
+    type ExecutorLatencyStats,
     type OccupantRef,
     type StageModelPolicy,
 } from '@gobing-ai/spur-domain';
@@ -15,7 +16,7 @@ import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@g
 import type { DecisionCorrelation } from '../decision/decision-events';
 import type { AgentExecutionOptions, WarmTurnContext, WarmTurnDispatch } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
-import type { AdaptiveTimeoutDecision, ExecutorLatencyStats } from './adaptive-timeout';
+import type { AdaptiveTimeoutDecision } from './adaptive-timeout';
 import { parseArtifactRefs } from './agent-invocation-sanitize';
 import { AgentResolver } from './agent-resolver';
 import { booleanFlag, jsonEnvelopeFlag, stringFlag } from './agent-run-flags';

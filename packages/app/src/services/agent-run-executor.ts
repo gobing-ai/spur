@@ -5,6 +5,7 @@ import {
     type CoordinationArtifactRef,
     CoordinationRunDao,
     type CoordinationRunReceipt,
+    type ExecutorLatencyStats,
     type OccupantRef,
 } from '@gobing-ai/spur-domain';
 import {
@@ -41,7 +42,7 @@ import {
 import { AgentRunLog } from '../observability/agent-run-log';
 import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
 import { readWorkflowRunRecord } from '../workflow/run-record';
-import { type ExecutorLatencyStats, loadExecutorLatency, resolveAdaptiveTimeoutMs } from './adaptive-timeout';
+import { loadExecutorLatency, resolveAdaptiveTimeoutMs } from './adaptive-timeout';
 import { sanitizeInvocationArgv, traceSafePrompt } from './agent-invocation-sanitize';
 import type { AgentResolver } from './agent-resolver';
 import { buildRoutingAttribution, classifyObjectiveFailure } from './agent-routing-attribution';

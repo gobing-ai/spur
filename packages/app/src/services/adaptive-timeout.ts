@@ -1,9 +1,9 @@
-import type { DbAdapter } from '@gobing-ai/ts-db';
+import { type DbAdapter, type ExecutorLatencyStats, readExecutorLatency } from '@gobing-ai/spur-domain';
 
 /**
  * D3 (task 1323) adaptive agent-run budget and ladder-order policy.
  *
- * Two pure decisions plus the history reader both consumers share:
+ * Two pure decisions plus the history seam both consumers share:
  *  - `resolveAdaptiveTimeoutMs` derives a per-node dispatch budget from the
  *    executor's observed latency, with the YAML `timeoutMs` as the hard cap
  *    (operator intent). Slow executors whose measured latency exceeds the cap
@@ -14,21 +14,10 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  *  - `ladderScore` weighs measured latency × success rate for post-failure
  *    ladder ordering (R3).
  *
- * History source (Q&A): `history_board_model_stats` when present; any failure
- * to read it degrades to the static behavior (empty map), never throws.
+ * History source (Q&A): the read itself lives in domain
+ * (`readExecutorLatency`, `history_board_model_stats`); any failure to read it
+ * degrades to the static behavior (empty map), never throws.
  */
-
-/** Observed latency for one executor (or its model) from run history. */
-export interface ExecutorLatencyStats {
-    /** Mean observed duration in ms. */
-    meanMs: number;
-    /** p95 duration when the source provides one; absent → derived from mean. */
-    p95Ms?: number;
-    /** Sample count backing the durations; 0 means "no evidence". */
-    samples: number;
-    /** Success ratio clamped to [0,1]; 1 when no failure evidence exists. */
-    successRate: number;
-}
 
 /** How the effective dispatch timeout was resolved (recorded in the run trace). */
 export interface AdaptiveTimeoutDecision {
@@ -121,58 +110,12 @@ export function ladderScore(latency: ExecutorLatencyStats): number {
     return base / successRate;
 }
 
-interface ModelStatsRow {
-    model: string;
-    assistant_duration_ms: number;
-    assistant_duration_samples: number;
-    errors: number;
-    tool_calls: number;
-}
-
-/**
- * Read observed latency for the given executor/model keys from
- * `history_board_model_stats` (the table the history board rollup maintains).
- * A missing table, empty history or any read failure degrades to an empty map
- * — static behavior, never a failed dispatch (Q&A: degrades when history is
- * empty).
- */
-export async function readExecutorLatency(
-    db: DbAdapter,
-    keys: readonly string[],
-): Promise<Map<string, ExecutorLatencyStats>> {
-    const wanted = [...new Set(keys)].filter((key) => key.length > 0);
-    if (wanted.length === 0) return new Map();
-    try {
-        const placeholders = wanted.map(() => '?').join(', ');
-        const rows = await db.queryAll<ModelStatsRow>(
-            `SELECT model, assistant_duration_ms, assistant_duration_samples, errors, tool_calls
-             FROM history_board_model_stats WHERE model IN (${placeholders})`,
-            ...wanted,
-        );
-        const stats = new Map<string, ExecutorLatencyStats>();
-        for (const row of rows) {
-            const samples = row.assistant_duration_samples;
-            if (samples <= 0) continue;
-            // Success proxy from the same table: tool error ratio. No tool
-            // evidence at all counts as success (no failure observation).
-            const successRate = row.tool_calls > 0 ? Math.min(1, Math.max(0, 1 - row.errors / row.tool_calls)) : 1;
-            stats.set(row.model, {
-                meanMs: row.assistant_duration_ms / samples,
-                samples,
-                successRate,
-            });
-        }
-        return stats;
-    } catch {
-        return new Map();
-    }
-}
-
 /**
  * The latency-history seam both consumers share (1323 R2/R3): the injected
  * `historyLatency` context hook wins (tests, alternate sources); otherwise the
- * executor reads `history_board_model_stats` through the DB accessor. No
- * source or a read failure → empty map (static behavior).
+ * executor reads `history_board_model_stats` through the DB accessor (domain
+ * `readExecutorLatency`). No source or a read failure → empty map (static
+ * behavior).
  */
 export interface LatencyHistorySource {
     historyLatency?: (executors: string[]) => Promise<Record<string, ExecutorLatencyStats>>;

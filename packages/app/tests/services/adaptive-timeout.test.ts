@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { type ExecutorLatencyStats, ladderScore, resolveAdaptiveTimeoutMs } from '../../src/services/adaptive-timeout';
+import type { ExecutorLatencyStats } from '@gobing-ai/spur-domain';
+import { ladderScore, resolveAdaptiveTimeoutMs } from '../../src/services/adaptive-timeout';
 
 // D3 (task 1323) R2/R3 policy: adaptive per-node dispatch budgets and the
 // measured latency x success ladder score. Pure policy — the executor applies

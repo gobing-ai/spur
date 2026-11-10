@@ -41,6 +41,7 @@ export {
     type TodoToolCallRow,
 } from './derived';
 export { deriveMissingAssistantDurations } from './derived-assistant-duration';
+export { type ExecutorLatencyStats, readExecutorLatency } from './executor-latency';
 export {
     type BucketedTokenRow,
     bucketedTokenSeries,
