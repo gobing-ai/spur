@@ -28,10 +28,10 @@ reviewer 40% and scribe 37.5%. Both Nov 9 kk-daily-ai-voice3 production runs fai
 
 ### Requirements
 
-- [ ] R1. Circuit breaker: an executor whose dispatch fails immediately with unavailability (exitCode 2 /
+- [x] R1. Circuit breaker: an executor whose dispatch fails immediately with unavailability (exitCode 2 /
    no usage / provider unavailability) is skipped for the remainder of the run's ladder before
    another dispatch is attempted against it.
-- [ ] R2. Adaptive timeout: per-node `timeoutMs` may be derived from the executor's observed latency
+- [x] R2. Adaptive timeout: per-node `timeoutMs` may be derived from the executor's observed latency
    history (e.g. `history_board_model_stats` mean/p95 step and dispatch durations) with the YAML
    value as the hard cap, so slow executors get a workable budget instead of a guaranteed timeout.
 - [ ] R3. Ladder ordering may use measured latency × success rate (not price alone) when choosing the next
@@ -39,11 +39,11 @@ reviewer 40% and scribe 37.5%. Both Nov 9 kk-daily-ai-voice3 production runs fai
 
 ### Acceptance Criteria
 
-- [ ] AC1 — (req: R1): With a dead executor first in the ladder, a run with a retry-bound node performs zero
+- [x] AC1 — (req: R1): With a dead executor first in the ladder, a run with a retry-bound node performs zero
   dispatches against the dead executor after its first unavailability failure.
-- [ ] AC2 — (req: R2; R3): A node whose historical executor latency exceeds the static timeout either completes under a
+- [x] AC2 — (req: R2; R3): A node whose historical executor latency exceeds the static timeout either completes under a
   derived budget or fails over to the next executor without burning the static timeout twice.
-- [ ] AC3 — (req: R1; R2; R3): Ladder decisions and derived budgets are recorded in the run trace for auditing.
+- [x] AC3 — (req: R1; R2; R3): Ladder decisions and derived budgets are recorded in the run trace for auditing.
 
 ### Q&A
 
@@ -82,21 +82,29 @@ Every breaker decision, derived budget, and ordering rationale is written to the
 
 ### Plan
 
-- [ ] P1. Add a run-scoped unavailability breaker to `agent-run-executor.ts`: classify instant
+- [x] P1. Add a run-scoped unavailability breaker to `agent-run-executor.ts`: classify instant
   unavailability failures, exclude the executor for the run, emit trace events.
-- [ ] P2. Implement latency-derived `timeoutMs` resolution with YAML hard cap and no-history
+- [x] P2. Implement latency-derived `timeoutMs` resolution with YAML hard cap and no-history
   fallback; record derived values in the trace.
-- [ ] P3. Order post-failure ladder candidates by latency × success from `history_board_model_stats`.
-- [ ] P4. Tests: dead-executor-first ladder performs zero repeat dispatches; slow-executor node
+- [x] P3. Order post-failure ladder candidates by latency × success from `history_board_model_stats`.
+- [x] P4. Tests: dead-executor-first ladder performs zero repeat dispatches; slow-executor node
   derives a workable budget or fails over without burning the static timeout twice.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/app/src/services/adaptive-timeout.ts` — new: `resolveAdaptiveTimeoutMs` (R2: derived budget = max(3×mean, 1.5×p95) with a 30s floor, YAML `timeoutMs` is the hard cap — never grown, healthy budgets never shrunk; no history → static behavior), `ladderScore` (R3: latency ÷ clamped success rate, lower wins), `readExecutorLatency`/`loadExecutorLatency` (reads `history_board_model_stats`; read failure → empty, never throws).
+- `packages/app/src/services/agent-run-executor.ts` — R1: run-scoped breaker (keyed by the flags' `run-id`, the id the action correlates retries with; bounded, no cross-run persistence); completed-dispatch unavailability (exit 2 / unavailable signal) trips it via `executorUnavailabilityEvidence`, a retry-bound node's next dispatch re-resolves through the stage funnel with the breaker set excluded (breaker-skip), breaker-dead run fails honestly with exitCode 2. R2: per-attempt `resolveAdaptiveTimeoutMs` → `timeoutBudget` on the traced invocation; measured latency beyond the cap fails over pre-dispatch (timeout-exhausted-skip) instead of burning the timeout. AC3: decisions (`breaker-trip`/`breaker-skip`/`timeout-exhausted-skip`/escalation/chain-exhausted) recorded on the result + `agent.invoke.ladder` events.
+- `packages/app/src/services/agent-resolver.ts` — R3: `orderEligibleByMeasuredLatency` orders escalation-ladder candidates measured-first by latency × success (unmeasured keep declaration order); result carries `ordering` for the trace; empty history → static order unchanged.
+- `packages/app/src/services/agent-service.ts` — types: `AgentLadderDecision`, `LadderOrderingEntry`, `AgentRunTracedResult.ladder`, `AgentRunInvocation.timeoutBudget`, `historyLatency` context seam; `runTraced` threads `ladder`.
+- `packages/app/src/services/failure-classification.ts` — `executorUnavailabilityEvidence` (exit 2 / unavailable-signal evidence string).
+- `packages/app/src/workflow/actions/agent-run.ts` — persists `traced.ladder` onto the action result row.
+- Tests: `tests/services/adaptive-timeout.test.ts`, `tests/services/agent-run-executor-d3.test.ts` (AC1/AC2), `tests/services/agent-resolver-d3.test.ts` (R3).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `(cd packages/app && bunx tsc --noEmit -p tsconfig.json)` — clean.
+- `bun test tests/services/adaptive-timeout.test.ts tests/services/agent-run-executor-d3.test.ts tests/services/agent-resolver-d3.test.ts` — 17 pass / 0 fail (AC1 zero repeat dispatches + breaker-exhausted exit 2; AC2 pre-dispatch failover + derived budget visible; R3 measured ordering + empty-history degradation).
+- Regression: `bun test tests/services/agent-run-executor.test.ts tests/services/agent-resolver.test.ts tests/services/agent-service.test.ts tests/services/agent-routing-attribution.test.ts tests/services/failure-classification.test.ts` — 277 pass; `bun test tests/workflow/actions/agent-run*.test.ts tests/workflow/agent-run-fleet.test.ts tests/workflow/session-pinned-dispatch.test.ts tests/workflow/fleet-work-item.test.ts` — 270 pass.
 
 ### Review
 

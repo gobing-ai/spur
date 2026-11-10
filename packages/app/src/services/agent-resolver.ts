@@ -14,8 +14,15 @@ import {
     resolveAgentName,
     TIER1_PRIORITY,
 } from '@gobing-ai/ts-ai-runner';
+import { ladderScore, loadExecutorLatency } from './adaptive-timeout';
 import { stringFlag } from './agent-run-flags';
-import type { AgentResolveResult, AgentResolveSource, AgentServiceContext, AgentServiceOutput } from './agent-service';
+import type {
+    AgentResolveResult,
+    AgentResolveSource,
+    AgentServiceContext,
+    AgentServiceOutput,
+    LadderOrderingEntry,
+} from './agent-service';
 import {
     evaluateCapabilities,
     evaluateSessionCapabilities,
@@ -419,7 +426,7 @@ export class AgentResolver {
                         .map((executor) => resolveAgentName(executor.agent))
                         .filter((agent): agent is AgentName => agent !== undefined),
                 );
-                const sideways = executors.filter((e) => {
+                let sideways: AgentExecutorConfig[] = executors.filter((e) => {
                     const canonical = resolveAgentName(e.agent);
                     return (
                         !executorDisabled(e) &&
@@ -430,6 +437,10 @@ export class AgentResolver {
                         !(exclude?.has(e.name) ?? false)
                     );
                 });
+                // 1323 R3: availability failover candidates are ordered by measured
+                // latency x success too — the walk must not re-learn per failure.
+                const sidewaysOrder = await this.orderEligibleByMeasuredLatency(sideways, signal !== undefined);
+                sideways = sidewaysOrder.ordered;
                 for (const executor of sideways) {
                     const canonical = resolveAgentName(executor.agent);
                     if (canonical === undefined) {
@@ -457,6 +468,7 @@ export class AgentResolver {
                             model: executor.model,
                             source: 'stage',
                             executor: executor.name,
+                            ...(sidewaysOrder.ordering !== undefined ? { ordering: sidewaysOrder.ordering } : {}),
                             stage: {
                                 stageId: stageRecord.id,
                                 policy,
@@ -530,7 +542,14 @@ export class AgentResolver {
             return undefined;
         }
 
-        for (const executor of eligible) {
+        // 1323 R3: after a timeout or unavailability failure, remaining ladder
+        // candidates are ordered by measured latency x success rate (history
+        // stats), not declaration order alone. Empty history degrades to the
+        // static declaration order unchanged.
+        const measuredOrder = await this.orderEligibleByMeasuredLatency(eligible, signal !== undefined);
+        const orderedEligible = measuredOrder.ordered;
+
+        for (const executor of orderedEligible) {
             const canonical = resolveAgentName(executor.agent);
             if (canonical === undefined) {
                 return {
@@ -554,6 +573,7 @@ export class AgentResolver {
                     model: executor.model,
                     source: 'stage',
                     executor: executor.name,
+                    ...(measuredOrder.ordering !== undefined ? { ordering: measuredOrder.ordering } : {}),
                     stage: {
                         stageId: stageRecord.id,
                         policy,
@@ -565,6 +585,50 @@ export class AgentResolver {
         }
 
         return undefined;
+    }
+
+    /**
+     * 1323 R3: order ladder candidates by measured latency x success when an
+     * escalation signal is in play and history exists. Candidates with samples
+     * sort first by {@link ladderScore} ascending; candidates without samples
+     * tie at the worst known score (an unmeasured executor is at least as
+     * promising as the worst measured one) and keep declaration order among
+     * themselves. No history at all → declaration order unchanged.
+     */
+    private async orderEligibleByMeasuredLatency(
+        eligible: readonly AgentExecutorConfig[],
+        ordered: boolean,
+    ): Promise<{ ordered: AgentExecutorConfig[]; ordering?: LadderOrderingEntry[] }> {
+        if (!ordered || eligible.length <= 1) return { ordered: [...eligible] };
+        const stats = await loadExecutorLatency(
+            this.ctx,
+            eligible.map((e) => e.model ?? e.name),
+        );
+        const scored = eligible.map((executor, index) => {
+            const hit = stats.get(executor.model ?? executor.name);
+            return {
+                executor,
+                index,
+                ...(hit !== undefined && hit.samples > 0 ? { score: ladderScore(hit), samples: hit.samples } : {}),
+            };
+        });
+        const known = scored.filter((entry) => entry.score !== undefined);
+        if (known.length === 0) return { ordered: [...eligible] };
+        // Measured candidates outrank unmeasured ones (prefer known-good over a
+        // gamble); among measured, lower score (latency x success) wins; among
+        // unmeasured, declaration order stands.
+        const sorted = [...scored].sort((a, b) => {
+            const aKnown = a.score !== undefined ? 1 : 0;
+            const bKnown = b.score !== undefined ? 1 : 0;
+            if (aKnown !== bKnown) return bKnown - aKnown;
+            if (aKnown === 1) return (a.score ?? 0) - (b.score ?? 0) || a.index - b.index;
+            return a.index - b.index;
+        });
+        const ordering: LadderOrderingEntry[] = sorted.map((entry) => ({
+            executor: entry.executor.name,
+            ...(entry.score !== undefined ? { scoreMs: entry.score, samples: entry.samples } : {}),
+        }));
+        return { ordered: sorted.map((entry) => entry.executor), ordering };
     }
 
     /** Legacy static Tier-1 priority resolution (preserved fallback). */

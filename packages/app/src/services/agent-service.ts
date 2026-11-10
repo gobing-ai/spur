@@ -15,6 +15,7 @@ import { NodeProcessExecutor, type OutputPolicy, type ProcessRegistry } from '@g
 import type { DecisionCorrelation } from '../decision/decision-events';
 import type { AgentExecutionOptions, WarmTurnContext, WarmTurnDispatch } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
+import type { AdaptiveTimeoutDecision, ExecutorLatencyStats } from './adaptive-timeout';
 import { parseArtifactRefs } from './agent-invocation-sanitize';
 import { AgentResolver } from './agent-resolver';
 import { booleanFlag, jsonEnvelopeFlag, stringFlag } from './agent-run-flags';
@@ -118,6 +119,8 @@ export type AgentResolveResult =
           tier?: CapabilityTier;
           /** Executor entry name that won — role resolution or an executor pin. */
           executor?: string;
+          /** 1323 R3: measured ordering of the ladder candidates, when reordering applied. */
+          ordering?: LadderOrderingEntry[];
       }
     | { ok: false; exitCode: number; message: string };
 /**
@@ -137,6 +140,37 @@ export interface AgentRunCaptureResult {
     signal?: string;
     /** Captured stderr, when available (R2b). */
     stderr?: string;
+}
+
+/**
+ * One measured-ordering row for the escalation ladder (1323 R3). Recorded in
+ * the run trace so a ladder decision can be audited against the history stats
+ * it was derived from.
+ */
+export interface LadderOrderingEntry {
+    executor: string;
+    /** ladderScore in ms (latency / successRate); lower is better. */
+    scoreMs?: number;
+    /** History samples backing the score; absent = no measurement. */
+    samples?: number;
+}
+
+/**
+ * One recorded ladder decision (1323 AC3): breaker trips and skips, pre-dispatch
+ * timeout-exhausted skips, escalations and chain exhaustion. Absent when the run
+ * made no adaptive-ladder decision.
+ */
+export interface AgentLadderDecision {
+    kind: 'breaker-trip' | 'breaker-skip' | 'timeout-exhausted-skip' | 'escalation' | 'chain-exhausted';
+    /** Executor the decision is about (tripped/skipped/failed). */
+    executor?: string;
+    /** Executor the run moved to, for escalations. */
+    toExecutor?: string;
+    /** Human-readable reason, including the objective trigger or evidence. */
+    reason: string;
+    /** Bounded detail (e.g. serialized adaptive budget numbers). */
+    detail?: string;
+    at: string;
 }
 
 /**
@@ -175,6 +209,12 @@ export interface AgentRunInvocation {
     outputMode: 'buffered' | 'stream' | 'pipe';
     /** Effective timeout in ms; undefined = no timeout. */
     timeoutMs?: number;
+    /**
+     * How the effective timeout was resolved (1323 R2/AC3): the history-derived
+     * decision behind `timeoutMs`, recorded for auditing. Absent on legacy
+     * surfaces that never computed one.
+     */
+    timeoutBudget?: AdaptiveTimeoutDecision;
     /** Effective continue flag (session latch). */
     continue: boolean;
     /** Whether stdin can read from an interactive terminal. Always false for one-shot runs. */
@@ -229,6 +269,11 @@ export interface AgentRunTracedResult {
      * the honest `unavailable` shape — never zero.
      */
     usage?: NormalizedAgentUsage;
+    /**
+     * Recorded adaptive-ladder decisions for this run (1323 AC3): breaker trips
+     * and skips, timeout-exhausted skips, escalations. Absent when none occurred.
+     */
+    ladder?: AgentLadderDecision[];
 }
 
 /** Output sink injected into AgentService. */
@@ -318,6 +363,12 @@ export interface AgentServiceContext {
      * Absent (tests) → no fleet declaration is seen.
      */
     reloadAgentConfig?: () => Promise<SpurConfig | null>;
+    /**
+     * Observed executor latency history (1323 R2/R3). Absent → the executor
+     * reads `history_board_model_stats` through {@link AgentServiceContext.getDb};
+     * both absent → static timeout/order behavior unchanged.
+     */
+    historyLatency?: (executors: string[]) => Promise<Record<string, ExecutorLatencyStats>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +631,7 @@ export class AgentService {
         return {
             exitCode,
             invocation: outcome.invocation,
+            ...(outcome.ladder !== undefined ? { ladder: outcome.ladder } : {}),
             stdout: result.stdout,
             stderr: result.stderr,
             durationMs: result.durationMs,

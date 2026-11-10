@@ -172,3 +172,19 @@ export function classifyDispatch(
 
     return undefined;
 }
+
+/**
+ * Immediate executor-unavailability evidence (1323 R1): the executor cannot
+ * dispatch at all right now — the KK-measured "instant exitCode 2 / no usage"
+ * shape. In the runner's exit-code contract a completed dispatch can only end
+ * 2 when the shim/dispatch layer failed before any agent work (agent failures
+ * are 3), so exit 2 IS dispatch-level unavailability. A terminal `unavailable`
+ * signal is the same condition named structurally.
+ */
+export function executorUnavailabilityEvidence(
+    result: Pick<AgentRunResult, 'exitCode' | 'signal'>,
+): string | undefined {
+    if (result.exitCode === 2) return `dispatch-level exit 2 (executor unusable for this run)`;
+    if (result.signal === 'unavailable') return `terminal signal ${result.signal}`;
+    return undefined;
+}
