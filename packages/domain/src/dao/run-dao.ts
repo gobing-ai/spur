@@ -112,7 +112,7 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
              FROM runs
              WHERE (?1 IS NULL OR workflow_name = ?1)
                AND (?2 IS NULL OR status = ?2)
-               AND (?3 IS NULL OR started_at >= ?3)
+               AND (?3 IS NULL OR julianday(started_at) >= julianday(?3))
                AND (
                  ?4 IS NULL
                  OR started_at < ?4
@@ -134,6 +134,18 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
         return this.adapter.queryFirst(
             'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, updated_at, terminal_reason, metadata_json, pid FROM runs WHERE id = ?',
             runId,
+        );
+    }
+
+    /**
+     * 1326 R10: rows whose id starts with `prefix`, capped at 21 so the caller can distinguish
+     * "unique" from "ambiguous" without materializing a broad prefix. `substr` comparison, not
+     * `LIKE` — a prefix containing `_` or `%` must not acquire wildcard semantics.
+     */
+    traceRowsByIdPrefix(prefix: string): Promise<Array<{ id: string }>> {
+        return this.adapter.queryAll<{ id: string }>(
+            'SELECT id FROM runs WHERE substr(id, 1, length(?1)) = ?1 ORDER BY id LIMIT 21',
+            prefix,
         );
     }
 

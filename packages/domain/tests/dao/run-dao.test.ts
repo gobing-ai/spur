@@ -327,6 +327,33 @@ describe('RunDao', () => {
             adapter.close();
         });
 
+        // 1326 R1/R2: `since` selects instants, so a local-offset bound and its UTC equivalent
+        // admit the same rows, and a seconds-only `started_at` inside the window is selected.
+        // The old TEXT predicate put `2026-11-08T05:00:00Z` after the `-08:00` upper bound.
+        test('traceRows `since` selects instants across offset form and stored precision', async () => {
+            const adapter = await setup();
+            const dao = new RunDao(adapter);
+            await adapter.run(
+                `INSERT INTO runs (id, workflow_name, mode, status, agent, started_at, metadata_json, created_at, updated_at)
+                 VALUES
+                   ('run_shifted', 'pipe', 'state-machine', 'done', 'pi', '2026-11-07T05:00:00.000Z', '{}', 1, 1),
+                   ('run_inside_ms', 'pipe', 'state-machine', 'done', 'pi', '2026-11-08T10:00:00.000Z', '{}', 2, 2),
+                   ('run_inside_seconds', 'pipe', 'state-machine', 'done', 'pi', '2026-11-08T11:00:00Z', '{}', 3, 3),
+                   ('run_legacy_numeric', 'pipe', 'state-machine', 'done', 'pi', 0, '{}', 4, 4)`,
+            );
+
+            // 2026-11-08 local day in America/Los_Angeles (PST, UTC-8), both bound forms.
+            const offsetForm = await dao.traceRows({
+                since: '2026-11-08T00:00:00.000-08:00',
+                limit: 10,
+            });
+            const utcForm = await dao.traceRows({ since: '2026-11-08T08:00:00.000Z', limit: 10 });
+
+            expect(offsetForm.map((r) => r.id).sort()).toEqual(['run_inside_ms', 'run_inside_seconds']);
+            expect(utcForm.map((r) => r.id).sort()).toEqual(offsetForm.map((r) => r.id).sort());
+            adapter.close();
+        });
+
         test('traceRowById returns run-level fields', async () => {
             const adapter = await setup();
             const dao = new RunDao(adapter);

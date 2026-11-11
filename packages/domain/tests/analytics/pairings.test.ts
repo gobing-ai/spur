@@ -534,6 +534,38 @@ describe('pairingSummary (feature J8 / task 0573)', () => {
         expect(pairings.some((p) => p.role === 'late')).toBe(false);
     });
 
+    // 1326 R1: pairingSummary's window must select instants, not TEXT order — a daily selector
+    // carries a local offset while `occurred_at` is `...Z`.
+    test('R1: offset-form and Z-form windows return the same pairings', async () => {
+        const db = await setupDb();
+        await insertStart(db, 's-shifted', '2026-11-08T05:00:00.000Z', {
+            role: 'shifted',
+            executor: 'cheap-exec',
+            runId: 'run-shifted',
+            executionId: 'exec-shifted',
+        });
+        await insertStart(db, 's-true-day', '2026-11-08T09:00:00.000Z', {
+            role: 'trueday',
+            executor: 'cheap-exec',
+            runId: 'run-trueday',
+            executionId: 'exec-trueday',
+        });
+
+        const offsetForm = await pairingSummary(db, {
+            since: '2026-11-08T00:00:00.000-08:00',
+            until: '2026-11-08T23:59:59.999-08:00',
+        });
+        const utcForm = await pairingSummary(db, {
+            since: '2026-11-08T08:00:00.000Z',
+            until: '2026-11-09T07:59:59.999Z',
+        });
+
+        expect(utcForm).toEqual(offsetForm);
+        expect(offsetForm.some((p) => p.role === 'trueday')).toBe(true);
+        expect(offsetForm.some((p) => p.role === 'shifted')).toBe(false);
+        db.close();
+    });
+
     test('R1: pairings keyed by NUL do not collide when an executor name prefixes another', async () => {
         const db = await setupDb();
         // 'ab' is a prefix of 'abc': a plain string-concat key would map both

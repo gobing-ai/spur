@@ -570,8 +570,11 @@ describe('forensic queries', () => {
             runId: 'run-1',
             taskWbs: '0042',
         });
+        // 1326: sargable TEXT range on the raw column + the exact parsed comparison.
         expect(where).toContain('m.ts >= ?');
+        expect(where).toContain('julianday(m.ts) >= julianday(?)');
         expect(where).toContain('m.ts <= ?');
+        expect(where).toContain('julianday(m.ts) <= julianday(?)');
         expect(where).toContain('m.source IN (?, ?)');
         expect(where).toContain('m.session_id = ?');
         expect(where).toContain('history_run_session hrs_scope');
@@ -581,7 +584,7 @@ describe('forensic queries', () => {
         expect(where).not.toContain('m.run_id');
         expect(where).not.toContain('m.task_wbs');
         expect(where).toContain('AND');
-        expect(params).toHaveLength(7);
+        expect(params).toHaveLength(9);
     });
 
     test('task-only selector unions the run chain with the direct authority (0722 R5)', () => {
