@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Residuals from 1324
-status: backlog
+status: done
 template: standard
 created_at: 2026-11-10T22:53:01.911Z
-updated_at: "2026-11-10T22:53:02.063Z"
+updated_at: "2026-11-11T17:46:38.282Z"
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1328-verdict.json
 ---
 
 ## 1328. Residuals from 1324
@@ -18,7 +20,7 @@ Source task: 1324 (feature E6) — deferred residuals filed by residual-scan set
 
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty until requirements are known. -->
+- [x] R1. `messageRollup`'s per-model/day latency aggregates (`assistantDurationMs`/`assistantDurationUnmeasured`/`assistantDurationSamples`) exclude `poll-duplicate` rows, so `history_board_model_stats` → `readExecutorLatency` means are not polluted by derived poll durations; token/cost sums (Q8 spend scope) unchanged.
 
 ### Acceptance Criteria
 
@@ -36,22 +38,40 @@ Source task: 1324 (feature E6) — deferred residuals filed by residual-scan set
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Guard the three duration SUM cases with `disposition <> 'poll-duplicate'` in `messageRollup` (packages/domain/src/analytics/forensic-query.ts).
+2. Regression test in packages/domain/tests/analytics/forensic-query.test.ts: duration aggregates exclude the poll row while token/message sums keep it.
+3. `bun test tests/analytics/forensic-query.test.ts` green in packages/domain; fail-proof the test by stashing the src fix.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- packages/domain/src/analytics/forensic-query.ts:186-189 (`messageRollup`): the `filtered` and `selected` CTEs now project `m.disposition`; the three assistant-duration SUM cases are guarded with `disposition <> 'poll-duplicate'` (column is NOT NULL, same predicate form as the 1324 R3 rollup queries). Token/cost/message sums untouched — the Q8 spend scope intentionally keeps collapsed poll rows.
+- packages/domain/tests/analytics/forensic-query.test.ts:362: regression test co-located with the 0624 request-folding test.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/domain/tests/analytics/forensic-query.test.ts:362 — a poll row with derived duration 7000ms no longer inflates `assistantDurationMs`/`assistantDurationSamples` while token sums keep both rows; bun test in packages/domain: 32 pass / 0 fail, and the test fails with the src fix stashed |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P4 | No new findings introduced; 1324 R3's primary surfaces (bySession, both loops queries, tool joins) already excluded collapsed polls — this closes the last latency aggregator (`messageRollup` → `history_board_model_stats` → `readExecutorLatency`) with a predicate identical to the 1324 R3 forms. | Accepted — closed with the fix; no residual risk identified. |
 
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-11T17:43:41.672Z backlog → todo (system)
+- 2026-11-11T17:43:42.013Z todo → wip (system)
+- 2026-11-11T17:44:19.705Z wip → testing (system)
+- 2026-11-11T17:46:38.238Z testing → done (system)
+
