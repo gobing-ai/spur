@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Add sectioned and summary output to spur task show
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-10T07:34:40.665Z
-updated_at: "2026-11-10T23:15:24.070Z"
+updated_at: "2026-11-11T00:02:17.023Z"
 feature_id: F22
 
 priority: P2
 ac_altitude: task-local
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1325-verdict.json
 ---
 
 ## 1325. Add sectioned and summary output to spur task show
@@ -84,23 +86,23 @@ No new flags on other nouns; no change to the task file schema.
 
 ### Solution
 
-Domain: `markdown-document.ts` gains `MarkdownSectionContent` + `sectionContent(name)` — the
+Domain: `packages/domain/src/planning/markdown-document.ts:29,366` gains `MarkdownSectionContent` + `sectionContent(name)` — the
 byte-exact heading+body slice of a section (null when absent; no canonical re-validation).
 
 App (`packages/app/src/services/`):
-- `task-query-ops.ts` — `showSections(wbs, requested)` (validates names → `VALIDATION_FAILED`
+- `packages/app/src/services/task-query-ops.ts:71,101` — `showSections(wbs, requested)` (validates names → `VALIDATION_FAILED`
   error listing the file's sections; returns file-order entries `{name, headingLine, byteCount,
   content}` + `totalBytes`) and `showSummary(wbs)` (all sections, byte counts, no `content`);
   both share a private `readTaskSummary()` with `show()`. `TaskService` delegates via
-  `task-service.ts` (types `TaskShowSectionEntry`/`TaskShowSectionsResult` exported from the
+  `packages/app/src/services/task-service.ts` (types `TaskShowSectionEntry`/`TaskShowSectionsResult` exported from the
   package index).
-- `task-files.ts` — `sizeBudgetWarnings(filePath)` evaluates the existing
+- `packages/app/src/services/task-files.ts:223` — `sizeBudgetWarnings(filePath)` evaluates the existing
   `evaluateTaskSize` precheck (`task-size-precheck.ts`) against the current file and returns
   advisory strings (errors swallowed → `[]`).
 - `task-create-ops.ts` / `task-update-ops.ts` — merge those advisories into `create` /
   `batchCreate` children / `updateBody` result `warnings[]`. Warning-only, never blocking.
 
-CLI (`apps/cli/src/commands/`): `task/show.ts` adds `--section` (repeatable, via a `collect`
+CLI (`apps/cli/src/commands/`): `apps/cli/src/commands/task/show.ts:42,54` adds `--section` (repeatable, via a `collect`
 collector), `--sections` (CSV), `--summary`; `--summary` + section flags is a usage error
 (exit 2); unknown section exits 3 (`VALIDATION_FAILED`), mirroring `task sections`; human mode
 prints summary lines (`### Name — N bytes` + total) or the verbatim section content; `--json`
@@ -108,7 +110,7 @@ envelopes the new result shapes. `task/create.ts` surfaces write-time warnings t
 (human) / `warnings[]` (JSON). `shared-options.ts` registers the new `--section` homonym
 (parity test green).
 
-Docs: `plugins/sp/skills/spur-cli/references/tasks.md` — fast-path block, verb-map row, and new
+Docs: `plugins/sp/skills/spur-cli/references/tasks.md:63-72` — fast-path block, verb-map row, and new
 "Sectioned and summary reads" / "Write-time size advisory" sections.
 
 Scope note (R3): the decomposition guidance requirement is delivered as documentation (Design §3
@@ -117,18 +119,22 @@ the four plan items.
 
 ### Testing
 
-- `packages/app/tests/services/task-show-sections.test.ts` (new, 9 pass): filtered
-  byte-identity vs an independently computed file slice (incl. multi-byte bodies), file-order +
-  dedupe, unknown-name `VALIDATION_FAILED` listing valid names, summary index with byte counts
-  and no `content` keys, oversize batch-create/updateBody warnings (non-blocking), conforming
-  write silent.
-- `apps/cli/tests/commands/task/show.test.ts` (+7, 12 pass): `--section` JSON byte-identity,
-  repeatable + CSV file order, `--summary` byte counts/total, human summary + section output,
-  unknown-name exit 3, `--summary` + `--section` exit 2.
-- Regression: domain suite 1469 pass; `task-service.test.ts` 133 pass; CLI
-  show/create/update/sections + shared-option parity 104 pass.
-- `bunx tsc --noEmit` clean in domain, app, cli; `bunx biome check` clean on all 12 touched
-  files.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-query-ops.ts:71-97` — `showSections` (exact-name validation → `VALIDATION_FAILED` listing present sections, file order, byte-exact `content`, UTF-8 `byteCount`); `:101-113` — `showSummary` (index, no bodies); CLI flags `apps/cli/src/commands/task/show.ts:35-48`; fresh this visit: suites #6 (9 pass) and #7 (12 pass) |
+| R2 | MET | `packages/app/src/services/task-files.ts:222-229` — `sizeBudgetWarnings` runs the same `evaluateTaskSize` the `precheck-size` gate runs; merged into create / batchCreate children / updateBody results (`task-create-ops.ts:402,594-600`, `packages/app/src/services/task-update-ops.ts:383-387`); rendered at every CLI write surface — batch-create proven live this visit (probes #3–#4: 11-R batch → JSON warnings row + stderr `0002: Task has 11 R-items (max 10). Consider decomposing into smaller tasks.`, exit 0), single `create` and `update --section` proven live visit 1; suite #2 fresh-run 13 pass |
+| R3 | MET | Documentation guidance per Design §3: warning text carries the decompose nudge `Task has 11 R-items (max 10). Consider decomposing into smaller tasks.` (`packages/app/src/services/task-size-precheck.ts:99`, observed live in probes #3–#4); reference-doc advisory section `plugins/sp/skills/spur-cli/references/tasks.md:63-72` now states write-time budget + `precheck-size` gate pointer accurately; split-oversize guidance `plugins/sp/skills/spur-dev/references/execution-workflow.md:331-336`. The chain prefers decomposition over one monolithic file when the R/AC set passes the budget; residual doc-polish note remains Finding 4 (ACCEPTED) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/task-show-sections.test.ts:116` "showSections returns byte-identical section content (AC1)" (pass; 9/9 file suite, fresh run #6) + `apps/cli/tests/commands/task/show.test.ts:121` "show --section returns only that section, byte-identical to the file (AC1)" (pass; 12/12 file suite, fresh run #7); visit-1 independent byte-identity spot check (4 sections, identical=true) unaffected — 2ec3071ff touches no show/section code |
+| AC2 | MET | test | `packages/app/tests/services/task-show-sections.test.ts:159` "showSummary returns the section index with byte counts and no bodies (AC2)" (pass, fresh run #6) + `apps/cli/tests/commands/task/show.test.ts:166` (pass, fresh run #7); visit-1 live probe (11 entries, 0 `content` keys, totalBytes = file bytes) stands |
+| AC3 | MET | test | Service: `packages/app/tests/services/task-show-sections.test.ts:178` "batch-create with 11 R-items warns at write time without blocking" (pass, fresh run #6). CLI, both channels — fresh this visit: `apps/cli/tests/commands/task/batch-create.test.ts:295` (JSON warnings rows) and `:315` (human stderr exact-match with WBS cross-check), plus live probes #3–#4 through the real CLI on a throwaway project: 11-R batch → exit 0 with the advisory rendered in `warnings[]` (JSON) and on stderr (human), before any pipeline run. Warning-only per policy (Q&A: write-time warning; `precheck-size` stays the hard gate) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -216,4 +222,5 @@ Verdict: PASS
 
 - 2026-11-10T16:31:03.319Z backlog → todo (system)
 - 2026-11-10T23:15:24.070Z todo → wip (system)
+- 2026-11-11T00:02:16.874Z wip → done (system)
 
