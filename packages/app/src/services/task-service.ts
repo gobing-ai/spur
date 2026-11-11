@@ -276,6 +276,9 @@ export class TaskService {
         status?: string;
         template?: string;
         actor?: string;
+        /** 1329 (42e0ee35): direct body inputs, threaded to TaskCreateOps.create. */
+        requirements?: string;
+        plan?: string;
         /**
          * Dedup window in seconds. Defaults to 300 seconds for every create —
          * feature-scoped or unscoped. Pass null to disable the guard. When enabled,
