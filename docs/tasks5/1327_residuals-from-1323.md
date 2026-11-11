@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Residuals from 1323
-status: backlog
+status: done
 template: standard
 created_at: 2026-11-10T22:10:44.717Z
-updated_at: "2026-11-10T22:10:44.874Z"
+updated_at: "2026-11-11T17:53:37.304Z"
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1327-verdict.json
 ---
 
 ## 1327. Residuals from 1323
@@ -18,7 +20,7 @@ Source task: 1323 (feature D3) — deferred residuals filed by residual-scan set
 
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty until requirements are known. -->
+- [x] R1. `runTraced`'s lifecycle start guard is start-once (`lifecycleStarted` flag) rather than `attempt === 0`, so a 1323 R2 timeout-exhausted-skip on attempt 0 does not suppress the run's `started` event (and heartbeats) for the executor that actually dispatches.
 
 ### Acceptance Criteria
 
@@ -36,22 +38,34 @@ Source task: 1323 (feature D3) — deferred residuals filed by residual-scan set
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Replace the `attempt === 0` guard on `lifecycle.start` with a `lifecycleStarted` flag (packages/app/src/services/agent-run-executor.ts).
+2. Regression test in packages/app/tests/services/agent-run-executor-d3.test.ts: the timeout-exhausted-skip scenario emits exactly one `started` event naming the executor that ran.
+3. `(cd packages/app && bun test tests/services/agent-run-executor-d3.test.ts)` green; fail-proof by stashing the src fix.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- packages/app/src/services/agent-run-executor.ts:544 — `lifecycleStarted` flag declared beside `dispatchStartedAt`.
+- packages/app/src/services/agent-run-executor.ts:815-818 — the `lifecycle.start` guard flips from `attempt === 0` to the start-once flag; the first real dispatch (including one after a timeout-exhausted-skip `continue`) emits `started` and resets `dispatchStartedAt` exactly once.
+- packages/app/tests/services/agent-run-executor-d3.test.ts:318 — regression test reusing the AC2 skip scenario with an execution observer: exactly one `started` event, naming `codex`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `(cd packages/app && bun test tests/services/agent-run-executor-d3.test.ts)` — 9 pass / 0 fail (43 expects).
+- Fail-proof: with the src fix stashed, the new test fails (zero `started` events); restored, it passes.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P4 | No new findings. The flag is set inside the guard so any later re-entry (escalation, warm-worker paths) cannot double-start; `attempt === 0` remains meaningful for the model pin (1255), which is intentionally untouched. | Accepted. |
 
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-11T17:53:17.110Z backlog → todo (system)
+- 2026-11-11T17:53:17.446Z todo → wip (system)
+- 2026-11-11T17:53:37.261Z wip → done (system)
+
