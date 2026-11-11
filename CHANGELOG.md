@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.4.31] - 2026-11-10
+
+### Added
+- detached-gate rechecks pick the affected scope for the light tier instead of running the full gate (1322) (7a4de969a)
+  <!-- src: packages/app/src/services/quality-gate.ts:493 · confidence: HIGH -->
+- agent runs gain a run-scoped executor circuit breaker, adaptive dispatch timeouts and measured ladder ordering (1323) (6953e495c)
+  <!-- src: packages/app/src/services/adaptive-timeout.ts:60 · confidence: HIGH -->
+- history provenance: antigravity usage ETL with `poll-duplicate` disposition and worktree-run merge into verified outcomes (1324) (6d53e76f5)
+  <!-- src: packages/domain/src/analytics/antigravity-etl.ts:37 · confidence: HIGH -->
+- `task show` supports sectioned reads and a summary index, with write-time size advisories (1325) (485d6dc4d)
+  <!-- src: packages/app/src/services/task-query-ops.ts:71 · confidence: HIGH -->
+
+### Fixed
+- loop detection excludes empty tool-call `args_digest` values (4b9718484)
+  <!-- src: packages/domain/src/analytics/forensic-query.ts:808 · confidence: HIGH -->
+- `workflow trace` resolves the run id before opening watch/poll, so id prefixes resolve for `--follow` (141aff683)
+  <!-- src: apps/cli/src/commands/workflow/trace.ts:504 · confidence: HIGH -->
+- history-anatomy reports stamp full provenance — identity, digests, coverage, disposition (a48728e4a)
+  <!-- src: packages/app/src/services/history-anatomy.ts:58 · confidence: HIGH -->
+- history daily windows are scoped by parsed instants, not local-offset strings (5ddbefe0b)
+  <!-- src: packages/domain/src/analytics/selector-time-range.ts:9 · confidence: HIGH -->
+- inclusive since/until predicates parse both bounds as instants before comparison (e561f225f)
+  <!-- src: packages/domain/src/analytics/selector-time-range.ts:7 · confidence: HIGH -->
+- batch task creation emits per-child size advisories on stderr, WBS-prefixed for attribution (1325 R2) (2ec3071ff)
+  <!-- src: apps/cli/src/commands/task/batch-create.ts:100 · confidence: HIGH -->
+- antigravity ETL source filter is built at the call site (`no-module-scope-import-calls` rule) (72d638cde)
+  <!-- src: packages/domain/src/analytics/antigravity-etl.ts:96 · confidence: HIGH -->
+- the run-scoped breaker set is included in escalation-seam executor exclusion (1323 R1) (20496e62f)
+  <!-- src: packages/app/src/services/agent-run-executor.ts:416 · confidence: HIGH -->
+- executor latency read moved into the domain package (`ts-db-only`/`raw-sql-only` rule compliance) (188a37c70)
+  <!-- src: packages/domain/src/analytics/executor-latency.ts:37 · confidence: HIGH -->
+- light-gate biome test fixtures are hermetic — the monorepo fixture lives in /tmp, never under the repo tree (f12ccef76)
+  <!-- src: packages/app/tests/services/quality-gate-affected-scope.test.ts:27 · confidence: HIGH -->
+- 1323 solution map relocated to the task doc; stray glob-named file dropped (0e1179bc6)
+
+### Changed
+- merge branch `sp/runall-1322-1325-193f` — batch 1322-1325 (c992bc5e2)
+- close 1325: settle follow-up 1329, done-state with solution anchors (25ba76a6a)
+- close 1324: settle follow-up 1328, task doc done-state (6f244d413)
+- close 1323: settle follow-up 1327, task doc done-state (e7fe29b39)
+- file residual follow-up 1326 from 1322 settle (95a167480)
+- sync 1325 certified review into task doc, defer accepted-as-is findings (2dbd1bfdb)
+- document `task show` section/summary flags in help parity pages (49fa0db03)
+- sync 1324 certified review into task doc, tick proven R/AC boxes (b695cd222)
+- correct 1324 AC section to match R1-R4 (084f3f3a5)
+- record I81 dogfood re-verification of 1326, 0674, 0680 (456a103d4)
+- sync certified review into 1323 task doc (e7d3fb2fe)
+- restore tsdoc on `loadExecutorLatency` (6dc733771)
+- dedupe 1323 solution sections (dc91163a4)
+- anchor 1323 solution citations to file:line (e766bd66a)
+- record 1323 solution change map (b01db0ebc)
+- return I81 to verifying now 1326 supplies corrected artifacts (2c9e73488)
+- sync trace-id, escalation and anatomy-stamp surfaces after 1326 (47076108e)
+- close 1322: review certification PASS, verdict replay green (b2c41af7c)
+- record history-anatomy window/provenance defects (02dc78729)
+- add long-running-command detachment lesson to cross-cutting (d7c0bc402)
+- register tasks 1322-1325, refresh feature rosters (54bf29d0f)
+- record 1326 wrap-up with re-verdicts for 0674 and 0680 (365ef2456)
+
 ## [0.4.29] - 2026-11-08
 
 ### Fixed
