@@ -35,6 +35,14 @@ Given the current and baseline artifacts, author the model half of the report. A
    ownerSurface). Categories from the closed vocabulary; stable keys of the form
    `<category>:<owner-surface>:<signal>`. Severity is the closed P1/P2/P3 vocabulary; reproCommand reproduces the observation verbatim; ownerSurface names
    the concrete owning surface (file/package/command), consistent with the key's middle segment.
+   **Every derived numeric comparison, delta, ratio, or sum in `observation`/`inference` carries an
+   adjacent `calc:` assertion** (grammar in `report-contract.md`). Write the arithmetic, do not
+   assert the conclusion: a claim that one figure is larger needs `calc: <a> > <b>`, a gap needs
+   `calc: <a> - <b> = <gap>`. The deterministic structure gate fails a false assertion
+   (`arithmetic-contradiction`), a missing one on a derived field (`arithmetic-evidence-missing`),
+   and an unparsable one (`arithmetic-invalid-assertion`) before validation runs — the observed
+   2026-11-08 inversion (`719,838,772` called larger than `725,707,709`) burned a full correction
+   pass precisely because no gate could see it.
 4. **Recurrence ledger** — classify every finding against the baseline on the **stable key**.
 5. **Telemetry gaps** — every dimension the artifact cannot support, rendered `not available`.
 6. **Remediation options** — proposals only (owner surface, expected impact, verification method,
@@ -74,6 +82,9 @@ Given a candidate report and the artifacts, independently verify:
 - **Positive patterns** — held to the same standard; an anchor-less entry FAILs.
 - **Remediation** — proposals only; any applied change, diff, or command the report claims to have
   run FAILs.
+- **Arithmetic** — every `calc:` assertion recomputes; a claim whose assertion does not hold, or a
+  derived claim with no assertion, is a finding against the report. Independent validation still
+  owns whether the operands belong to the cited artifact; the deterministic gate owns the math.
 
 Emit `PASS` only when every rule holds. On FAIL, name the section, the finding key, and the rule
 violated. Never launch a workflow.

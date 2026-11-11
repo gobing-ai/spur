@@ -138,7 +138,7 @@ spur history anatomy-<op> [op flags...]
 | `anatomy-paths` | `--out <env> [--skill-dir d] [--helper p] ...` — resolve the run paths into an env file |
 | `anatomy-assert-clean` | `--baseline <porcelain> [--expect p]...` — fail on undeclared writes |
 | `anatomy-probe` | `--artifact a --target t ...` — cache disposition + provenance |
-| `anatomy-stamp` | `--candidate c --provenance p --out o` — stamp provenance frontmatter |
+| `anatomy-stamp` | `--candidate c --provenance p --out o [--validation v] [--trace t]` — stamp provenance frontmatter (final PASS receipt + per-dispatch provenance) |
 | `anatomy-refresh` | `--report r --out o` — refresh a cache-hit report |
 | `anatomy-publish` | `<candidate.md> <target.md>` — atomic publish |
 

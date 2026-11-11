@@ -144,11 +144,13 @@ states:
     onEnter:
       - kind: shell
         options:
+          # 1326: the selector is NOT provenance. `--executor "$agent"` used to stamp the literal
+          # `auto`; the resolved executor/model now come from the run's own action receipts at stamp.
           command: >-
             . .spur/run/$__runId-paths.txt;
             $spurBin history anatomy-probe --artifact .spur/run/$__runId-history-anatomy-current.json
             --baseline .spur/run/$__runId-history-anatomy-baseline.json --target "$HA_TARGET"
-            --mode "$mode" --date "$HA_DATE" --recompute "$recompute" --executor "$agent"
+            --mode "$mode" --date "$HA_DATE" --recompute "$recompute"
             --skill-dir "$HA_SKILL" --contract "$HA_SKILL/references/report-contract.md"
             --workflow "$workflowFile" --helper "$HA_HELPER" --contract-version "$contractVersion" --run-id "$__runId"
             --out .spur/run/$__runId-provenance.json
@@ -322,14 +324,23 @@ states:
       Cache-miss path. Attaches the full R7 frontmatter provenance block (identity tuple, window
       state, generated/validated timestamps, artifact paths + digests, contract/skill/workflow
       digests, per-source coverage + last_imported_at, spur/schema version, executor, run id,
-      cache disposition) and the freshness banner to the validated candidate.
+      cache disposition) and the freshness banner to the validated candidate. 1326 R5/R6: the
+      validated timestamp and the per-action executor/model rows come from the run's OWN receipts
+      (the validation artifact and the run trace), never from probe time or the selector.
     onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run;
+            $spurBin workflow trace "$__runId" --json > .spur/run/$__runId-trace.json
       - kind: shell
         options:
           command: >-
             . .spur/run/$__runId-paths.txt;
             $spurBin history anatomy-stamp --candidate .spur/run/$__runId-candidate.md
             --provenance .spur/run/$__runId-provenance.json
+            --validation .spur/run/$__runId-validation.txt
+            --trace .spur/run/$__runId-trace.json
             --out .spur/run/$__runId-publishable.md
 
   - id: publish

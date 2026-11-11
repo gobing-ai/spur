@@ -68,6 +68,34 @@ Every finding — problem and positive alike — carries the full field set:
 | `reproCommand` | The invocation that reproduces the observation — one command a reader can run verbatim (0680 R2). Gate-enforced. |
 | `ownerSurface` | The concrete surface that owns the fix (a file path, package, or command), consistent with the key's `<owner-surface>` segment but named as a target rather than a slug (0680 R3). Gate-enforced. |
 
+## Arithmetic assertions (`calc:`) — task 1326
+
+A field that makes a **derived numeric claim** must carry its arithmetic next to it, in the same
+field, as a machine-checkable line. The deterministic structure gate (`checkReportStructure`)
+rejects a false assertion and a derived claim that has none — before independent validation, so the
+model validator is never the only arithmetic check.
+
+Grammar (frozen; no `eval`, no parentheses, no unit suffixes, no arbitrary JavaScript):
+
+```text
+calc: <number> <+|-> [number ...] = <number>      # left-associative sums and deltas
+calc: <number> * <number> = <number>              # product
+calc: <number> / <number> = <number>              # ratio
+calc: <number> <|<=|>|>= <number>                 # ordering claim
+```
+
+- Integers are exact; a non-integer result uses a relative tolerance of `1e-9`.
+- The label may be written bare (`calc: …`) or as inline code (`` `calc`: … ``) — the gate accepts
+  both, and both must parse.
+- **Detection is deterministic and vocabulary-based.** An `observation` or `inference` field counts
+  as derived when it contains `%` or one of `larger|smaller|higher|lower|more than|less than|above|
+  below|exceeds|dominates|gap|delta|difference|sum|sums|sum of|share|ratio|mean|average`
+  (case-insensitive). Naming a raw artifact field alone (`totals.inputTokens`) is not a derived
+  claim. A grammar failure is `arithmetic-invalid-assertion`; a false assertion is
+  `arithmetic-contradiction`; a derived field with no assertion is `arithmetic-evidence-missing`.
+- The assertion names the arithmetic; the operands still have to belong to the cited artifact, and
+  that ownership check stays with independent validation. The gate never silently corrects a report.
+
 ## Evidence rules
 
 Enforcement rail for every claim:

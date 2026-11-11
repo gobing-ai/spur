@@ -239,14 +239,19 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'usage: spur history anatomy-stamp --candidate <c.md> --provenance <p.json> --out <o.md>\n',
+                    stderr: 'usage: spur history anatomy-stamp --candidate <c.md> --provenance <p.json> --out <o.md> [--validation <v.txt> --trace <t.json>]\n',
                 };
             }
             try {
-                const p = JSON.parse(readFileSync(f.provenance, 'utf8')) as core.CacheProvenance;
+                let p = JSON.parse(readFileSync(f.provenance, 'utf8')) as core.CacheProvenance;
+                // 1326 R5/R6: the workflow supplies both receipts; the two flags are optional so the
+                // probe/stamp unit surface keeps its pre-1326 behavior.
+                if (f.validation !== undefined && f.trace !== undefined) {
+                    p = core.applyFinalProvenance(p, { validationPath: f.validation, tracePath: f.trace });
+                }
                 writeFileSync(f.out, `${core.stampReport(readFileSync(f.candidate, 'utf8'), p)}\n`);
-            } catch {
-                return { exitCode: 1, stdout: '', stderr: 'stamp: could not read candidate or provenance\n' };
+            } catch (err) {
+                return { exitCode: 1, stdout: '', stderr: `stamp: ${(err as Error).message}\n` };
             }
             return { exitCode: 0, stdout: '', stderr: '' };
         }

@@ -1121,3 +1121,125 @@ describe('parse robustness / digest fallbacks (module-level)', () => {
         }
     });
 });
+
+describe('checkReportStructure arithmetic assertions (1326 R7 / AC5)', () => {
+    const sections = [
+        'Scope and provenance',
+        'Executive summary',
+        'Baseline comparison',
+        'Findings',
+        'Recurrence ledger',
+        'Telemetry gaps',
+        'Remediation options',
+        'Performance analysis',
+        'Workflow and process improvements',
+        'Report-only advisories',
+        'Positive patterns',
+        'Evidence ledger',
+    ];
+    const finding = (bullets: string): string => {
+        const i = sections.indexOf('Findings');
+        const before = sections
+            .slice(0, i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        const after = sections
+            .slice(i + 1)
+            .map((s) => `## ${s}\n\nbody`)
+            .join('\n\n');
+        return `${before}\n\n### A finding\n\n${bullets}\n\n${after}`;
+    };
+    const triage = (observation: string, inference: string): string =>
+        [
+            '- `key`: `positive:history-analyze:cache-read`',
+            '- `category`: `positive`',
+            '- `impact`: i',
+            '- `trend`: `not-comparable`',
+            observation,
+            inference,
+            '- `contradictions`: none',
+            '- `evidenceAnchor`: `.spur/run/x-current.json` — `#/totals`',
+            '- `severity`: `P3`',
+            '- `reproCommand`: `spur history analyze --json`',
+            '- `ownerSurface`: `spur history analyze` token totals',
+        ].join('\n');
+
+    test('the observed inversion — cache read claimed larger than billed input — fails', () => {
+        const r = checkReportStructure(
+            finding(
+                triage(
+                    '- `observation`: cache read is larger. `calc`: 719838772 > 725707709',
+                    '- `inference`: cache read is the larger figure.',
+                ),
+            ),
+        );
+        expect(r.ok).toBe(false);
+        expect(r.problems).toContain('arithmetic-contradiction:719838772 > 725707709');
+    });
+
+    test('the correct relation and its gap pass', () => {
+        const r = checkReportStructure(
+            finding(
+                triage(
+                    '- `observation`: billed input is larger. `calc`: 719838772 < 725707709',
+                    '- `inference`: the gap is 5868937. `calc`: 725707709 - 719838772 = 5868937',
+                ),
+            ),
+        );
+        expect(r.problems).toEqual([]);
+        expect(r.ok).toBe(true);
+    });
+
+    test('a derived comparison with no assertion fails as arithmetic-evidence-missing', () => {
+        const r = checkReportStructure(
+            finding(
+                triage(
+                    '- `observation`: cache read is larger than billed input',
+                    '- `inference`: cache read dominates the window',
+                ),
+            ),
+        );
+        expect(r.ok).toBe(false);
+        expect(r.problems).toContain('arithmetic-evidence-missing:observation');
+        expect(r.problems).toContain('arithmetic-evidence-missing:inference');
+    });
+
+    test('a plain artifact read is not a derived claim and needs no assertion', () => {
+        const r = checkReportStructure(
+            finding(
+                triage(
+                    '- `observation`: `totals.inputTokens` is 725707709',
+                    '- `inference`: read the artifact field directly',
+                ),
+            ),
+        );
+        expect(r.problems).toEqual([]);
+        expect(r.ok).toBe(true);
+    });
+
+    test('a ratio assertion is checked with a relative tolerance', () => {
+        const r = checkReportStructure(
+            finding(
+                triage(
+                    '- `observation`: the share is 0.9919128087972399. `calc`: 719838772 / 725707709 = 0.9919128087972399',
+                    '- `inference`: cache read covers most of billed input.',
+                ),
+            ),
+        );
+        expect(r.problems).toEqual([]);
+        expect(r.ok).toBe(true);
+    });
+
+    test('an unparsable assertion fails instead of passing vacuously', () => {
+        const r = checkReportStructure(
+            finding(
+                triage(
+                    '- `observation`: cache read is larger. `calc`: 719838772 >',
+                    '- `inference`: cache read is the larger figure.',
+                ),
+            ),
+        );
+        expect(r.ok).toBe(false);
+        expect(r.problems.some((p) => p.startsWith('arithmetic-invalid-assertion'))).toBe(true);
+    });
+});
