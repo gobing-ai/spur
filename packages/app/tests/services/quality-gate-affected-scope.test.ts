@@ -139,6 +139,47 @@ describe('workspace dependency graph (1322 R3)', () => {
         expect(graph.byName.size).toBe(0);
         expect(graph.dependents.size).toBe(0);
     });
+
+    test('an unsupported glob shape marks the graph so selection refuses the tier (1326)', () => {
+        // yarn-classic `packages/**` silently expanded to nothing before 1326: the graph
+        // looked empty, so the shared-package fallback could never fire.
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1326-glob-'));
+        try {
+            writeFileSync(
+                join(dir, 'package.json'),
+                `${JSON.stringify({ name: 'fixture-root', private: true, workspaces: ['packages/**'] }, null, 4)}\n`,
+            );
+            mkdirSync(join(dir, 'packages/shared-lib'), { recursive: true });
+            writeFileSync(
+                join(dir, 'packages/shared-lib/package.json'),
+                `${JSON.stringify({ name: '@fix/shared-lib' }, null, 4)}\n`,
+            );
+            const graph = readWorkspaceGraph(dir);
+            expect(graph.byName.size).toBe(0);
+            expect(graph.unsupported).toContain('packages/**');
+            const scope = lightScope(['packages/shared-lib/src/index.ts'], (p) => existsSync(join(dir, p)), graph);
+            expect(scope.fallback).toBe(
+                `workspaces glob "packages/**" is not a supported shape (only \`dir/*\` globs and literal dirs expand) — full suite required`,
+            );
+            expect(scope.workspaces).toEqual(['packages/shared-lib']);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a mixed supported/unsupported workspaces list still refuses the tier (1326)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1326-glob-'));
+        try {
+            writeFileSync(
+                join(dir, 'package.json'),
+                `${JSON.stringify({ name: 'fixture-root', private: true, workspaces: ['apps/*', 'packages/**'] }, null, 4)}\n`,
+            );
+            const graph = readWorkspaceGraph(dir);
+            expect(graph.unsupported).toContain('packages/**');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 describe('affected-scope selection (1322 R3)', () => {

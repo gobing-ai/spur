@@ -521,6 +521,13 @@ export interface WorkspaceInfo {
 export interface WorkspaceGraph {
     byName: Map<string, string>;
     dependents: Map<string, string[]>;
+    /**
+     * Set when the root `workspaces` field uses a glob shape this reader cannot expand (1326):
+     * any pattern containing `*` that is not the `dir/*` form. The maps are then empty not
+     * because the repo has no workspaces but because the graph cannot see them — selection
+     * must refuse the tier (fallback) instead of classifying nothing.
+     */
+    unsupported?: string;
 }
 
 /** Pure graph constructor over workspace descriptors (tests inject; the fs reader is real). */
@@ -575,7 +582,9 @@ function workspaceDependenciesOf(abs: (p: string) => string, dir: string): { nam
  * `packages/*`, or literal dirs) expand to workspace dirs; each contributes its package name and
  * internal dependency edges. Any unreadable root or workspace is skipped; a graph with no
  * workspaces classifies nothing (legacy behavior — selection never falls back on a repo the
- * graph cannot see).
+ * graph cannot see). A glob shape the reader cannot expand (e.g. yarn-classic `packages/**`)
+ * sets `unsupported` (1326) so selection refuses the tier instead of silently yielding an
+ * empty graph whose shared-package fallback can never fire.
  */
 export function readWorkspaceGraph(cwd: string | undefined): WorkspaceGraph {
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
@@ -589,6 +598,14 @@ export function readWorkspaceGraph(cwd: string | undefined): WorkspaceGraph {
         if (Array.isArray(declared)) globs = declared.filter((g): g is string => typeof g === 'string');
     } catch {
         return { byName: new Map(), dependents: new Map() };
+    }
+    const unsupported = globs.find((glob) => glob.includes('*') && (!glob.endsWith('/*') || glob === '/*'));
+    if (unsupported !== undefined) {
+        return {
+            byName: new Map(),
+            dependents: new Map(),
+            unsupported: `workspaces glob ${JSON.stringify(unsupported)} is not a supported shape (only \`dir/*\` globs and literal dirs expand)`,
+        };
     }
     const dirs = new Set<string>();
     for (const glob of globs) {
@@ -704,7 +721,12 @@ export function lightScope(
         }
     }
     let fallback: string | undefined;
-    if (graph !== undefined) {
+    if (graph?.unsupported !== undefined) {
+        // 1326: the graph cannot see this repo's workspaces — refuse the tier rather than
+        // let the shared-package safety net appear to have run over an empty graph.
+        fallback = `${graph.unsupported} — full suite required`;
+    }
+    if (fallback === undefined && graph !== undefined) {
         for (const file of changedFiles) {
             // plugins/sp has no package and no compiled dependents — the 1142 structure-test
             // mapping owns those paths, so they never trigger the shared-package fallback.
