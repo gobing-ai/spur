@@ -327,6 +327,9 @@ export class TaskCreateOps {
         status?: string;
         template?: string;
         actor?: string;
+        /** 1329 (42e0ee35): direct body inputs so a single create can author oversize bodies; threaded to the same candidate path batch items use. */
+        requirements?: string;
+        plan?: string;
         /**
          * Dedup window in seconds. Defaults to 300 seconds for every create —
          * feature-scoped or unscoped. Pass null to disable the guard. When enabled,
@@ -357,6 +360,8 @@ export class TaskCreateOps {
             parentWbs: params.parentWbs,
             template: params.template,
             explicitStatus: params.status,
+            requirements: params.requirements,
+            plan: params.plan,
         });
         this.validateCandidateOrThrow(params.title, shape);
 

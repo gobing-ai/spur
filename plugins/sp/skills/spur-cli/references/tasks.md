@@ -72,6 +72,11 @@ mode; `batch-create` surfaces per-child `warnings` rows (`[{"wbs", "warnings"}]`
 when non-empty) in `--json` and prints `<wbs>: <warning>` lines to stderr in human mode;
 `update --section` section writes carried this advisory already.
 
+When an advisory fires, split the task instead of growing it: decompose into smaller tasks before
+pipeline execution (execution-workflow.md, "Split oversized tasks before pipeline execution").
+`create --requirements/--plan` and `batch-create` body fields exist to author the split tasks'
+content up front — not to accumulate more into one oversized task.
+
 ## Verb map
 
 | Verb | Purpose | Key flags |

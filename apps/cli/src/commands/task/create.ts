@@ -24,6 +24,10 @@ export function registerTaskCreateCommand(task: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.featureTrace)
         .option('--parent <wbs>', 'Parent WBS for sub-task grouping')
         .option('--template <variant>', `Template variant (${TASK_VARIANTS.join('|')})`)
+        // 1329 (42e0ee35): single-create body inputs — an oversize body can be authored at
+        // capture time, making the write-time size advisory reachable on this surface.
+        .option('--requirements <text>', 'Pre-filled Requirements body (normalized like batch items)')
+        .option('--plan <text>', 'Pre-filled Plan body (ordered checklist)')
         .option('--no-reopen', "Do not reopen a 'verifying' parent feature to 'active'")
         .option(...SHARED_OPTIONS.folderTasks)
         .option(
@@ -72,6 +76,8 @@ export function registerTaskCreateCommand(task: Command, context: CliContext): v
                     featureId: options.feature,
                     parentWbs: options.parent,
                     template: options.template,
+                    requirements: options.requirements,
+                    plan: options.plan,
                     noReopen: options.reopen === false,
                     // Dedup guard: default 300s window for every create (feature-scoped
                     // or unscoped). Explicit --dedupe-within overrides the window.

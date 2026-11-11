@@ -47,6 +47,19 @@ export function registerTaskShowCommand(task: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             const requested = [...(options.section ?? []), ...parseCsvSections(options.sections)];
+            // 1329 (823be33b): an explicitly-passed `--sections` whose CSV holds zero usable
+            // names (e.g. ",") must not silently degrade to the full dump — that pays for the
+            // whole file when the caller asked for sections. Fail as invalid usage.
+            if (options.sections !== undefined && parseCsvSections(options.sections).length === 0) {
+                writeJsonError(
+                    context.output,
+                    options,
+                    `--sections "${options.sections}" carries no usable section names`,
+                    'VALIDATION_FAILED',
+                );
+                context.setExitCode(2);
+                return;
+            }
             if (options.summary === true && requested.length > 0) {
                 writeJsonError(
                     context.output,

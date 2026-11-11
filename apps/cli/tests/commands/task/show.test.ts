@@ -230,3 +230,31 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(2);
     });
 });
+
+describe('spur task show --sections edge (1329, finding 823be33b)', () => {
+    test('an empty --sections CSV errors instead of silently falling back to the full dump', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Empty CSV'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const json = createCapturedOutput();
+        let exitCode = await main(['task', 'show', wbs, '--sections', ',', '--json'], { cwd, output: json });
+        expect(exitCode).toBe(2);
+        expect(json.errors.some((e) => e.includes('no usable section names'))).toBe(true);
+
+        const env = createCapturedOutput();
+        exitCode = await main(['task', 'show', wbs, '--sections', ',', '--json', '--json-envelope'], {
+            cwd,
+            output: env,
+        });
+        expect(exitCode).toBe(2);
+        const parsed = JSON.parse(lastMessage(env));
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error?.message ?? '').toContain('no usable section names');
+
+        const human = createCapturedOutput();
+        exitCode = await main(['task', 'show', wbs, '--sections', ' , ,'], { cwd, output: human });
+        expect(exitCode).toBe(2);
+        expect(human.errors.some((e) => e.includes('no usable section names'))).toBe(true);
+    });
+});

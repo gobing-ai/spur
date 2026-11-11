@@ -661,3 +661,29 @@ exit 1
         expect(parsed.error.code).toBe('invalid-usage');
     });
 });
+
+describe('spur task create body inputs (1329, finding 42e0ee35)', () => {
+    test('create --requirements/--plan author the bodies and reach the size advisory on this surface', async () => {
+        const reqs = Array.from({ length: 11 }, (_, i) => `- [ ] R${i + 1}. authored requirement ${i + 1}`).join('\n');
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            [
+                'task',
+                'create',
+                '--skip-ready',
+                '--requirements',
+                reqs,
+                '--plan',
+                '- step one\n- step two',
+                'Authored bodies',
+            ],
+            { cwd, output },
+        );
+        expect(exitCode).toBe(0);
+        const raw = await readFile(createdPath(output), 'utf-8');
+        expect(raw).toContain('- [ ] R11. authored requirement 11');
+        expect(raw).toContain('- step one');
+        // Oversize advisory is reachable: 11 R-items breaches the max-10 budget.
+        expect(output.errors.some((e) => e.includes('R-items'))).toBe(true);
+    });
+});
