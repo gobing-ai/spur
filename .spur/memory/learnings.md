@@ -6918,3 +6918,128 @@ cheap fix for an absent lane.
   defects, repaired through the owning surface and re-closed with the same verb — record them
   `done (run-failed-recovered)`, never re-run the pipeline to flip a run row.
 
+I'll start by loading the doc-evolve skill and reading the wrapup task list.
+Now applying the drift repairs.
+Wrap complete. Seven doc files repaired, all under `docs/`; corpus untouched.
+
+**Drift report**
+
+| Doc | Code says | Doc said | Authority | Repair |
+| --- | --- | --- | --- | --- |
+| `docs/design/cli-contracts.md` (`trace`) | unique run-id prefix resolves; exact wins; ambiguous lists ≤20 ids (`workflow-inspect-ops.ts:292-300`, `run-dao.ts:145-150`, `trace.ts:502-513`) | exact full id only | T3 / §6.5 | Added the resolution contract |
+| `docs/design/history-cli-contracts.md` (`analyze`) | `instant` grain emits a ±1 s widened TEXT prefilter ahead of the exact `julianday` comparison, exact-only for unparseable bounds (`selector-time-range.ts:28-79`) | `julianday` comparison only | T3 / §6.5 | Added §*Sargable time windows* |
+| `docs/design/history-anatomy.md` | `anatomy-stamp --validation/--trace` are additive optional inputs | invariant 5 forbade "any new `spur history` flag" — self-contradiction | §7.2 | Scoped the invariant to report verbs/flags; recorded the helper-input exception |
+| `docs/03_ARCHITECTURE.md` §32 | executor appends the `Escalating:` line to `.spur/memory/runs/<runId>.md` under `--json` (`agent-run-executor.ts:828-836`) | record described stdout/stderr frames only | §6.4 / T3 | Added the mechanism + why |
+| `docs/design/workflow-observability.md` | allow-list is `agent, model, role, timeoutMs, maxTokens, maxCostUsd, invocation`; `timeoutMs` accepts numeric strings (`observability.ts:384-412`) | 4-field summary, no coercion | T3 / §6.5 | Corrected the list and the coercion rule |
+| `docs/help/cmd_history.md` | `anatomy-stamp` flags include `--validation`/`--trace` | pre-1326 operand row | §7.2 stale projection | Updated row |
+| `docs/help/cmd_workflow.md` | prefix resolution on `run-id` | bare "Run ID" | §7.2 stale projection | Updated argument row |
+
+**Checked, no delta:** `docs/00_ADR.md` — ADR-079's "never validated from a modification time" remains true (`validatedAt` is a provenance receipt; validity stays digest-derived), so no ad-hoc amendment under §6.1. `docs/04_DESIGN.md` — no satellite added/moved and no indexed fact changed (T9 not triggered); no superseded row re-added.
+
+Metadata: `03_ARCHITECTURE` → `1.78.0`, `updated_at 2026-11-10`; satellites' `updated_at`/`related` refreshed (history-cli-contracts was stale at 2026-10-09 despite carrying 1326 content).
+
+---
+
+# Working learnings — 2026-11-10
+
+Source tasks: 1326 (history-anatomy daily window mis-scoping and false provenance). Captured
+during wrap-up; evidence lives in the task record and `.spur/run/1326-*` artifacts.
+
+## 2026-11-10 · 1326 — history-anatomy window selection and run provenance
+
+### Conventions
+
+- Stored history timestamps mix millisecond and seconds-only `…Z` precision, and a daily selector
+  carries a local UTC offset. Never compare stored timestamp TEXT to a selector string; route every
+  bound through the `instant` grain (`julianday(<column>) >= julianday(?)`) in
+  `packages/domain/src/analytics/selector-time-range.ts`.
+- One predicate seam, three planes. A time-window fix must enumerate every plane the same selector
+  reaches — messages/coverage/totals, `system_events` pairings and escalations, and
+  `runs.started_at` verified outcomes. The original one-seam design left two of them mis-scoped.
+- Provenance describes the final invocation, never the selector. `auto` is a selection, not an
+  executor; when a fallback ladder can escalate mid-run, per-action `dispatches[]` is the correct
+  granularity and top-level `executor`/`model` must name the final PASS validation.
+- A validation timestamp comes from the artifact that proves validation: require the last line to be
+  exactly `Verdict: PASS`, then take that file's mtime. Probe time overstated validation by 48.5
+  minutes in the source run.
+- Derived numbers in a report carry a machine-checkable `calc:` assertion beside them. The
+  deterministic structure gate rejects both contradictions and missing assertions; no second model
+  gate is added.
+- Add capability to the owning surface, not a new one: `anatomy-stamp` gained optional
+  `--validation`/`--trace`, and the pre-change invocation keeps working when they are omitted.
+- Mirror an existing contract rather than inventing one: numeric-string coercion copied from
+  `command-gate`, escalation visibility reused `AgentRunLog` and the existing
+  `agent.invoke.escalated` event, prefix resolution reused `RunDao.traceRowById` first.
+
+### Errors fixed
+
+- TEXT collation shifted every day window by the UTC offset: the shifted 2026-11-07 predicate
+  returned agy 659 / claude 2,063 / codex 1,165 / pi 5,816 against a true local day of 0 / 666 / 0 /
+  3,657.
+- Seconds-only stored values were dropped at an inclusive upper bound. Parameter-only normalization
+  cannot fix this; both sides must be parsed.
+- `validatedAt` was assigned from the probe's `nowIso`, so it equalled `generatedAt` and preceded the
+  real validation PASS artifact.
+- The workflow passed `--executor "$agent"`, publishing the selector `auto` as provenance, and never
+  read `spurVersion` from the analyze artifact.
+- The structure gate checked shape and anchors but not arithmetic: `719,838,772 > 725,707,709`
+  passed. It now returns `arithmetic-contradiction`, and a derived claim without its required
+  assertion returns `arithmetic-evidence-missing`.
+- JSON-mode runs hid the fallback ladder because the `Escalating:` write sat behind
+  `if (!jsonOutput)`; the durable record now receives it at the ladder hop.
+- `${vars.stepTimeoutMs}` resolves to the string `3600000`, which `projectActionMetadata` dropped,
+  rendering `timeout=unbounded` while the real budget was 3,600,000 ms.
+- `spur workflow trace` accepted only an exact full id while progress lines print the 8-char prefix,
+  so the id an operator was shown did not work.
+
+### Patterns
+
+- Red-first at three layers for a shared predicate: helper SQL shape in `selector-time-range.test.ts`,
+  real rows at the service seam (`history-service`, `pairings`), and DAO rows at the query seam
+  (`run-dao`, `verified-outcome`).
+- Sargability is part of the fix, not a follow-up. The parsed-only predicate degraded to a
+  covering-index SCAN and a bounded daily analyze measured 25.7 s / 20.6 s against a 1.2 s / 0.7 s
+  baseline. A one-second-widened TEXT range on the raw column, ahead of the exact comparison,
+  restored `SEARCH … (ts>? AND ts<?)` at 0.49 s with byte-identical coverage. The exact predicate
+  stays authoritative and the prefilter is dropped for unparseable bounds, so correctness never
+  depends on the optimization.
+- Hermetic regressions first per requirement group, then a single bounded live E2E as the acceptance
+  receipt. The E2E was one workflow regeneration, not a second model run per requirement.
+- Fail closed on a missing receipt instead of stamping a placeholder; render a stated reason
+  (`not available: invocation model absent`) instead of a bare `not available`.
+- Bound any prefix lookup structurally: `substr(id, 1, length(?1)) = ?1` with `LIMIT 21` (no `LIKE`
+  wildcards), diagnostics capped at 20 candidate ids, and resolve once before `--follow` or
+  `--follow --output` opens a record path or starts a poll loop.
+- Keep the existing one-read poll invariant when adding resolution: resolve only on the exact-miss
+  path so a follower's poll still costs one row read.
+- Re-derive report findings from corrected artifacts instead of forcing a preferred outcome:
+  comparability flipped to `comparable` because codex was absent from both corrected windows, and
+  the agy import defect was re-anchored as a 1-message/zero-usage asymmetry.
+
+### Gotchas
+
+- SQLite TEXT ordering is not time ordering: two representations of the same instant sort apart, and
+  a lexicographic predicate silently admits rows from an adjacent window.
+- `julianday(<column>)` disables the index range plan. A correct-but-unplanned predicate is a
+  performance regression that a correctness-only review will miss.
+- Widening a prefilter is safe only because the exact comparison still filters; never let the
+  widened range be the only bound.
+- Do not attach UTC `DATE(ts)` daily-bucket relabeling to a selector fix — that is a separate
+  schema/design change.
+- `formatDuration(3_600_000)` renders `60m 0s`, not `1h 0m 0s`; assert against the real formatter.
+- `ctx.output.error` is not persistence. Prove durable visibility with an `AgentRunLog.append` at the
+  same ladder hop, and keep stdout JSON parseable.
+- Reuse the existing `resolvePaths` 23 h/25 h DST bounds in fixtures; a fixed 24 h offset slice fails
+  the DST day.
+- Live model E2E runs cost roughly the source run's 27–49 minutes. Preserve partial artifacts on
+  failure and do not launch a replacement run.
+- Direct SQL at E2E time is the authority for coverage counts; the audit baseline is a snapshot, and
+  later import drift is recorded rather than forced back.
+- A task renumber has no CLI verb; changing only the filename plus canonical heading was a narrow,
+  recorded exception while all spec edits stayed CLI-gated.
+- "Docs updated" in a task means the satellites the implementer owned, not every surface the change
+  touched. Wrap-up still found undocumented drift in the `spur workflow trace` id contract, the
+  agent-run record's escalation line, and the stale `anatomy-stamp` operand row in
+  `docs/help/cmd_history.md`, plus a satellite invariant that forbade the very additive flag the
+  change shipped. Check the surface's owning reference and the internal consistency of the satellite,
+  not only the files named in the Solution.

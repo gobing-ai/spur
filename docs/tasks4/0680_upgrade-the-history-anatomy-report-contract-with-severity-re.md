@@ -4,7 +4,7 @@ name: "Upgrade the history-anatomy report contract with severity, repro, owner s
 status: done
 template: feature-impl
 created_at: 2026-08-26T05:38:45.026Z
-updated_at: "2026-08-26T20:17:23.277Z"
+updated_at: "2026-11-10T21:11:32.797Z"
 feature_id: I81
 priority: P2
 tags: ["history-anatomy", "report-contract", "sp-plugin", "dogfood"]
@@ -110,36 +110,38 @@ Contract, gate, and rubrics moved in one commit (R7), twin regenerated.
 R6: chained `agent.run` cost surfaces through the pairing analytics fold that 0679 repaired (payload-path attribution); Performance analysis now contracts to report it instead of "~unknown". No auto-write to the corpus anywhere: the handoff prints an invocation for the operator to run.
 
 ### Testing
+
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:110` `FINDING_FIELDS` carries `severity`; the finding-block scan at `plugins/sp/scripts/history-anatomy-cache.ts:351` fails a block missing any triage field. `plugins/sp/tests/skill-structure.test.ts:1005-1006` asserts the `FINDING_FIELDS` set has 12 entries |
-| R2 | MET | `reproCommand` required per finding block by the same scan; unit test pins failure-by-name when the field is absent |
-| R3 | MET | `ownerSurface` required by the same scan; consistency with the stable key noted in the contract |
-| R4 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:127-130` — the Remediation handoff route mandates a printed `spur task create` invocation carrying the proposal's finding key; no automatic corpus write |
-| R5 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:18` lists `Report-only advisories` as section 10 of twelve; `plugins/sp/skills/history-anatomy/references/report-contract.md:135` defines it as report-only for repeated tool-and-argument signatures, proposing no interruption |
-| R6 | MET | Performance-analysis run-cost reporting contracts to the pairing fold's `totalCostUsd`/`meanDurationMs` delivered by task 0679 |
-| R7 | MET | Contract, cache helper, `.mjs` twin, and operations rubrics landed in one commit; `bun run script-contract-check` is the standing twin gate (ADR-065) |
+| R1 | MET | `packages/app/src/services/history-anatomy.ts:129` lists severity in FINDING_FIELDS. `packages/app/src/services/history-anatomy.ts:511` fails a finding block that omits a required field. `plugins/sp/tests/skill-structure.test.ts:1194` expects 11 fields and exited 0 this run. |
+| R2 | MET | `packages/app/src/services/history-anatomy.ts:130` lists reproCommand. The same block scan fails a finding that omits it. The published report findings each carry reproCommand. |
+| R3 | MET | `packages/app/src/services/history-anatomy.ts:131` lists ownerSurface. The same block scan fails a finding that omits it. |
+| R4 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:160` requires a printed spur task create invocation carrying the finding key, and forbids executing it. `docs/report` `2026-11-08-history-anatomy.md` line 341 and line 349 supply that invocation with the stable key in the title. |
+| R5 | MET | `packages/app/src/services/history-anatomy.ts:112` names Report-only advisories. `plugins/sp/skills/history-anatomy/references/report-contract.md:168` defines the section as report-only. `docs/report` `2026-11-08-history-anatomy.md` line 466 is that section and line 468 proposes no automatic interruption. |
+| R6 | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md:175` contracts run cost to totalCostUsd and meanDurationMs from the pairing fold. |
+| R7 | MET | The field list, the section list, and the contract live together and `plugins/sp/tests/skill-structure.test.ts:1173` pins both lists against the contract. That test exited 0 this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R13 — Each published finding names its severity, repro command, and owner surface | MET | test | `plugins/sp/tests/skill-structure.test.ts:1005-1008` asserts `FINDING_FIELDS` has 12 entries and that the contract names every field; the finding-block scan fails a candidate missing any of them. 129/129 plugin tests green this run |
-| R14 — An accepted remediation proposal can be handed to the task corpus | PARTIAL | static-ref | `plugins/sp/skills/history-anatomy/references/report-contract.md:127-130` defines the printed `spur task create` invocation carrying the stable key, executed by the operator. Contract-only by design — no runtime path exists to test |
-| R18 — The report carries a report-only repeated-call advisory | PARTIAL | static-ref | The *contract* half is test-pinned: `plugins/sp/tests/skill-structure.test.ts:999-1001` asserts the section list has 12 entries, with the standing `Report-only advisories` slot named in the assertion comment; `plugins/sp/skills/history-anatomy/references/report-contract.md:18` places it at section 10 of twelve and `plugins/sp/skills/history-anatomy/references/report-contract.md:135` defines it. The *report* half — that a published report actually carries the advisory — is authored by the model-bearing enrich stage and is unobserved: no run artifact and no dogfood record for I81 exists in this tree |
+| R13 — Each published finding names its severity, repro command, and owner surface | MET | test | `plugins/sp/tests/skill-structure.test.ts:1194` asserts FINDING_FIELDS has 11 entries including severity, reproCommand, and ownerSurface, and that the contract names each. The test exited 0 this run. This run also read the 10 finding blocks in `docs/report` `2026-11-08-history-anatomy.md` and each block contains severity, reproCommand, and ownerSurface. |
+| R14 — An accepted remediation proposal can be handed to the task corpus | MET | command | `docs/report` `2026-11-08-history-anatomy.md` line 341 says the spur task create line is the handoff and the finding key must be copied into the task body. Line 349 prints the invocation whose title starts with the stable key telemetry:step-support:claude-duration-unmeasured. The report marks the command not run, which is the operator gate at `plugins/sp/skills/history-anatomy/references/report-contract.md:160`. |
+| R18 — The report carries a report-only repeated-call advisory | MET | command | `docs/report` `2026-11-08-history-anatomy.md` line 466 is the Report-only advisories section. Line 468 states these lines propose no automatic interruption, no retry cap, and no kill. Current and baseline repeat rows follow. `plugins/sp/tests/skill-structure.test.ts:1190` pins the twelve-section list including that section and exited 0 this run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
 ### Review
 
-**Functional traceability** — all seven requirements MET. R1-R3: triage fields gate-enforced (gate now actually scans real bullet findings — the legacy regex was vacuous against the format every published report uses, found and fixed in-task); R4: handoff prints the task-create invocation with stable key; R5: standing Report-only advisories section takes the frozen count to twelve; R6: run-cost reporting contracts to the 0679-repaired pairing fold; R7: contract + helper twin + rubrics landed in one commit.
+**Functional traceability** — all seven requirements MET. R1-R3 triage fields are gate-enforced on bullet findings. R4 prints the task-create invocation with the stable key and does not write the corpus. R5 adds the standing Report-only advisories section. R6 contracts run-cost reporting to the pairing fold. R7 landed the contract, helper, and rubrics together.
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P3 | Skill boundary test forbade "spur task" text in skill files; handoff route requires naming the printed invocation as report data | Reconciled same-commit: exemption scoped to the two files that document printed command TEXT, with an anti-execution assertion added so the exemption cannot become a hole |
-| P4 | End-to-end daily-report rerun with a live model stage was not executed in this session | Deferred — deterministic gate + rubric coverage verified by unit tests; the enrich stage is exercised on the next scheduled run |
+| P3 | Skill boundary test forbade "spur task" text in skill files; handoff route requires naming the printed invocation as report data | FIXED: exemption is scoped to report-contract.md and operations.md, with an anti-execution assertion so the exemption cannot become a hole. `plugins/sp/tests/skill-structure.test.ts:993-1023` |
+| P4 | End-to-end daily-report rerun with a live model stage was not executed in this session | Deferred — the 2026-11-08 published report is the later live run. Deterministic gate coverage stays in the unit tests. |
 
-SECUA — fail-closed gate additions only. Architecture: vocabulary stays duplicated-by-design per the frozen local-copy rule.
+SECUA — fail-closed gate additions only. Architecture: vocabulary stays duplicated by design per the frozen local-copy rule.
 
 ### References
 
