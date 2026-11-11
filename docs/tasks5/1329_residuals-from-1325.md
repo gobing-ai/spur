@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Residuals from 1325
-status: backlog
+status: done
 template: standard
 created_at: 2026-11-11T00:02:29.712Z
-updated_at: "2026-11-11T00:02:29.879Z"
+updated_at: "2026-11-11T17:58:21.822Z"
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1329-verdict.json
 ---
 
 ## 1329. Residuals from 1325
@@ -20,7 +22,9 @@ Source task: 1325 (feature F22) — deferred residuals filed by residual-scan se
 
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty until requirements are known. -->
+- [x] R1. `task create` accepts `--requirements <text>` and `--plan <text>`, threading oversize bodies through the same candidate path batch items use, so the write-time size advisory is reachable on the single-create surface.
+- [x] R2. `task show --sections` with a CSV containing zero usable names exits 2 as invalid usage instead of silently falling back to the full dump.
+- [x] R3. The spur-cli tasks.md size-advisory section carries a dedicated split-guidance sentence (decompose instead of growing one oversized task).
 
 ### Acceptance Criteria
 
@@ -38,22 +42,45 @@ Source task: 1325 (feature F22) — deferred residuals filed by residual-scan se
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Add `requirements`/`plan` params to TaskService.create and thread to resolveCandidateShape; add the CLI flags.
+2. Guard `--sections` in show.ts: explicitly passed but zero usable names → VALIDATION_FAILED, exit 2.
+3. Add the split-guidance sentence to plugins/sp/skills/spur-cli/references/tasks.md.
+4. CLI integration tests in create.test.ts / show.test.ts; `(cd apps/cli && bun test …)` green, fail-proofed by stashing src.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- packages/app/src/services/task-create-ops.ts:330-333,363-364 — `create` params gain `requirements`/`plan`, threaded to `resolveCandidateShape` (the same path batch items take; normalization + size precheck apply unchanged).
+- apps/cli/src/commands/task/create.ts:27-29,107-108 — `--requirements <text>` / `--plan <text>` flags passed to `svc.create`.
+- apps/cli/src/commands/task/show.ts:50-62 — an explicitly passed `--sections` with zero usable names emits VALIDATION_FAILED and exits 2 instead of degrading to the full dump.
+- plugins/sp/skills/spur-cli/references/tasks.md:75-78 — dedicated split-guidance sentence after the advisory paragraph.
+- apps/cli/tests/commands/task/create.test.ts:665 — bodies authored + advisory fired; apps/cli/tests/commands/task/show.test.ts:234 — empty CSV errors in bare `--json` (stderr) and `--json --json-envelope` (ok:false envelope).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/tests via apps/cli/tests/commands/task/create.test.ts:665 — create with 11 R-item requirements + plan authors both bodies and fires the R-items advisory on stderr; component in packages/app/src/services/task-create-ops.ts:330 |
+| R2 | MET | apps/cli/tests/commands/task/show.test.ts:234 — `--sections ","` and `" , ,"` exit 2 with the no-usable-names error in bare --json and the ok:false envelope; apps/cli/src/commands/task/show.ts:50 |
+| R3 | MET | plugins/sp/skills/spur-cli/references/tasks.md:75 — dedicated split-guidance sentence in the size-advisory section |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P4 | `--section ""` (repeatable form) still treats an empty value as a requested name; only the CSV form is guarded. Out of the finding's scope (823be33b names `--sections ","`); documented behavior unchanged. | Accepted. |
 
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-11T17:57:58.955Z backlog → todo (system)
+- 2026-11-11T17:57:59.293Z todo → wip (system)
+- 2026-11-11T17:58:21.775Z wip → done (system)
+
