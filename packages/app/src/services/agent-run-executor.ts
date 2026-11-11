@@ -538,6 +538,10 @@ export class AgentRunExecutor {
         let result: AgentRunResult | undefined;
         let invocation: AgentRunInvocation | undefined;
         let dispatchStartedAt = Date.now();
+        // 1327: start-once flag, not `attempt === 0` — the 1323 R2 timeout-exhausted-skip can
+        // `continue` past attempt 0 without dispatching, which must not suppress the run's
+        // started event (and its heartbeats) for the executor that actually runs.
+        let lifecycleStarted = false;
 
         // Run→session observation (feature E6 / task 0557). When a DB is
         // available, watermark the agent's session root at dispatch and record
@@ -809,7 +813,8 @@ export class AgentRunExecutor {
                 };
 
                 // Start lifecycle ONCE before first dispatch.
-                if (attempt === 0) {
+                if (!lifecycleStarted) {
+                    lifecycleStarted = true;
                     lifecycle.start({
                         agent,
                         ...(model !== undefined ? { model } : {}),

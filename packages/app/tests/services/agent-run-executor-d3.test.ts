@@ -314,3 +314,26 @@ describe('1323 review finding 1 — escalation walk excludes run-scoped breaker-
         expect((traced.ladder ?? []).some((d) => d.kind === 'escalation' && d.toExecutor === 'pi-flash')).toBe(false);
     });
 });
+
+describe('1327 review finding — lifecycle starts on the first real dispatch', () => {
+    test('a timeout-exhausted-skip on attempt 0 does not suppress the started event for the executor that runs', async () => {
+        // pi-flash is skipped pre-dispatch (measured latency beyond the static cap),
+        // so the first real dispatch happens on a later loop pass — the start-once
+        // guard must fire there, not only on `attempt === 0`.
+        const seen = stubSpawn(async (options) => ok(options, 'fast executor finished'));
+        const events: import('../../src/observability/agent-execution').AgentExecutionEvent[] = [];
+        const svc = twoExecutorService({
+            'pi-flash': { meanMs: 5000, samples: 12, successRate: 0.95 },
+        });
+        const traced = await svc.runTraced('stage work', d3Flags('d3-run-9', { timeout: '1000' }), usableForAllDeps(), {
+            heartbeatMs: 0,
+            observer: (event) => events.push(event),
+        });
+        expect(seen.filter((options) => options.command === 'pi')).toHaveLength(0);
+        expect(traced.exitCode).toBe(0);
+        expect(traced.invocation?.executor).toBe('codex-main');
+        const started = events.filter((event) => event.kind === 'started');
+        expect(started).toHaveLength(1);
+        expect(started[0]?.kind === 'started' && started[0]?.agent).toBe('codex');
+    });
+});
