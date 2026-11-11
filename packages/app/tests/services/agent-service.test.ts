@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentExecutorConfig, SpurConfig } from '@gobing-ai/spur-config';
@@ -3962,6 +3962,45 @@ describe('AgentService tier fallback under real failure (0540)', () => {
         expect(escalation.fromTier).toBe('standard');
         expect(escalation.toExecutor).toBe('capable-exec');
         expect(escalation.toTier).toBe('capable-1');
+    });
+
+    // 1326 R8: the ladder's human `Escalating:` line used to be suppressed entirely in JSON mode,
+    // which is exactly how the workflow surface runs — the only recovery signal an operator has
+    // vanished while recovery itself worked. It must reach the durable run record instead, with
+    // stdout still parseable and the structured event unchanged.
+    test('R8: JSON mode keeps the Escalating line in the durable run record', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'agent-escalation-'));
+        try {
+            const bus = new EventBus<Record<string, (event: unknown) => void>>();
+            const escalations: Array<Record<string, unknown>> = [];
+            bus.on('agent.invoke.escalated', (event) => escalations.push(event as Record<string, unknown>));
+            const { lines, errors, output } = captureOutput();
+            const svc = new AgentService({ cwd, env: {}, output, agentConfig: ladderConfig, events: bus });
+            const { deps, runPromptCommand } = sequentialDispatchDeps([
+                makeRunResult({ exitCode: 1, stderr: 'Error: rate limit exceeded (429)' }),
+                makeRunResult({ exitCode: 0 }),
+            ]);
+
+            const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: true }, deps);
+
+            expect(code).toBe(0);
+            expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['pi', 'claude']);
+            // Human stderr stays suppressed in JSON mode (stdout is the machine channel).
+            expect(errors.some((e) => e.includes('Escalating:'))).toBe(false);
+            // …but the durable record carries the line naming both executors.
+            const runsDir = join(cwd, '.spur', 'memory', 'runs');
+            const log = readdirSync(runsDir)
+                .map((f) => readFileSync(join(runsDir, f), 'utf8'))
+                .join('\n');
+            expect(log).toContain('Escalating: std-exec');
+            expect(log).toContain('retrying on capable-exec');
+            // Exactly one unchanged structured escalation event.
+            expect(escalations).toHaveLength(1);
+            // And the machine channel is still JSON.
+            expect(lines.some((l) => l.trim().startsWith('{'))).toBe(true);
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 
     test('R2: exhaustion exits non-zero naming stage, tiers attempted, and executors tried — no fall-through to agent.default', async () => {

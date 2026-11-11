@@ -285,6 +285,21 @@ export class WorkflowInspectOps {
     }
 
     /**
+     * 1326 R10: resolve an operator-supplied run id — exact match first, then a UNIQUE prefix.
+     * Progress lines print the 8-char id prefix, so a prefix must resolve; an ambiguous prefix
+     * fails with its candidates (capped at 20) and an absent one fails distinctly.
+     */
+    async resolveRunId(db: DbAdapter, input: string): Promise<string> {
+        const runDao = new RunDao(db);
+        if (await runDao.traceRowById(input)) return input;
+        const rows = await runDao.traceRowsByIdPrefix(input);
+        if (rows.length === 0) throw new Error(`Run not found: ${input}`);
+        if (rows.length === 1) return rows[0]?.id ?? input;
+        const candidates = rows.slice(0, 20).map((r) => r.id);
+        throw new Error(`Ambiguous run id prefix: ${input}; candidates: ${candidates.join(', ')}`);
+    }
+
+    /**
      * Project one run's persisted timeline. `preloadedRow` is the row the caller already read
      * (the worker-liveness probe): passing it keeps a follower's poll at ONE row read (1319 R1).
      */

@@ -825,12 +825,15 @@ export class AgentRunExecutor {
                     break;
                 }
 
-                // Escalating (R3) — report which executor failed and why.
+                // Escalating (R3) — report which executor failed and why. 1326 R8: the line is
+                // also appended to the durable run record, so JSON-mode runs (the workflow
+                // surface) keep the operator's only recovery signal. The human stderr write and
+                // the `agent.invoke.escalated` event keep their existing behavior.
+                const escalationLine = `Escalating: ${currentStage.executorName} (tier ${currentStage.executorTier}) failed with ${escalationSignal}; retrying on ${nextResolved.stage.executorName} (tier ${nextResolved.stage.executorTier})`;
                 if (!jsonOutput) {
-                    this.ctx.output.error(
-                        `Escalating: ${currentStage.executorName} (tier ${currentStage.executorTier}) failed with ${escalationSignal}; retrying on ${nextResolved.stage.executorName} (tier ${nextResolved.stage.executorTier})`,
-                    );
+                    this.ctx.output.error(escalationLine);
                 }
+                agentLog.append('stderr', escalationLine);
                 // 0545 R2: the escalation is its OWN record — originating tier,
                 // resulting tier, and the objective trigger — never a null-valued
                 // field on the starting decision. Absence of this row is the

@@ -1044,3 +1044,93 @@ describe('followTrace worker-lost reap (1317 R3)', () => {
         expect(lines).toContain(`worker-lost: pid ${deadPid} not alive`);
     });
 });
+
+// ---------------------------------------------------------------------------
+// 1326 R10 — prefix resolution. Progress lines print the 8-char run-id prefix, so
+// `spur workflow trace <prefix>` must resolve it: exact first, then unique prefix,
+// with an ambiguous prefix failing by candidate list and an absent one as "not found".
+// ---------------------------------------------------------------------------
+describe('spur workflow trace run-id prefixes (1326 R10)', () => {
+    async function seedRuns(ids: string[]): Promise<{ cwd: string; dbUrl: string }> {
+        const cwd = await createTempProject();
+        const dbUrl = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbUrl });
+        const now = Date.now();
+        for (const id of ids) {
+            await db.run(
+                'INSERT INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, 'test-flow', 'sync', 'done', now, now, '{}', now, now],
+            );
+        }
+        db.close();
+        return { cwd, dbUrl };
+    }
+
+    const UNIQUE = 'aaaa1111-2222-3333-4444-555555555555';
+    const SIBLING = 'aaaa9999-2222-3333-4444-555555555555';
+    const EXACT = 'exact-run';
+
+    test('a unique prefix resolves to the same timeline as the full id', async () => {
+        const { cwd, dbUrl } = await seedRuns([UNIQUE, EXACT]);
+        const prefixed = createCapturedOutput();
+        expect(await main(['workflow', 'trace', 'aaaa1111', '--json'], { output: prefixed, cwd, dbUrl })).toBe(0);
+        const full = createCapturedOutput();
+        expect(await main(['workflow', 'trace', UNIQUE, '--json'], { output: full, cwd, dbUrl })).toBe(0);
+        const a = JSON.parse(prefixed.messages.at(-1) ?? '{}') as WorkflowTraceTimeline;
+        const b = JSON.parse(full.messages.at(-1) ?? '{}') as WorkflowTraceTimeline;
+        expect(a.run.runId).toBe(UNIQUE);
+        expect(a.run.runId).toBe(b.run.runId);
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    test('an exact full id takes precedence over prefix matching', async () => {
+        // `exact-run` is a prefix of `exact-run-2`, so only exact precedence can pick it.
+        const { cwd, dbUrl } = await seedRuns([EXACT, 'exact-run-2']);
+        const output = createCapturedOutput();
+        expect(await main(['workflow', 'trace', EXACT, '--json'], { output, cwd, dbUrl })).toBe(0);
+        const parsed = JSON.parse(output.messages.at(-1) ?? '{}') as WorkflowTraceTimeline;
+        expect(parsed.run.runId).toBe(EXACT);
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    test('an ambiguous prefix fails naming its candidates; an absent prefix reports not found', async () => {
+        const { cwd, dbUrl } = await seedRuns([UNIQUE, SIBLING]);
+        const ambiguous = createCapturedOutput();
+        expect(await main(['workflow', 'trace', 'aaaa'], { output: ambiguous, cwd, dbUrl })).toBe(1);
+        expect(ambiguous.errors.join('\n')).toContain('Ambiguous run id prefix: aaaa');
+        expect(ambiguous.errors.join('\n')).toContain(UNIQUE);
+        expect(ambiguous.errors.join('\n')).toContain(SIBLING);
+
+        const absent = createCapturedOutput();
+        expect(await main(['workflow', 'trace', 'cccc'], { output: absent, cwd, dbUrl })).toBe(1);
+        expect(absent.errors.join('\n')).toContain('Run not found: cccc');
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    test('--follow and --follow --output both resolve the full id before polling or opening a record', async () => {
+        const { cwd, dbUrl } = await seedRuns([UNIQUE]);
+        const follow = createCapturedOutput();
+        expect(
+            await main(['workflow', 'trace', 'aaaa1111', '--follow', '--poll', '50'], {
+                output: follow,
+                cwd,
+                dbUrl,
+            }),
+        ).toBe(0);
+        expect(follow.messages.join('\n')).toContain(UNIQUE);
+
+        const followLog = createCapturedOutput();
+        // No run record exists for this seeded row, so the reader must fail on the RECORD, not
+        // on the prefix: a prefix-named missing file would report the 8-char id instead.
+        expect(
+            await main(['workflow', 'trace', 'aaaa1111', '--follow', '--output', '--poll', '50'], {
+                output: followLog,
+                cwd,
+                dbUrl,
+            }),
+        ).toBe(0);
+        expect(followLog.messages.join('\n')).toContain(UNIQUE);
+        await rm(cwd, { recursive: true, force: true });
+    });
+});

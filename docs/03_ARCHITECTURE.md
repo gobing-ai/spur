@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.77.0
+version: 1.78.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-05
+updated_at: 2026-11-10
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1375,7 +1375,10 @@ state. `coordination_runs.parent_run_id` is the dispatch edge (a workflow dispat
 the inherited `SPUR_RUN_ID`), and `AgentTraceService` reads the two families as one lineage:
 `spur agent trace <runId>` walks the edge up to a root and back down, naming each run's status, its exact
 `history_run_session` ids and its stream. The supervisor's per-process ring buffer stays a LIVE VIEW — it is
-tagged with the current `run_id` while a keyed drain is live, but the file is the record.
+tagged with the current `run_id` while a keyed drain is live, but the file is the record. Workflow
+`agent.run` dispatches open the same record, and the executor appends its `Escalating: <from> failed
+with <signal>; retrying on <to>` fallback-ladder line at the hop, so the recovery signal persists
+when a `--json` run suppresses the human stderr diagnostic; `agent.invoke.escalated` is unchanged.
 
 New run records (`.md` and `.state.json`), including active runs, write directly to `recordsDir` (`.spur/memory/runs/`), registered artifact bytes copy to
 `runArtifactsDir` (`.spur/memory/runs/<runId>/artifacts/`) before DAO registration (`persistDurableArtifact`),

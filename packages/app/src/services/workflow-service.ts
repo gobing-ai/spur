@@ -565,9 +565,24 @@ export class WorkflowAppService {
             // a reader can tell "slow" from "dead". The list branch is untouched — no N probes.
             // 1319 R1: the probe's row is handed to the projection, so a poll costs no extra read.
             const probe = await reapIfWorkerLost(db, this.ctx.cwd, runIdOrFilter);
-            return this.inspectOps.traceRun(db, runIdOrFilter, probe.reaped ? undefined : probe.row);
+            if (probe.row !== undefined) {
+                return this.inspectOps.traceRun(db, runIdOrFilter, probe.reaped ? undefined : probe.row);
+            }
+            // 1326 R10: only a miss pays for prefix resolution, so a followed run's poll stays at
+            // ONE row read; a unique 8-char prefix then takes the identical reap + projection path.
+            const resolved = await this.inspectOps.resolveRunId(db, runIdOrFilter);
+            const resolvedProbe = await reapIfWorkerLost(db, this.ctx.cwd, resolved);
+            return this.inspectOps.traceRun(db, resolved, resolvedProbe.reaped ? undefined : resolvedProbe.row);
         }
         return this.inspectOps.traceList(db, runIdOrFilter ?? {});
+    }
+
+    /**
+     * 1326 R10: resolve an operator-supplied run id — exact, else a unique prefix. Public so the
+     * CLI can resolve BEFORE a `--follow` watch opens a record path or a poll loop.
+     */
+    async resolveRunId(runId: string): Promise<string> {
+        return this.inspectOps.resolveRunId(await this.ctx.getDb(), runId);
     }
 
     /**
