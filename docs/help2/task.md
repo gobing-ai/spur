@@ -50,6 +50,8 @@ spur task create [--skip-ready] [--agent <selector>] [--no-reopen] [--json]
 | `--no-reopen` | Do not reopen a `verifying` parent feature to `active` |
 | `--parent <wbs>` | Parent WBS for sub-task grouping |
 | `--template <variant>` | `standard` \| `feature-impl` \| `issue` \| `review` \| `meta` \| `brainstorm` |
+| `--requirements <text>` | Pre-filled Requirements body (normalized like batch items; makes the write-time size advisory reachable on single create) |
+| `--plan <text>` | Pre-filled Plan body (ordered checklist) |
 | `--dedupe-within <seconds>` | Override the dedup window (on by default for 300 s when `--feature` is set) |
 | `--allow-duplicate-name` | Disable the dedup guard entirely |
 | `--skip-ready` | Backlog capture only — skip ready preparation (no model dispatch) |

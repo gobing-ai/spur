@@ -81,7 +81,7 @@ content up front — not to accumulate more into one oversized task.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--no-reopen` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--skip-ready` `--agent <selector>` `--folder` `--json` |
+| `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--no-reopen` `--parent <wbs>` `--template <variant>` `--requirements <text>` `--plan <text>` `--dedupe-within <s>` `--allow-duplicate-name` `--skip-ready` `--agent <selector>` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body; section-filtered or summary mode (1325) | `--section <name>` `--sections <csv>` `--summary` `--folder` `--json` |
 | `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--no-reopen` `--priority <p>` `--ac-numbering task-local` `--ac-altitude <a>` `--estimate-hours <n>` `--no-lifecycle` `--force-done` `--reason <text>` `--provenance-bypass` `--verdict-dir <path>` `--folder` `--json` |
 | `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |

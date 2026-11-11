@@ -51,6 +51,8 @@ spur task create [options] <title>
 | `--no-reopen` | Do not reopen a `verifying` parent feature to `active` — keeps the pre-1132 accept-as-is behavior; never bypasses the `done`/`cancelled` rejection |
 | `--parent <wbs>` | Parent WBS for sub-task grouping |
 | `--template <variant>` | Template variant: `standard · feature-impl · issue · review · meta · brainstorm` (default: `feature-impl` when `--feature` is given, else `standard`; unknown variant → exit 2) |
+| `--requirements <text>` | Pre-filled Requirements body (normalized like batch items; makes the write-time size advisory reachable on single create) |
+| `--plan <text>` | Pre-filled Plan body (ordered checklist) |
 | `--folder <path>` | Custom tasks folder |
 | `--dedupe-within <seconds>` | Override the default dedup window (seconds); guard is on (300s) by default when `--feature` is set |
 | `--allow-duplicate-name` | Disable the dedup guard entirely (creates anyway) |
