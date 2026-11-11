@@ -1,11 +1,13 @@
 ---
 schema_version: 1
 name: Residuals from 1322
-status: backlog
+status: done
 template: standard
 created_at: 2026-11-10T19:52:54.958Z
-updated_at: "2026-11-10T19:52:55.118Z"
+updated_at: "2026-11-11T17:51:01.841Z"
 
+done_forced: "false"
+done_reason: unforced close; PASS artifact at .spur/memory/evidence/1326-verdict.json
 ---
 
 ## 1326. Residuals from 1322
@@ -18,7 +20,7 @@ Source task: 1322 (feature H16) — deferred residuals filed by residual-scan se
 
 ### Requirements
 
-<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty until requirements are known. -->
+- [x] R1. `readWorkspaceGraph` marks a `workspaces` glob shape it cannot expand (any `*` pattern that is not `dir/*`, e.g. yarn-classic `packages/**`) as `unsupported` on `WorkspaceGraph`, and `lightScope` refuses the light tier with a fallback rationale for such a graph instead of classifying nothing.
 
 ### Acceptance Criteria
 
@@ -36,22 +38,42 @@ Source task: 1322 (feature H16) — deferred residuals filed by residual-scan se
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Add `unsupported?: string` to `WorkspaceGraph`; detect unsupported shapes in `readWorkspaceGraph` (packages/app/src/services/quality-gate.ts) and return the rationale.
+2. In `lightScope`, set `fallback` from `graph.unsupported` before the per-file shared-package scan.
+3. Regression tests in packages/app/tests/services/quality-gate-affected-scope.test.ts (unsupported shape alone + mixed list); fail-proof by stashing the src fix.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- packages/app/src/services/quality-gate.ts:530 — `WorkspaceGraph.unsupported?: string` carries the rationale for a `workspaces` shape the reader cannot expand.
+- packages/app/src/services/quality-gate.ts:602-608 — `readWorkspaceGraph` detects the unsupported shape (any `*` pattern that is not `dir/*`, including the degenerate `/*`) and returns the empty graph with the rationale instead of silently expanding nothing.
+- packages/app/src/services/quality-gate.ts:724-728 — `lightScope` refuses the tier from `graph.unsupported` before the per-file shared-package scan, so the fallback names the real cause.
+- packages/app/tests/services/quality-gate-affected-scope.test.ts:143,170 — regression tests for the unsupported shape alone and in a mixed list.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/tests/services/quality-gate-affected-scope.test.ts:143 — yarn-classic `packages/**` marks the graph `unsupported` and lightScope returns the full-suite fallback instead of classifying nothing; bun test in packages/app: 17 pass / 0 fail, and both new tests fail with the src fix stashed |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P3 | WBS collision discovered during closure: `docs/tasks5/` held two `1326_*` files (this residual and a done history-anatomy task), and the locator's first-prefix-match sent every `spur task … 1326` write to the unrelated done task. `spur task residual settle` allocated ids without a collision check. | Worked around for this closure by temporarily hiding the colliding file (name-only move, restored byte-identical). Root cause — settle's id allocation — is a new finding, not fixed here. |
+| P4 | No findings in the fix itself; the unsupported-shape predicate is a pure prefix/`endsWith` check with tests for the standalone and mixed-list cases. | Accepted. |
 
 ### References
 
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-11T17:50:31.853Z backlog → todo (system)
+- 2026-11-11T17:50:32.179Z todo → wip (system)
+- 2026-11-11T17:51:01.795Z wip → done (system)
+
