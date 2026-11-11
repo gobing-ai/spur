@@ -153,6 +153,7 @@ export async function messageRollup(
         `WITH filtered AS (
              SELECT m.source, m.session_id, m.model, m.ts, m.input_tokens, m.output_tokens,
                     m.cache_read_tokens, m.cache_write_tokens, m.cost_usd, m.role, m.duration_ms,
+                    m.disposition,
                     ROW_NUMBER() OVER (PARTITION BY m.request_id ORDER BY m.rowid DESC) AS rn,
                     m.request_id
              FROM history_message m
@@ -168,7 +169,7 @@ export async function messageRollup(
                         'unknown'
                     ) AS model,
                     ts, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-                    cost_usd, role, duration_ms
+                    cost_usd, role, duration_ms, disposition
              FROM filtered WHERE request_id IS NULL OR rn = 1
          )
          SELECT source, model, DATE(ts) AS day,
@@ -179,9 +180,12 @@ export async function messageRollup(
                 SUM(cache_write_tokens) AS cacheWriteTokens,
                 SUM(cost_usd) AS costUsd,
                 SUM(CASE WHEN input_tokens IS NOT NULL OR output_tokens IS NOT NULL THEN 1 ELSE 0 END) AS recordsWithUsage,
-                SUM(CASE WHEN role = 'assistant' THEN duration_ms END) AS assistantDurationMs,
-                SUM(CASE WHEN role = 'assistant' THEN duration_ms IS NULL END) AS assistantDurationUnmeasured,
-                SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 THEN 1 ELSE 0 END) AS assistantDurationSamples
+                -- 1328: latency aggregates exclude collapsed poll rows — the duration
+                -- backfill hands poll duplicates derived durations, so executor-latency
+                -- means/samples stay unpolluted (1324 R3's rollup-chain residue).
+                SUM(CASE WHEN role = 'assistant' AND disposition <> 'poll-duplicate' THEN duration_ms END) AS assistantDurationMs,
+                SUM(CASE WHEN role = 'assistant' AND duration_ms IS NULL AND disposition <> 'poll-duplicate' THEN 1 ELSE 0 END) AS assistantDurationUnmeasured,
+                SUM(CASE WHEN role = 'assistant' AND duration_ms > 0 AND disposition <> 'poll-duplicate' THEN 1 ELSE 0 END) AS assistantDurationSamples
          FROM selected
          GROUP BY source, model, DATE(ts)`,
         ...params,

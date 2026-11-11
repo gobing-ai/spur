@@ -359,6 +359,49 @@ describe('forensic queries', () => {
         db.close();
     });
 
+    test('messageRollup latency aggregates exclude collapsed poll rows (1324 R3 residue)', async () => {
+        const db = await setup();
+        // A real assistant turn plus a poll duplicate the duration backfill handed a
+        // derived duration: token/cost sums keep both rows (Q8 spend scope), while the
+        // duration aggregates must count only the real turn.
+        await insertMessage(db, {
+            record_hash: 'p1',
+            session_id: 'sess-poll',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'assistant',
+            disposition: 'keep',
+            ts: '2026-05-30T00:00:00.000Z',
+            model: 'claude-x',
+            input: 100,
+            output: 50,
+            duration_ms: 100,
+        });
+        await insertMessage(db, {
+            record_hash: 'p2',
+            session_id: 'sess-poll',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'assistant',
+            disposition: 'poll-duplicate',
+            ts: '2026-05-30T00:00:01.000Z',
+            model: 'claude-x',
+            input: 5,
+            output: 1,
+            duration_ms: 7000,
+        });
+        const rows = await messageRollup(db, { ...ALL, sessionId: 'sess-poll' });
+        expect(rows).toHaveLength(1);
+        const row = rows[0];
+        // Spend scope unchanged: both rows count toward messages/tokens.
+        expect(row?.messages).toBe(2);
+        expect(row?.inputTokens).toBe(105);
+        expect(row?.assistantDurationMs).toBe(100);
+        expect(row?.assistantDurationSamples).toBe(1);
+        expect(row?.assistantDurationUnmeasured).toBe(0);
+        db.close();
+    });
+
     test('messageRollup reports per-step token/cost buckets (Q8)', async () => {
         const db = await setup();
         await seedFixture(db);
