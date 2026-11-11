@@ -79,6 +79,9 @@ spur task show [options] <wbs>
 | Flag | Description |
 |---|---|
 | `--folder <path>` | Custom tasks folder |
+| `--section <name>` | Show only this section, byte-exact (repeatable) |
+| `--sections <csv>` | Comma-separated section names to show (e.g. `Background,Plan`); combined with `--section` |
+| `--summary` | Print frontmatter metadata plus a section index (name, heading, byte count) and total file size — no section bodies |
 | `--json` | Output machine-readable JSON (frontmatter is a top-level field) |
 
 ### JSON shape

@@ -3,6 +3,7 @@ import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import type { TaskLocator } from './task-locator';
 import type { TaskServiceContext } from './task-service';
 import { WbsCollisionError } from './task-service-errors';
+import { evaluateTaskSize } from './task-size-precheck';
 
 /**
  * Task-file location and WBS allocation for {@link TaskService}: folder walks, sibling-worktree
@@ -211,5 +212,21 @@ export class TaskFiles {
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '')
             .slice(0, 60);
+    }
+
+    /**
+     * 1325 P3: size-budget warnings for the file's CURRENT content — the same
+     * evaluation the pipeline precheck (`precheck-size`) runs at admission,
+     * surfaced at write time as an advisory on the write result. Never throws
+     * (a read failure after a successful write must not fail the write report).
+     */
+    async sizeBudgetWarnings(filePath: string): Promise<string[]> {
+        try {
+            const doc = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task');
+            // Without frontmatter, matching `task check --precheck` exactly.
+            return evaluateTaskSize(doc.bodyWithoutFrontmatter).reasons;
+        } catch {
+            return [];
+        }
     }
 }

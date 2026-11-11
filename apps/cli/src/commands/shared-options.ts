@@ -34,6 +34,9 @@ export const SHARED_OPTIONS = {
     ] as const,
     jsonSupported: ['--json', 'Output machine-readable JSON where supported'] as const,
     section: ['--section <name>', 'Section name to write'] as const,
+    // Homonym of `section` (write target) — `task show` reads a FILTER of named
+    // sections (1325 P1), so it carries its own description text.
+    sectionShowFilter: ['--section <name>', 'Show only this section, byte-exact (repeatable)'] as const,
     fromFile: ['--from-file <path>', 'File to read section body from (requires --section)'] as const,
     statusFilter: ['--status <s>', 'Filter by status'] as const,
     last: ['--last <n>', 'Limit results (default 20)'] as const,

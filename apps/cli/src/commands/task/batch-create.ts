@@ -72,6 +72,12 @@ export function registerTaskBatchCreateCommand(task: Command, context: CliContex
                     const normalized = children
                         .map((r, i) => ({ wbs: ids[i] ?? r.ref.id, normalized: r.normalized ?? [] }))
                         .filter((row) => row.normalized.length > 0);
+                    // 1325 P3 (review remediation): per-child write-time size
+                    // advisories ride the batch result too — same `{wbs, warnings}`
+                    // row projection as `normalized`, present only when non-empty.
+                    const warnings = children
+                        .map((r, i) => ({ wbs: ids[i] ?? r.ref.id, warnings: r.warnings ?? [] }))
+                        .filter((row) => row.warnings.length > 0);
                     context.output.write(
                         toEnvelopeJson(
                             {
@@ -79,6 +85,7 @@ export function registerTaskBatchCreateCommand(task: Command, context: CliContex
                                 wbs: ids,
                                 parentsWired,
                                 ...(normalized.length > 0 ? { normalized } : {}),
+                                ...(warnings.length > 0 ? { warnings } : {}),
                                 ...(featureReopened.some((r) => r !== undefined) ? { featureReopened } : {}),
                                 ...readiness,
                             },
@@ -89,6 +96,14 @@ export function registerTaskBatchCreateCommand(task: Command, context: CliContex
                     context.output.write(`Created ${children.length} task(s)`);
                     for (const r of children) {
                         context.output.write(`  ${r.ref.id}  ${r.ref.filePath}`);
+                    }
+                    // 1325 P3 (review remediation): write-time size advisories on
+                    // stderr — the same channel single `create` uses. WBS-prefixed
+                    // so a multi-child batch keeps each advisory attributable.
+                    for (const r of children) {
+                        for (const warning of r.warnings ?? []) {
+                            context.output.error(`${r.ref.id}: ${warning}`);
+                        }
                     }
                     if (parentsWired.length > 0) {
                         context.output.write(`Wired ${parentsWired.length} parent(s):`);

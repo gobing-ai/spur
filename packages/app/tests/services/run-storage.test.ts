@@ -978,10 +978,16 @@ describe('completed scratch disposal equivalence (E71/1027)', () => {
             expect(status(badRun)).toBe('failed');
             expect(status(pausedRun)).toBe('paused');
 
-            // A later temporary gate recreates scratch and writes back into it.
+            // A later temporary gate recreates scratch and writes back into it. The light
+            // receipt needs tree identity (1322 R4 / 0976 R1 symmetry): this root has no git
+            // tree, so the gate logs why and writes no receipt — none is forged at the path the
+            // full tier owns.
             silenceStdout(() => runLightGate({ wbs: '1027' }, { cwd: root }));
             expect(existsSync(join(scratch, '1027-light-gate.log'))).toBeTrue();
-            expect(existsSync(join(scratch, '1027-check-receipt.json'))).toBeTrue();
+            expect(existsSync(join(scratch, '1027-check-receipt.json'))).toBeFalse();
+            expect(readFileSync(join(scratch, '1027-light-gate.log'), 'utf8')).toContain(
+                'light receipt: not written — git tree capture failed',
+            );
 
             // Missing durable artifact degrades bytes honestly; inspection plane unaffected.
             rmSync(runArtifactsDir(root, okRun), { recursive: true, force: true });

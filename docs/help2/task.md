@@ -67,10 +67,13 @@ spur task create "Research caching options" --template brainstorm --skip-ready
 ## spur task show
 
 ```bash
-spur task show <wbs> [--folder <path>] [--json]
+spur task show <wbs> [--folder <path>] [--section <name>] [--sections <csv>] [--summary] [--json]
 ```
 
-Prints one task (under `--json`, the frontmatter is a top-level field).
+Prints one task (under `--json`, the frontmatter is a top-level field). Pass `--section <name>`
+(repeatable) or `--sections <csv>` to print only the named sections, byte-exact; `--summary` prints
+frontmatter metadata plus a section index (name, heading, byte count) and total file size, with no
+section bodies (`--summary` cannot be combined with `--section`/`--sections`).
 
 ## spur task update
 

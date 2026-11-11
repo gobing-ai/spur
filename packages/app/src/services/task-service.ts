@@ -186,6 +186,29 @@ export interface TaskShowResult extends TaskSummary {
     content: string;
 }
 
+/** One entry of a filtered or summary `task show` (task 1325). */
+export interface TaskShowSectionEntry {
+    /** Section name exactly as parsed from the heading. */
+    readonly name: string;
+    /** Full heading line as written in the file (e.g. `### Background`). */
+    readonly headingLine: string;
+    /** UTF-8 byte count of {@link content} (heading line + body) — bytes, not characters. */
+    readonly byteCount: number;
+    /**
+     * Byte-exact section content (heading line + body). Present in filtered mode
+     * only — summary mode omits bodies entirely (1325 P2).
+     */
+    readonly content?: string;
+}
+
+/** Filtered (`showSections`) or summary (`showSummary`) show result: metadata + section index. */
+export interface TaskShowSectionsResult extends TaskSummary {
+    /** Requested sections in file order (filtered) or the full section index (summary). */
+    readonly sections: readonly TaskShowSectionEntry[];
+    /** Total UTF-8 byte size of the whole file — the size the caller avoided reading. */
+    readonly totalBytes: number;
+}
+
 /**
  * Per-parent summary produced by `TaskService.batchCreate` (task 0178, F1/F2).
  * Surfaced alongside the children the batch created so the CLI can report which
@@ -278,6 +301,26 @@ export class TaskService {
 
     async show(wbs: string): Promise<TaskShowResult> {
         return this.queryOps.show(wbs);
+    }
+
+    /**
+     * Filtered read (1325 P1): only the named sections' byte-exact bodies plus
+     * frontmatter metadata — a caller never pays for the whole dump to read one
+     * section. `requested` names are matched exactly against the parsed sections;
+     * unknown names throw with `cliCode: 'VALIDATION_FAILED'` listing the present
+     * section names. Duplicate requests collapse to one entry, in file order.
+     */
+    async showSections(wbs: string, requested: readonly string[]): Promise<TaskShowSectionsResult> {
+        return this.queryOps.showSections(wbs, requested);
+    }
+
+    /**
+     * Summary read (1325 P2): frontmatter metadata plus a section index — name,
+     * heading line, byte count per section and total file size — with NO section
+     * bodies, so planning/resuming never needs the full dump.
+     */
+    async showSummary(wbs: string): Promise<TaskShowSectionsResult> {
+        return this.queryOps.showSummary(wbs);
     }
 
     // ── update (status transition) ──

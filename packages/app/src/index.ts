@@ -924,6 +924,8 @@ export type {
     TaskFoldersConfig,
     TaskServiceContext,
     TaskShowResult,
+    TaskShowSectionEntry,
+    TaskShowSectionsResult,
     TaskSummary,
 } from './services/task-service';
 export {

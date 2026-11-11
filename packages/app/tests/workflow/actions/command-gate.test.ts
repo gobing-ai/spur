@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -517,4 +517,134 @@ describe('CommandGateActionRunner timeoutMs (1319 R2)', () => {
             rmSync(workdir, { recursive: true, force: true });
         }
     }, 15_000);
+});
+
+// ─── 1322 R1/R4 — the persisted step log (`logFile`) ───────────────────────────
+
+describe('CommandGateActionRunner logFile (1322)', () => {
+    const context = (workdir: string) => ({ runId: 'r-log', stateOrNodeId: 'gate', workdir, vars: {}, env: {} });
+
+    test('a failing gate persists its output at the log path and carries the path in its data (AC1/AC2)', async () => {
+        const workdir = join(tmpdir(), `gate-log-fail-${crypto.randomUUID()}`);
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        try {
+            const res = await new CommandGateActionRunner(new NodeProcessExecutor(), createNodeFileSystem()).execute(
+                {
+                    executable: 'bun',
+                    args: ['-e', 'console.log("gate ran"); process.exit(1)'],
+                    resultFile: '.spur/run/gate.status',
+                    logFile: '.spur/run/wbs-gate.log',
+                    softFail: true,
+                },
+                context(workdir),
+            );
+            expect(res.ok).toBe(true);
+            const data = res.data as { status?: string; logFile?: string };
+            expect(data.status).toBe('FAIL');
+            // The step result names the log path — remediation reads evidence without re-running.
+            expect(data.logFile).toBe(join(realpathSync(workdir), '.spur/run/wbs-gate.log'));
+            const log = readFileSync(join(workdir, '.spur/run/wbs-gate.log'), 'utf8');
+            expect(log).toContain('gate ran');
+            expect(log).toContain('--- attempt 1 exit 1');
+            expect(log).toContain('gate outcome: FAIL (exit 1)');
+            expect(readFileSync(join(workdir, '.spur/run/gate.status'), 'utf8')).toBe('FAIL\n');
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('a passing gate persists the log too and the success data carries the path (AC1)', async () => {
+        const workdir = join(tmpdir(), `gate-log-pass-${crypto.randomUUID()}`);
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        try {
+            const res = await new CommandGateActionRunner(new NodeProcessExecutor(), createNodeFileSystem()).execute(
+                {
+                    executable: 'echo',
+                    args: ['gate-ok'],
+                    resultFile: '.spur/run/gate.status',
+                    logFile: '.spur/run/wbs-gate.log',
+                },
+                context(workdir),
+            );
+            expect(res.ok).toBe(true);
+            const data = res.data as { status?: string; logFile?: string };
+            expect(data.status).toBe('PASS');
+            expect(data.logFile).toBe(join(realpathSync(workdir), '.spur/run/wbs-gate.log'));
+            const log = readFileSync(join(workdir, '.spur/run/wbs-gate.log'), 'utf8');
+            expect(log).toContain('gate-ok');
+            expect(log).toContain('gate outcome: PASS (exit 0)');
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('retry attempts all land in the persisted log', async () => {
+        const workdir = join(tmpdir(), `gate-log-retry-${crypto.randomUUID()}`);
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        try {
+            const res = await new CommandGateActionRunner(new NodeProcessExecutor(), createNodeFileSystem()).execute(
+                {
+                    executable: 'bun',
+                    args: ['-e', 'console.log("SQLite database 5 is busy"); process.exit(1)'],
+                    resultFile: '.spur/run/gate.status',
+                    logFile: '.spur/run/wbs-gate.log',
+                    softFail: true,
+                    retry: { maxAttempts: 2, delayMs: 1, on: ['sqlite-busy'] },
+                },
+                context(workdir),
+            );
+            const data = res.data as { attempts?: number };
+            expect(data.attempts).toBe(2);
+            const log = readFileSync(join(workdir, '.spur/run/wbs-gate.log'), 'utf8');
+            expect(log).toContain('--- attempt 1 exit 1');
+            expect(log).toContain('--- attempt 2 exit 1');
+            expect(log.match(/SQLite database 5 is busy/g)?.length).toBe(2);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('an undeclared logFile writes no log and the data carries none (unchanged behavior)', async () => {
+        const workdir = join(tmpdir(), `gate-log-none-${crypto.randomUUID()}`);
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        try {
+            const res = await new CommandGateActionRunner(new NodeProcessExecutor(), createNodeFileSystem()).execute(
+                { executable: 'echo', args: ['plain'], resultFile: '.spur/run/gate.status' },
+                context(workdir),
+            );
+            expect(res.ok).toBe(true);
+            expect('logFile' in (res.data as Record<string, unknown>)).toBe(false);
+            expect(existsSync(join(workdir, '.spur/run/wbs-gate.log'))).toBe(false);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('a logFile escaping .spur/run/ is rejected before dispatch (same confinement as resultFile)', async () => {
+        const executor = new NodeProcessExecutor();
+        const fs = createNodeFileSystem();
+        const run = spyOn(executor, 'run').mockResolvedValue({
+            command: 'echo',
+            args: [],
+            durationMs: 0,
+            stdout: '',
+            stderr: '',
+            exitCode: 0,
+        });
+        const write = spyOn(fs, 'writeFile').mockImplementation(async () => {});
+        try {
+            const res = await new CommandGateActionRunner(executor, fs).execute(
+                { executable: 'echo', resultFile: '.spur/run/gate.status', logFile: '.spur/run/../run-other/gate.log' },
+                { runId: 'r-log', stateOrNodeId: 's1', workdir: process.cwd(), vars: {}, env: {} },
+            );
+            expect(res.ok).toBe(false);
+            expect(res.error).toContain('logFile');
+            expect(res.error).toContain('must resolve beneath .spur/run/');
+            expect(run).not.toHaveBeenCalled();
+            expect(write).not.toHaveBeenCalled();
+        } finally {
+            run.mockRestore();
+            write.mockRestore();
+        }
+    });
 });

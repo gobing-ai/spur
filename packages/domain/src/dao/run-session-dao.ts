@@ -13,9 +13,13 @@ export type RunSessionExactness = 'exact' | 'unresolved' | 'estimated';
 /**
  * Mechanism that produced a run→session mapping. `inferred` (task 0558) marks
  * a mapping derived after the fact from run windows + history timestamps rather
- * than observed at the spawn boundary or supplied by the caller.
+ * than observed at the spawn boundary or supplied by the caller. `worktree-merge`
+ * (task 1324 R1) marks a mapping carried into the project DB by the worktree
+ * persist-out merge — the row originated in the worktree's own `.spur/spur.db`
+ * and its original mechanism is replaced by the origin marker so provenance
+ * consumers can distinguish merged rows from locally observed ones.
  */
-export type RunSessionMechanism = 'observed' | 'supplied' | 'inferred';
+export type RunSessionMechanism = 'observed' | 'supplied' | 'inferred' | 'worktree-merge';
 
 /** Raw `history_run_session` row. */
 export interface RunSessionRow {

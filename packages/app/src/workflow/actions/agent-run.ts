@@ -1628,6 +1628,10 @@ export class AgentRunActionRunner implements ActionRunner {
             // 1306: the terminating signal rides the failure row so shared finalization can
             // classify a timeout/cancellation from the row itself, without a second stream read.
             if (!ok && traced.signal !== undefined) resultData.signal = traced.signal;
+            // 1323 AC3: adaptive-ladder decisions (breaker trips/skips, timeout-exhausted
+            // failovers, escalations) and the derived timeout budget (carried on the traced
+            // invocation) persist with the action row so the run trace can audit them.
+            if (traced.ladder !== undefined && traced.ladder.length > 0) resultData.ladder = traced.ladder;
             resultData.session = resumedDispatch ? ('reused' as const) : ('fresh' as const);
             resultData.sessionSource = sessionDeclared ? ('declared' as const) : ('default' as const);
             // 0933 R26: surface the escalation on the result record — the pipeline

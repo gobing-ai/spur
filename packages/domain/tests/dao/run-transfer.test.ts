@@ -327,3 +327,109 @@ describe('transferRunTables (task 0975 R1)', () => {
         target.close();
     });
 });
+
+// ─── Task 1324 R1: worktree provenance merge with origin markers ──────────
+
+describe('transferRunTables worktree provenance merge (task 1324 R1)', () => {
+    test('merges runs, phase_runs, task_run_links and run_sessions with ids preserved and worktree-origin markers', async () => {
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'wt_run_1', { workflowName: 'task-pipeline', externalKey: null });
+        await insertChild(source, 'phase_runs', 'wt_ph_1', 'wt_run_1', 'implement');
+        await source.run(
+            `INSERT INTO task_run_links (id, wbs, run_id, kind, created_at)
+             VALUES ('wt_link_1', '0345', 'wt_run_1', 'pipeline', 1)`,
+        );
+        await source.run(
+            `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at)
+             VALUES ('wt_run_1', 'agy', 'sess_wt_1', 'exact', 'observed', '2026-11-10T10:00:00.000Z')`,
+        );
+
+        const result = await transferRunTables(source, target);
+        expect(result.persistedIds).toEqual(['wt_run_1']);
+        expect(result.skipped).toEqual([]);
+
+        // Ids preserved on every merged row.
+        const run = await target.queryFirst<{ id: string; metadata_json: string }>(
+            'SELECT id, metadata_json FROM runs WHERE id = ?',
+            'wt_run_1',
+        );
+        expect(run?.id).toBe('wt_run_1');
+        // Worktree-origin marker stamped into the run metadata.
+        const meta = JSON.parse(run?.metadata_json ?? '{}') as Record<string, unknown>;
+        expect(meta.worktree_origin).toBe(true);
+
+        expect(await count(target, 'phase_runs')).toBe(1);
+        const phase = await target.queryFirst<{ id: string }>("SELECT id FROM phase_runs WHERE id = 'wt_ph_1'");
+        expect(phase?.id).toBe('wt_ph_1');
+
+        const link = await target.queryFirst<{ id: string; wbs: string; run_id: string }>(
+            'SELECT id, wbs, run_id FROM task_run_links WHERE id = ?',
+            'wt_link_1',
+        );
+        expect(link).toEqual({ id: 'wt_link_1', wbs: '0345', run_id: 'wt_run_1' });
+
+        // The run→session mapping carries the worktree-merge mechanism marker; exactness
+        // and the mapping itself are preserved so cost attribution keeps the exact row.
+        const session = await target.queryFirst<{
+            run_id: string;
+            source: string;
+            session_id: string;
+            exactness: string;
+            mechanism: string;
+        }>('SELECT run_id, source, session_id, exactness, mechanism FROM history_run_session');
+        expect(session).toEqual({
+            run_id: 'wt_run_1',
+            source: 'agy',
+            session_id: 'sess_wt_1',
+            exactness: 'exact',
+            mechanism: 'worktree-merge',
+        });
+        source.close();
+        target.close();
+    });
+
+    test('re-merge is idempotent: second pass changes no rows', async () => {
+        const source = await setup();
+        const target = await setup();
+        await insertRun(source, 'wt_run_2', { workflowName: 'task-pipeline', externalKey: null });
+        await insertChild(source, 'phase_runs', 'wt_ph_2', 'wt_run_2', 'verify');
+        await source.run(
+            `INSERT INTO task_run_links (id, wbs, run_id, kind, created_at)
+             VALUES ('wt_link_2', '0346', 'wt_run_2', 'pipeline', 1)`,
+        );
+        await source.run(
+            `INSERT INTO history_run_session (run_id, source, session_id, exactness, mechanism, resolved_at)
+             VALUES ('wt_run_2', 'pi', 'sess_wt_2', 'exact', 'observed', '2026-11-10T11:00:00.000Z')`,
+        );
+
+        await transferRunTables(source, target);
+        const snapshot = async (): Promise<{ runs: number; phases: number; links: number; sessions: number }> => ({
+            runs: await count(target, 'runs'),
+            phases: await count(target, 'phase_runs'),
+            links: await count(target, 'task_run_links'),
+            sessions: await count(target, 'history_run_session'),
+        });
+        const before = await snapshot();
+
+        const second = await transferRunTables(source, target);
+        expect(second.persistedIds).toEqual([]);
+        expect(second.skipped).toEqual([{ id: 'wt_run_2', reason: 'id-exists' }]);
+        expect(await snapshot()).toEqual(before);
+        source.close();
+        target.close();
+    });
+
+    test('tolerates a pre-0013 worktree DB without history_run_session', async () => {
+        const source = await setup();
+        const target = await setup();
+        await source.exec('DROP TABLE history_run_session');
+        await insertRun(source, 'wt_run_3', { workflowName: 'wf-old', externalKey: null });
+
+        const result = await transferRunTables(source, target);
+        expect(result.persistedIds).toEqual(['wt_run_3']);
+        expect(await count(target, 'history_run_session')).toBe(0);
+        source.close();
+        target.close();
+    });
+});

@@ -5,6 +5,7 @@ import {
     type CoordinationArtifactRef,
     CoordinationRunDao,
     type CoordinationRunReceipt,
+    type ExecutorLatencyStats,
     type OccupantRef,
 } from '@gobing-ai/spur-domain';
 import {
@@ -41,12 +42,13 @@ import {
 import { AgentRunLog } from '../observability/agent-run-log';
 import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
 import { readWorkflowRunRecord } from '../workflow/run-record';
+import { loadExecutorLatency, resolveAdaptiveTimeoutMs } from './adaptive-timeout';
 import { sanitizeInvocationArgv, traceSafePrompt } from './agent-invocation-sanitize';
 import type { AgentResolver } from './agent-resolver';
 import { buildRoutingAttribution, classifyObjectiveFailure } from './agent-routing-attribution';
 import { booleanFlag, parseTagsFlag, stringFlag } from './agent-run-flags';
 import { agentRunPreflight, parseRequiresCapabilitiesFlag } from './agent-run-preflight';
-import type { AgentRunDeps, AgentRunInvocation, AgentServiceContext } from './agent-service';
+import type { AgentLadderDecision, AgentRunDeps, AgentRunInvocation, AgentServiceContext } from './agent-service';
 import { normalizeAgentUsage } from './agent-usage';
 import {
     capabilityDiagnostic,
@@ -56,7 +58,7 @@ import {
     SESSION_CAPABILITY_AXES,
 } from './capability-attestation';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
-import { permissionFailureEvidence } from './failure-classification';
+import { executorUnavailabilityEvidence, permissionFailureEvidence } from './failure-classification';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 import { resolveRunRecordDir } from './run-storage';
 
@@ -169,6 +171,55 @@ export class AgentRunExecutor {
      */
     private readonly sessionRootRegistry: RunSessionOverlapRegistry = { active: new Map(), overlapped: new Set() };
 
+    /**
+     * Run-scoped executor circuit breaker (1323 R1): executors proven
+     * unavailable in a run are excluded from every later dispatch of that run —
+     * including retry-bound nodes — instead of being relearned per dispatch.
+     * Keyed by workflow run id (the correlation the action passes); a direct
+     * CLI run mints its own id, so the scope never crosses runs (no cross-run
+     * persistence — that is the B5/B6 availability lifecycle's job). Bounded:
+     * oldest entries are evicted past the cap so a long-lived service cannot
+     * grow the map without limit.
+     */
+    private readonly runBreakers = new Map<string, { executors: Set<string>; touchedAt: number }>();
+    private static readonly BREAKER_CAP = 256;
+
+    private breakerFor(runId: string): { executors: Set<string>; touchedAt: number } {
+        let breaker = this.runBreakers.get(runId);
+        if (breaker === undefined) {
+            breaker = { executors: new Set(), touchedAt: Date.now() };
+            this.runBreakers.set(runId, breaker);
+            if (this.runBreakers.size > AgentRunExecutor.BREAKER_CAP) {
+                const oldest = [...this.runBreakers.entries()].sort((a, b) => a[1].touchedAt - b[1].touchedAt);
+                for (const [key] of oldest.slice(0, this.runBreakers.size - AgentRunExecutor.BREAKER_CAP)) {
+                    this.runBreakers.delete(key);
+                }
+            }
+        }
+        breaker.touchedAt = Date.now();
+        return breaker;
+    }
+
+    /** Record one adaptive-ladder decision (1323 AC3) and mirror it onto the event bus. */
+    private recordLadderDecision(
+        decisions: AgentLadderDecision[],
+        identity: { runId: string; executionId: string; actionId?: string },
+        events: AgentServiceContext['events'],
+        decision: Omit<AgentLadderDecision, 'at'>,
+    ): void {
+        const row: AgentLadderDecision = { ...decision, at: new Date().toISOString() };
+        decisions.push(row);
+        if (events !== undefined) {
+            void events.emit('agent.invoke.ladder', {
+                runId: identity.runId,
+                executionId: identity.executionId,
+                ...(identity.actionId !== undefined ? { actionId: identity.actionId } : {}),
+                ...row,
+                severity: 'warning',
+            });
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Private: executeRun (shared by run and runCapture)
     // -------------------------------------------------------------------------
@@ -191,7 +242,14 @@ export class AgentRunExecutor {
         deps: AgentRunDeps | undefined,
         options: { silent: boolean; nonInteractive?: boolean; execution?: AgentExecutionOptions },
     ): Promise<
-        | { ok: true; result: AgentRunResult; invocation: AgentRunInvocation; coordination?: { occupant: OccupantRef } }
+        | {
+              ok: true;
+              result: AgentRunResult;
+              invocation: AgentRunInvocation;
+              /** 1323 AC3: recorded adaptive-ladder decisions, when any occurred. */
+              ladder?: AgentLadderDecision[];
+              coordination?: { occupant: OccupantRef };
+          }
         | { ok: false; exitCode: number; message: string }
     > {
         const silent = options.silent;
@@ -348,6 +406,17 @@ export class AgentRunExecutor {
         // climbed.
         const tiersAttempted = new Set<string>(currentStage ? [currentStage.executorTier] : []);
 
+        // 1323: run-scoped breaker + adaptive-ladder decision log + per-call
+        // latency-history cache. `attemptedExecutors` is the per-attempt seam;
+        // the breaker persists the exclusion across attempts and nodes of the
+        // SAME run (the action correlates retries with the same run id).
+        // 1323 R1: the workflow action correlates retries by stamping the run id on the
+        // flags (agent-run.ts `flags['run-id'] = context.runId`), so that id scopes the
+        // breaker; a direct CLI run without it falls back to the minted correlation id.
+        const breaker = this.breakerFor(stringFlag(flags, 'run-id', runCorrelation.runId));
+        const ladderDecisions: AgentLadderDecision[] = [];
+        const latencyCache = new Map<string, ExecutorLatencyStats | undefined>();
+
         // Tier-2 warning (suppressed in json/silent mode) — first agent only.
         if (!jsonOutput && TIER2_AGENTS.has(currentAgent)) {
             this.ctx.output.error(`Warning: ${currentAgent} is a Tier-2 agent (TUI/gateway only)`);
@@ -497,6 +566,52 @@ export class AgentRunExecutor {
             }
         }
 
+        // 1323 R1: the run already proved this executor unavailable (an earlier
+        // node or attempt tripped the breaker) — resolve through the stage funnel
+        // with the breaker set excluded instead of re-dispatching into a
+        // guaranteed failure. Retry-bound nodes therefore never re-pay the dead
+        // executor.
+        if (currentStage !== undefined && breaker.executors.has(currentStage.executorName)) {
+            const skippedExecutor = currentStage.executorName;
+            runFlags.signal = 'resource-exhaustion';
+            runFlags['from-executor'] = skippedExecutor;
+            const rerun = await this.resolver.resolveAgent(
+                runFlags,
+                doctorRunner,
+                new Set([...attemptedExecutors, ...breaker.executors]),
+            );
+            if (!rerun.ok || rerun.stage === undefined || breaker.executors.has(rerun.stage.executorName)) {
+                const message =
+                    `executor circuit breaker: every remaining executor for stage '${skippedExecutor}' is ` +
+                    `unavailable for this run (tripped: ${[...breaker.executors].join(', ')})`;
+                this.recordLadderDecision(ladderDecisions, lifecycle.identity, this.ctx.events, {
+                    kind: 'chain-exhausted',
+                    executor: skippedExecutor,
+                    reason: message,
+                });
+                await sessionObserver?.resolve();
+                return { ok: false, exitCode: 2, message };
+            }
+            currentAgent = rerun.agent;
+            currentModel = rerun.model;
+            currentSource = rerun.source;
+            currentStage = rerun.stage;
+            currentRole = rerun.role;
+            currentRoleOrigin = rerun.roleOrigin;
+            dispatchExecutor.setRoleEnv(currentRole);
+            currentTier = rerun.tier;
+            currentExecutor = rerun.executor;
+            routing = buildRoutingAttribution(rerun);
+            attemptedExecutors.add(rerun.stage.executorName);
+            tiersAttempted.add(rerun.stage.executorTier);
+            this.recordLadderDecision(ladderDecisions, lifecycle.identity, this.ctx.events, {
+                kind: 'breaker-skip',
+                executor: skippedExecutor,
+                toExecutor: rerun.stage.executorName,
+                reason: 'run-scoped circuit breaker: skipped an executor proven unavailable earlier in this run',
+            });
+        }
+
         try {
             for (let attempt = 0; ; attempt++) {
                 const agent = currentAgent;
@@ -505,6 +620,75 @@ export class AgentRunExecutor {
                 // dispatches its OWN model — a pin- or caller-derived name from the previous
                 // executor must never travel with it (tasks 0407/0482 escalation, 0894 reroll).
                 const model = (attempt === 0 ? explicitModel : undefined) ?? currentModel;
+
+                // 1323 R2: derive this attempt's dispatch budget from the executor's observed
+                // latency, with the node's YAML timeoutMs as the hard cap. No history (or no
+                // declared budget) degrades to the static behavior unchanged. The decision —
+                // derived numbers and whether the executor fits — is recorded for the trace.
+                const attemptExecutorEntry = this.ctx.agentConfig?.executors?.find(
+                    (entry) => entry.name === (currentExecutor ?? ''),
+                );
+                const latencyKey = attemptExecutorEntry?.model ?? currentExecutor ?? agent;
+                if (!latencyCache.has(latencyKey)) {
+                    const stats = await loadExecutorLatency(this.ctx, [latencyKey]);
+                    latencyCache.set(latencyKey, stats.get(latencyKey));
+                }
+                const timeoutDecision = resolveAdaptiveTimeoutMs(timeoutMs, latencyCache.get(latencyKey));
+                const effectiveTimeoutMs = timeoutDecision.appliedMs ?? timeoutMs;
+                // 1323 R2/AC2: a measured latency beyond the static cap means the dispatch is
+                // a guaranteed timeout — fail over to the next eligible executor BEFORE burning
+                // the budget. No alternative executor → dispatch under the operator cap with the
+                // derived budget recorded (timeout-exhausted, visible in the trace).
+                if (
+                    timeoutMs !== undefined &&
+                    !timeoutDecision.fits &&
+                    currentStage !== undefined &&
+                    breaker.executors.size + attemptedExecutors.size < 64
+                ) {
+                    const exhaustedExecutor = currentStage.executorName;
+                    runFlags.signal = 'timeout';
+                    runFlags['from-executor'] = exhaustedExecutor;
+                    const rerun = await this.resolver.resolveAgent(
+                        runFlags,
+                        doctorRunner,
+                        new Set([...attemptedExecutors, ...breaker.executors]),
+                    );
+                    if (
+                        rerun.ok &&
+                        rerun.stage !== undefined &&
+                        rerun.stage.executorName !== exhaustedExecutor &&
+                        !attemptedExecutors.has(rerun.stage.executorName) &&
+                        !breaker.executors.has(rerun.stage.executorName)
+                    ) {
+                        currentAgent = rerun.agent;
+                        currentModel = rerun.model;
+                        currentSource = rerun.source;
+                        currentStage = rerun.stage;
+                        currentRole = rerun.role;
+                        currentRoleOrigin = rerun.roleOrigin;
+                        dispatchExecutor.setRoleEnv(currentRole);
+                        currentTier = rerun.tier;
+                        currentExecutor = rerun.executor;
+                        routing = buildRoutingAttribution(rerun);
+                        attemptedExecutors.add(rerun.stage.executorName);
+                        tiersAttempted.add(rerun.stage.executorTier);
+                        this.recordLadderDecision(ladderDecisions, lifecycle.identity, this.ctx.events, {
+                            kind: 'timeout-exhausted-skip',
+                            executor: exhaustedExecutor,
+                            toExecutor: rerun.stage.executorName,
+                            reason:
+                                `measured latency exceeds the static budget; failed over without burning ` +
+                                `the ${timeoutMs}ms timeout`,
+                            detail: JSON.stringify({
+                                derivedMs: timeoutDecision.derivedMs,
+                                staticMs: timeoutMs,
+                                meanMs: timeoutDecision.meanMs,
+                                samples: timeoutDecision.samples,
+                            }),
+                        });
+                        continue;
+                    }
+                }
 
                 // Capability gate (0706 R5): resolve-first, compare-before-spawn.
                 // Evaluated per attempt — the escalation ladder may land on a
@@ -611,7 +795,10 @@ export class AgentRunExecutor {
                     ...(cwd !== '' ? { cwd } : {}),
                     mode: mode as 'text' | 'json',
                     outputMode,
-                    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                    ...(effectiveTimeoutMs !== undefined ? { timeoutMs: effectiveTimeoutMs } : {}),
+                    ...(timeoutDecision.staticMs !== undefined || timeoutDecision.derivedMs !== undefined
+                        ? { timeoutBudget: timeoutDecision }
+                        : {}),
                     continue: !freshRole && continueFlag,
                     stdinInteractive: false,
                     ...(model !== undefined ? { model } : {}),
@@ -627,7 +814,7 @@ export class AgentRunExecutor {
                         agent,
                         ...(model !== undefined ? { model } : {}),
                         invocation: `${attemptInvocation.command} ${attemptInvocation.argv.join(' ')}`,
-                        ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                        ...(effectiveTimeoutMs !== undefined ? { timeoutMs: effectiveTimeoutMs } : {}),
                         ...(routing !== undefined ? { routing } : {}),
                     });
                     dispatchStartedAt = Date.now();
@@ -691,7 +878,7 @@ export class AgentRunExecutor {
                             ? warmResult(warmOutcome, dispatchStartedAt)
                             : await runner.runPromptCommand(agent, promptOptions, {
                                   cwd: cwd || undefined,
-                                  ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
+                                  ...(effectiveTimeoutMs !== undefined ? { timeout: effectiveTimeoutMs } : {}),
                                   signal: controller.signal,
                                   correlation: lifecycle.identity,
                                   // 0799 R1: exact attribution rides every dispatch so the
@@ -749,8 +936,28 @@ export class AgentRunExecutor {
                 // classifier misses the provider's phrasing — the ladder escalates
                 // and the run-scoped attempted set excludes the exhausted executor.
                 const quotaConfirmed = currentExecutor !== undefined && runQuotaExhaustedExecutors.has(currentExecutor);
+                // 1323 R1: a dispatch that failed IMMEDIATELY with executor unavailability
+                // (dispatch-level exit 2 / no usage) trips the run-scoped breaker — the executor
+                // is excluded for the rest of THIS run before another dispatch is attempted
+                // against it.
+                const unavailability = executorUnavailabilityEvidence(result);
+                let breakerTripped = false;
+                if (unavailability !== undefined && currentStage !== undefined) {
+                    breaker.executors.add(currentStage.executorName);
+                    breakerTripped = true;
+                    this.recordLadderDecision(ladderDecisions, lifecycle.identity, this.ctx.events, {
+                        kind: 'breaker-trip',
+                        executor: currentStage.executorName,
+                        reason: `circuit breaker: ${unavailability}`,
+                    });
+                }
                 const classifiedSignal = classifyObjectiveFailure(result);
-                let escalationSignal = quotaConfirmed ? ('resource-exhaustion' as const) : classifiedSignal;
+                // Breaker unavailability is availability routing like quota exhaustion (1260):
+                // `resource-exhaustion` is the only availability signal in the objective
+                // vocabulary, so the breaker reuses it rather than minting a parallel controller.
+                let escalationSignal = quotaConfirmed
+                    ? ('resource-exhaustion' as const)
+                    : (classifiedSignal ?? (breakerTripped ? ('resource-exhaustion' as const) : undefined));
                 // 1264 R2/R3: the catalog rescue covers only the residue the rules left behind.
                 // A rule match, a timeout, a permission denial (0687 R9) or a confirmed quota
                 // event keeps today's route untouched, and a rescue that declines, throws or
@@ -781,20 +988,34 @@ export class AgentRunExecutor {
                     matchingFallbacks.length === 0 ||
                     (escalationSignal !== 'resource-exhaustion' && attempt >= matchingFallbacks.length)
                 ) {
-                    break;
+                    // 1323 R1: a breaker-tripped executor is availability routing — the ladder
+                    // walks even when the stage policy declares no matching fallback entry,
+                    // because re-dispatching into a proven-dead executor is never the answer.
+                    if (!breakerTripped) break;
                 }
 
                 // Re-resolve with escalation flags to pick the next executor.
                 // R3: exclude executors already attempted this run so the ladder
                 // walks to the next eligible candidate instead of re-selecting the
                 // same dead executor and breaking on attemptedExecutors.has(...).
+                // 1323 R1 (review finding 1): the run-scoped breaker set joins the
+                // exclusion — a breaker-dead executor from an earlier node stays
+                // unavailable for the whole run, so re-selecting it here would
+                // re-dispatch into a guaranteed failure. A resolve that still comes
+                // back breaker-dead (pinned fallthrough) is chain exhaustion,
+                // mirroring the pre-loop breaker-skip seam above.
                 runFlags.signal = escalationSignal;
                 runFlags['from-executor'] = currentStage.executorName;
-                const nextResolved = await this.resolver.resolveAgent(runFlags, doctorRunner, attemptedExecutors);
+                const nextResolved = await this.resolver.resolveAgent(
+                    runFlags,
+                    doctorRunner,
+                    new Set([...attemptedExecutors, ...breaker.executors]),
+                );
                 if (
                     !nextResolved.ok ||
                     nextResolved.stage === undefined ||
-                    attemptedExecutors.has(nextResolved.stage.executorName)
+                    attemptedExecutors.has(nextResolved.stage.executorName) ||
+                    breaker.executors.has(nextResolved.stage.executorName)
                 ) {
                     // Chain exhausted (R4 / 0540 R2) — name the stage, the
                     // tiers attempted, and the executors tried. The run then
@@ -808,6 +1029,11 @@ export class AgentRunExecutor {
                     // Structured twin of the human diagnostic so --json runs are
                     // not silent about exhaustion (review 0540 minor: the stderr
                     // line was json-suppressed with no event equivalent).
+                    this.recordLadderDecision(ladderDecisions, lifecycle.identity, this.ctx.events, {
+                        kind: 'chain-exhausted',
+                        executor: currentStage.executorName,
+                        reason: `escalation chain exhausted; executors tried: ${[...attemptedExecutors].join(', ')}`,
+                    });
                     if (this.ctx.events !== undefined) {
                         void this.ctx.events.emit('agent.invoke.exhausted', {
                             runId: lifecycle.identity.runId,
@@ -830,6 +1056,7 @@ export class AgentRunExecutor {
                 // surface) keep the operator's only recovery signal. The human stderr write and
                 // the `agent.invoke.escalated` event keep their existing behavior.
                 const escalationLine = `Escalating: ${currentStage.executorName} (tier ${currentStage.executorTier}) failed with ${escalationSignal}; retrying on ${nextResolved.stage.executorName} (tier ${nextResolved.stage.executorTier})`;
+                const failedExecutor = currentStage.executorName;
                 if (!jsonOutput) {
                     this.ctx.output.error(escalationLine);
                 }
@@ -866,6 +1093,12 @@ export class AgentRunExecutor {
                 routing = buildRoutingAttribution(nextResolved);
                 attemptedExecutors.add(nextResolved.stage.executorName);
                 tiersAttempted.add(nextResolved.stage.executorTier);
+                this.recordLadderDecision(ladderDecisions, lifecycle.identity, this.ctx.events, {
+                    kind: 'escalation',
+                    executor: failedExecutor,
+                    toExecutor: nextResolved.stage.executorName,
+                    reason: `escalated on ${escalationSignal}`,
+                });
             }
         } finally {
             if (quotaEventBridge !== undefined) quotaEventBridge.off('agent.quota.exhausted', onQuotaExhausted);
@@ -944,6 +1177,7 @@ export class AgentRunExecutor {
             ok: true,
             result,
             invocation,
+            ...(ladderDecisions.length > 0 ? { ladder: ladderDecisions } : {}),
             ...(occupantRef !== undefined ? { coordination: { occupant: occupantRef } } : {}),
         };
     }
