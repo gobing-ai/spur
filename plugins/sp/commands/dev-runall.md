@@ -2,7 +2,7 @@
 description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
 requires: [cli:spur, local-fs]
 role: planner
-argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
+argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--wrap-pr] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -21,7 +21,8 @@ Wraps the **sp:spur-dev** skill.
 | `--auto` | Skip objective HITL gates, and treat the batch as unattended: `--auto` implies `--keep-going` (a failed task is `failed`, its in-batch dependents `skipped`, independents keep running). | off |
 | `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below). `auto`, a name, parallel mode, and headless invocation use subprocesses; `auto` is resolved **once per batch** — the first run's implement `result.executor` is pinned for every later task, and only a `failed-agent` ending re-resolves it, exactly once (1318 R2/R3). The opt-in `fleet` selector (0942) maps each task run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
 | `--json` | Emit structured JSON. | off |
-| `--wrap` | Run the wrap hop **once for the batch** over the `done` subset only (Step 6 of execution-batch.md): `vars.feature` is passed only when every frozen task is `done`/`cancelled`; an empty done subset skips the wrap with a reason. The `--agent` selector is preserved into the `/sp:dev-wrap` handoff when supplied; omission remains omission. | off |
+| `--wrap` | Run the wrap hop **once for the batch** over the `done` subset only (Step 6 of execution-batch.md): `vars.feature` is passed only when every frozen task is `done`/`cancelled`; an empty done subset skips the wrap with a reason. The `--agent` selector is preserved into the `/sp:dev-wrap` handoff when supplied; omission remains omission. Mutually exclusive with `--wrap-pr`. | off |
+| `--wrap-pr` | Run the wrap hop **once for the batch** over the `done` subset, commit close-out writes, push the worktree branch to remote origin, and open a Pull Request targeting the base ref (WT-PR). Mutually exclusive with `--wrap`. Requires `--worktree` or a dedicated non-base branch. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--continue` | Resume an interrupted batch. | off |
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
@@ -34,7 +35,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Usage
 
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
+/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--wrap-pr] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
 ```
 
 Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
@@ -57,7 +58,9 @@ unattended, so it also implies `--keep-going`), `--agent <inline|auto|name>`
 `auto` or a name is merged into each per-task `vars.agent` and `vars.implementAgent`; `fleet` maps each task run to `executor: 'fleet'` instead (fleet dispatch, 0942); parallel mode
 retains isolated subprocesses, ADR-047), `--json` (emit the
 report as JSON), `--wrap` (trigger
-`wrapup-pipeline.yaml` after the batch completes), `--next`
+`wrapup-pipeline.yaml` after the batch completes; mutually exclusive with `--wrap-pr`), `--wrap-pr`
+(run batch wrap hop, commit close-out writes, push worktree branch to remote origin, and open a Pull Request
+targeting the base ref; mutually exclusive with `--wrap`), `--next`
 (chain each task to terminal status, then run the wrap hop **once for the batch** — see below),
 `--worktree` `[<name>]` (run the batch in an isolated git worktree —
 FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form

@@ -154,10 +154,11 @@ spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.js
 One row per run carrying that run's own Total, a bold total of the sums, and — when run windows overlap —
 a wall-span line from the first start to the last end. No run block reuses a batch-wide window.
 
-## Step 6 — Batch wrap (`--wrap` / `--next`) (F96 task 0952 R1)
+## Step 6 — Batch wrap (`--wrap` / `--wrap-pr` / `--next`) (F96 task 0952 R1)
 
 Run **once for the batch**, after the Step 5 report — never per task (dev-operations.md §runall
 agrees; the old "per task" flag-row wording in dev-runall.md was a contradiction, now fixed).
+`--wrap` and `--wrap-pr` are mutually exclusive; passing both is rejected.
 
 The wrap receives only what it would accept:
 
@@ -201,6 +202,11 @@ spur workflow commit-guard-stage --run "$RUN_ID" -- <files the wrap wrote> \
   || { echo "close-out halt: commit-guard refused a path (foreign, unmerged or conflict-marked); nothing committed" >&2; exit 1; }
 git commit -m "chore(wrap): <command> <selector> close-out writes"
 ```
+
+**PR landing (`--wrap-pr`):** Under `--wrap-pr`, the wrap hop and close-out commit execute identically
+on `$BRANCH`, but instead of fast-forward merging into the base ref (`WT-4`), the branch is pushed to
+remote origin and a Pull Request is opened targeting `$BASE_REF` via `gh pr create` (`WT-PR`,
+`execution-worktree-landing.md`).
 
 > **Forbidden:** `git add -A` and `git add .` — here as in every driver commit step. In the
 > worktree batch the same rule rides in the WT-3b block above.

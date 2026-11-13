@@ -352,6 +352,40 @@ merge. One contract, no alternatives:
 This is a deliberate choice over auto-migrating DB state: the committed corpus files are the durable
 record and the persisted run artifacts are the evidence record.
 
+### WT-PR — Remote PR landing path (`--wrap-pr`)
+
+When `--wrap-pr` is supplied instead of `--wrap`:
+The batch/task completes verification with no failed task, and Step 6 wrap completes its close-out commit
+directly on `$BRANCH` in the execution tree.
+Instead of checking out `$BASE_REF` and fast-forward merging locally (`WT-4`), the driver pushes the branch
+to the remote repository and opens a GitHub Pull Request:
+
+1. **Preflight checks (fail-closed):**
+   ```bash
+   git remote get-url origin >/dev/null 2>&1 \
+     || { echo "WT-PR halt: git remote 'origin' is not configured" >&2; exit 1; }
+   gh auth status >/dev/null 2>&1 \
+     || { echo "WT-PR halt: gh CLI is not authenticated; run 'gh auth login'" >&2; exit 1; }
+   ```
+2. **Push branch to origin:**
+   ```bash
+   git push -u origin "$BRANCH" \
+     || { echo "WT-PR halt: git push origin $BRANCH failed" >&2; exit 1; }
+   ```
+3. **Open Pull Request via `gh pr create`:**
+   ```bash
+   # Compose PR title and body from task / batch metadata:
+   # For single task (dev-run): title="feat(<wbs>): <title>", body cites verification PASS & Solution.
+   # For batch (dev-runall): title="feat(<feature-id>): <feature-summary>" or "feat(batch): <selector> (<n> tasks)".
+   PR_URL=$(gh pr create --base "$BASE_REF" --head "$BRANCH" --title "$PR_TITLE" --body "$PR_BODY") \
+     || { echo "WT-PR halt: gh pr create failed" >&2; exit 1; }
+   echo "WT-PR: Pull Request opened at $PR_URL"
+   ```
+4. **Marker transition & worktree disposition:**
+   - Record in the worktree marker: `.status = "pr-created" | .prUrl = "$PR_URL"`.
+   - Local base branch (`$BASE_REF`) remains untouched.
+   - The local worktree and branch are retained (or worktree cleaned up in create mode, while preserving the branch on origin).
+
 ### WT-4r — rebasing a retained branch in a linked worktree
 
 When a pre-merge halt is resolved by rebasing the retained branch (rather than landing as-is), two

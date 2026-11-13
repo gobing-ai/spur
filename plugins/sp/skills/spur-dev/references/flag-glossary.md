@@ -212,6 +212,18 @@ with `--next`, wrap runs **once for the batch** after every task reaches termina
 the batch-once shippable gate `dev-verifyall` uses. Without `--next`, `--wrap` is wrap-without-
 chaining — the single task or batch wraps without advancing the lifecycle. On `dev-find-way` it
 wraps the one resolved ticket inside the worktree before the merge, and is skipped in chart mode.
+Mutually exclusive with `--wrap-pr`.
+
+### `--wrap-pr` — run wrap hop, push branch, and create a Pull Request
+
+**Anchor:** `#flag-wrap-pr`.
+
+After the main step completes, run the wrap hop (learnings, metrics, doc-sync) and close-out commit,
+then push the worktree or dedicated task branch to `origin` and open a Pull Request targeting the base ref using
+`gh pr create`. Mutually exclusive with `--wrap` (specifying both exits 2). Full mode only; requires
+`--worktree` or execution on a dedicated non-base branch (refuses execution directly on `main`).
+On `dev-runall`, PR creation runs **once for the batch** over the `done` subset. When used with
+`--worktree`, leaves the local base branch unmodified and records the PR URL in the worktree marker.
 
 ### `--force` — bypass a named guard
 

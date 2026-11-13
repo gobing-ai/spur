@@ -2,7 +2,7 @@
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
 requires: [cli:spur, local-fs]
 role: coder
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]] [--no-summary]"
+argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -19,7 +19,8 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. omit and explicit `--agent inline` resolve identically (task 0687): eligible stages dispatch once to a native subagent with host-session fallback (0508 eligibility); otherwise every stage executes in the invoking session. `auto` or a name keeps subprocess dispatch.. The opt-in `fleet` selector (0942) maps the run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
 | `--auto` | Skip objective HITL confirmations. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
-| `--wrap` | Run the wrap hop after the main step. The `--agent` selector is preserved into the `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. The wrap hop is workflow-backed and reports its trigger-3 subprocess override. | off |
+| `--wrap` | Run the wrap hop after the main step. The `--agent` selector is preserved into the `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. The wrap hop is workflow-backed and reports its trigger-3 subprocess override. Mutually exclusive with `--wrap-pr`. | off |
+| `--wrap-pr` | Run the wrap hop after the main step, commit close-out writes, push the worktree branch to remote origin, and open a Pull Request targeting the base ref (WT-PR). Mutually exclusive with `--wrap`. Full mode only; requires `--worktree` or a dedicated non-base branch. | off |
 | `--continue` | Resume an interrupted task from its checkpoint. | off |
 | `--worktree` `[<name>]` | Run the task pipeline in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. Full mode only. | off |
 | `--no-summary` | Skip the measured execution summary (per-stage time, wait, tool calls, total / non-cached tokens) printed after a full-mode run. | off (summary printed) |
@@ -28,7 +29,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
-/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--continue] [--worktree [<name>]] [--no-summary]
+/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary]
 
 ## Implementation
 
@@ -64,6 +65,10 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
   `.spur/run/<wbs>-question.md` and exits 0 — the pipeline's `escalate` hop surfaces the question,
   the operator answers via `spur workflow continue --answer-text`, and the guard appends the Q/A
   pair to this transcript before re-entering implement, where the agent reads it and resumes.
+- `--wrap-pr` (run wrap hop, push branch, and create PR) — runs the wrap hop on `$BRANCH`, commits close-out
+  writes, pushes the branch to `origin`, and opens a Pull Request targeting `$BASE_REF`
+  (`WT-PR`, execution-worktree-landing.md). Mutually exclusive with `--wrap`: passing both exits 2. Full mode only;
+  requires `--worktree` or execution on a dedicated non-base branch (refuses execution directly on `main`).
 
 `--worktree` `[<name>]` (run the task's pipeline in an isolated git worktree — FF-merge onto the
 base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree,
