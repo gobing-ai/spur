@@ -7,7 +7,7 @@
             "modelQueries": 3,
             "wallClockMs": 2300000,
             "tokenCostUsd": null,
-            "source": "Full-depth runs 2026-08-08..20: 1459s-2719s; authoritative 2053s/2023s/1985s (n=3, 2026-08-19/20, per ADR-076 retirement — 538s unusable). Budget = 2300s ≈ max+~12% headroom. Gate measures median-of-sane terminal runs; short precheck-failure/dry runs pull the median down, so this is a gross-regression ceiling. Live fixture re-measurement: bun scripts/spur-dev.ts eval-pipeline --runs 3 (operator command in 0607 Solution). 2026-11-14 recount: 4 -> 3 model queries (implement, remediate, review) after the slim-harness refactor; wall-clock ceiling predates it and is not re-measured.",
+            "source": "Full-depth runs 2026-08-08..20: 1459s-2719s; authoritative 2053s/2023s/1985s (n=3, 2026-08-19/20, per ADR-076 retirement — 538s unusable). Budget = 2300s ≈ max+~12% headroom. Gate measures median-of-sane terminal runs; short precheck-failure/dry runs pull the median down, so this is a gross-regression ceiling. Live fixture re-measurement: bun scripts/spur-dev.ts eval-pipeline --runs 3 (operator command in 0607 Solution). 2026-11-14 recount: 4 -> 3 model queries (implement, remediate, review) after the slim-harness refactor; the wall-clock ceiling predates it and is reference only — no pipeline, gate or hook reads it; only a manual `spur workflow cost --budget` compares against it.",
             "decision": null
         },
         "idea-pipeline": {

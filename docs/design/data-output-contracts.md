@@ -262,7 +262,7 @@ edit, caught post-commit by a human. New task citations and test evidence theref
 the `path:symbol` form — the symbol names a named code entity, so an edit that shifts lines
 does not invalidate it.
 
-- **Preferred form:** `` `task-check.ts:extractBacktickLineAnchors` `` — repo-relative path plus a
+- **Preferred form:** `` `task-check.ts:TaskCheckService` `` — repo-relative path plus a
   named symbol (function, class, exported const). Applies to new citations in task files
   (Solution/Testing/References evidence) and test descriptions.
 - **Line anchors stay acceptable** when there is no enclosing named symbol or the reference is

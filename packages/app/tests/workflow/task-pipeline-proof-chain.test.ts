@@ -435,7 +435,7 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
             `.spur/run/${VAR('__runId')}-review-cert.md`,
         ]);
         expect(verdict?.softFail).toBe(true);
-        // Derivation only: the pipeline does not pass `--replay` (the gate already ran the tests).
+        // Derivation only: the gate already ran the tests.
         expect(verdict?.timeoutMs).toBe('120000');
     });
 
