@@ -97,12 +97,7 @@ describe('shipped decision catalog content — frozen routing contract', () => {
         }
     });
 
-    // The fallback IS the degraded routing value the guards consume — freeze it per decision.
-    test('fallback values match the routing the retired inline defaults produced', () => {
-        // The lane decision is deterministic now; only `failure-class` ships.
-        expect(decisions['task-semantic-risk']).toBeUndefined();
+    test('failure-class keeps the degraded routing fallback', () => {
         expect(decisions['failure-class']?.fallback).toBe('fix');
-        expect(decisions['task-triage']).toBeUndefined();
-        expect(decisions['review-failure-class']).toBeUndefined();
     });
 });

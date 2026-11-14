@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TaskService } from '@gobing-ai/spur-app';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
@@ -19,14 +19,6 @@ let cwd: string;
 beforeAll(async () => {
     cwd = join(join(import.meta.dir, '..'), '..', `.tmp-record-task-test-${Date.now()}`);
     await mkdir(join(cwd, 'docs', 'tasks'), { recursive: true });
-    // Materialize the file the fixtures cite as their evidence anchor. Since the 0994
-    // follow-up a live record's Testing/Solution `file:line` anchor must RESOLVE at the
-    // `--as done` guard (`L4.anchor-unresolved` is an error there), so a fixture citing a
-    // path that does not exist would be denied by the anchor gate before the behaviour
-    // each test below exists to exercise. Every fixture cites line 1 of this file.
-    const evidenceTarget = join(cwd, 'apps', 'cli', 'src', 'commands', 'task.ts');
-    await mkdir(join(evidenceTarget, '..'), { recursive: true });
-    await writeFile(evidenceTarget, '// fixture evidence target (no real code)\nexport {};\n', 'utf-8');
 });
 
 afterAll(() => {
@@ -135,7 +127,6 @@ describe('spur task CLI', () => {
             `${JSON.stringify({
                 wbs,
                 verdict: 'PASS',
-                confidence: 'HIGH',
                 requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'tests pass' }],
                 acceptanceCriteria: [],
                 checks: [{ name: 'Security', status: 'P1', evidence: 'no bypass' }],

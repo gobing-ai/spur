@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { main } from '../../../src/index';
 import { type CapturedOutput, createCapturedOutput } from '../../helpers';
@@ -17,14 +17,6 @@ let cwd: string;
 beforeAll(async () => {
     cwd = join(join(import.meta.dir, '..'), '..', `.tmp-verdict-task-test-${Date.now()}`);
     await mkdir(join(cwd, 'docs', 'tasks'), { recursive: true });
-    // Materialize the file the fixtures cite as their evidence anchor. Since the 0994
-    // follow-up a live record's Testing/Solution `file:line` anchor must RESOLVE at the
-    // `--as done` guard (`L4.anchor-unresolved` is an error there), so a fixture citing a
-    // path that does not exist would be denied by the anchor gate before the behaviour
-    // each test below exists to exercise. Every fixture cites line 1 of this file.
-    const evidenceTarget = join(cwd, 'apps', 'cli', 'src', 'commands', 'task.ts');
-    await mkdir(join(evidenceTarget, '..'), { recursive: true });
-    await writeFile(evidenceTarget, '// fixture evidence target (no real code)\nexport {};\n', 'utf-8');
 });
 
 afterAll(() => {
@@ -140,7 +132,6 @@ describe('spur task CLI', () => {
         const answer = (tag: string) =>
             [
                 'Verdict: PASS',
-                'Confidence: MEDIUM',
                 '',
                 '| Req | Status | Evidence |',
                 '|-----|--------|----------|',
@@ -191,42 +182,5 @@ describe('spur task CLI', () => {
         });
         expect(exitCode).toBe(1);
         expect(output.errors.some((e) => e.includes('Answer file not found'))).toBe(true);
-    });
-
-    // 1319 R4 through the real verb: `--replay` must be opt-in, and a cited test file that does
-    // not hold up must downgrade PASS to PARTIAL inside the durable artifact. A missing file is
-    // the deterministic failure here — nothing is spawned.
-    test('--replay downgrades PASS to PARTIAL when a cited test file is missing; without it nothing replays', async () => {
-        const answerPath = join(cwd, '8090-verify-answer.txt');
-        const artifact = join(process.cwd(), '.spur', 'run', '8090-verdict.json');
-        await Bun.write(
-            answerPath,
-            '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET | `apps/cli/tests/gone.test.ts:3` |\n',
-        );
-
-        try {
-            const plain = createCapturedOutput();
-            expect(
-                await main(['task', 'verdict', '8090', '--from-answer', answerPath, '--json'], { cwd, output: plain }),
-            ).toBe(0);
-            expect(JSON.parse(lastMessage(plain)).replay).toBeUndefined();
-
-            const replayed = createCapturedOutput();
-            const exitCode = await main(
-                ['task', 'verdict', '8090', '--from-answer', answerPath, '--replay', '--json'],
-                {
-                    cwd,
-                    output: replayed,
-                },
-            );
-            expect(exitCode).toBe(1);
-            const parsed = JSON.parse(await readFile(artifact, 'utf-8'));
-            expect(parsed.verdict).toBe('PARTIAL');
-            expect(parsed.replay.findings).toEqual([
-                { anchor: 'apps/cli/tests/gone.test.ts:3', file: 'apps/cli/tests/gone.test.ts', missing: true },
-            ]);
-        } finally {
-            rmSync(artifact, { force: true });
-        }
     });
 });

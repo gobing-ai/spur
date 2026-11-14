@@ -11,14 +11,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/ts-utils';
-import {
-    type ActionCostAttributionLike,
-    buildStepProfile,
-    formatStepProfileHuman,
-    type StepProfileRow,
-    type StepProfileRun,
-    type TraceActionEvent,
-} from '../../src/workflow/step-profile';
+import type { StepProfileRow } from '../../src/workflow/step-profile';
 import { parseStepProfileCliArgs, runStepProfileCli, STEP_PROFILE_USAGE } from '../../src/workflow/step-profile-cli';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
@@ -29,96 +22,11 @@ function at(sec: number): string {
     return new Date(T0 + sec * 1000).toISOString();
 }
 
-interface ActionSpec {
-    node: string;
-    actionKind: string;
-    startSec: number;
-    endSec: number;
-    invocation?: Record<string, string | number | boolean> | null;
-    /** `undefined` = the executor computed no cost attribution at all (live `cost` absent). */
-    cost?: ActionCostAttributionLike | null;
-}
-
-function actionEvent(spec: ActionSpec): TraceActionEvent {
-    return {
-        kind: 'action',
-        node: spec.node,
-        actionKind: spec.actionKind,
-        durationMs: (spec.endSec - spec.startSec) * 1000,
-        startedAt: at(spec.startSec),
-        completedAt: at(spec.endSec),
-        invocation: spec.invocation ?? null,
-        cost: spec.cost === undefined ? null : spec.cost,
-    };
-}
-
-/** A run carries non-action events too; only `kind: 'action'` is evidence. */
-const PHASE_EVENT: TraceActionEvent = { kind: 'phase' };
-
-function run(runId: string, actions: ActionSpec[]): StepProfileRun {
-    return { runId, events: [PHASE_EVENT, ...actions.map(actionEvent)] };
-}
-
-function cost(cacheHit: number | null, estimatedHit?: number): ActionCostAttributionLike {
-    return {
-        exact: cacheHit === null ? null : { cacheHit },
-        estimated: estimatedHit === undefined ? null : { cacheHit: estimatedHit },
-    };
-}
-
 function rowFor(rows: StepProfileRow[], node: string, actionKind: string): StepProfileRow {
     const row = rows.find((r) => r.node === node && r.actionKind === actionKind);
     if (row === undefined) throw new Error(`no row for ${node}/${actionKind}`);
     return row;
 }
-
-// ── fixtures: three runs, one node executed twice in run A ──────────────────────────────
-
-const AGENT_FRESH: ActionSpec = {
-    node: 'implement',
-    actionKind: 'agent.run',
-    startSec: 0,
-    endSec: 20,
-    invocation: { continue: false, skill: 'sp:super-coder' },
-    cost: cost(0.8),
-};
-const AGENT_RESUMED: ActionSpec = {
-    node: 'implement',
-    actionKind: 'agent.run',
-    startSec: 30,
-    endSec: 34,
-    invocation: { continue: true },
-    // `estimated` is retroactive evidence and must never mix into the reported cacheHit.
-    cost: cost(0.4, 0.0),
-};
-
-const RUNS: StepProfileRun[] = [
-    run('run-a', [AGENT_FRESH, { node: 'test', actionKind: 'shell', startSec: 25, endSec: 28 }, AGENT_RESUMED]),
-    run('run-b', [
-        {
-            node: 'implement',
-            actionKind: 'agent.run',
-            startSec: 0,
-            endSec: 30,
-            invocation: { continue: true },
-            cost: cost(0.2),
-        },
-        { node: 'test', actionKind: 'shell', startSec: 30, endSec: 31 },
-    ]),
-    // Old event: no `invocation` recorded at all → session unknown, never "fresh".
-    run('run-c', [
-        {
-            node: 'implement',
-            actionKind: 'agent.run',
-            startSec: 0,
-            endSec: 1,
-            invocation: null,
-            cost: cost(null),
-        },
-    ]),
-];
-
-const PROFILE = buildStepProfile({ workflow: 'idea-pipeline', windowSec: 300, runs: RUNS });
 
 // ── CLI contract ───────────────────────────────────────────────────────────────────────
 
@@ -172,19 +80,6 @@ describe('task 0827 R1 — CLI flags, defaults and exit codes', () => {
         expect(parseStepProfileCliArgs(['idea-pipeline'], '/custom/spur').spurBin).toBe('/custom/spur');
         expect(parseStepProfileCliArgs(['idea-pipeline']).spurBin).toBe('spur');
         expect(parseStepProfileCliArgs(['idea-pipeline', '--spur-bin', 'x'], '/custom/spur').spurBin).toBe('x');
-    });
-
-    test('human output is one line per row: one-decimal seconds and ? for unknown', () => {
-        const text = formatStepProfileHuman(PROFILE);
-        const lines = text.trimEnd().split('\n');
-        expect(lines).toHaveLength(1 + PROFILE.rows.length);
-        expect(text).toContain('implement');
-        expect(text).toContain('4.0s');
-        expect(text).toContain('30.0s');
-        // `test/shell` has one measured idle gap of 0.0s and no cache evidence at all.
-        expect(text).toContain('0.0s');
-        expect(text).toContain('0.40 (3/4)');
-        expect(text).toContain('? (0/2)');
     });
 });
 

@@ -9,7 +9,7 @@
  *   - an operator leaves and the renewer keeps heartbeating       → `record-gone`
  *   - an orphaned renewer outlives its usefulness                 → lifetime cap
  *
- * The TTL is injected (900 ms here instead of 30 s) so the 3×-TTL scenario runs in seconds
+ * The TTL is injected (300 ms here instead of 30 s) so the 3×-TTL scenario runs in about a second
  * while keeping the real renewal ratio (`interval = TTL / 3`). A real long-lived child process
  * supplies the agent identity — a fixture fingerprint would prove nothing about `ps`.
  */
@@ -27,7 +27,7 @@ import {
     type ProcessIdentity,
 } from '../../src/index';
 
-const TTL_MS = 900;
+const TTL_MS = 300;
 const INTERVAL_MS = TTL_MS / 3;
 
 async function makeGuestService(): Promise<{
@@ -108,7 +108,7 @@ describe('GuestLeaseRenewer (1279 R1 — 3× TTL of work with no inbox wait)', (
             });
             const running = renewer.run('coder-g1', abort.signal);
 
-            await Bun.sleep(3 * TTL_MS + 400);
+            await Bun.sleep(3 * TTL_MS + 200);
 
             const claimAfter = await new ProjectClaimDao(db).get(cwd, 'guest:coder-g1');
             expect(claimAfter).not.toBeNull();

@@ -1,14 +1,12 @@
 /**
- * 1319 R3/R5 — the two pipeline behaviours that are wiring, not library code.
+ * 1319 R3 — the formatter step is wiring, not library code.
  *
  * Same harness discipline as the other task-pipeline tests (0945/0943): load the LIVE definition,
  * execute its own actions and guards against staged state with the workflow vars exported as env.
  * No engine run and no model call.
  *
- * - R3/AC5: the implement-exit formatter is a bounded `command.gate`. A hanging formatter finishes
+ * The implement-exit formatter is a bounded `command.gate`. A hanging formatter finishes
  *   at the bound and still reports success to the chain (`softFail`), so the run proceeds to gate.
- * - R5/AC7: on a verdict-lint failure the review state re-enters itself ONCE with the lint findings
- *   in the prompt and the stale cert/answer removed; a second failure falls through to remediate.
  */
 
 import { describe, expect, test } from 'bun:test';

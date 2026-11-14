@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -69,21 +69,6 @@ function seedEnv(opts: {
         path: taskPath,
         cleanup: () => rmSync(root, { recursive: true, force: true }),
     };
-}
-
-/**
- * Seed one repository-relative evidence file under a seeded task's repo root.
- *
- * Live records must RESOLVE every in-repo anchor (0994 follow-up: `L4.anchor-unresolved`
- * is an error), so a fixture that cites a real-looking path has to materialize it —
- * otherwise the fixture is asserting on a gate finding it never intended to model.
- * Only task paths built by `seedEnv` work here: its repo root is one level above the
- * `tasks/` dir, whereas `seedFile` resolves its root to the system temp dir.
- */
-function seedRepoFile(taskPath: string, rel: string, content: string): void {
-    const abs = join(taskPath, '..', '..', rel);
-    mkdirSync(join(abs, '..'), { recursive: true });
-    writeFileSync(abs, content);
 }
 
 /** Minimal valid task frontmatter for L4 tests. */
@@ -2390,7 +2375,6 @@ describe('F92 R2 — target-status (asStatus) validation projection', () => {
         ].join('\n');
 
         const { fs, path, cleanup } = seedEnv({ taskContent: testingTaskMissingReview });
-        seedRepoFile(path, 'packages/app/src/services/x.ts', 'export const x = 1;\n'.repeat(14));
         const svc = new TaskCheckService(fs, matrix);
 
         // Plain check (current status = testing): testing requires Solution+Testing
@@ -2495,14 +2479,8 @@ describe('0800 R1 — open Plan box is an error at a terminal transition target'
     const openBoxFinding = (result: { findings: Array<{ code: string; severity: string }> }) =>
         result.findings.find((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
 
-    // The fixture cites `packages/app/src/services/x.ts:12`; seed it under the seeded
-    // repo root so the certification gate sees a resolvable anchor and this describe
-    // stays about open-box severity. Terminal variants are exempt from the gate
-    // anyway, but seeding them too keeps one fixture shape.
     function seedOpenBox(content: string) {
-        const env = seedEnv({ taskContent: content });
-        seedRepoFile(env.path, 'packages/app/src/services/x.ts', 'export const x = 1;\n'.repeat(14));
-        return env;
+        return seedEnv({ taskContent: content });
     }
 
     test('no --as on the same testing task reports nothing (non-terminal current row)', async () => {

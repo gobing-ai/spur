@@ -604,8 +604,8 @@ status moves, filings) and assert no code, API or version fact._
   <!-- src: package.json:32 · confidence: HIGH -->
 
 ### Removed
-- `feature-verification.yaml`, `pr-review.yaml` and `wayfinder-resolution.yaml` leave `config/workflows`, the generated CLI config and the init scaffold — the first folded into `feature-lifecycle`'s `verifying` entry (1246), the other two replaced by the flat `spur builder pr-<verb>` verbs and the `sp/wayfinder` skill — and a repo-wide absence proof plus a recorded retirement guard the removal (fe86b4fdf, b7ed2885f, b4e9d3e7b)
-  <!-- src: config/workflow-candidates.json:70, repo-wide-tests/workflow-consolidation-absence.test.ts:1 · confidence: MEDIUM -->
+- `feature-verification.yaml`, `pr-review.yaml` and `wayfinder-resolution.yaml` leave `config/workflows`, the generated CLI config and the init scaffold — the first folded into `feature-lifecycle`'s `verifying` entry (1246), the other two replaced by the flat `spur builder pr-<verb>` verbs and the `sp/wayfinder` skill — with retirement decisions recorded in the workflow promotion ledger (fe86b4fdf, b7ed2885f, b4e9d3e7b)
+  <!-- src: config/workflow-candidates.json:70, docs/design/workflow-consolidation.md · confidence: MEDIUM -->
 
 BREAKING CHANGE: the three removed workflows no longer exist, so a project override of any of them stops applying. Migrate a `feature-verification` override into the `feature-lifecycle` `verifying` state, a `pr-review` override onto the `spur builder pr-*` verbs (`/sp:dev-pr-review` runs them directly), and a `wayfinder-resolution` override onto `sp/wayfinder` over the direct verbs. Delete the three stale seeded copies from `~/.config/spur/workflows/`; init preserves existing files. A verification receipt recorded under the retired `feature-verification` identity is stale after upgrade: run `spur feature verify <id>` once. The wrap-up `feature` variable has been removed. A wrap-up step that relied on `wrapup-pipeline` advancing feature status must now call `spur feature sync <id>`.
 

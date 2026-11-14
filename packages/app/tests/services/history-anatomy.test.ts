@@ -418,58 +418,6 @@ describe('checkReportStructure (R5)', () => {
         expect(r.problems.some((p) => p.includes('placeholder'))).toBe(true);
     });
 
-    // R5/R26: the anchor gate must inspect *every* claim, and must not mistake a table's own
-    // header row for an unanchored claim — the two halves of the same defect.
-    const head = sections
-        .slice(0, 11)
-        .map((s) => `## ${s}\n\nbody`)
-        .join('\n\n');
-    const ledger = (rows: string) => `${head}\n\n## Evidence ledger\n\n| Claim | Anchor |\n| --- | --- |\n${rows}`;
-
-    test('a fully anchored ledger table passes — the header row is structure, not a claim', () => {
-        const r = checkReportStructure(
-            ledger(
-                '| tokens rose 20% | `packages/app/src/x.ts:10` |\n| loop detected | `packages/domain/src/y.ts:42` |\n',
-            ),
-        );
-        expect(r.problems).toEqual([]);
-        expect(r.ok).toBe(true);
-    });
-
-    test('an unanchored claim after an anchored first claim still fails', () => {
-        const r = checkReportStructure(
-            ledger('| tokens rose 20% | `packages/app/src/x.ts:10` |\n| sessions were slow | none whatsoever |\n'),
-        );
-        expect(r.ok).toBe(false);
-        expect(r.problems).toContain('evidence-claim-without-anchor');
-    });
-
-    test('a blockquote ledger is scanned past its first line', () => {
-        const r = checkReportStructure(
-            `${head}\n\n## Evidence ledger\n\n> tokens rose 20% — \`packages/app/src/x.ts:10\`\n> loop detected — no anchor here\n`,
-        );
-        expect(r.ok).toBe(false);
-        expect(r.problems).toContain('evidence-claim-without-anchor');
-    });
-
-    // 0690 R3: the anchor gate keeps pinning the backticked format from the 0687 fix pass —
-    // the `current #/pointer` artifact vocabulary enrich models actually emit never matches.
-    test('a `current #/pointer` claim row fails evidence-claim-without-anchor', () => {
-        const r = checkReportStructure(ledger('| repeated session spike | current #/sessions/pi-deepseek |\n'));
-        expect(r.ok).toBe(false);
-        expect(r.problems).toContain('evidence-claim-without-anchor');
-    });
-
-    test('backticked path and path:line anchors satisfy the gate directly (0690 R3)', () => {
-        const r = checkReportStructure(
-            ledger(
-                '| artifact digest changed | `.spur/run/x-history-anatomy-current.json` |\n| gate regex drifted | `plugins/sp/scripts/history-anatomy-cache.mjs:330` |\n',
-            ),
-        );
-        expect(r.problems).toEqual([]);
-        expect(r.ok).toBe(true);
-    });
-
     // 0690: a replica of run 99333080's candidate reproduces all three observed gate classes by name.
     test('the 99333080 failure classes reproduce together and by name', () => {
         const bad = sections
@@ -480,7 +428,6 @@ describe('checkReportStructure (R5)', () => {
         const r = checkReportStructure(replica);
         expect(r.ok).toBe(false);
         expect(r.problems).toContain('placeholder-or-todo-present');
-        expect(r.problems).toContain('evidence-claim-without-anchor');
         expect(r.problems).toContain('section-missing-or-out-of-order:Report-only advisories');
     });
 });

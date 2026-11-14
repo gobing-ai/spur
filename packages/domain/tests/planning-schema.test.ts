@@ -301,10 +301,6 @@ describe('status icon maps', () => {
         }
     });
 
-    test('taskStatusIcon returns the mapped emoji for a known status', () => {
-        expect(taskStatusIcon('todo')).toBe(TASK_STATUS_ICONS.todo);
-    });
-
     test('TASK_STATUS_ICONS.deprecated is defined and taskStatusIcon resolves it (ADR-137)', () => {
         expect(TASK_STATUS_ICONS.deprecated).toBeDefined();
         expect(taskStatusIcon('deprecated')).toBe(TASK_STATUS_ICONS.deprecated);

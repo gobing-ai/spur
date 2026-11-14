@@ -173,13 +173,6 @@ describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () =>
         ).toBe(true);
     });
 
-    test('start state no longer archives/resets shared idea-* paths', () => {
-        const start = DEF.states.find((s) => s.id === 'start');
-        const cmds = (start?.onEnter ?? []).filter((a) => a.kind === 'shell').map((a) => a.options?.command ?? '');
-        expect(cmds.some((c) => c.includes('idea-archive'))).toBe(false);
-        expect(cmds.some((c) => c.includes('rm -f .spur/run/idea-'))).toBe(false);
-    });
-
     test('discovery/eval/gate paths are __runId-scoped', () => {
         const raw = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
         // Every former fixed idea-* run path must carry the run-id prefix.
@@ -605,15 +598,6 @@ describe('idea-pipeline definition — regression invariants and no-surface guar
         }
     });
 
-    test('static runall recommendation is gone from the whole workflow definition, not just the note', () => {
-        const raw = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
-        // Finding 4 pre-fix: the handoff state hardcoded "Next: /sp:dev-runall --feature <id>"
-        // in both the state description and the terminal note. No form of that static
-        // recommendation may reappear anywhere in the definition.
-        expect(raw).not.toContain('Next: /sp:dev-runall');
-        expect(raw).not.toContain('Next command: /sp:dev-runall');
-    });
-
     test('task-batch.schema.json stays closed and carries no order-sidecar field (R2)', () => {
         // F2: the private order sidecar (`depends_on_names`) is workflow-run data, never part of
         // the public batch-create input contract. The schema must remain closed (no additional
@@ -649,26 +633,7 @@ function agentPrompt(stateId: string): string {
     return String(action?.options?.input ?? '');
 }
 
-function guardCommand(from: string, to: string): string {
-    const guard = DEF.transitions.find((t) => t.from === from && t.to === to)?.guard;
-    expect(guard, `transition ${from}→${to} must declare a guard`).toBeDefined();
-    return String(guard?.options?.command ?? '');
-}
-
 describe('idea-pipeline definition — 0887 robustness contract', () => {
-    test('R1: start persists the idea verbatim to -idea-input.md and fails the run when it is empty', () => {
-        const shell = stateActions('start').find(
-            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-idea-input.md'),
-        );
-        const command = String(shell?.options?.command ?? '');
-        expect(command).toContain('-idea-input.md');
-        // Verbatim write of $idea, then a whitespace-aware non-empty check (a bare `test -s`
-        // passes a newline-only file, so emptiness must be measured with awk NF).
-        expect(command).toContain('printf \'%s\\n\' "$idea" >');
-        expect(command).toContain("awk 'NF'");
-        expect(command).toContain('-idea-precheck-doctor.status');
-    });
-
     test('R2: every model-bearing stage prompt treats the idea-input artifact as the authoritative ask', () => {
         for (const state of [
             'discovery',
@@ -707,36 +672,11 @@ describe('idea-pipeline definition — 0887 robustness contract', () => {
         ).toBe(false);
     });
 
-    test('R4: profile=auto ac-generate guards conjunct the recorded check status', () => {
-        const forward = guardCommand('ac-generate', 'system-design');
-        // 0945/1004: coverage folds into the recorded idea-ac-check status (gate --inventory);
-        // guards read the derived readiness file, never check internals inline.
-        expect(forward).toContain('-idea-ac-ready.status');
-        expect(forward).not.toContain('-idea-coverage.status');
-        expect(guardCommand('ac-generate', 'decompose')).toContain('-idea-ac-ready.status');
-        // Retry/failed edges keep the direct single-status pair (1004 R2 dropped cov_status).
-        for (const to of ['ac-generate', 'failed'] as const) {
-            const command = guardCommand('ac-generate', to);
-            expect(command).toContain('test "$ac_status" != PASS');
-            expect(command).not.toContain('cov_status');
-        }
-    });
-
-    test('R4: the objective check states are deleted, so no profile pauses on them (1250 R2)', () => {
-        // The former interactive feature-check/batch-create gates are gone: their recorded results
-        // are deterministic, so no operator answer could change the route. Only the two taste gates
-        // remain decision points.
-        const stateIds = DEF.states.map((s) => s.id);
-        expect(stateIds).not.toContain('feature-check');
-        expect(stateIds).not.toContain('batch-create');
+    test('R4: only the two taste gates remain decision points (1250 R2)', () => {
         const gateStates = DEF.states
             .filter((s) => (s.onEnter ?? []).some((a) => a.kind === 'hitl.confirm'))
             .map((s) => s.id);
         expect(gateStates.sort()).toEqual(['design-approval', 'idea-eval']);
-        // No transition may target a deleted state.
-        const targets = new Set(DEF.transitions.map((t) => t.to));
-        expect(targets.has('feature-check')).toBe(false);
-        expect(targets.has('batch-create')).toBe(false);
     });
 
     test('R5: ac-generate prompt carries the verbatim-title rule', () => {

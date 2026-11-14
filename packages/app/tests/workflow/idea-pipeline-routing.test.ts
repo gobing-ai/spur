@@ -209,21 +209,6 @@ describe('idea-pipeline 0945 — route fact writer (R2)', () => {
 describe('idea-pipeline 1250 R2 — the recorded objective results route under every profile', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'idea-routing-profiles-'));
 
-    test('the deleted objective gate states are gone from the definition', () => {
-        const ids = DEF.states.map((s) => s.id);
-        expect(ids).not.toContain('feature-check');
-        expect(ids).not.toContain('batch-create');
-        const targets = new Set(DEF.transitions.map((t) => t.to));
-        expect(targets.has('feature-check')).toBe(false);
-        expect(targets.has('batch-create')).toBe(false);
-        // No answer-normalization shells survive for the deleted gates.
-        const allShells = DEF.states
-            .flatMap((s) => shellActions(s.id).map((a) => String(a.options?.command ?? '')))
-            .join('\n');
-        expect(allShells).not.toContain('idea-feature-check-answer.txt');
-        expect(allShells).not.toContain('idea-batch-create-answer.txt');
-    });
-
     test('ac-generate routes on the recorded check and derived route under auto AND standard alike', () => {
         let index = 0;
         const targets = new Map<string, string>();

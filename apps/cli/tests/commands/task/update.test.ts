@@ -20,14 +20,6 @@ let cwd: string;
 beforeAll(async () => {
     cwd = join(join(import.meta.dir, '..'), '..', `.tmp-update-task-test-${Date.now()}`);
     await mkdir(join(cwd, 'docs', 'tasks'), { recursive: true });
-    // Materialize the file the fixtures cite as their evidence anchor. Since the 0994
-    // follow-up a live record's Testing/Solution `file:line` anchor must RESOLVE at the
-    // `--as done` guard (`L4.anchor-unresolved` is an error there), so a fixture citing a
-    // path that does not exist would be denied by the anchor gate before the behaviour
-    // each test below exists to exercise. Every fixture cites line 1 of this file.
-    const evidenceTarget = join(cwd, 'apps', 'cli', 'src', 'commands', 'task.ts');
-    await mkdir(join(evidenceTarget, '..'), { recursive: true });
-    await writeFile(evidenceTarget, '// fixture evidence target (no real code)\nexport {};\n', 'utf-8');
 });
 
 afterAll(() => {
@@ -129,7 +121,6 @@ describe('spur task CLI', () => {
     const PASS_VERDICT = {
         wbs: 'PLACEHOLDER',
         verdict: 'PASS',
-        confidence: 'HIGH',
         requirements: [
             { id: 'R1', status: 'MET', evidence: 'x' },
             { id: 'R2', status: 'MET', evidence: 'y' },
@@ -587,7 +578,6 @@ describe('spur task CLI', () => {
                     wbs,
                     verdict: 'PASS',
                     source: 'test-stub',
-                    confidence: 'HIGH',
                     requirements: [{ id: 'r1', status: 'MET', evidence: 'stub' }],
                     acceptanceCriteria: [],
                     checks: [{ name: 'stub', status: 'pass', evidence: 'stub' }],
@@ -730,18 +720,6 @@ describe('spur task CLI', () => {
         const msg = output.errors.join('\n') + output.messages.join('\n');
         expect(msg).toContain('missing verify verdict artifact');
         expect(await readStatus(wbs)).toBe('testing');
-    });
-    test('done guard: 1123 → F511 — a legacy artifact carrying a confidence value parses and advances', async () => {
-        // F511 (task 1207): the 1123 requirement (a PASS must state a level) was retired —
-        // a model that can write a PASS can write `HIGH`. The guard reads proof digests only;
-        // legacy artifacts that still carry a `confidence` key parse with the value ignored,
-        // including out-of-vocabulary ones (read-compat, no error).
-        const wbs = await seedTaskAtTesting('guard legacy-confidence');
-        await writeVerdict(wbs, { ...PASS_VERDICT, wbs, confidence: 'SURE' });
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], { cwd, output });
-        expect(exitCode).toBe(0);
-        expect(await readStatus(wbs)).toBe('done');
     });
     test('done guard: no verdict file + --force-done → allow with audit trail', async () => {
         const wbs = await seedTaskAtTesting('guard no-verdict force');

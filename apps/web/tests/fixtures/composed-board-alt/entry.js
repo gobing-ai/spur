@@ -3,7 +3,7 @@
 // Served at the SAME `/modules/native-probe/*` path as the first project's module, on a different
 // origin, from a different catalog: same module id, different sidebar metadata, different content
 // and a different declared stylesheet. A Board that leaked the first project's catalog, styles or
-// module state could not satisfy the assertions in `composed-board-browser.test.ts`.
+// module state could not satisfy the assertions in `composed-board-browser.heavy.test.ts`.
 import { createContext, createElement, useContext, useState } from 'react';
 
 /** Context this project's module owns; the default value differs from the first project's. */
