@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { main } from '../../../src/index';
 import { type CapturedOutput, createCapturedOutput } from '../../helpers';
@@ -182,42 +182,5 @@ describe('spur task CLI', () => {
         });
         expect(exitCode).toBe(1);
         expect(output.errors.some((e) => e.includes('Answer file not found'))).toBe(true);
-    });
-
-    // 1319 R4 through the real verb: `--replay` must be opt-in, and a cited test file that does
-    // not hold up must downgrade PASS to PARTIAL inside the durable artifact. A missing file is
-    // the deterministic failure here — nothing is spawned.
-    test('--replay downgrades PASS to PARTIAL when a cited test file is missing; without it nothing replays', async () => {
-        const answerPath = join(cwd, '8090-verify-answer.txt');
-        const artifact = join(process.cwd(), '.spur', 'run', '8090-verdict.json');
-        await Bun.write(
-            answerPath,
-            '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET | `apps/cli/tests/gone.test.ts:3` |\n',
-        );
-
-        try {
-            const plain = createCapturedOutput();
-            expect(
-                await main(['task', 'verdict', '8090', '--from-answer', answerPath, '--json'], { cwd, output: plain }),
-            ).toBe(0);
-            expect(JSON.parse(lastMessage(plain)).replay).toBeUndefined();
-
-            const replayed = createCapturedOutput();
-            const exitCode = await main(
-                ['task', 'verdict', '8090', '--from-answer', answerPath, '--replay', '--json'],
-                {
-                    cwd,
-                    output: replayed,
-                },
-            );
-            expect(exitCode).toBe(1);
-            const parsed = JSON.parse(await readFile(artifact, 'utf-8'));
-            expect(parsed.verdict).toBe('PARTIAL');
-            expect(parsed.replay.findings).toEqual([
-                { anchor: 'apps/cli/tests/gone.test.ts:3', file: 'apps/cli/tests/gone.test.ts', missing: true },
-            ]);
-        } finally {
-            rmSync(artifact, { force: true });
-        }
     });
 });

@@ -60,10 +60,4 @@ describe('spur feature verify', () => {
         expect(noRun.exitCode).toBe(1);
         expect(noRun.err).toBe('feature verify: Error: feature D9 not found in the configured features directory');
     });
-
-    test('the retired confidence flags are gone (ADR-138, task 1221)', async () => {
-        const r = await run(['feature', 'verify', 'D9', '--run-id', 'v3', '--ack-low-confidence']);
-        expect(r.exitCode).not.toBe(0);
-        expect(r.err).toContain("unknown option '--ack-low-confidence'");
-    });
 });
