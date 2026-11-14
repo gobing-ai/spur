@@ -174,7 +174,8 @@ Two properties are load-bearing and are asserted structurally:
   unconditional single end-of-run gate).
 - **The full tier is still the only `PASS` writer.** Only the integrated run can claim a green
   project gate; the per-task token is `DEFERRED`, and the deferred `gate → review`
-  guard accepts it only while `deferQualityGate = "true"`.
+  guard accepts it only while `deferQualityGate = "true"` (the pipeline default since the
+  incremental gate; pass `"false"` for a full gate on every task).
 
 `--defer-gate` with `--mode sequential` (or omitted `--mode`) is rejected — the flag exists to move
 one full gate from N worktrees to the one place the integrated tree exists. Under `--mode auto` it

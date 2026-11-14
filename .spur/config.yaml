@@ -106,6 +106,10 @@ builder:
   # `spur self exec <name>`.
   preset: bun
   actions:
+    # Incremental gate: the lcov `coverage-gate` rule certifies a FULL-suite run, so the
+    # per-task tier runs only the static post rule; its coverage floor is the changed-file
+    # check in the gate itself. `bun run test-post-check` (full gate) keeps both.
+    rules-post: bun run apps/cli/src/index.ts rule run --preset recommended-post-check --rule every-export-has-tsdoc --fail-on warning --no-logo
     test-repo-wide: bun run test-repo-wide
     plugin-smoke: bun run plugin-smoke
     corpus-check: bun run corpus-check

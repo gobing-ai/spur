@@ -117,9 +117,10 @@ demonstrate stands on its own and governs any future candidate. Composition, act
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
-`deferQualityGate` (default `"false"`; an opt-in parallel batch sets `"true"` so each task writes
-`DEFERRED` from the light tier and the batch runs one `full` gate on the integrated base ref over the
-merged slices before the deferred feature sync — ADR-124's 2026-10-07 clarification, detail in
+`deferQualityGate` (default `"true"` = incremental gate: each task writes `DEFERRED` from the light
+tier — changed-scope lint, rules, typecheck, related tests, per-file coverage floor on changed files —
+and the `full` gate runs once per feature (`spur feature verify`) or per batch on the integrated base
+ref; `"false"` = full gate on every task — ADR-124's 2026-10-07 clarification, detail in
 [`workflow-catalogue-refactor.md`](workflow-catalogue-refactor.md) §4),
 `formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, `__hitlInput`, `maxEscalations`
 (default `2`), `escalationQuestion` (runtime-written from the question file), `deferFeatureSync`
@@ -136,9 +137,9 @@ probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run
 post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
 the full gate on `test-recheck` only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
 behavior, full gate every recheck). `review` is only ever entered through a **full green** `qualityGateCmd` —
-only the full gate writes `PASS` (task 0587 R3) — with the single opt-in exception of
-`deferQualityGate: "true"` in a parallel batch, where the `test`/`test-recheck` guards also accept the
-`DEFERRED` token the light tier wrote and the batch's integrated `full` gate is what issues `PASS`.
+only the full gate writes `PASS` (task 0587 R3). In the default incremental mode
+(`deferQualityGate: "true"`) the gate guard also accepts the `DEFERRED` token the light tier wrote,
+and the feature/batch `full` gate is what issues `PASS`.
 `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
 missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
 that actually decides. **Implement-only pin (task 0454):** `implementAgent` is used only by the

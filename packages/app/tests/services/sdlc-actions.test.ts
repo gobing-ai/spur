@@ -39,7 +39,7 @@ describe('bun preset byte-identity (task 1222 R4)', () => {
         'check-feature': 'bun run spur-check-feature',
         'lint-changed': 'bunx biome check {files}',
         'typecheck-changed': 'cd {workspace} && bun run typecheck',
-        'test-changed': 'cd {workspace} && bun test {paths}',
+        'test-changed': 'cd {workspace} && bun test --coverage --coverage-reporter=text {paths}',
     };
 
     test('every reserved action resolves to the satellite bun literal with no config', () => {

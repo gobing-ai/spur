@@ -294,8 +294,14 @@ describe('planLightChecks', () => {
         expect(plans[2]).toEqual({ id: 'rules:post', cmd: 'bun run test-post-check' });
         expect(plans[3]).toEqual({ id: 'typecheck:packages/domain', cmd: 'cd packages/domain && bun run typecheck' });
         // Every test command cd's into its workspace; paths are workspace-relative.
-        expect(plans[4]).toEqual({ id: 'test:apps/cli', cmd: 'cd apps/cli && bun test tests/a.test.ts' });
-        expect(plans[5]).toEqual({ id: 'test:packages/domain', cmd: 'cd packages/domain && bun test tests/b.test.ts' });
+        expect(plans[4]).toEqual({
+            id: 'test:apps/cli',
+            cmd: 'cd apps/cli && bun test --coverage --coverage-reporter=text tests/a.test.ts',
+        });
+        expect(plans[5]).toEqual({
+            id: 'test:packages/domain',
+            cmd: 'cd packages/domain && bun test --coverage --coverage-reporter=text tests/b.test.ts',
+        });
     });
 
     test('a colocated suite runs from its top-level directory, not a truncated path', () => {
@@ -304,7 +310,10 @@ describe('planLightChecks', () => {
             () => false,
         );
         expect(plans).toEqual([
-            { id: 'test:scripts', cmd: 'cd scripts && bun test commands/flag-contract-parity.test.ts' },
+            {
+                id: 'test:scripts',
+                cmd: 'cd scripts && bun test --coverage --coverage-reporter=text commands/flag-contract-parity.test.ts',
+            },
         ]);
     });
 

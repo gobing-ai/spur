@@ -1306,11 +1306,11 @@ unit:
   (`deferFeatureSync`), so their branches never touch feature files or the generated feature index;
   after the last integration the orchestrator runs the bounded sync plus one `feature refresh` per
   touched feature on the base ref and commits it once.
-- **One integrated full gate per batch (opt-in).** With `deferQualityGate: "true"`
-  (`--defer-gate` on a parallel — explicit or `--mode auto`-resolved — `/sp:dev-runall`), each task's `test` state runs
+- **Incremental gate per task, one full gate per feature or batch (default).** With `deferQualityGate: "true"`
+  (the pipeline default; `"false"` restores the full gate on every task), each task's `gate` state runs
   the light tier and records `DEFERRED` — never `PASS` — so the batch's one `full` gate runs on the
   integrated base ref over the merged slices, before the deferred corpus sync. The per-task
-  "review only after a green full gate" invariant therefore holds at batch scope; default off keeps
+  "review only after a green full gate" invariant therefore holds at feature/batch scope; `"false"` keeps
   the per-task `full` gate, and an integrated FAIL fails the batch without running the sync. ADR-124's
   2026-10-07 clarification owns the scope change; detail in
   [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.

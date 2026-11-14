@@ -131,9 +131,9 @@ vars:
     # Project quality gate for the `gate` hop, overridable per project:
     # `--vars '{"qualityGateCmd":"bun run lint && bun run test"}'`.
     # INVARIANT (ADR-124, clarified 2026-10-07 by task 1111 R5): only the FULL tier writes PASS.
-    # Under the opt-in `deferQualityGate` policy the per-task token is DEFERRED (light tier) and
-    # the "review runs only after a green full gate" invariant moves to BATCH scope — nothing is
-    # reported PASS without the integrated full gate on the base ref.
+    # Under the default incremental policy (`deferQualityGate`) the per-task token is DEFERRED and
+    # the "green full gate" invariant lives at FEATURE/BATCH scope (`spur feature verify`, the
+    # batch integration gate) — nothing is reported PASS without the full gate.
     # TRUSTED CONFIG ONLY — `spur task gate` passes this to the project's gate command. Never
     # interpolate untrusted operator/LLM input into qualityGateCmd (task 0436 SECUA residual).
     # The gate observes, it does not mutate: `implement` already ran `$formatCmd` on its way out,
@@ -196,13 +196,14 @@ vars:
     # (default) = on; set to "off" to bypass:
     # `--vars '{"implementScopeGuard":"off"}'`.
     implementScopeGuard: ""
-    # 1111 R1: opt-in parallel-batch gate policy. When "true", `gate` runs the LIGHT tier for
-    # per-task early feedback and writes `DEFERRED` (light PASS) or `FAIL` to
-    # `.spur/run/<wbs>-test-gate.status` — never `PASS`, because that token means the full
-    # project gate ran green on this tree. The batch orchestrator owes ONE integrated full gate
-    # on the base ref over the merged slices (1111 R3). Default "false" = unchanged behavior,
-    # and a stray `DEFERRED` file fails the guards.
-    deferQualityGate: "false"
+    # Gate mode. "true" (default) = INCREMENTAL: `gate` runs lint, rules, typecheck of the touched
+    # workspaces and their dependents, the related tests, and the per-file coverage floor on the
+    # changed files, then writes `DEFERRED` or `FAIL` to `.spur/run/<wbs>-test-gate.status` —
+    # never `PASS`, because that token means the full project gate ran green on this tree. The
+    # full gate runs once per feature (`spur feature verify`) or batch (integration gate).
+    # "false" = FULL: every task pays the whole project gate; a stray `DEFERRED` fails the guards.
+    # `--vars '{"deferQualityGate":"false"}'`.
+    deferQualityGate: "true"
     # 0931 R5: parallel batches defer the per-task feature sync so a task branch never
     # touches feature files or docs/features/INDEX.md. When "true", the close's post-record
     # shell appends a deferral note and skips the sync; the parallel batch orchestrator runs
@@ -1022,12 +1023,12 @@ transitions:
                   test "$(cat ".spur/run/$wbs-test-gate.status" 2>/dev/null)" = PASS
     - from: gate
       to: review
-      description: Opt-in batch policy — the typed outcome is PASS and the gate wrote the DEFERRED (light-tier) token.
+      description: Incremental mode — the typed outcome is PASS and the gate wrote the DEFERRED (incremental) token.
       guard:
           kind: shell
           options:
-              # 1111 R2: `DEFERRED` is accepted ONLY when the opt-in var is "true" — with the
-              # default "false" a stray DEFERRED file fails the guard exactly like a corrupt one.
+              # `DEFERRED` is accepted ONLY in incremental mode — in full mode ("false") a stray
+              # DEFERRED file fails the guard exactly like a corrupt one.
               command: >-
                   test "$deferQualityGate" = "true" &&
                   test "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = PASS &&

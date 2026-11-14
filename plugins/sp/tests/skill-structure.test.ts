@@ -783,10 +783,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             implementBlock.indexOf('command: \'sh -c "$formatCmd" ; exit 0\''),
         );
 
-        // 1111 R1/R2 — the opt-in deferred gate policy. Failure cases first: the var defaults
-        // to "false" (no behavior change), the deferred mode is reachable only through the var,
-        // and the triage guards accept DEFERRED only while the var is "true".
-        expect(taskPipeline).toContain('deferQualityGate: "false"');
+        // The incremental gate is the default; the deferred mode is reachable only through the
+        // var, and the guards accept DEFERRED only while the var is "true".
+        expect(taskPipeline).toContain('deferQualityGate: "true"');
         const gateBlock = taskPipeline.split('  - id: gate\n')[1]?.split('  - id: remediate\n')[0] ?? '';
         expect(gateBlock).toContain('M=run;');
         expect(gateBlock).toContain('M=recheck;');

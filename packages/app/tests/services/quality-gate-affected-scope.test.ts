@@ -1,10 +1,10 @@
 /**
  * Task 1322 (feature H16) — affected-scope selection (R3) and the recheck light-tier triage
  * (P2). A real two-workspace monorepo fixture (`packages/shared-lib` depended on by
- * `apps/leaf-app`) pins: graph construction, selection over the workspace dependency graph, the
- * shared-package and unmapped-path fallback to the full suite, base-sha change sets, the light
- * receipt's selection rationale, and both recheck outcomes (a red tier fails the visit without
- * paying the full chain; a green tier or a fallback falls through to the full gate).
+ * `apps/leaf-app`) pins: graph construction, selection over the workspace dependency graph
+ * (a shared package pulls its dependents into the typecheck set; the tier never refuses a scope),
+ * base-sha change sets, the changed-file coverage floor, and both recheck outcomes (a red tier
+ * fails the visit without paying the full chain; a green tier falls through to the full gate).
  */
 import { afterAll, describe, expect, test } from 'bun:test';
 import { execSync } from 'node:child_process';
@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type BuilderConfig, BuilderConfigSchema } from '@gobing-ai/spur-config';
 import {
+    changedCoverageShortfalls,
     dependentsOf,
     lightScope,
     readBaseSha,
@@ -140,9 +141,7 @@ describe('workspace dependency graph (1322 R3)', () => {
         expect(graph.dependents.size).toBe(0);
     });
 
-    test('an unsupported glob shape marks the graph so selection refuses the tier (1326)', () => {
-        // yarn-classic `packages/**` silently expanded to nothing before 1326: the graph
-        // looked empty, so the shared-package fallback could never fire.
+    test('an unsupported glob shape is recorded on the graph (1326)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-1326-glob-'));
         try {
             writeFileSync(
@@ -158,16 +157,13 @@ describe('workspace dependency graph (1322 R3)', () => {
             expect(graph.byName.size).toBe(0);
             expect(graph.unsupported).toContain('packages/**');
             const scope = lightScope(['packages/shared-lib/src/index.ts'], (p) => existsSync(join(dir, p)), graph);
-            expect(scope.fallback).toBe(
-                `workspaces glob "packages/**" is not a supported shape (only \`dir/*\` globs and literal dirs expand) — full suite required`,
-            );
             expect(scope.workspaces).toEqual(['packages/shared-lib']);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
     });
 
-    test('a mixed supported/unsupported workspaces list still refuses the tier (1326)', () => {
+    test('a mixed supported/unsupported workspaces list is recorded too (1326)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-1326-glob-'));
         try {
             writeFileSync(
@@ -183,7 +179,7 @@ describe('workspace dependency graph (1322 R3)', () => {
 });
 
 describe('affected-scope selection (1322 R3)', () => {
-    test('a leaf-workspace change is selected: owning workspace, no fallback', () => {
+    test('a leaf-workspace change selects its owning workspace', () => {
         const { dir, cleanup } = monorepoFixture();
         try {
             const scope = lightScope(
@@ -191,7 +187,6 @@ describe('affected-scope selection (1322 R3)', () => {
                 (p) => existsSync(join(dir, p)),
                 readWorkspaceGraph(dir),
             );
-            expect(scope.fallback).toBeUndefined();
             expect(scope.workspaces).toEqual(['apps/leaf-app']);
             expect(scope.tests).toEqual(['apps/leaf-app/tests/leaf-app.test.ts']);
         } finally {
@@ -199,7 +194,7 @@ describe('affected-scope selection (1322 R3)', () => {
         }
     });
 
-    test('a shared-package change falls back to the full suite, naming the dependent', () => {
+    test('a shared-package change adds its dependents to the typecheck set', () => {
         const { dir, cleanup } = monorepoFixture();
         try {
             const scope = lightScope(
@@ -207,44 +202,38 @@ describe('affected-scope selection (1322 R3)', () => {
                 (p) => existsSync(join(dir, p)),
                 readWorkspaceGraph(dir),
             );
-            expect(scope.fallback).toBe(
-                'shared package packages/shared-lib (depended on by apps/leaf-app) — full suite required',
-            );
+            expect(scope.workspaces).toEqual(['apps/leaf-app', 'packages/shared-lib']);
         } finally {
             cleanup();
         }
     });
 
-    test('a path no workspace owns falls back to the full suite', () => {
+    test('a path no workspace owns gets lint + rules only', () => {
         const { dir, cleanup } = monorepoFixture();
         try {
             const scope = lightScope(['README.md'], (p) => existsSync(join(dir, p)), readWorkspaceGraph(dir));
-            expect(scope.fallback).toBe(
-                'unmapped path README.md (no owning workspace package.json) — full suite required',
-            );
+            expect(scope).toEqual({ files: ['README.md'], workspaces: [], tests: [] });
         } finally {
             cleanup();
         }
     });
 
-    test('plugins/sp paths never trigger the fallback (the 1142 mapping owns them)', () => {
+    test('plugins/sp paths map to the plugin workspace (the 1142 mapping owns them)', () => {
         const { dir, cleanup } = monorepoFixture();
         try {
             const scope = lightScope(['plugins/sp/skills/x/SKILL.md'], () => true, readWorkspaceGraph(dir));
-            expect(scope.fallback).toBeUndefined();
             expect(scope.workspaces).toEqual(['plugins/sp']);
         } finally {
             cleanup();
         }
     });
 
-    test('without a graph the mapping keeps legacy behavior (no fallback classification)', () => {
+    test('without a graph only owning workspaces are selected', () => {
         const { dir, cleanup } = monorepoFixture();
         try {
             const scope = lightScope(['packages/shared-lib/src/index.ts', 'README.md'], (p) =>
                 existsSync(join(dir, p)),
             );
-            expect(scope.fallback).toBeUndefined();
             expect(scope.workspaces).toEqual(['packages/shared-lib']);
         } finally {
             cleanup();
@@ -262,9 +251,8 @@ describe('light gate selection evidence and base-sha change sets (1322 R3/P5)', 
                 runLightGate({ wbs: '1322r' }, { cwd: dir, builder: leafBuilder('exit 0') }),
             );
             expect(result.status).toBe('PASS');
-            expect(result.fallback).toBeUndefined();
             const log = readFileSync(join(dir, result.logFile), 'utf8');
-            expect(log.startsWith('--- light scope: selected — workspaces: apps/leaf-app;')).toBe(true);
+            expect(log.startsWith('--- light scope: workspaces: apps/leaf-app;')).toBe(true);
             expect(log).toContain('--- light scope files (1): apps/leaf-app/src/index.ts');
             const receipt = JSON.parse(readFileSync(join(dir, '.spur/run/1322r-check-receipt.json'), 'utf8')) as {
                 schemaVersion: string;
@@ -280,7 +268,7 @@ describe('light gate selection evidence and base-sha change sets (1322 R3/P5)', 
         }
     });
 
-    test('a shared-package change refuses the tier: BLOCKED with rationale, no checks, no receipt', () => {
+    test('a shared-package change runs the tier and typechecks the dependent', () => {
         const { dir, base, cleanup } = monorepoFixture();
         try {
             recordBase(dir, '1322s', base);
@@ -288,16 +276,9 @@ describe('light gate selection evidence and base-sha change sets (1322 R3/P5)', 
             const result = silenceStdout(() =>
                 runLightGate({ wbs: '1322s' }, { cwd: dir, builder: leafBuilder('exit 0') }),
             );
-            expect(result.status).toBe('FAIL');
-            expect(result.fallback).toContain('shared package packages/shared-lib');
-            expect(result.blocked).toBe(result.fallback);
-            expect(result.checks).toEqual([]);
-            const log = readFileSync(join(dir, result.logFile), 'utf8');
-            expect(log).toContain('--- light scope: full-suite-fallback — shared package packages/shared-lib');
-            expect(log).toContain('--- light gate BLOCKED: affected-scope fallback');
-            // No tier receipt: the refusal must not overwrite standing boundary evidence.
-            expect(existsSync(join(dir, '.spur/run/1322s-check-receipt.json'))).toBe(false);
-            // And the light tier never writes the full gate's status token.
+            expect(result.status).toBe('PASS');
+            expect(result.checks.map((check) => check.id)).toContain('typecheck:apps/leaf-app');
+            // The light tier never writes the full gate's status token.
             expect(existsSync(join(dir, '.spur/run/1322s-test-gate.status'))).toBe(false);
         } finally {
             cleanup();
@@ -405,34 +386,103 @@ describe('recheck visits triage through the light tier (1322 P2/AC3)', () => {
             expect(receipt.tier).toBe('full');
             const log = readFileSync(join(dir, '.spur/run/1322g-test-gate.log'), 'utf8');
             expect(log).toContain('--- gate visit recheck: affected-scope light tier (1322) — PASS');
-            expect(log).toContain('--- light scope: selected — workspaces: apps/leaf-app');
+            expect(log).toContain('--- light scope: workspaces: apps/leaf-app');
+        } finally {
+            cleanup();
+        }
+    });
+});
+
+describe('incremental coverage floor on changed files', () => {
+    const FLOOR =
+        '[test]\ncoverageThreshold = { lines = 0.9, functions = 0.9 }\ncoveragePathIgnorePatterns = ["**/gen/**"]\n';
+    const low = "echo ' src/index.ts | 50.00 | 50.00 | 3-4'";
+
+    /** Change a source file and its suite so `test:apps/leaf-app` runs, under a 90/90 root floor. */
+    function gate(wbs: string, testCmd: string) {
+        const { dir, base, cleanup } = monorepoFixture();
+        try {
+            recordBase(dir, wbs, base);
+            writeFileSync(join(dir, 'bunfig.toml'), FLOOR);
+            writeFileSync(join(dir, 'apps/leaf-app/src/index.ts'), 'export const one = 2;\n');
+            writeFileSync(join(dir, 'apps/leaf-app/tests/leaf-app.test.ts'), 'export const ok = 1;\n');
+            const result = silenceStdout(() => runLightGate({ wbs }, { cwd: dir, builder: leafBuilder(testCmd) }));
+            return { result, log: readFileSync(join(dir, result.logFile), 'utf8') };
+        } finally {
+            cleanup();
+        }
+    }
+
+    test('only changed, non-ignored files are judged, re-rooted to repo paths', () => {
+        const table = [
+            ' src/a.ts | 50.00 | 100.00 | 7',
+            ' src/b.ts | 10.00 | 10.00 |',
+            ' src/gen/c.ts | 0.00 | 0.00 |',
+        ];
+        expect(
+            changedCoverageShortfalls(
+                table.join('\n'),
+                'apps/x',
+                ['apps/x/src/a.ts', 'apps/x/src/gen/c.ts'],
+                { functions: 0.9, lines: 0.9 },
+                ['**/gen/**'],
+            ),
+        ).toEqual(['quality gate: coverage shortfall apps/x/src/a.ts:7 funcs=50.00 lines=100.00']);
+    });
+
+    test('a changed file still below the floor after the workspace-wide run fails the tier', () => {
+        const { result, log } = gate('covfail', low);
+        expect(result.status).toBe('FAIL');
+        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'FAIL' });
+        expect(log).toContain('quality gate: coverage shortfall apps/leaf-app/src/index.ts:3 funcs=50.00 lines=50.00');
+    });
+
+    test('a shortfall the workspace-wide run covers passes', () => {
+        const { result } = gate(
+            'covpass',
+            `case "{paths}" in ./) echo 'All files | 100.00 | 100.00 |' ;; *) ${low} ;; esac`,
+        );
+        expect(result.status).toBe('PASS');
+        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'PASS' });
+    });
+
+    test('a workspace-wide run that prints no coverage table cannot clear the shortfall', () => {
+        const { result, log } = gate('coverr', `case "{paths}" in ./) exit 3 ;; *) ${low} ;; esac`);
+        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'FAIL' });
+        expect(log).toContain('no coverage table from the workspace-wide run');
+    });
+
+    test('a red workspace-wide run is still judged by its table', () => {
+        const table = "echo 'All files | 100.00 | 100.00 |'; echo ' src/index.ts | 100.00 | 100.00 |'; exit 1";
+        const { result } = gate('covred', `case "{paths}" in ./) ${table} ;; *) ${low} ;; esac`);
+        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'PASS' });
+    });
+
+    test('sibling suites of a changed source file join the related tests', () => {
+        const { dir, base, cleanup } = monorepoFixture();
+        try {
+            recordBase(dir, 'covsib', base);
+            writeFileSync(join(dir, 'apps/leaf-app/tests/index-extra.test.ts'), 'export const ok = 1;\n');
+            sh('git add . && git commit -qm sibling', dir);
+            writeFileSync(join(dir, 'apps/leaf-app/src/index.ts'), 'export const one = 2;\n');
+            const result = silenceStdout(() =>
+                runLightGate({ wbs: 'covsib' }, { cwd: dir, builder: leafBuilder('echo ran {paths}') }),
+            );
+            expect(readFileSync(join(dir, result.logFile), 'utf8')).toContain('ran tests/index-extra.test.ts');
         } finally {
             cleanup();
         }
     });
 
-    test('a full-suite fallback falls through to the full gate exactly as before', () => {
+    test('no floor configured means nothing to judge', () => {
         const { dir, base, cleanup } = monorepoFixture();
         try {
-            recordBase(dir, '1322u', base);
-            writeFileSync(join(dir, 'packages/shared-lib/src/index.ts'), 'export const one = 2;\n');
-            const sentinel = join(dir, 'full-ran');
-            const full = silenceStdout(() =>
-                runQualityGate(
-                    'recheck',
-                    { wbs: '1322u', qualityGateCmd: `touch "${sentinel}"`, runId: 'r1322' },
-                    { cwd: dir, builder: leafBuilder('exit 0') },
-                ),
+            recordBase(dir, 'covnone', base);
+            writeFileSync(join(dir, 'apps/leaf-app/tests/leaf-app.test.ts'), 'export const ok = 1;\n');
+            const result = silenceStdout(() =>
+                runLightGate({ wbs: 'covnone' }, { cwd: dir, builder: leafBuilder(low) }),
             );
-            expect(full.status).toBe('PASS');
-            expect(existsSync(sentinel)).toBe(true);
-            const log = readFileSync(join(dir, '.spur/run/1322u-test-gate.log'), 'utf8');
-            expect(log).toContain('check.scope-fallback — shared package packages/shared-lib');
-            expect(log).toContain('--- light gate BLOCKED: affected-scope fallback');
-            const receipt = JSON.parse(readFileSync(join(dir, '.spur/run/1322u-check-receipt.json'), 'utf8')) as {
-                tier: string;
-            };
-            expect(receipt.tier).toBe('full');
+            expect(result.checks.some((check) => check.id.startsWith('coverage:'))).toBe(false);
         } finally {
             cleanup();
         }

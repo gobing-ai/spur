@@ -494,12 +494,6 @@ export interface LightScope {
     files: string[];
     workspaces: string[];
     tests: string[];
-    /**
-     * Set when affected-scope selection refuses the tier (1322 R3): the change set touches a
-     * shared package with workspace dependents, or a path no workspace owns. The value is the
-     * rationale; the caller falls back to the full suite (the light tier refuses to decide).
-     */
-    fallback?: string;
 }
 
 /** One workspace's identity plus its internal package dependencies, as read from its package.json (1322 R3). */
@@ -720,35 +714,15 @@ export function lightScope(
             tests.add(file);
         }
     }
-    let fallback: string | undefined;
-    if (graph?.unsupported !== undefined) {
-        // 1326: the graph cannot see this repo's workspaces — refuse the tier rather than
-        // let the shared-package safety net appear to have run over an empty graph.
-        fallback = `${graph.unsupported} — full suite required`;
-    }
-    if (fallback === undefined && graph !== undefined) {
-        for (const file of changedFiles) {
-            // plugins/sp has no package and no compiled dependents — the 1142 structure-test
-            // mapping owns those paths, so they never trigger the shared-package fallback.
-            if (file.startsWith('plugins/sp/')) continue;
-            const owner = workspaceOf(file, exists);
-            if (owner === null) {
-                fallback = `unmapped path ${file} (no owning workspace package.json) — full suite required`;
-                break;
-            }
-            const dependents = dependentsOf(graph, owner);
-            if (dependents.length > 0) {
-                fallback = `shared package ${owner} (depended on by ${dependents.join(', ')}) — full suite required`;
-                break;
-            }
+    // Incremental mode never refuses a scope: a shared package's dependents join the typecheck
+    // set (an API break surfaces there in seconds) and their own suites stay with the full gate,
+    // which runs once per feature or batch. Root-level files get lint + rules only.
+    if (graph !== undefined) {
+        for (const owner of [...workspaces]) {
+            for (const dependent of dependentsOf(graph, owner)) workspaces.add(dependent);
         }
     }
-    return {
-        files,
-        workspaces: [...workspaces].sort(),
-        tests: [...tests].sort(),
-        ...(fallback !== undefined ? { fallback } : {}),
-    };
+    return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
 }
 
 /** One planned light check: a stable id plus the shell command to run. */
@@ -868,8 +842,6 @@ export interface LightGateResult {
     receiptFile: string;
     /** Set when the tier could not decide (a changed-path `git diff` timed out) — exit 2 (1319 R1). */
     blocked?: string;
-    /** Set when affected-scope selection refused the tier (1322 R3) — same exit-2 surface. */
-    fallback?: string;
 }
 
 /** Deferred-tier result (task 1111): the light verdict plus the status token written. */
@@ -907,6 +879,90 @@ export function runDeferredGate(env: QualityGateEnv, options: QualityGateOptions
     appendFileSync(abs(light.logFile), note);
     process.stdout.write(`quality gate ${status} (deferred tier; log: ${light.logFile})\n`);
     return { status, light, statusFile };
+}
+
+/** Root `bunfig.toml` coverage floor + ignore globs; null when no floor is configured. */
+function readCoverageConfig(cwd: string | undefined): { threshold: CoverageThreshold; ignore: string[] } | null {
+    try {
+        const text = readFileSync(cwd ? join(cwd, 'bunfig.toml') : 'bunfig.toml', 'utf8');
+        const threshold = parseCoverageThreshold(text);
+        if (threshold === null) return null;
+        const test = (Bun.TOML.parse(text) as { test?: { coveragePathIgnorePatterns?: unknown } }).test;
+        const raw = test?.coveragePathIgnorePatterns;
+        const ignore = Array.isArray(raw) ? raw.filter((g): g is string => typeof g === 'string') : [];
+        return { threshold, ignore };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Shortfall lines for the CHANGED files of one workspace only: coverage-table rows are
+ * workspace-relative, so each is re-rooted before matching the change set. Files the root
+ * `coveragePathIgnorePatterns` exempt stay exempt; files no test loaded have no row and are not
+ * judged (the full gate does not judge them either).
+ */
+export function changedCoverageShortfalls(
+    testLog: string,
+    workspace: string,
+    changedFiles: string[],
+    threshold: CoverageThreshold,
+    ignore: string[] = [],
+): string[] {
+    const changed = new Set(changedFiles);
+    const globs = ignore.map((pattern) => new Bun.Glob(pattern));
+    const shortfalls: string[] = [];
+    for (const line of scanCoverageShortfalls(testLog, threshold)) {
+        const rel = line.slice('quality gate: coverage shortfall '.length).split(':')[0] ?? '';
+        const path = `${workspace}/${rel}`;
+        if (!changed.has(path) || globs.some((glob) => glob.match(path))) continue;
+        shortfalls.push(line.replace(rel, path));
+    }
+    return shortfalls;
+}
+
+/**
+ * Incremental coverage floor: after a green `test:<ws>` run, every changed file of that workspace
+ * must meet the root per-file floor. The related tests alone often under-cover a file the rest of
+ * the workspace suite exercises, so a shortfall escalates ONCE to the whole workspace suite before
+ * it counts. Returns null when there is nothing to judge (no floor, no changed file below it).
+ */
+function changedCoverageCheck(
+    plan: LightCheckPlan,
+    testLog: string,
+    scope: LightScope,
+    cwd: string | undefined,
+    timeoutMs: number,
+    builder: BuilderConfig | undefined,
+): { id: string; cmd: string; status: CheckStatus; durationMs: number; log: string } | null {
+    const config = readCoverageConfig(cwd);
+    if (config === null) return null;
+    const workspace = plan.id.slice('test:'.length);
+    const id = `coverage:${workspace}`;
+    const related = changedCoverageShortfalls(testLog, workspace, scope.files, config.threshold, config.ignore);
+    if (related.length === 0) return null;
+    const resolved = resolveAction(builder, 'test-changed');
+    if (resolved.kind === 'unbound') return null;
+    const command = resolved.kind === 'command' ? resolved.command : resolved.steps.join(' && ');
+    const cmd = renderScoped(command, { workspace, paths: ['./'] });
+    const startedAtMs = Date.now();
+    const full = runShellCommand(cmd, cwd, undefined, timeoutMs);
+    const durationMs = Date.now() - startedAtMs;
+    // A red suite still prints a valid table: failures elsewhere in the workspace are the full
+    // gate's verdict, not this row's. Only a run that produced no table cannot be judged.
+    const remaining =
+        !full.timedOut && /^\s*All files\s*\|/m.test(full.output)
+            ? changedCoverageShortfalls(full.output, workspace, scope.files, config.threshold, config.ignore)
+            : [`quality gate: no coverage table from the workspace-wide run (${cmd})`, ...related];
+    const status: CheckStatus = remaining.length === 0 ? 'PASS' : 'FAIL';
+    const body = remaining.length === 0 ? '' : `${remaining.join('\n')}\n`;
+    return {
+        id,
+        cmd,
+        status,
+        durationMs,
+        log: `--- light ${id}: ${status} (${durationMs}ms, workspace-wide)\n${body}`,
+    };
 }
 
 /**
@@ -947,33 +1003,21 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     if (!capture.ok) {
         appendFileSync(abs(logFile), `--- light receipt: no git tree identity — ${capture.error}\n`);
     }
-    // 1322 R3: affected-scope selection over the workspace dependency graph. The rationale is the
-    // log's opening lines (receipt rows point back at this path), so a light receipt always
-    // carries the selection evidence — which files were in scope and why the tier refused.
     const scope = lightScope(changed, (p) => existsSync(abs(p)), readWorkspaceGraph(cwd));
-    const scopeHeader =
-        scope.fallback !== undefined
-            ? `--- light scope: full-suite-fallback — ${scope.fallback}\n--- light scope files (${changed.length}): ${changed.join(' ')}\n`
-            : `--- light scope: selected — workspaces: ${scope.workspaces.join(' ') || '(none)'}; related tests: ${scope.tests.length}; files: ${changed.length}\n--- light scope files (${changed.length}): ${changed.join(' ')}\n`;
-    appendFileSync(abs(logFile), scopeHeader);
-    if (scope.fallback !== undefined) {
-        // The tier refuses to decide a scope it cannot cover: a shared package's dependents or an
-        // unmapped root path can only be certified by the full suite (1322 R3). No checks run, no
-        // receipt is written (a light receipt here would overwrite standing boundary evidence),
-        // and the caller exits BLOCKED (2) naming the rationale — the fallback IS to the full gate.
-        const line = `--- light gate BLOCKED: affected-scope fallback — full gate owns this tree\n`;
-        appendFileSync(abs(logFile), line);
-        process.stdout.write(`light gate BLOCKED — ${scope.fallback}\n`);
-        return {
-            status: 'FAIL',
-            scope,
-            checks: [],
-            logFile,
-            receiptFile,
-            blocked: scope.fallback,
-            fallback: scope.fallback,
-        };
+    // Sibling suites (`tests/**/<base>-*.test.ts`) usually carry most of a large module's
+    // coverage; running them up front avoids the workspace-wide coverage re-measure.
+    const siblings = new Set(scope.tests);
+    for (const file of changed) {
+        const source = file.match(/^(.+)\/src\/(?:.*\/)?([^/]+)\.tsx?$/);
+        if (!source?.[1] || !source[2] || !scope.workspaces.includes(source[1])) continue;
+        const suites = new Bun.Glob(`${source[1]}/tests/**/${source[2]}-*.test.{ts,tsx}`);
+        for (const suite of suites.scanSync({ cwd: cwd ?? '.' })) siblings.add(suite);
     }
+    scope.tests = [...siblings].sort();
+    appendFileSync(
+        abs(logFile),
+        `--- light scope: workspaces: ${scope.workspaces.join(' ') || '(none)'}; related tests: ${scope.tests.length}; files: ${changed.length}\n--- light scope files (${changed.length}): ${changed.join(' ')}\n`,
+    );
     // Bind the fs predicates to the gate cwd, not the process cwd (tests run gates in fixtures).
     const plans = planLightChecks(scope, (workspace) => workspaceHasTypecheck(abs(workspace)), options.builder);
 
@@ -1027,6 +1071,19 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
             : `--- light ${plan.id}: ${status} (${durationMs}ms)\n`;
         appendFileSync(abs(logFile), `${header}${result.output}`);
         checks.push({ id: plan.id, cmd: plan.cmd, status, durationMs, logPath: logFile });
+        if (status === 'PASS' && plan.id.startsWith('test:')) {
+            const row = changedCoverageCheck(plan, result.output, scope, cwd, timeoutMs, options.builder);
+            if (row !== null) {
+                appendFileSync(abs(logFile), row.log);
+                checks.push({
+                    id: row.id,
+                    cmd: row.cmd,
+                    status: row.status,
+                    durationMs: row.durationMs,
+                    logPath: logFile,
+                });
+            }
+        }
     }
 
     const receipt = buildReceipt({
@@ -1583,27 +1640,21 @@ export function runQualityGate(
             abs(logFile),
             `--- gate visit ${mode}: affected-scope light tier (1322) — ${light.status}\n${readFileSync(abs(light.logFile), 'utf8')}`,
         );
-        if (light.fallback === undefined) {
-            if (light.status === 'FAIL') {
-                writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), 'utf8')));
-                writeFileSync(abs(statusFile), 'FAIL\n');
-                appendFileSync(abs(logFile), `git-tree: ${tree.ok ? tree.tree : 'unbound'}\n`);
-                process.stdout.write(`quality gate FAIL (light tier) — last 40 lines follow (full log: ${logFile})\n`);
-                process.stdout.write(tailLines(readFileSync(abs(logFile), 'utf8'), 40));
-                return {
-                    status: 'FAIL',
-                    attempts: 0,
-                    logFile,
-                    findingsFile,
-                    statusFile,
-                    attemptFile,
-                    receiptFile: light.receiptFile,
-                };
-            }
-        } else {
-            const line = `check.scope-fallback — ${light.fallback}; probe + full gate follow\n`;
-            process.stdout.write(line); // tee: stdout and the log
-            appendFileSync(abs(logFile), line);
+        if (light.status === 'FAIL') {
+            writeFileSync(abs(findingsFile), extractFindings(readFileSync(abs(logFile), 'utf8')));
+            writeFileSync(abs(statusFile), 'FAIL\n');
+            appendFileSync(abs(logFile), `git-tree: ${tree.ok ? tree.tree : 'unbound'}\n`);
+            process.stdout.write(`quality gate FAIL (light tier) — last 40 lines follow (full log: ${logFile})\n`);
+            process.stdout.write(tailLines(readFileSync(abs(logFile), 'utf8'), 40));
+            return {
+                status: 'FAIL',
+                attempts: 0,
+                logFile,
+                findingsFile,
+                statusFile,
+                attemptFile,
+                receiptFile: light.receiptFile,
+            };
         }
     }
 
