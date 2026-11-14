@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A71"
 name: "Desktop Board shell and native macOS integration"
-status: done
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-10-04T21:10:38.682Z"
-updated_at: "2026-10-04T23:58:42.727Z"
+updated_at: "2026-11-14T05:59:46.257Z"
 ---
 
 # A71: Desktop Board shell and native macOS integration
@@ -55,4 +55,5 @@ Feature: Desktop Board shell
 - 2026-10-04T21:11:00.310Z backlog → active (system)
 - 2026-10-04T23:58:40.093Z active → verifying (system)
 - 2026-10-04T23:58:42.727Z verifying → done (system)
+- 2026-11-14T05:59:46.257Z done → deprecated (system)
 

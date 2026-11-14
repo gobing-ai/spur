@@ -187,7 +187,7 @@ here. The bare `recommended` preset is removed; `recommended-pre-check` is the d
 
 **Compiled binary assets.** When a compiled Bun module's virtual path cannot find the bundled
 tree, `bundledConfigRoot()` tries `dirname(process.execPath)/config`. A binary distributed alone
-still has no config assets; desktop staging ships the generated tree beside the server and CLI
+still has no config assets; a distributed bundle ships the generated tree beside the server and CLI
 companion, together with the CLI manifest and schemas for package schema references. Discovery never uses the launch cwd or selected project as a bundled-asset fallback.
 
 No symlinks participate in install or init — config propagates by copy-and-resolve only.

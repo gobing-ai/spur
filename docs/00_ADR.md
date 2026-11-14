@@ -879,6 +879,9 @@ and `.spur/run/` artifacts and writes only new `.spur/run/` outputs (plus foldin
 mutation-after-proof surface, consistent with ADR-076's retirement of the model-bearing
 residual-sweep stage.
 
+*Retired 2026-11-13:* the residual sweep, its `residual-scan.ts`, and `spur task residual` are gone
+(the ADR-138 amendment of that date records why); this note is history.
+
 ## ADR-072: One Canonical Pipeline per Lifecycle Boundary
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5 · **Amends:** ADR-029

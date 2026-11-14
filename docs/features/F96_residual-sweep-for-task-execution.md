@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F96"
 name: "Residual sweep for task execution"
-status: done
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-09-24T18:48:46.363Z"
-updated_at: "2026-10-21T18:35:08.787Z"
+updated_at: "2026-11-14T05:59:46.594Z"
 ---
 
 # F96: Residual sweep for task execution
@@ -125,4 +125,5 @@ D65 merged certification into review and uses gate/remediate for fixes. Residual
 - 2026-10-05T02:58:06.751Z done → active (system)
 - 2026-10-05T03:14:38.271Z active → verifying (system)
 - 2026-10-05T03:14:40.713Z verifying → done (system)
+- 2026-11-14T05:59:46.594Z done → deprecated (system)
 

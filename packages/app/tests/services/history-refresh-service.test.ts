@@ -653,12 +653,12 @@ test('history refresh preserves whitespace in executable and source argv', async
     await handleHistoryRefreshJob(
         {
             cwd: '/project',
-            invocation: ['/Applications/Spur Desktop.app/cli/spur', '/source with spaces/main.ts'],
+            invocation: ['/Applications/Example App.app/cli/spur', '/source with spaces/main.ts'],
             executor,
         },
         jobOf(validPayload),
     );
-    expect(runs[0]?.command).toBe('/Applications/Spur Desktop.app/cli/spur');
+    expect(runs[0]?.command).toBe('/Applications/Example App.app/cli/spur');
     expect(runs[0]?.args?.[0]).toBe('/source with spaces/main.ts');
     await expect(
         handleHistoryRefreshJob({ cwd: '/project', invocation: [], executor }, jobOf(validPayload)),

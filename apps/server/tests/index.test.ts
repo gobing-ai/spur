@@ -75,10 +75,10 @@ describe('index main entry', () => {
 
 test('standalone companion argv preserves installation paths with spaces', () => {
     expect(
-        resolveStandaloneSpurInvocation('/Applications/Spur Desktop.app/Contents/Resources/spur/spur-server'),
+        resolveStandaloneSpurInvocation('/Applications/Example App.app/Contents/Resources/spur/spur-server'),
     ).toEqual([
         process.platform === 'win32'
-            ? '/Applications/Spur Desktop.app/Contents/Resources/cli/spur.exe'
-            : '/Applications/Spur Desktop.app/Contents/Resources/cli/spur',
+            ? '/Applications/Example App.app/Contents/Resources/cli/spur.exe'
+            : '/Applications/Example App.app/Contents/Resources/cli/spur',
     ]);
 });

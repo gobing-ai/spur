@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F961"
 name: "Residual-scan ignores placeholder no-finding review rows"
-status: done
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-09-26T22:44:18.592Z"
-updated_at: "2026-09-27T00:05:48.021Z"
+updated_at: "2026-11-14T05:59:46.921Z"
 ---
 
 # F961: Residual-scan ignores placeholder no-finding review rows
@@ -70,4 +70,5 @@ Feature: Residual-scan ignores placeholder no-finding review rows
 - 2026-09-27T00:04:06.621Z backlog → active (system)
 - 2026-09-27T00:04:08.970Z active → verifying (system)
 - 2026-09-27T00:05:48.021Z verifying → done (system)
+- 2026-11-14T05:59:46.921Z done → deprecated (system)
 
