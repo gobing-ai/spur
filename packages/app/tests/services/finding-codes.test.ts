@@ -162,7 +162,7 @@ test('Unknown code in tasks config severity map is rejected', () => {
         active: 'docs/tasks',
         severity: {
             [FINDING_CODES.L3_PLAN_FORMAT]: 'off',
-            [FINDING_CODES.L4_DESIGN_PLACEHOLDER]: 'warning',
+            [FINDING_CODES.L3_AC_EMPTY]: 'warning',
         },
     };
     const validResult = tasksConfigSchema.safeParse(validConfig);

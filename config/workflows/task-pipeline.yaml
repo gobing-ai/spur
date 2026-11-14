@@ -714,12 +714,11 @@ states:
             options:
                 id: review-verdict
                 executable: "${vars.spurBin}"
-                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-cert.md", "--replay"]
+                args: ["task", "verdict", "${vars.wbs}", "--from-answer", ".spur/run/${vars.__runId}-review-cert.md"]
                 resultFile: .spur/run/${vars.__runId}-review-verdict.status
                 softFail: true
-                # 1319 R4: the replay runs up to 5 cited suites at 120 s each; the action bound is
-                # the same headroom the review hop gets, so a slow cited suite cannot pin the visit.
-                timeoutMs: "900000"
+                # Derivation only (no `--replay`: the gate already ran the tests for this tree).
+                timeoutMs: "120000"
           # (e) one fold, one token: PASS requires the typed verdict PASS and the artifact's own PASS.
           # Fail-closed: any missing/corrupt input leaves FAIL, so the transitions can route a
           # non-PASS review into remediation instead of dead-ending the run.

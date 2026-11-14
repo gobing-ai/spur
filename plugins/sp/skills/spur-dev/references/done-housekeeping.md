@@ -102,8 +102,7 @@ restricted sandbox - port-binding and `ps` denials produce failures that are not
 project's sandbox notes). Real regressions are *additional* failures.
 
 **3. Finish the work the step abandoned.** Write the sections the killed step would have written
-(`## Solution`, `## Testing`, and the `## Review` P1-P4 table - the L3 `review-priority-table`
-gate will reject the task without it). Use the normal `--section --from-file` contract.
+(`## Solution`, `## Testing`, and the `## Review` P1-P4 table). Use the normal `--section --from-file` contract.
 
 **4. Force-done with an honest reason.**
 

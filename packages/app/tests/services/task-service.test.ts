@@ -2563,8 +2563,8 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         });
     });
 
-    // Write-time mirror of L4.gate-language and the late `--feature` attach path.
-    describe('updateSection / updateField — gate-language and late-attach warnings', () => {
+    // The late `--feature` attach path.
+    describe('updateSection / updateField — late-attach warnings', () => {
         const root = () => tasksDir.replace('/tasks', '');
 
         async function writeTmp(name: string, body: string): Promise<string> {
@@ -2573,25 +2573,6 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             await fs.writeFile(path, `${body}\n`);
             return path;
         }
-
-        test('gate vocabulary stays silent once dependencies[] is declared', async () => {
-            const created = await svc.create({ title: 'Gate words deps' });
-            await svc.mutateDependencies(created.ref.id, 'set', ['0001']);
-            const src = await writeTmp('gate-deps', 'Blocked until HITL approval of the parent.');
-
-            const result = await svc.updateSection(created.ref.id, 'Background', src);
-
-            expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
-        });
-
-        test('1112 R2: write-time path stays silent for composition prose without a cue', async () => {
-            const created = await svc.create({ title: 'Gate words composition' });
-            const src = await writeTmp('gate-comp', 'The review steps merged back into one step.');
-
-            const result = await svc.updateSection(created.ref.id, 'Background', src);
-
-            expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
-        });
 
         test('attaching feature_id after the AC write re-runs the DD-09 subset warning', async () => {
             const fs = createNodeFileSystem(root());

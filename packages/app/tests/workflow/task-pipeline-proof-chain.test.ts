@@ -484,15 +484,12 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
             'verdict',
             VAR('wbs'),
             '--from-answer',
-            // The cert file the reviewer writes itself; the shell above falls back to the captured
-            // answer, so the lint no longer reads a narration-shaped stdout as the certification.
+            // The cert file the reviewer writes itself; the shell above falls back to the captured answer.
             `.spur/run/${VAR('__runId')}-review-cert.md`,
-            // 1319 R4: certification replays the test files its rows cite before PASS is durable.
-            '--replay',
         ]);
         expect(verdict?.softFail).toBe(true);
-        // 1319 R4: the replay runs up to 5 cited suites at 120 s each, so the action carries a bound.
-        expect(verdict?.timeoutMs).toBe('900000');
+        // Derivation only: the pipeline does not pass `--replay` (the gate already ran the tests).
+        expect(verdict?.timeoutMs).toBe('120000');
     });
 
     test('behavioral: MET rows certify PASS; an UNMET requirement cannot certify, so done is unreachable', () => {

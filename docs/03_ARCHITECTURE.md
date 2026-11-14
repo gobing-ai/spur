@@ -237,9 +237,9 @@ and the unchanged `agent.run` step budgets. A deadline is `BLOCKED`/exit 2, neve
 writes no check receipt — a FAIL receipt keyed to the tree would arm the no-progress skip. Host
 pauses are measured by the resume (the only Spur-owned moment that sees both ends) into run metadata
 `hostPauses[]`, which `spur workflow profile`/`trace` read; a still-open pause past its budget gets a
-derived `stalled` label with the resume hint, never a status change. Verdict certification can
-re-execute the test files its rows cite (`spur task verdict --replay`, ≤5 files, 120 s each, outside
-the gate lock), downgrading an unearned PASS to PARTIAL. Contract:
+derived `stalled` label with the resume hint, never a status change. `spur task verdict --replay` can
+re-execute the test files a verdict's rows cite (≤5 files, 120 s each, outside the gate lock),
+downgrading an unearned PASS to PARTIAL; it is a manual flag — the pipeline does not pass it. Contract:
 [`gate-bounds-and-pause-attribution.md`](design/gate-bounds-and-pause-attribution.md).
 
 Two execution models behind one host (ADR-009):

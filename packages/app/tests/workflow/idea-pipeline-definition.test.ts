@@ -739,11 +739,10 @@ describe('idea-pipeline definition — 0887 robustness contract', () => {
         expect(targets.has('batch-create')).toBe(false);
     });
 
-    test('R5: ac-generate prompt carries both task-check rules (verbatim titles, gate language)', () => {
+    test('R5: ac-generate prompt carries the verbatim-title rule', () => {
         const prompt = agentPrompt('ac-generate');
         expect(prompt).toContain('# covers:');
         expect(prompt).toContain('byte-identical');
-        expect(prompt).toContain('L4.gate-language');
     });
 
     test('R6: feature-create prompt names the .ref.id --json envelope', () => {

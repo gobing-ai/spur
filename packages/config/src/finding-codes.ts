@@ -21,13 +21,11 @@ export const ALL_FINDING_CODES = [
     'L2.unclosed-code-fence',
 
     // L3: Format rules
-    'L3.requirements-format',
     'L3.requirements-checkbox',
     'L3.requirements-empty',
     'L3.ac-empty',
     'L3.ac-requirement-coverage',
     'L3.solution-file-line',
-    'L3.review-priority-table',
     'L3.required-section-placeholder',
     'L3.plan-format',
     'L3.unchecked-checklist',
@@ -41,7 +39,6 @@ export const ALL_FINDING_CODES = [
     'L3.review-testing-contradiction',
 
     // L4: Traceability & integrity
-    'L4.design-placeholder',
     'L4.feature-not-found',
     'L4.feature-terminal',
     'L4.feature-deprecated',
@@ -54,10 +51,8 @@ export const ALL_FINDING_CODES = [
     'L4.rollup-missing-roster',
     'L4.rollup-roster-not-declared-dependency',
     'L4.readiness-blocked',
-    'L4.prose-prerequisite-unlisted',
     'L4.prerequisite-cycle',
     'L4.prerequisite-not-done',
-    'L4.gate-language',
     'L4.linked-task-parse-failed',
     'L4.orphan-scenarios',
     'L4.uncovered-task-scenario',
@@ -65,9 +60,6 @@ export const ALL_FINDING_CODES = [
     'L4.verdict-rows-match-no-scenario',
     'L4.verifying-incomplete-tasks',
     'L4.dogfood-missing',
-    'L4.stale-line-anchor',
-    'L4.anchor-unresolved',
-    'L4.anchor-subject-mismatch',
     'L4.malformed-verdict-artifact',
     'L4.scenario-unverified',
     'L4.testing-verdict-stub',
@@ -117,13 +109,11 @@ export const FINDING_CODES = {
     L2_UNCLOSED_CODE_FENCE: 'L2.unclosed-code-fence',
 
     // L3
-    L3_REQUIREMENTS_FORMAT: 'L3.requirements-format',
     L3_REQUIREMENTS_CHECKBOX: 'L3.requirements-checkbox',
     L3_REQUIREMENTS_EMPTY: 'L3.requirements-empty',
     L3_AC_EMPTY: 'L3.ac-empty',
     L3_AC_REQUIREMENT_COVERAGE: 'L3.ac-requirement-coverage',
     L3_SOLUTION_FILE_LINE: 'L3.solution-file-line',
-    L3_REVIEW_PRIORITY_TABLE: 'L3.review-priority-table',
     L3_REQUIRED_SECTION_PLACEHOLDER: 'L3.required-section-placeholder',
     L3_PLAN_FORMAT: 'L3.plan-format',
     L3_UNCHECKED_CHECKLIST: 'L3.unchecked-checklist',
@@ -137,7 +127,6 @@ export const FINDING_CODES = {
     L3_REVIEW_TESTING_CONTRADICTION: 'L3.review-testing-contradiction',
 
     // L4
-    L4_DESIGN_PLACEHOLDER: 'L4.design-placeholder',
     L4_FEATURE_NOT_FOUND: 'L4.feature-not-found',
     L4_FEATURE_TERMINAL: 'L4.feature-terminal',
     // 1180 R2: `deprecated` is non-terminal, so L4.feature-terminal never fires for it;
@@ -157,10 +146,8 @@ export const FINDING_CODES = {
     L4_ROLLUP_MISSING_ROSTER: 'L4.rollup-missing-roster',
     L4_ROLLUP_ROSTER_NOT_DECLARED_DEPENDENCY: 'L4.rollup-roster-not-declared-dependency',
     L4_READINESS_BLOCKED: 'L4.readiness-blocked',
-    L4_PROSE_PREREQUISITE_UNLISTED: 'L4.prose-prerequisite-unlisted',
     L4_PREREQUISITE_CYCLE: 'L4.prerequisite-cycle',
     L4_PREREQUISITE_NOT_DONE: 'L4.prerequisite-not-done',
-    L4_GATE_LANGUAGE: 'L4.gate-language',
     L4_LINKED_TASK_PARSE_FAILED: 'L4.linked-task-parse-failed',
     L4_ORPHAN_SCENARIOS: 'L4.orphan-scenarios',
     L4_UNCOVERED_TASK_SCENARIO: 'L4.uncovered-task-scenario',
@@ -168,7 +155,6 @@ export const FINDING_CODES = {
     L4_VERDICT_ROWS_MATCH_NO_SCENARIO: 'L4.verdict-rows-match-no-scenario',
     L4_DOGFOOD_MISSING: 'L4.dogfood-missing',
     L4_VERIFYING_INCOMPLETE_TASKS: 'L4.verifying-incomplete-tasks',
-    L4_STALE_LINE_ANCHOR: 'L4.stale-line-anchor',
     // Certification gate (task 0994 follow-up, 2026-09-28): a backticked in-repo anchor
     // whose file is missing or whose line range falls outside the file. ERROR when the
     // check is the completion target (`--as done`); a warning on any other live check, so
@@ -176,8 +162,6 @@ export const FINDING_CODES = {
     // Objective conditions only (no heuristic), and terminal records are exempt, so it
     // bites exactly at the `testing → done` certification window rather than re-litigating
     // historical evidence (ADR-092 / 0862 R3).
-    L4_ANCHOR_UNRESOLVED: 'L4.anchor-unresolved',
-    L4_ANCHOR_SUBJECT_MISMATCH: 'L4.anchor-subject-mismatch',
     L4_MALFORMED_VERDICT_ARTIFACT: 'L4.malformed-verdict-artifact',
     L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
     L4_TESTING_VERDICT_STUB: 'L4.testing-verdict-stub',

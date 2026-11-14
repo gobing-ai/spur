@@ -316,7 +316,7 @@ spur task check <wbs> --json
 ```
 
 Must return `pass: true` with 0 errors. Warnings may be acceptable on meta tasks
-(e.g. `prose-prerequisite-unlisted`, `uncovered-task-scenario`).
+(e.g. `uncovered-task-scenario`).
 
 ## Output
 

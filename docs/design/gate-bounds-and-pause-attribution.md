@@ -44,7 +44,8 @@ Invariants:
 
 ## 2. Verdict evidence replay (`spur task verdict --replay`)
 
-`--replay` is opt-in, off by default, and does exactly one thing: after the verdict is derived, it re-executes the **test files the verdict rows cite**.
+`--replay` is opt-in, off by default and not passed by `task-pipeline` (the gate already ran the
+tests for the tree); it does exactly one thing: after the verdict is derived, it re-executes the **test files the verdict rows cite**.
 
 | Rule | Value |
 | --- | --- |
