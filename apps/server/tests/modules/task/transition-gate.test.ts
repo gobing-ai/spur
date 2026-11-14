@@ -61,9 +61,6 @@ const UNGATED_TASK = [...TASK_HEAD, '### Background', '', 'Text', ''].join('\n')
 const PASS_VERDICT = {
     wbs: '0001',
     verdict: 'PASS',
-    // Task 1085: a PASS artifact must carry the verifier's stated confidence
-    // level or the shared done gate rejects it before the structural gate runs.
-    confidence: 'HIGH',
     requirements: [{ id: 'R1', status: 'MET', evidence: 'a' }],
     acceptanceCriteria: [],
     source: 'test',
@@ -83,15 +80,6 @@ function makeCtx(opts: { task: string; verdict?: unknown; withMatrix?: boolean }
     const tasksDir = join(root, TASKS_DIR);
     mkdirSync(tasksDir, { recursive: true });
     writeFileSync(join(tasksDir, '0001_task.md'), opts.task);
-    // Materialize the file `GATED_TASK`'s Solution cites. Since the 0994 follow-up a live
-    // record's Testing/Solution `file:line` anchor must RESOLVE at the `--as done` gate
-    // (`L4.anchor-unresolved` is an error there), so an unresolvable fixture anchor would
-    // deny the transition before the verdict gate these tests exercise. The project root
-    // is the parent of the tasks dir (`spur-gate-corpus`), since the fixture deliberately
-    // avoids a `docs/tasks` suffix and so takes the `dirname(tasksDir)` branch.
-    const evidenceTarget = join(root, 'spur-gate-corpus', 'packages', 'app', 'src', 'gate.ts');
-    mkdirSync(join(evidenceTarget, '..'), { recursive: true });
-    writeFileSync(evidenceTarget, 'export const gate = true;\nexport const a = 1;\nexport const b = 2;\n');
     if (opts.verdict !== undefined) {
         mkdirSync(join(root, '.spur', 'run'), { recursive: true });
         writeFileSync(join(root, '.spur', 'run', '0001-verdict.json'), JSON.stringify(opts.verdict));
