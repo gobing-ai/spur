@@ -155,13 +155,6 @@ export const FINDING_CODES = {
     L4_VERDICT_ROWS_MATCH_NO_SCENARIO: 'L4.verdict-rows-match-no-scenario',
     L4_DOGFOOD_MISSING: 'L4.dogfood-missing',
     L4_VERIFYING_INCOMPLETE_TASKS: 'L4.verifying-incomplete-tasks',
-    // Certification gate (task 0994 follow-up, 2026-09-28): a backticked in-repo anchor
-    // whose file is missing or whose line range falls outside the file. ERROR when the
-    // check is the completion target (`--as done`); a warning on any other live check, so
-    // entering `testing` is never blocked for evidence that is still being assembled.
-    // Objective conditions only (no heuristic), and terminal records are exempt, so it
-    // bites exactly at the `testing → done` certification window rather than re-litigating
-    // historical evidence (ADR-092 / 0862 R3).
     L4_MALFORMED_VERDICT_ARTIFACT: 'L4.malformed-verdict-artifact',
     L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
     L4_TESTING_VERDICT_STUB: 'L4.testing-verdict-stub',

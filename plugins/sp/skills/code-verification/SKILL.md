@@ -144,13 +144,8 @@ assign a per-requirement status:
 Record the evidence string (repo-relative `file:line`, command, or test name) per requirement —
 this lands in `## Testing`.
 
-**Line-anchor verification (anti-stale-citation rule).** Every `file:line` evidence citation
-written into the Testing table MUST be re-read at the cited lines this run, and the re-read content
-MUST name the requirement's subject (the R-item's noun - not merely exist on disk) before a MET row
-is written. A citation whose anchor resolves to another ticket's content, a stale line range, or a
-heading/comment unrelated to the requirement fails the row to UNMET and surfaces the stale anchor as
-a finding (severity >= P2). This closes the gap where a verify run certified a task `done` citing
-`evidence:134` that was actually a sibling ticket's telemetry text (0299 R1, from the 0282 re-audit).
+**Cite what you actually read.** Evidence must be something you inspected this run and that
+supports the requirement; nothing parses or re-checks the cell, so its accuracy is yours.
 
 **External evidence (task 0584 / ADR-062) — legal citation form.** Evidence that lives OUTSIDE this
 repository has a frozen non-anchor form: a named origin plus a backticked path with the line number
@@ -199,9 +194,7 @@ The answer file must include a stable AC table:
 | Scenario: CLI emits JSON | MET | test | `apps/cli/tests/foo.test.ts:42` |
 ```
 
-**Line-anchor verification applies to AC evidence too.** Every `file:line` citation in the AC
-evidence column is subject to the Step 4 line-anchor rule - re-read at the cited lines this run and
-confirm the content names the AC's subject before marking the row MET.
+**AC evidence follows the same rule as Step 4:** cite what you inspected this run.
 
 ### Step 6 — Design conformance (Phase 7a; Wave C / 0179 R1–R3)
 

@@ -64,34 +64,6 @@ function isPlaceholderBody(body: string): boolean {
     return stripped.length === 0;
 }
 
-/** Backtick `path:line` / `path:start-end` citations (skips URLs and bare numbers). */
-export function extractBacktickLineAnchors(
-    body: string,
-): Array<{ raw: string; path: string; startLine: number; endLine?: number }> {
-    const out: Array<{ raw: string; path: string; startLine: number; endLine?: number }> = [];
-    const re = /`([^`\n]+?:(\d+)(?:-(\d+))?)`/g;
-    let m: RegExpExecArray | null = re.exec(body);
-    while (m !== null) {
-        const raw = m[1] ?? '';
-        const startStr = m[2];
-        const endStr = m[3];
-        if (startStr) {
-            // Split path from trailing :line / :start-end
-            const pathPart = raw.replace(/:(\d+)(?:-(\d+))?$/, '');
-            const hasExt = /\.\w{1,8}$/.test(pathPart.split('/').pop() ?? '');
-            if (pathPart && !pathPart.includes('://') && hasExt) {
-                const startLine = Number(startStr);
-                const endLine = endStr !== undefined ? Number(endStr) : undefined;
-                if (Number.isFinite(startLine) && startLine >= 1) {
-                    out.push({ raw, path: pathPart, startLine, endLine });
-                }
-            }
-        }
-        m = re.exec(body);
-    }
-    return out;
-}
-
 // ─── TaskCheckService ───────────────────────────────────────────────────
 
 /** Four-layer task validator (design §3). L1 schema → L2 matrix → L3 format → L4 traceability. */

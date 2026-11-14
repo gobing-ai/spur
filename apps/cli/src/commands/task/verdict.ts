@@ -11,16 +11,12 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
         .summary('Derive PASS/PARTIAL/FAIL/UNKNOWN verdict from verify answer text (replaces pipeline grep/shell).')
         .argument('<wbs>', 'Task WBS number')
         .option('--from-answer <path>', 'Path to verify answer text file')
-        // 1319 R4: replay the test files the verdict rows cite, before a PASS becomes durable.
-        .option('--replay', 'Re-execute the test files the verdict rows cite; a failure downgrades PASS to PARTIAL')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
-            const { deriveVerdict, formatReplayReport, readTaskAcceptanceCriteria, replayCitedTests } = await import(
-                '@gobing-ai/spur-app'
-            );
+            const { deriveVerdict, readTaskAcceptanceCriteria } = await import('@gobing-ai/spur-app');
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
             let answerText: string;
             try {
@@ -47,26 +43,11 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
             const taskAc = await readTaskAcceptanceCriteria(wbs, corpusDeps);
             const result = deriveVerdict(answerText, taskCheckPassed, taskAc);
 
-            // 1319 R4: replay before the artifact becomes durable. A cited test file that is missing,
-            // fails or times out means the PASS was not earned, so it downgrades to PARTIAL and the
-            // findings name the anchor. A non-PASS is never upgraded.
-            const replay =
-                options.replay === true
-                    ? await replayCitedTests([...result.requirements, ...(result.acceptanceCriteria ?? [])], {
-                          // The project's own `test-changed` binding, not the default preset.
-                          cwd: context.cwd,
-                          builder: context.spurConfig?.builder,
-                      })
-                    : undefined;
-            const downgraded = replay !== undefined && replay.findings.length > 0 && result.verdict === 'PASS';
-            if (downgraded) result.verdict = 'PARTIAL';
-
             // Emit verdict artifact.
             const jsonOut = JSON.stringify(
                 {
                     wbs,
                     ...result,
-                    ...(replay !== undefined ? { replay } : {}),
                     source: 'spur-task-verdict',
                 },
                 null,
@@ -81,11 +62,6 @@ export function registerTaskVerdictCommand(task: Command, context: CliContext): 
                 context.output.write(
                     `Verdict: ${result.verdict} (${result.requirements.length} requirements, ${result.checks.length} checks)`,
                 );
-                if (replay !== undefined) {
-                    const report = formatReplayReport(replay);
-                    context.output.write(report.summary);
-                    for (const line of report.findings) context.output.error(line);
-                }
             }
 
             if (result.verdict !== 'PASS') {

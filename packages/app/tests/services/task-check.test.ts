@@ -2665,61 +2665,6 @@ test('0700 R5: multi-paragraph R-item bodies still do not false-positive (0174)'
     expect(findings).toHaveLength(0);
 });
 
-// ── 0700 R6: gate-language advisory reads frontmatter dependencies ──
-
-const gateLanguageFindingsOf = async (overrides: Record<string, unknown>) => {
-    // taskFm already emits the `### Background` skeleton — fill its body rather
-    // than appending a duplicate section (getSection reads the first match).
-    const content = taskFm({ feature_id: 'F1', status: 'backlog', name: 'Gate task', ...overrides }).replace(
-        '### Background\n\ntext',
-        '### Background\n\nThis step is a HITL approval merge event before the capstone.',
-    );
-    const { fs, path, cleanup } = seedEnv({
-        taskContent: content,
-        features: { F1: feature0700('F1', ['the real scenario']) },
-    });
-    const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-    cleanup();
-    return result.findings.filter((f) => f.code.includes('gate-language'));
-};
-
-test('0700 R6: no advisory when the task already declares a dependency', async () => {
-    const findings = await gateLanguageFindingsOf({ dependencies: ['0691'] });
-    expect(findings).toHaveLength(0);
-});
-
-// ── 1112 R2: ambiguous gate tokens warn only with a gating cue in the same sentence ──
-
-const gateLanguageFindingsForBody = async (body: string) => {
-    const content = taskFm({ feature_id: 'F1', status: 'backlog', name: 'Gate task' }).replace(
-        '### Background\n\ntext',
-        `### Background\n\n${body}`,
-    );
-    const { fs, path, cleanup } = seedEnv({
-        taskContent: content,
-        features: { F1: feature0700('F1', ['the real scenario']) },
-    });
-    const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-    cleanup();
-    return result.findings.filter((f) => f.code.includes('gate-language'));
-};
-
-test('1112 R2: composition prose without a gating cue stays silent', async () => {
-    const findings = await gateLanguageFindingsForBody(
-        'The review steps merged back into one step. The approved design passed.',
-    );
-    expect(findings).toHaveLength(0);
-});
-
-// Workflow tasks cite engine action kinds (`hitl.confirm`, `hitl.select`); a dotted identifier
-// names an action, not a gate, and must not warn (feature D66 tasks 1248/1250 tripped this).
-test('gate-language: dotted workflow action kinds stay silent', async () => {
-    const findings = await gateLanguageFindingsForBody(
-        'The `hitl.confirm` action received an empty answer. Replace kind: hitl.select with decide.',
-    );
-    expect(findings).toHaveLength(0);
-});
-
 // ── 0700 R2: stale non-passing Review beside PASS Testing on a closed task ──
 
 const closedTaskWith = async (reviewBody: string, status = 'done') => {

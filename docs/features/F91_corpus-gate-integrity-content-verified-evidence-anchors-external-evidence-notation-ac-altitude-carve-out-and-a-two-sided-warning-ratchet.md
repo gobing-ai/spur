@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F91"
 name: "Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet"
-status: active
+status: deprecated
 priority: P2
 tags: []
 created_at: "2026-08-17T22:15:08.187Z"
-updated_at: "2026-10-21T18:35:07.975Z"
+updated_at: "2026-11-14T20:30:04.776Z"
 ---
 
 # F91: Corpus gate integrity: content-verified evidence anchors, external-evidence notation, AC-altitude carve-out, and a two-sided warning ratchet
@@ -123,6 +123,14 @@ Feature: Corpus gate integrity
 
 ## Notes
 
+### Current reading — 2026-11-14
+
+The slim-harness refactor (ADR-138 amendment, 2026-11-13) retired evidence-anchor validation and the
+anchor subject-matcher this feature was reopened for (`L4.anchor-unresolved`, `L4.anchor-subject-mismatch`,
+`L4.stale-line-anchor`, `spur task migrate-anchors`): scenarios R3–R5 no longer describe shipped
+behaviour, and R1/R2 were retired by D61 / ADR-108. Only R6 (AC altitude) remains live, owned by
+`spur task check`. The feature is deprecated; the 2026-10-21 reading below is history.
+
 ### Current reading — 2026-10-21
 
 D61 / ADR-108 retired accepted-debt corpus baselines and warning-ratchet snapshots. Evidence-anchor validation, external-evidence notation and AC altitude remain live; baseline/ratchet claims below are historical.
@@ -207,4 +215,5 @@ R3 rename lands, F31's name field are feature-file writes from that task.
 - 2026-10-08T07:55:25.156Z active → verifying (system)
 - 2026-10-08T07:55:26.543Z verifying → done (system)
 - 2026-10-10T05:04:29.578Z done → active (system)
+- 2026-11-14T20:29:57.671Z active → deprecated (system)
 

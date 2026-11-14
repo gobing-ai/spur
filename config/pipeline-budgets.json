@@ -4,10 +4,10 @@
     "note": "Per-pipeline model-query + wall-clock cost budgets (task 0607 R3). modelQueries anchors the live workflow definitions' query lists — the SSOT, extracted by extractResolvedWorkflowFacts and guarded by composition-baseline.test.ts (0775 retired the snapshot this file previously anchored to). wallClockMs is a gross-regression ceiling anchored to measured real-run data (R5): the gate compares the median-of-sane terminal-run wall-clock against it. A null budget is unenforced until measured — never treated as 0. Raising a numeric budget requires a fresh recorded decision in the same commit (config/pipeline-budgets.json vs git HEAD); the `spur workflow cost --budget` gate fails a silent raise by name.",
     "budgets": {
         "task-pipeline": {
-            "modelQueries": 4,
+            "modelQueries": 3,
             "wallClockMs": 2300000,
             "tokenCostUsd": null,
-            "source": "Full-depth runs 2026-08-08..20: 1459s-2719s; authoritative 2053s/2023s/1985s (n=3, 2026-08-19/20, per ADR-076 retirement — 538s unusable). Budget = 2300s ≈ max+~12% headroom. Gate measures median-of-sane terminal runs; short precheck-failure/dry runs pull the median down, so this is a gross-regression ceiling. Live fixture re-measurement: bun scripts/spur-dev.ts eval-pipeline --runs 3 (operator command in 0607 Solution).",
+            "source": "Full-depth runs 2026-08-08..20: 1459s-2719s; authoritative 2053s/2023s/1985s (n=3, 2026-08-19/20, per ADR-076 retirement — 538s unusable). Budget = 2300s ≈ max+~12% headroom. Gate measures median-of-sane terminal runs; short precheck-failure/dry runs pull the median down, so this is a gross-regression ceiling. Live fixture re-measurement: bun scripts/spur-dev.ts eval-pipeline --runs 3 (operator command in 0607 Solution). 2026-11-14 recount: 4 -> 3 model queries (implement, remediate, review) after the slim-harness refactor; the wall-clock ceiling predates it and is reference only — no pipeline, gate or hook reads it; only a manual `spur workflow cost --budget` compares against it.",
             "decision": null
         },
         "idea-pipeline": {

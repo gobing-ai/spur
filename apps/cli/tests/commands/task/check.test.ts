@@ -491,9 +491,6 @@ describe('spur task CLI', () => {
             const relResults = JSON.parse(lastMessage(rel));
             const absResults = JSON.parse(lastMessage(abs));
             expect(relResults).toEqual(absResults);
-            const blob = JSON.stringify(relResults);
-            expect(blob).not.toContain('Stale line anchor');
-            expect(blob).not.toContain('stale-line-anchor');
         } finally {
             rmSync(fx.root, { recursive: true, force: true });
         }

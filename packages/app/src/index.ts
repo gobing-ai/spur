@@ -945,15 +945,6 @@ export type {
     TokenLedgerWatchListener,
 } from './services/token-ledger-watcher';
 export { TokenLedgerWatcher } from './services/token-ledger-watcher';
-export type { ReplayFinding, ReplayResult, ReplayRow, VerdictReplayOptions } from './services/verdict-replay';
-export {
-    citedTestFiles,
-    formatReplayReport,
-    REPLAY_MAX_FILES,
-    REPLAY_TIMEOUT_MS,
-    replayCitedTests,
-    replayWorkspace,
-} from './services/verdict-replay';
 export { createWarmTurnDispatcher, type TurnSessionBinding } from './services/warm-turn-dispatch';
 export { reapIfWorkerLost } from './services/workflow-clean-ops';
 export type {
