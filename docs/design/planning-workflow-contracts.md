@@ -489,7 +489,8 @@ enforcing verdict-line shape, requirement row completeness/uniqueness/identity, 
 validity, and AC-label identity against the task checklist (AC completeness stays a verifier
 judgement, not a lint class). A lint failure halts the stage before the verdict step can misread a
 malformed answer. The current precheck is the single `task check --precheck` guard described above;
-`spur task verdict --from-answer` now owns answer linting, without a separate plugin lint step.
+`spur task verdict --from-answer` then owned answer linting; the slim-harness refactor retired answer
+linting entirely — `--from-answer` only derives the verdict.
 
 **Run status (ADR-044):** terminal states partition into success and failure via an optional
 `failureStates` subset of `terminalStates` (declared per workflow; absent ⇒ today's behavior). Landing

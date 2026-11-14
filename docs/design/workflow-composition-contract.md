@@ -11,7 +11,7 @@ tags: [contract, D9, F96, workflow]
 # Workflow composition contract
 
 **Area:** workflow definition composition, deterministic action ownership, pipeline promotion, and run artifacts.
-**Status:** composition/projection infrastructure built; the digest-bound proof chain shipped for `task-pipeline` (ADR-071; tasks 0703/0769) — the docs half retired with `docs-pipeline.yaml` (task 0866). Physical path confinement, spec-complete proof inputs, honest review-completion evidence, and bound artifact registration at record entry landed (task 0785). Residual completeness shipped as an observe-only scan inside `record`, after the verdict-proven box flips (task 0983), plus the existing bounded remediation loop (F96; [task-residual-sweep.md](task-residual-sweep.md)).
+**Status:** composition/projection infrastructure built; the digest-bound proof chain shipped for `task-pipeline` (ADR-071; tasks 0703/0769) — the docs half retired with `docs-pipeline.yaml` (task 0866). Physical path confinement, spec-complete proof inputs, honest review-completion evidence, and bound artifact registration at record entry landed (task 0785). The residual-completeness scan (F96) was retired with the slim-harness refactor.
 **Authority:** derived; decisions live in `00_ADR`, module boundaries in `03_ARCHITECTURE`.
 
 ## Target workflow inventory

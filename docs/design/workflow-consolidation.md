@@ -58,7 +58,7 @@ task workflows.
   pair, guards fail closed. `verifying` onEnter currently runs
   `env -u SPUR_WORKFLOW_RUN_ACTIVE spur workflow run feature-verification.yaml …` (1147 R4 workaround
   for the nested-run refusal, 0610 R4).
-- `task-pipeline`'s `done` state already performs `task record`, the residual sweep/fold/settle,
+- `task-pipeline`'s `done` state already performs `task record`,
   the done transition and a best-effort `feature sync`. `wrapup-pipeline` re-resolves and re-checks
   the same tasks.
 - `config/decisions/idea-pipeline.yaml` ships `idea-recommendation` and `needs-design` as

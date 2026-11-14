@@ -27,12 +27,10 @@ status transitions, frontmatter fields, and section edits — never mutate a tas
 | `path <wbs>` | Resolve a WBS to its task file path |
 | `scaffold-tests <wbs>` | Generate BDD test stubs from the task's acceptance criteria |
 | `gate <wbs> <mode>` | Run the task-pipeline quality gate (`run`, `recheck`, `deferred`, `light`, `status`) |
-| `residual <wbs> <step>` | F96 residual sweep: `scan`, `fold`, `settle`, `report`, `review-gate` |
 | `diffstat <wbs>` | Emit the `<wbs>-diffstat.json` row the risk-tiered review routes on |
 | `run-link <wbs>` | Record a pipeline provenance link |
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into one batch verdict |
 | `migrate` | One-time task corpus normalization pass |
-| `migrate-anchors` | Rewrite stale `file:line` anchors to current line numbers |
 
 All verbs accept `--json` (and `--json-envelope`); folder-scoped verbs accept `--folder <path>`.
 
@@ -268,18 +266,16 @@ spur task scaffold-tests <wbs> [--file <path>] [--json]
 Generates BDD test stubs from the task's acceptance-criteria scenarios — the bridge from
 planning to the test suite.
 
-## spur task gate / residual / diffstat
+## spur task gate / diffstat
 
 ```bash
 spur task gate <wbs> <mode> [--cmd <command>] [--probe-cmd <command>] [--run-id <id>]
-spur task residual <wbs> <scan|fold|settle|report|review-gate> [--root <dir>] [--tmp-dir <dir>] [--folder <path>]
 spur task diffstat <wbs>
 ```
 
 The task-pipeline's deterministic steps, called from `task-pipeline.yaml` (no plugin scripts).
 `gate` runs the quality gate and writes `.spur/run/<wbs>-test-gate.{log,findings,status,attempt}`
-(exit `0` PASS/DEFERRED, `1` FAIL, `2` usage). `residual` drives the F96 residual sweep (`--root`
-holds `.spur/run`, `--tmp-dir` is the staging dir scanned for `<wbs>-*` residue). `diffstat` writes
+(exit `0` PASS/DEFERRED, `1` FAIL, `2` usage). `diffstat` writes
 the diff row (`files`, `loc`, `sensitive`) that routes the risk-tiered review. These verbs print
 plain text, not `--json` envelopes.
 
@@ -302,17 +298,14 @@ Reads a JSON array of per-task outcomes (`{wbs,outcome}` rows — `PASS`, `PARTI
 `NOT-STARTED`, `UNKNOWN`) and emits the deterministic batch verdict, with `NOT-STARTED` tasks
 excluded from the rollup. The batch-verify replacement for ad-hoc prose rollups.
 
-## spur task migrate / migrate-anchors
+## spur task migrate
 
 ```bash
 spur task migrate [--dry-run] [--json]
-spur task migrate-anchors [--wbs <wbs>] [--dry-run] [--json]
 ```
 
-One-time maintenance passes: corpus normalization, and qualification of stale `file:line`
-anchors. Both are idempotent; `--dry-run` reports without writing. Not part of the daily loop.
-`--wbs` scopes `migrate-anchors` to one task file, which is how the pipeline's implement step
-repairs a single task's anchors without rewriting the rest of the corpus.
+One-time corpus normalization. Idempotent; `--dry-run` reports without writing. Not part of the
+daily loop.
 
 ## See also
 

@@ -1438,26 +1438,6 @@ describe('TaskService', () => {
             return path;
         }
 
-        test('rejects an authored Solution without a file:line citation before any write', async () => {
-            const created = await svc.create({ title: 'R1 invalid solution' });
-            const fs = createNodeFileSystem(root());
-            const before = await fs.readFile(created.ref.filePath);
-            const beforeUpdatedAt = MarkdownDocument.parse(before, 'task').frontmatterData?.updated_at;
-
-            const src = await writeSource('r1-sol-no-cite', 'Changed everything but forgot the citation.\n');
-            await expect(svc.updateSection(created.ref.id, 'Solution', src)).rejects.toMatchObject({
-                name: 'SectionMutationError',
-                code: 'invalid-solution',
-                message: 'Solution must contain at least one `file:line` citation',
-            });
-
-            // No mutation: file content and updated_at are unchanged.
-            const after = await fs.readFile(created.ref.filePath);
-            expect(after).toBe(before);
-            const afterUpdatedAt = MarkdownDocument.parse(after, 'task').frontmatterData?.updated_at;
-            expect(afterUpdatedAt).toBe(beforeUpdatedAt);
-        });
-
         test('accepts a Solution with a backticked path:line citation', async () => {
             const created = await svc.create({ title: 'R1 sol backtick' });
             const src = await writeSource(
@@ -2593,15 +2573,6 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             await fs.writeFile(path, `${body}\n`);
             return path;
         }
-
-        test('Background with gate vocabulary warns without blocking', async () => {
-            const created = await svc.create({ title: 'Gate words' });
-            const src = await writeTmp('gate', 'Blocked until HITL approval of the parent.');
-
-            const result = await svc.updateSection(created.ref.id, 'Background', src);
-
-            expect((result.warnings ?? []).join('\n')).toContain('L4.gate-language');
-        });
 
         test('gate vocabulary stays silent once dependencies[] is declared', async () => {
             const created = await svc.create({ title: 'Gate words deps' });

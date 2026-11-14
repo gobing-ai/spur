@@ -183,7 +183,6 @@ describe('spur task record — text rendering of every result field', () => {
             reviewWritten: true,
             solutionBackfilled: true,
             transitionedTo: 'testing',
-            scenarioWarnings: ['scenario key S1 dropped'],
             closeAuditError: 'audit boom',
             bookkeepingError: 'row boom',
             verdictState: 'stale',
@@ -194,7 +193,6 @@ describe('spur task record — text rendering of every result field', () => {
             expect(await main(['task', 'record', '0001'], { cwd, output })).toBe(0);
             expect(output.messages.at(-1)).toBe('Testing written, Review written, Solution backfilled, 0001 → testing');
             const errors = output.errors.join('\n');
-            expect(errors).toContain('scenario key S1 dropped');
             expect(errors).toContain('failed to record done close audit fields: audit boom');
             expect(errors).toContain('failed to reconcile task-lifecycle bookkeeping row: row boom');
             expect(errors).toContain('ⓘ verdict artifact stale: re-run verify');

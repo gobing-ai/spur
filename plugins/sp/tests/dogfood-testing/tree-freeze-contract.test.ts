@@ -39,14 +39,6 @@ describe('implement-probe and post-gate freeze contract (task 1135)', () => {
         expect(intoReview.length).toBeGreaterThan(0);
         for (const t of intoReview) {
             const cmd = String((t.guard?.options as Record<string, unknown> | undefined)?.command ?? '');
-            // 1319 R5(c): the ONE self-entry is the inner lint retry — it re-issues the review in
-            // place (guarded by the run-scoped retry token) instead of buying a remediate hop. It
-            // certifies nothing new: `review → done` still demands the gate tokens plus the
-            // verdict PASS, so a stale review cannot ride a blocked gate into certification.
-            if (t.from === 'review') {
-                expect(cmd).toContain('-review-lint-retry');
-                continue;
-            }
             expect(t.from).toBe('gate');
             expect(cmd).toContain('-gate.status');
             expect(cmd).toContain('-test-gate.status');

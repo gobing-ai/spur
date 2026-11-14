@@ -161,12 +161,10 @@ Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — omp cal
 ```
 
 Use this form ONLY when the evidence genuinely lives outside `spur`'s working tree (a `@gobing-ai/ts-*`
-source under `~/xprojects/ts-libs`, or a gitignored `.spur/run/**` artifact). `checkLineAnchors`
-classifies it as external and never raises `L4.stale-line-anchor` for it (R1). Do NOT use it for a file
-that lives in this repo — in-repo evidence MUST use the repo-relative backtick form
-`` `path:line` `` / `` `path:start-end` ``, and citing it in the external form still reports (R2).
+source under `~/xprojects/ts-libs`, or a gitignored `.spur/run/**` artifact). In-repo evidence uses the
+repo-relative backtick form `` `path:line` `` / `` `path:start-end` ``.
 
-**Concrete anchors (0804 R9):** existing `file:line`s only, never globs, always repo-root-relative — a basename is `L4.anchor-unresolved` at the `--as done` gate (`references/verdict-schema.md`).
+**Concrete anchors:** existing `file:line`s only, never globs or basenames, always repo-root-relative (`references/verdict-schema.md`).
 
 ### Step 5 — Acceptance Criteria guard
 
@@ -275,7 +273,7 @@ completion gate (`PARTIAL`/`FAIL` route the pipeline to `failed`).
 Assemble the evidence and **emit the canonical verdict artifact** — verification writes no task
 section (F92 0593 R1). Under the pipeline **you** write
 `.spur/run/<wbs>-verify-answer.txt` (0726 R3: host `expectFile`, never captured/overwritten); a
-deterministic shell step lints it and derives `.spur/run/<wbs>-verdict.json`, and `record`
+deterministic shell step derives `.spur/run/<wbs>-verdict.json`, and `record`
 transcribes `## Testing` from it.
 
 **Standalone** (`/sp:dev-verify` outside the pipeline), write the artifact yourself, then invoke
@@ -284,40 +282,14 @@ the deterministic Testing writer `spur task record` (section authorship never ha
 ```bash
 # write .spur/run/<wbs>-verdict.json (shape in references/verdict-schema.md), then:
 spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing, flips proven boxes
-# F96 residual sweep (observe-only): scan + fold AFTER record, under every --fix mode (0987).
-spur task residual <wbs> scan
-spur task residual <wbs> fold
-# Downgrade only: re-record so Testing carries the final (folded) verdict.
-[ "$(jq -r .verdict .spur/run/<wbs>-verdict.json)" = PASS ] \
-  || spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json
 ```
-
-> **Residual fold (F96).** `scan` reads `.spur/run/` artifacts and the post-record task file and
-> writes `residuals.json` + `residual-report.md`; `fold` rewrites the verdict artifact's
-> `residual-sweep` check in place (PASS → PARTIAL when a blocking residual exists), and the
-> downgrade-only re-record transcribes it — a manual verify cannot certify what the pipeline would
-> reject. The sweep runs after `record` (same order as the pipeline, 0983/0987): before it, a
-> verdict-proven box is still unticked and a clean PASS would fold to PARTIAL. The sweep is the
-> `spur task residual` verb (no plugin script to resolve). When the task reaches `done` through
-> `--next`, run `spur task residual <wbs> settle` (files the follow-up task; best-effort).
 
 > **Corrections: the answer file is the source of truth.** `spur task record` re-transcribes
 > `## Testing` from the verdict artifact — direct `--section Testing` writes are futile. Fix
 > `.spur/run/<wbs>-verify-answer.txt` → `spur task verdict <wbs> --from-answer <file>` → re-record.
 
-> **Scenario-key carry-forward (standalone `--force` re-verifies).** When you author a fresh
-> verdict artifact for a task whose `## Testing` already carries feature scenario-title rows
-> (`Scenario: <title>` / `AC-N` keys with MET status), **copy those rows into the new artifact**
-> keyed the same way — record re-transcribes `## Testing` wholesale, so a fresh artifact keyed by
-> bare `R1`-style ids drops the scenario keys `spur feature check` needs for satisfaction
-> (`L4.scenario-unverified` regresses; 0921/D63). Since 0936, `record` warns on stderr (exit 0)
-> for each dropped MET-matched scenario key and when the new rows match no feature scenario —
-> treat those warnings as a re-key instruction, not noise.
-
-> **Keying rule for feature-linked tasks (1086/1089 re-audits).** Key AC rows by the exact feature
-> scenario title (`R1 — …`): feature `Scenario:` titles are declared identities and satisfy L4
-> scenario matching directly. Bare `AC1` fails `ac-identity` on Gherkin AC sections, and checklist
-> labels truncate at the first colon (a `(req: …)` suffix), so the task's own AC title may not resolve.
+> **Keying rule for feature-linked tasks.** Key AC rows by the exact feature scenario title
+> (`R1 — …`) or `AC-N`, so `record` can tick the aliased AC line.
 
 > **Do not write `## Review` directly, ever.** The `## Review` section is owned by the
 > `review` coordinator (`/sp:dev-review` → `sp:super-reviewer`), which merges
@@ -358,20 +330,18 @@ Verdict: PASS
 ```
 
 The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant — `Status` in column 2 — and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.
-The answer MUST carry exactly one top-level `Confidence: HIGH|MEDIUM|LOW` line (ADR-141): the lint *derives* the level from your own rows and rejects a mismatch (`confidence-missing` / `-duplicate` / `-mismatch`), so state the level your evidence earns — `HIGH` needs every AC row MET on `test`/`command`, a citation-only row makes it `MEDIUM`. Full rule: [verdict-schema](references/verdict-schema.md).
-The answer MUST cite a source for external API/library claims in Requirement/AC evidence cells: a cell asserting a scoped-package (`@scope/name`), `node_modules/`, semver-version (`x.y.z`), or backticked function-call (`` `name(args)` ``) claim is rejected with `evidence-citation` unless the SAME cell carries a citation — a repo `path:line(-end)` (backticked or bare), the external named-origin form (@origin `path` line N), or a URL. Cross-cell references ("receipt above") do not count; marker-free receipts ("bun test 398 pass / 0 fail") need no citation.
+Cite a source for external API/library claims in the SAME evidence cell (repo `path:line`, the external named-origin form, or a URL) — reviewer-enforced, not linted.
 **MUST NOT:** place a `Severity` column between `Req` and `Status`. The parser tolerates variants
 as defense-in-depth; this contract is canonical.
 
 Under the pipeline, the verifier owns the answer file `.spur/run/<wbs>-verify-answer.txt` (0726
 R3): `Verdict: PARTIAL` first, append one row at a time, replace the verdict line only when all
-rows are certified — interruptions leave lintable partial rows; retries fill only missing IDs.
-Host: `spur task verdict --from-answer` lints the answer file, then derives the verdict +
-`spur task check` (R9). Vocabularies,
-rejection classes, and the AC identity rule: `references/verdict-schema.md`. Sections follow the
+rows are certified — interruptions leave usable partial rows; retries fill only missing IDs.
+Host: `spur task verdict --from-answer` derives the verdict from the answer file, then runs
+`spur task check` (R9). Vocabularies and the AC identity rule: `references/verdict-schema.md`. Sections follow the
 Step 10 contract.
 
-**Standalone** (outside the pipeline — no host lint/derive step), write the answer file and
+**Standalone** (outside the pipeline — no host derive step), write the answer file and
 artifact yourself; shape and field-by-field contract in
 [references/verdict-schema.md](references/verdict-schema.md):
 

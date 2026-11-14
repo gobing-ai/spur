@@ -98,7 +98,7 @@ deprecated task, because each edits the record rather than declaring the work re
 | Hop | Permitted | Why |
 | --- | --- | --- |
 | `spur task record` (Testing/Solution/Review sections) | yes | Records what already happened; refusing it would strand the evidence trail. |
-| `spur task migrate-anchors`, verdict writes | yes | Corpus-integrity and evidence hops, same reasoning. |
+| verdict writes | yes | Corpus-integrity and evidence hops, same reasoning. |
 | `spur task update <wbs> --section <any>` | yes, with a freeze warning | Matches `FeatureService.updateSection` (S6). |
 | `spur task update <wbs> <status>` to anything but `todo`/`cancelled` | no | The graph refuses it (S3/S7). |
 | New dependency edge onto the task (`dependencies[]`) | no | S8/S9. |

@@ -28,10 +28,9 @@ export class DependencyMutationError extends Error {
  * - `no-matrix`      — no section-matrix entry for variant/status → exit 3
  * - `unknown-section`— section name not in `TASK_CANONICAL_SECTIONS` → exit 3
  * - `forbidden`      — section is forbidden for the task's current status → exit 3
- * - `invalid-solution` — explicit Solution update lacks a `file:line` citation → exit 3
  */
 export class SectionMutationError extends Error {
-    readonly code: 'usage' | 'no-matrix' | 'unknown-section' | 'forbidden' | 'invalid-solution';
+    readonly code: 'usage' | 'no-matrix' | 'unknown-section' | 'forbidden';
     constructor(code: SectionMutationError['code'], message: string) {
         super(message);
         this.name = 'SectionMutationError';

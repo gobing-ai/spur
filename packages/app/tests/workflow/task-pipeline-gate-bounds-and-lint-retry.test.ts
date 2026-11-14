@@ -12,11 +12,9 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 import { CommandGateActionRunner } from '../../src/workflow/actions/command-gate';
 
@@ -73,31 +71,6 @@ function staged(): string {
     return cwd;
 }
 
-function runShell(command: string, cwd: string, vars: Record<string, string>): void {
-    const run = spawnSync('/bin/sh', ['-c', render(command, vars)], {
-        cwd,
-        env: { ...getEnvVars(), ...vars },
-        encoding: 'utf8',
-    });
-    if (run.status !== 0) throw new Error(`shell exited ${run.status}: ${run.stderr}`);
-}
-
-/** First passing edge in declaration order — the engine's routing decision. */
-function firstPassingEdgeIndex(from: string, cwd: string, vars: Record<string, string>): number {
-    const edges = definition.transitions.filter((t) => t.from === from);
-    for (const [index, edge] of edges.entries()) {
-        if (edge.guard?.kind === 'always') return index;
-        if (edge.guard?.kind !== 'shell') continue;
-        const run = spawnSync('/bin/sh', ['-c', edge.guard.options?.command ?? ''], {
-            cwd,
-            env: { ...getEnvVars(), ...vars },
-            encoding: 'utf8',
-        });
-        if (run.status === 0) return index;
-    }
-    throw new Error(`no passing edge out of ${from}`);
-}
-
 describe('1319 R3 — the formatter step is bounded and stays best-effort', () => {
     test('a hanging formatCmd ends at the bound and never fails the chain', async () => {
         const cwd = staged();
@@ -135,76 +108,6 @@ describe('1319 R3 — the formatter step is bounded and stays best-effort', () =
             // The gate is the real gate; the formatter never certifies anything.
             expect((result.data as { status?: string }).status).toBe('BLOCKED');
             expect(readFileSync(join(cwd, options.resultFile), 'utf8')).toBe('BLOCKED\n');
-        } finally {
-            rmSync(cwd, { recursive: true, force: true });
-        }
-    });
-});
-
-describe('1319 R5 — one inline re-review before any remediate hop', () => {
-    const retryStep = () => {
-        const steps = state('review').onEnter ?? [];
-        const last = steps.at(-1);
-        if (last?.kind !== 'shell') throw new Error('the retry token is not the last onEnter step');
-        return String((last.options as { command?: string }).command ?? '');
-    };
-
-    test('a lint failure sets RETRY, clears the stale cert/answer, and routes review → review', () => {
-        const cwd = staged();
-        try {
-            const vars = baseVars();
-            const cert = join(cwd, '.spur', 'run', `${RUN_ID}-review-cert.md`);
-            const answer = join(cwd, '.spur', 'run', `${RUN_ID}-review-answer.txt`);
-            writeFileSync(join(cwd, '.spur', 'run', `${WBS}-verdict-lint.txt`), 'line 12: AC3 matches no task AC\n');
-            writeFileSync(cert, 'stale cert\n');
-            writeFileSync(answer, 'stale answer\n');
-
-            runShell(retryStep(), cwd, vars);
-
-            expect(readFileSync(join(cwd, '.spur', 'run', `${RUN_ID}-review-lint-retry`), 'utf8')).toBe('RETRY\n');
-            expect(existsSync(cert)).toBe(false);
-            expect(existsSync(answer)).toBe(false);
-            // The retry edge wins over remediate and over retry-exhausted (declaration order).
-            const index = firstPassingEdgeIndex('review', cwd, vars);
-            expect(definition.transitions.filter((t) => t.from === 'review')[index]?.to).toBe('review');
-        } finally {
-            rmSync(cwd, { recursive: true, force: true });
-        }
-    });
-
-    test('a retried run whose lint still fails falls through to remediate', () => {
-        const cwd = staged();
-        try {
-            const vars = baseVars();
-            writeFileSync(join(cwd, '.spur', 'run', `${WBS}-verdict-lint.txt`), 'line 12: still wrong\n');
-            writeFileSync(join(cwd, '.spur', 'run', `${WBS}-review.status`), 'FAIL\n');
-            // The retry already happened once in this run.
-            writeFileSync(join(cwd, '.spur', 'run', `${RUN_ID}-review-lint-retried`), '');
-
-            runShell(retryStep(), cwd, vars);
-            expect(readFileSync(join(cwd, '.spur', 'run', `${RUN_ID}-review-lint-retry`), 'utf8')).toBe('NONE\n');
-
-            const edges = definition.transitions.filter((t) => t.from === 'review');
-            const index = firstPassingEdgeIndex('review', cwd, vars);
-            expect(edges[index]?.to).toBe('remediate');
-        } finally {
-            rmSync(cwd, { recursive: true, force: true });
-        }
-    });
-
-    test('a clean lint never asks for a retry', () => {
-        const cwd = staged();
-        try {
-            const vars = baseVars();
-            writeFileSync(join(cwd, '.spur', 'run', `${WBS}-review.status`), 'PASS\n');
-            writeFileSync(join(cwd, '.spur', 'run', `${WBS}-approval.status`), 'APPROVED\n');
-
-            runShell(retryStep(), cwd, vars);
-
-            expect(readFileSync(join(cwd, '.spur', 'run', `${RUN_ID}-review-lint-retry`), 'utf8')).toBe('NONE\n');
-            const edges = definition.transitions.filter((t) => t.from === 'review');
-            const index = firstPassingEdgeIndex('review', cwd, vars);
-            expect(edges[index]?.to).toBe('done');
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }

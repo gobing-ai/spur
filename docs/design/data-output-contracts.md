@@ -124,7 +124,7 @@ Row-level deltas from the default rule:
   mode (`--json` without envelope) writes the `ok:false` payload to **stdout**;
   without `--json` the message stays stderr prose.
 - **Class-3 top-level-`ok` payloads** move under `data` unchanged; the envelope `ok` is
-  recomputed as command success (task migrate, migrate-anchors, check --corpus, noop,
+  recomputed as command success (task migrate, check --corpus, noop,
   init fresh run, projects/builder success payloads).
 - **Kept raw (5 sites, not adopted):** `task verdict` (writes the `.spur/run` verdict
   artifact consumed by pipeline code, not CLI stdout), the two workflow internal event
@@ -175,7 +175,6 @@ Row-level deltas from the default rule:
 | task | list | 657 | **bare-array** | no envelope; becomes `{ok:true, data, meta}` paginated form |
 | task | refresh | 690 | flat-object | unwrapped |
 | task | migrate | 715 | flat-object-with-ok `{ok:true, dryRun, corpusDir, …report}` | `ok` at top level means command success, not envelope discriminant |
-| task | migrate-anchors | 754 | flat-object-with-ok | same top-level-`ok` conflict |
 | task | refresh-roster | 797 | flat-object | unwrapped |
 | task | batch-create | 959, 1015, 1020 | success flat-object `{created, wbs, parentsWired, readiness:{status: ready\|skipped, depth: ready}}` (0788 — whole batch prepared before commit unless `--skip-ready`); error branches via `writeCreateJsonError` (0787): raw `--json` stdout `{ok:false, error:{code, …}}`, `candidate-invalid` carrying `findings`, `preparation-failed` (0788) carrying `failedStage`/`recoveryCommand` | unwrapped success; enveloped errors collapse to `INTERNAL_ERROR` + `details.cliCode`; any invalid item aborts the whole batch (zero files) |
 | task | record | 880 | flat-object | unwrapped |
@@ -245,7 +244,7 @@ Cross-cutting deviation classes (every row is an instance of one of these):
 1. **Unwrapped flat-object** — no `{ok, data}` envelope (majority).
 2. **Bare-array** — `task list`, `task check`, `feature check`.
 3. **Top-level `ok` with non-envelope meaning** — projects/builder/init-fresh/agent-create/
-   task migrate/migrate-anchors/corpus-check: `ok` states command success and siblings sit
+   task migrate/corpus-check: `ok` states command success and siblings sit
    beside it, so `.ok` is not an envelope discriminant (the two-`ok`s hazard ADR-091 rule 4
    resolves by moving these under `data`).
 4. **Pseudo-envelope errors** — `{error:{code, message}}` with no `ok` (message/agent/task
@@ -263,7 +262,7 @@ edit, caught post-commit by a human. New task citations and test evidence theref
 the `path:symbol` form — the symbol names a named code entity, so an edit that shifts lines
 does not invalidate it.
 
-- **Preferred form:** `` `anchor-qualifier.ts:resolveRepoRoot` `` — repo-relative path plus a
+- **Preferred form:** `` `task-check.ts:extractBacktickLineAnchors` `` — repo-relative path plus a
   named symbol (function, class, exported const). Applies to new citations in task files
   (Solution/Testing/References evidence) and test descriptions.
 - **Line anchors stay acceptable** when there is no enclosing named symbol or the reference is

@@ -110,7 +110,6 @@ schema_version: 1
 name: Test Task
 status: done
 variant: standard
-feature_id: F1
 created_at: '2026-06-13T00:00:00.000Z'
 updated_at: '2026-06-13T00:00:00.000Z'
 ---
@@ -128,37 +127,29 @@ updated_at: '2026-06-13T00:00:00.000Z'
 | --- | --- | --- | --- |
 | P1 | \`src/index.ts:10\` | Test finding | Test rec |
 
-- [ ] Unchecked item in body
 `;
         const taskPath = join(tasksDir, '0001_test-task.md');
         writeFileSync(taskPath, taskContent);
         const taskService = new TaskCheckService(fs, matrix);
 
-        // Baseline: L3.unchecked-checklist emitted as warning
+        // Baseline: L4.missing-feature-id emitted as warning
         const baseline = await taskService.check(taskPath, '0001');
-        const boxFinding = baseline.findings.find((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
-        expect(boxFinding).toBeDefined();
-        expect(boxFinding?.severity).toBe('warning');
+        const finding = baseline.findings.find((f) => f.code === FINDING_CODES.L4_MISSING_FEATURE_ID);
+        expect(finding).toBeDefined();
+        expect(finding?.severity).toBe('warning');
 
         // Override 1: 'off' drops the finding completely
         const withOff = await taskService.check(taskPath, '0001', {
-            severityOverrides: { [FINDING_CODES.L3_UNCHECKED_CHECKLIST]: 'off' },
+            severityOverrides: { [FINDING_CODES.L4_MISSING_FEATURE_ID]: 'off' },
         });
-        expect(withOff.findings.some((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST)).toBe(false);
+        expect(withOff.findings.some((f) => f.code === FINDING_CODES.L4_MISSING_FEATURE_ID)).toBe(false);
 
-        // Override 2: 'error' elevates the warning finding to error
+        // Override 2: 'error' elevates the warning finding
         const withError = await taskService.check(taskPath, '0001', {
-            severityOverrides: { [FINDING_CODES.L3_UNCHECKED_CHECKLIST]: 'error' },
+            severityOverrides: { [FINDING_CODES.L4_MISSING_FEATURE_ID]: 'error' },
         });
-        const elevated = withError.findings.find((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
+        const elevated = withError.findings.find((f) => f.code === FINDING_CODES.L4_MISSING_FEATURE_ID);
         expect(elevated?.severity).toBe('error');
-
-        // Override 3: 'warning' demotes an error finding (e.g. L4.feature-not-found)
-        const withDemote = await taskService.check(taskPath, '0001', {
-            severityOverrides: { [FINDING_CODES.L4_FEATURE_NOT_FOUND]: 'error' },
-        });
-        const demoted = withDemote.findings.find((f) => f.code === FINDING_CODES.L4_FEATURE_NOT_FOUND);
-        expect(demoted?.severity).toBe('error');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

@@ -25,7 +25,7 @@
 # captures and compares, digest-bound receipt preconditions, `run.artifact` verdict
 # registration and the `verifiedOutcome` it fed — is gone; a PASS receipt is reused while
 # the tree hash holds and invalidated when the tree moves. `done` closes on the verb's own
-# target-aware `task check` plus the residual sweep, not on a re-asserted digest.
+# target-aware `task check`, not on a re-asserted digest.
 #
 # No operator pause lives in this file (D65 R10): the only pause is the host executor's
 # `agent.run` transform (1232). `escalate` asks its question through the responder and the
@@ -172,9 +172,6 @@ vars:
     # anchors directly in the /sp:dev-fixall input, so the fix agent starts AT the failing
     # file:line instead of re-deriving it from a fresh gate run (0482 R3).
     gateFindings: ""
-    # 1319 R5: lint findings from the previous review visit, echoed into the review prompt on the
-    # inline retry. Empty on the happy path, so the prompt pays nothing when nothing is wrong.
-    reviewLint: ""
     # The quality-gate mode this visit runs — `run` on the first gate visit of the run,
     # `recheck` after a remediation hop, `deferred` under the opt-in batch policy. Written by
     # the gate's own shell and projected into this var (args cannot branch) — D65 1239 R2.
@@ -223,8 +220,7 @@ states:
       onEnter:
           # (e) git-status hygiene advisory; never fails the run (0487 R6 / 0511 R1). 1007 R3:
           # the F96 base-sha capture (0950) merged into this shell — original commands in order,
-          # then the one-time base commit capture; a resumed run keeps its original base so
-          # residual scans stay anchored to the same diff.
+          # then the one-time base commit capture; a resumed run keeps its original base.
           - kind: shell
             options:
                 command: >-
@@ -358,15 +354,6 @@ states:
                 resultFile: .spur/run/${vars.__runId}-implement-format.status
                 softFail: true
                 timeoutMs: "${vars.stepTimeoutMs}"
-          # 1109 R3: qualify this task's unique basename anchors to repo-relative paths.
-          # Placement is load-bearing: it runs AFTER implement's mutations (and the format
-          # above) and BEFORE the gate reads the tree, so the receipt is keyed to the final
-          # tree. `--wbs` scopes the pass to this task's resolved file.
-          # Non-fatal (`; exit 0`): the done gate still reports anything left. Scope
-          # contract: task 1109 R5.
-          - kind: shell
-            options:
-                command: "$spurBin task migrate-anchors --wbs $wbs --json ; exit 0"
 
     # ── escalate hop (operator-question pause, 0933) ──────────────────────────
     # The implement agent paused on an operator question: it wrote
@@ -594,14 +581,11 @@ states:
             options:
                 command: >-
                     TASK_POLICY=$($spurBin task show "$wbs" --json | jq -er '.frontmatter.mutationPolicy // ([.content | scan("(?m)^mutationPolicy:[ \t]*([^ \r\n]+)[ \t]*$") | .[0]] | if length == 0 then "code" elif length == 1 then .[0] else "ambiguous" end)') || exit 1; [ "$mutationPolicy:$TASK_POLICY" = "code:code" ] || { echo "remediate: mutation policy forbids automatic code repair (run=$mutationPolicy, task=$TASK_POLICY) — gate failure preserved, no agent dispatched" >&2; exit 1; }
-          # (e) attempt counter + residual artifact projection in one log append
-          # (1007 R3: the two appends merged — original commands in order, exit 0).
-          # (d) F96 R3 (0950): dev-fixall treats residual items as fix targets and may defer
-          # P3/markers to residual-deferrals.json; this carries the structured artifact too.
+          # (e) attempt counter.
           - kind: shell
             options:
                 command: >-
-                    printf '%s\n' "$(( $(cat ".spur/run/$wbs-test-fix-attempt" 2>/dev/null || echo 0) + 1 ))" > ".spur/run/$wbs-test-fix-attempt"; [ -f ".spur/run/$wbs-residuals.json" ] && echo '--- residual artifact (F96 fix targets; deferrals go to residual-deferrals.json, P3/markers only) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$wbs-residuals.json" >> ".spur/run/$wbs-test-gate.log"; exit 0
+                    printf '%s\n' "$(( $(cat ".spur/run/$wbs-test-fix-attempt" 2>/dev/null || echo 0) + 1 ))" > ".spur/run/$wbs-test-fix-attempt"; exit 0
           # Review-lane input: a non-PASS review status routes into this same bounded repair hop
           # (1262 R6), but it stages no gate evidence — the fixer would receive a GREEN gate log
           # and an empty findings list. Project the reviewer's answer into the same log the other
@@ -646,11 +630,10 @@ states:
     # D65 1239 R2: `verify` merged into `review`. The reviewer's answer must carry the
     # requirement/AC traceability table (`| Req | Status | Evidence |`, evidence = `file:line`
     # or a named test/command) — sp:functional-review produces it and the answer contract owns
-    # the shape. `spur task verdict --from-answer` lints that answer, derives PASS/PARTIAL/FAIL
+    # the shape. `spur task verdict --from-answer` derives PASS/PARTIAL/FAIL
     # from the rows and writes the canonical `.spur/run/<wbs>-verdict.json` that `spur task
     # record` consumes for box flips and `## Testing`; a review whose rows do not resolve (an
-    # UNMET requirement, a missing row, a bad AC identity) cannot derive PASS. The review-gate
-    # residual check (1122) still blocks an open P1-P3 finding. Everything is folded into one
+    # UNMET requirement, a missing row, a bad AC identity) cannot derive PASS. Everything is folded into one
     # status token the transitions read, so a non-PASS review routes into the bounded repair
     # hop BEFORE `done` spends the close.
     - id: review
@@ -662,22 +645,8 @@ states:
           Three-dimensional code review via /sp:dev-review (functional requirements traceability
           + SECUA framework + architecture depth), findings written to `## Review`, then
           deterministic certification: `spur task verdict --from-answer` over the reviewer's
-          own traceability table, the review-gate residual check, and the operator/maker
-          approval decision point. Cost at this decision point (1122): open P1-P3 review
-          findings block `done`; only P4 rows and DEFER-ed P3 rows are wrap residuals.
+          own traceability table, and the operator/maker approval decision point.
       onEnter:
-          # 1319 R5(b)/Q9: surface the previous visit's verdict-lint findings for THIS visit's prompt.
-          # Empty on the first visit (and after a clean lint), capped so the prompt stays inside its
-          # composition budget, and it names the declared R/AC ids because the lint already does.
-          - kind: shell
-            options:
-                command: >-
-                    mkdir -p .spur/run; L=".spur/run/$wbs-verdict-lint.txt"; O=".spur/run/$__runId-review-lint.txt";
-                    if [ -s "$L" ]; then head -c 600 "$L" > "$O"; else : > "$O"; fi; exit 0
-          - kind: file.read.into-var
-            options:
-                path: .spur/run/${vars.__runId}-review-lint.txt
-                var: reviewLint
           - kind: agent.run
             options:
                 # 0710 R2: review always runs on a fresh session — no implementation-session
@@ -694,19 +663,12 @@ states:
                 # of the prompt. A report body ending with a `| WBS | Verdict | P1 | … |` summary and
                 # no per-requirement rows derives UNKNOWN and can never certify, which looped every
                 # run through review -> remediate.
-                # 1254: the review emits TWO artifacts with different consumers — the `## Review`
-                # section (finding dispositions, deriveReviewConfidence) and this captured answer
-                # (requirement/AC evidence, deriveVerifyConfidence). The prompt has to teach both
-                # lanes and the fact that a single `Confidence:` line may only carry the second one.
-                # 1254: the prompt stays inside the 1000-char composition cap — the full
-                # contract (tables, vocabularies, the two confidence lanes, AC identity vs
-                # feature credit) is owned by `plugins/sp/agents/super-reviewer.md` Output Format,
-                # which this pointer names.
+                # The prompt stays inside the 1000-char composition cap — the full contract
+                # (tables, vocabularies) is owned by `plugins/sp/agents/super-reviewer.md`
+                # Output Format, which this pointer names.
                 input: >-
                     /sp:dev-review --tasks ${vars.wbs} --auto --focus ${vars.reviewFocus}
-                    Answer contract: super-reviewer Output Format. Emit the machine-linted artifact, not a prose summary.
-                    `## Review`: deriveReviewConfidence. Captured answer (`spur task verdict`) has one `Confidence: HIGH|MEDIUM|LOW`
-                    line (deriveVerifyConfidence), never the section's disposition level.
+                    Answer contract: super-reviewer Output Format. Emit the verdict tables, not a prose summary.
                     End with one `Verdict: PASS|PARTIAL|FAIL` line after
                     `| Req | Status | Evidence |` (one row per requirement; MET | PARTIAL | UNMET) and
                     `| AC | Status | Evidence Type | Evidence |` (one row per AC; MET | PARTIAL | UNMET | N/A).
@@ -715,12 +677,11 @@ states:
                     a declared `AC-N` alias; a linked scenario covers its task; a task-local criterion needs no feature credit.
                     Open P1-P3 blocks completion.
                     Also write it to `.spur/run/${vars.__runId}-review-cert.md`.
-                    ${vars.reviewLint}
                 # The captured review answer is the run's certification input (and the
                 # `task verdict` input below): expectFile fails the step when no answer landed.
                 answerFile: .spur/run/${vars.__runId}-review-answer.txt
                 expectFile: .spur/run/${vars.__runId}-review-answer.txt
-                # The reviewer WRITES this one itself (see (c2)); declared so the composition lint can
+                # The reviewer WRITES this one itself (see (c2)); declared so the composition check can
                 # see the run path the prompt names (1233 R2).
                 inputs:
                     - path: .spur/run/${vars.__runId}-review-cert.md
@@ -738,20 +699,17 @@ states:
           # (c2) The reviewer is asked to WRITE its canonical artifact to `-review-cert.md`, because
           # the captured answer above is the agent's stdout: a reviewer that writes the artifact and
           # then narrates its summary has the artifact overwritten by the narration, and the verdict
-          # lint fails work that is actually complete (four such runs in the G74 batch, 2026-10-24).
+          # derivation fails work that is actually complete (four such runs in the G74 batch, 2026-10-24).
           # The agent-written cert wins; when it is absent or empty the captured answer is used, so
           # this is a strict widening of accepted inputs, never a new failure mode.
           - kind: shell
             options:
                 command: >-
                     A=".spur/run/$__runId-review-answer.txt"; C=".spur/run/$__runId-review-cert.md"; [ -s "$C" ] || cp "$A" "$C" 2>/dev/null; exit 0
-          # (d) `spur task verdict` owns the answer lint and the verdict derivation (task 1003
-          # R2): one complete requirement row per declared requirement, AC identities resolved,
-          # status/evidence vocabularies accepted, hedged or uncited evidence rejected. It
-          # writes `.spur/run/<wbs>-verdict.json` — the review verdict artifact `spur task
-          # record` consumes — and exits 1 on a non-PASS verdict BY DESIGN, which `softFail`
-          # records as the typed outcome the guards route. A lint failure (exit 1) is a failed
-          # certification, never a warning, and there is no grep fallback.
+          # (d) `spur task verdict` owns the verdict derivation (task 1003 R2). It writes
+          # `.spur/run/<wbs>-verdict.json` — the review verdict artifact `spur task record`
+          # consumes — and exits 1 on a non-PASS verdict BY DESIGN, which `softFail` records as
+          # the typed outcome the guards route.
           - kind: command.gate
             options:
                 id: review-verdict
@@ -762,19 +720,18 @@ states:
                 # 1319 R4: the replay runs up to 5 cited suites at 120 s each; the action bound is
                 # the same headroom the review hop gets, so a slow cited suite cannot pin the visit.
                 timeoutMs: "900000"
-          # (e) one fold, one token: PASS requires the typed verdict PASS, the artifact's own
-          # PASS, and a clean review gate (open P1-P3 finding or an uncited claim blocks it).
+          # (e) one fold, one token: PASS requires the typed verdict PASS and the artifact's own PASS.
           # Fail-closed: any missing/corrupt input leaves FAIL, so the transitions can route a
           # non-PASS review into remediation instead of dead-ending the run.
           # Idempotent re-entry: the answer file is consumed as a stage input, so a second visit to
           # this state has no answer to re-judge. An ABSENT answer is not new evidence against a
-          # PASS — the durable `<wbs>-verdict.json` and the residual gate still have to pass — so the
+          # PASS — the durable `<wbs>-verdict.json` still has to pass — so the
           # run-scoped verdict status is consulted only when an answer is actually present (without
           # this, re-entry overwrote a PASS with FAIL and closed the task's run as `failed`).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; S=FAIL; if [ ! -f ".spur/run/$__runId-review-answer.txt" -o "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ]; then [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && $spurBin task residual "$wbs" review-gate --no-logo >&2 && S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
+                    mkdir -p .spur/run; S=FAIL; if [ ! -f ".spur/run/$__runId-review-answer.txt" -o "$(cat ".spur/run/$__runId-review-verdict.status" 2>/dev/null)" = PASS ]; then [ "$(jq -r '.verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS ] && S=PASS; fi; printf '%s\n' "$S" > ".spur/run/$wbs-review.status"; exit 0
           # (d) record the review severity as the lane decision's outcome (1263 R3b): the
           # question `task-semantic-risk` answered is "is this risky?", and the Review table's
           # worst finding is the answer as observed. Resolved rows count (a fixed P2 was still
@@ -806,21 +763,12 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; A=APPROVED; if [ "$profile" = auto ]; then [ "$__hitlAnswer" = no ] && A=DENIED; else [ "$__hitlAnswer" = yes ] || A=DENIED; fi; printf '%s\n' "$A" > ".spur/run/$wbs-approval.status"; exit 0
-          # 1319 R5(b): one inline re-review token, decided AFTER every fold above so deleting the
-          # stale cert/answer cannot make a fold read the previous visit's verdict. Run-scoped, so a
-          # stale file from an earlier run can never trigger a retry; `-retried` makes it once only.
-          # A second lint failure leaves the token NONE and routes to remediate exactly as today.
-          - kind: shell
-            options:
-                command: >-
-                    if [ -s ".spur/run/$wbs-verdict-lint.txt" ] && [ ! -f ".spur/run/$__runId-review-lint-retried" ]; then touch ".spur/run/$__runId-review-lint-retried"; printf 'RETRY\n' > ".spur/run/$__runId-review-lint-retry"; rm -f ".spur/run/$__runId-review-cert.md" ".spur/run/$__runId-review-answer.txt"; else printf 'NONE\n' > ".spur/run/$__runId-review-lint-retry"; fi; exit 0
 
     - id: done
       description: >
           Terminal — the task is closed deterministically. onEnter performs the close the
           former `record` state owned: `spur task record` writes Testing/Review from the review
-          verdict and flips the requirement/AC boxes it proves, the residual sweep folds any
-          leftover, and `spur task update <wbs> done --no-lifecycle` runs the verb's own
+          verdict and flips the requirement/AC boxes it proves, and `spur task update <wbs> done --no-lifecycle` runs the verb's own
           target-aware `task check` as the completion gate — a task whose boxes or evidence do
           not certify cannot reach the stored `done` status.
       onEnter:
@@ -848,38 +796,6 @@ states:
             options:
                 command: >-
                     if [ "$deferFeatureSync" = "true" ]; then echo "feature sync deferred to batch integration" >> ".spur/run/$wbs-report.txt"; else FID="$($spurBin task show $wbs --json 2>/dev/null | jq -r '(.feature_id // .frontmatter.feature_id) // empty' 2>/dev/null)"; if [ -n "$FID" ]; then $spurBin feature sync "$FID" --json || echo "feature sync failed — re-run: $spurBin feature sync $FID" >> ".spur/run/$wbs-report.txt"; else echo "Orphan task $wbs — no feature_id linked — proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt"; fi; fi; exit 0
-          # (d) F96 (0983): `spur task residual` owns the sweep; shell only sequences it. The
-          # scan runs AFTER `task record` flipped the verdict-proven boxes, or a proven-but-
-          # unticked box folds every good run to PARTIAL and the done gate is unreachable
-          # (0967). Any box still unchecked post-record stays blocking.
-          # ONE hard action (scan+fold): a scanner crash fails the close closed.
-          - kind: shell
-            options:
-                command: >-
-                    $spurBin task residual "$wbs" scan --no-logo && $spurBin task residual "$wbs" fold --no-logo
-          # (e) F96 R5 (0983): a sweep downgrade must reach the task record — re-record from
-          # the FINAL (post-fold) artifact so Testing carries the downgraded verdict; a failed
-          # task must not retain a stale PASS Testing narrative. Soft (exit 0): the downgrade
-          # itself fails the re-assert below.
-          # 0980: --no-lifecycle for the same orphan reason as the main record command.
-          - kind: shell
-            options:
-                command: >-
-                    verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)"; if [ -n "$verdict" ] && [ "$verdict" != PASS ]; then $spurBin task record $wbs --solution-from-diff --transition testing --no-lifecycle || echo "post-downgrade re-record failed — re-run: $spurBin task record $wbs" >&2; fi; exit 0
-          # (e) The completion contract, re-asserted after the sweep: a post-record residual
-          # downgrade must block the close (hard action, no `; exit 0`). The verdict artifact is
-          # the review's own evidence, not a re-captured digest — the old proof re-assertion is
-          # gone, the fail-closed check on the verdict it certifies is not.
-          - kind: shell
-            options:
-                command: 'jq -e ".verdict == \"PASS\"" .spur/run/$wbs-verdict.json >/dev/null'
-          # (d) F96 R4 (0950): `spur task residual` owns the settle.
-          # Soft best-effort (exit 0) — runs after certification and must never change
-          # the outcome; failure prints the re-run command.
-          - kind: shell
-            options:
-                command: >-
-                    $spurBin task residual "$wbs" settle --no-logo || echo "residual-settle failed — re-run: spur task residual $wbs settle" >&2; exit 0
           # (c) command.gate owns the done transition with classified transient retry. The verb
           # runs its own target-aware `task check --as done` (the completion gate) before the
           # status write, so a task that does not certify a `done` target never stores `done`.
@@ -922,13 +838,6 @@ states:
                     printf '\n## Escalation bound reached\n\nThe implement step asked an operator question %s times (bound %s) and ended without a resumable answer. Unanswered question:\n\n' "$n" "$maxEscalations" >> .spur/run/$wbs-report.txt;
                     cat .spur/run/$wbs-question.md >> .spur/run/$wbs-report.txt;
                     exit 0
-          # (d) F96 R5 (0950): `spur task residual` owns the report.
-          # Soft (exit 0): a run that exhausts its fix budget on residuals leaves the
-          # report + recovery line while the task stays `wip`.
-          - kind: shell
-            options:
-                command: >-
-                    $spurBin task residual "$wbs" report --no-logo || echo "residual-report failed — re-run: spur task residual $wbs report" >&2; exit 0
 
 transitions:
     # ── precheck: task check --precheck (size + evidence + four-layer, 1002 R4) → implement; ──
@@ -1105,16 +1014,6 @@ transitions:
           kind: shell
           options:
               command: 'test "$(cat ".spur/run/$wbs-approval.status" 2>/dev/null)" = DENIED'
-    # 1319 R5(c): one inline re-review when the answer LINT failed, before any remediate hop is
-    # spent. Declared after the denial route and before `retry-exhausted` because a lint retry is
-    # not a repair attempt (it does not consume the shared fix-attempt counter). First match wins.
-    - from: review
-      to: review
-      description: The verdict lint rejected the answer's shape — re-issue the review prompt once with the lint findings instead of buying a remediate hop.
-      guard:
-          kind: shell
-          options:
-              command: 'test "$(cat ".spur/run/$__runId-review-lint-retry" 2>/dev/null)" = RETRY'
     - from: review
       to: failed
       terminalReason: retry-exhausted

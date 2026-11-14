@@ -21,7 +21,6 @@ const EXPECTED_TIER_A_VERBS = {
         'list',
         'refresh',
         'migrate',
-        'migrate-anchors',
         'refresh-roster',
         'batch-create',
         'record',

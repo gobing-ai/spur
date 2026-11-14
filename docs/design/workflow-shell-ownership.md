@@ -248,7 +248,7 @@ write order without a subprocess pipe-buffer cap before appending each attempt t
 | `test-fix:onEnter:0` | GLUE | mutation-policy gate |
 | `test-fix:onEnter:1` | GLUE (warn) | fixall attempt counter + verdict hand-off |
 | `test-recheck:onEnter:1` | EXT (warn) | wrapper for `spur task gate <wbs> recheck`; `gateProbeCmd` fast path, then `qualityGateCmd` |
-| `verify:onEnter:2` | EXT | wrapper for `verify-answer-lint.ts` (option d) |
+| `verify:onEnter:2` | EXT | wrapper for `verify-answer-lint.ts` (option d; lint since retired) |
 | `verify:onEnter:3` | SIMPLE | single `task verdict --from-answer` |
 | `verify:onEnter:4` | GLUE (warn) | proof-digest injection into the verdict json (one jq mutation) |
 | `record:onEnter:1` | BUILTIN | `command.gate` `task record --solution-from-diff --transition testing --no-lifecycle` with transient retry |

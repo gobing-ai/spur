@@ -1037,13 +1037,8 @@ Only `verified(D)` may cross the completion boundary, and the boundary re-captur
 before transition. This statically disqualified the former `task-pipeline2.yaml`: both its
 editing-capable verify action and post-PASS residual `agent.run` could mutate proof inputs before
 record. That graph was deleted rather than promoted (ADR-076, 2026-08-20). The canonical task
-pipeline now carries residual completeness under this rule (F96): a deterministic `residual-scan`
-runs inside `record`, after `spur task record` flips the verdict-proven boxes (0983), with evidence
-writes confined to `.spur/run/`; a blocking residual folds a failing `residual-sweep` check into the
-verdict and downgrades PASS to PARTIAL, so the `record → done` guard fails closed into
-`record → failed` and Testing is re-recorded from the final artifact. The bounded `verify → test-fix`
-loop stays reserved for a verifier non-PASS; follow-up filing and staging cleanup are confined to
-`done` entry, after certification. Shapes live in `docs/design/task-residual-sweep.md`.
+pipeline carries no post-verdict residual sweep (retired with the slim-harness refactor): a green
+gate receipt for the tree plus one reviewer verdict is the whole completion contract.
 
 Enforceable invariants:
 

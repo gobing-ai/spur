@@ -115,13 +115,6 @@ export interface RecordResult {
     bookkeepingError?: string;
     transitionedTo?: string;
     /**
-     * 0936 R1: scenario-key carry-forward warnings from the Testing
-     * re-transcription guard — one per dropped MET-matched feature scenario key,
-     * plus the no-match parity warning. Warn-only (exit 0); the CLI prints each
-     * to stderr and `--json` carries the array. Absent when silent.
-     */
-    scenarioWarnings?: string[];
-    /**
      * 1040 R1/R4: state of the verdict artifact this record actually pulled —
      * `readable` (parsed, rows usable), `missing` (absent, unreadable, or a
      * foreign-task artifact), or `malformed` (bad JSON / structurally invalid).
@@ -681,11 +674,10 @@ const SEVERITY_PRIORITY: Record<string, string | undefined> = {
  * Render the `## Review` section body from a verdict.
  *
  * Produces a P1–P4 priority findings table. A passing check with no explicit
- * severity is a gate outcome, not a finding, so it gets no row — rendering it as
- * P4 made the residual sweep count every clean gate as an advisory residual. When
+ * severity is a gate outcome, not a finding, so it gets no row. When
  * no finding remains, emits exactly one "No findings" P4 row — a clean verify is a
  * valid review outcome (the section-matrix requires a P1–P4 table, not an empty
- * section), and the residual sweep reads that row as no finding.
+ * section).
  *
  * Design: section-matrix §Review — P1–P4 priority table.
  */

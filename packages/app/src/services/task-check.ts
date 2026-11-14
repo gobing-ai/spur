@@ -7,18 +7,9 @@
  * L4: Traceability (warning-first).
  */
 
-import { basename, dirname, join } from 'node:path';
-import {
-    checkAcCoverage,
-    DEFAULT_TASK_VARIANT,
-    MarkdownDocument,
-    parseChecklist,
-    stripAcFence,
-    taskFrontmatterSchema,
-    WAYFINDER_MAP_TAG,
-} from '@gobing-ai/spur-domain';
+import { dirname, join } from 'node:path';
+import { DEFAULT_TASK_VARIANT, MarkdownDocument, stripAcFence, taskFrontmatterSchema } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { readVerdictArtifact } from './done-transition-guard';
 import { isFeatureFile } from './feature-check';
 import {
     type CheckFindings,
@@ -32,9 +23,7 @@ import { applyStructuralRepairs, type StructuralRepair } from './structural-repa
 import { evaluateTaskEvidence, type TaskEvidenceDeps } from './task-evidence-precheck';
 import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
 import { TaskLocator } from './task-locator';
-import { isEmptyRecordSolution } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
-import { parseVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -75,156 +64,6 @@ function isPlaceholderBody(body: string): boolean {
     return stripped.length === 0;
 }
 
-/**
- * The `record` UNKNOWN stub row in a `## Testing` section (task 0625 R3).
- *
- * `spur task record` emits this exact table row when a verdict artifact carries
- * no requirement rows (`packages/app/src/services/task-record.ts:191`). The
- * clobber that produced it is fixed, but a stub already sitting in a `done` task
- * went undetected (0619/0620). Match the ROW SHAPE, not the prose: an author who
- * writes "no requirements recorded" in a sentence must not trip this. The verdict
- * token is a single word (PASS/PARTIAL/FAIL/UNKNOWN) after `verify verdict`.
- */
-const TESTING_VERDICT_STUB_RE =
-    /^\|\s*[—–-]+\s*\|\s*[—–-]+\s*\|\s*No requirements recorded; verify verdict\s+\S+\s*\|/m;
-
-/**
- * A table cell that carries no real content: empty, a dash/em-dash placeholder run
- * (`—`, `–`, `-`, `---`), or a bare `n/a`/`N/A`. Dash-filled cells defeat a bare
- * non-empty check — a `| P1 | — | — | — |` placeholder row is still a placeholder
- * (task 0297; how 0296 reached `done` with an unauthored Review).
- */
-function isPlaceholderCell(cell: string): boolean {
-    const c = cell.trim();
-    return c === '' || /^[—–-]+$/.test(c) || /^n\/?a$/i.test(c);
-}
-
-/**
- * A `### Review` body counts as carrying a real findings table only when at least
- * one `P1`–`P4` row has substantive content beyond the severity label itself — i.e.
- * a markdown table row `| P2 | <file> | <finding> | … |` where some non-severity cell
- * is non-placeholder. The shipped review template scaffolds an *empty-cell* P-table
- * (`| P1 | | | |`); a bare `/P[1-4]/` match falsely accepts that scaffold as a
- * populated table, and a bare non-empty check falsely accepts dash-filled cells
- * (`| P1 | — | — | — |`). Requiring a non-placeholder cell closes both false-passes
- * so a review task can't reach `wip` with an unauthored findings table.
- */
-/**
- * True when Review body has at least one `| P1|…|P4 |` row with a non-placeholder
- * non-severity cell. Exported for the lifecycle done-gate (task 0278 R1) so
- * `testing→done` can refuse prose-only Reviews in-process — defense-in-depth
- * when PATH `spur task check --strict-core` is stale or unreachable.
- */
-export function hasPopulatedPriorityTable(body: string): boolean {
-    for (const line of body.split('\n')) {
-        const cells = line.split('|');
-        if (cells.length < 3) continue; // not a table row
-        // R7a (task 0487): the severity cell may carry prose — `P1 (blocker)`,
-        // `P2 — deferred`. Anchor on the label, not on the whole cell; `\b`
-        // still rejects `P12`. The non-placeholder content check below is what
-        // separates a real finding row from the empty scaffold.
-        const severityIdx = cells.findIndex((c) => /^\s*P[1-4]\b/.test(c));
-        if (severityIdx === -1) continue;
-        const hasContent = cells.some((c, i) => i !== severityIdx && !isPlaceholderCell(c));
-        if (hasContent) return true;
-    }
-    return false;
-}
-
-/**
- * Extract the `### Review` section body from a task markdown document.
- * Returns null when the section is absent.
- *
- * R7c (task 0487): the previous single-regex form ended the body at
- * `(?=^### |Z)` — a literal `Z`, not the `\Z` end-anchor JS does not have. That
- * truncated every Review body at its first uppercase `Z`, and when `### Review`
- * was the file's last section (no following `### ` heading and no `Z`) the match
- * failed outright, so the gate read a populated Review as absent. Slice to the
- * next `### ` heading or to end-of-input instead.
- */
-export function extractReviewSectionBody(markdown: string): string | null {
-    const heading = markdown.match(/^### Review[ \t]*\n/m);
-    if (!heading) return null;
-    const rest = markdown.slice((heading.index ?? 0) + heading[0].length);
-    const next = rest.match(/^### /m);
-    return next ? rest.slice(0, next.index ?? 0) : rest;
-}
-
-/**
- * The shipped `### Review` scaffold is reflection prose plus an *empty-cell* P-table
- * (`| P1 | | | |`). A review task carries this verbatim from creation until the first
- * fix round fills it. Such a scaffold is a placeholder — neither a real findings table
- * (so it must not satisfy the L3 rule) nor a half-authored section the operator forgot
- * to table (so it must not error either): it errors only once the section becomes
- * required (`wip`+), exactly like a missing required section.
- *
- * A body is the review scaffold when, after stripping the empty-cell P-table rows and
- * the markdown table chrome (header + `---` separator), nothing but guidance prose
- * remains. If real prose-with-no-table or a partially-filled table is present, it is
- * NOT a scaffold — the L3 rule then applies and fires on the missing populated table.
- */
-function isReviewScaffold(body: string): boolean {
-    if (isPlaceholderBody(body)) return true;
-    if (hasPopulatedPriorityTable(body)) return false; // real findings → not a scaffold
-    // The scaffold's structural signature is an empty-cell `P1`–`P4` table. Require it:
-    // pure prose with no table at all is a half-authored section, not the shipped
-    // scaffold, and must still error. The scaffold is present only when at least one
-    // empty-cell P-row exists AND every table row is empty-cell chrome (header,
-    // separator, or `| Pn | | | |` — dash/`n/a` placeholder cells count as empty) —
-    // any real table content disqualifies it.
-    let sawEmptyPRow = false;
-    for (const line of body.split('\n')) {
-        if (!line.includes('|')) continue; // prose line — allowed alongside the scaffold table
-        const cells = line.split('|').map((c) => c.trim());
-        const isSeparator = cells.every((c) => c === '' || /^:?-+:?$/.test(c));
-        const isEmptyPRow =
-            cells.every((c) => isPlaceholderCell(c) || /^P[1-4]$/.test(c)) && cells.some((c) => /^P[1-4]$/.test(c));
-        const isHeader = cells.some((c) => /severity|file|finding|recommendation/i.test(c));
-        if (isEmptyPRow) sawEmptyPRow = true;
-        else if (!isSeparator && !isHeader) return false; // real table content → not a scaffold
-    }
-    return sawEmptyPRow;
-}
-
-/**
- * A `### Review` body is "prose-only" when, after stripping placeholder content,
- * it contains no markdown table rows at all (no `|` characters). This covers the
- * pre-fix-round authoring window where the operator has written context prose but
- * has not yet drafted a findings table — a legitimate state when Review is *optional*
- * (backlog/todo for the `review` variant). It must NOT be tolerated where Review is
- * *required* (`wip`+): there a populated findings table is mandatory regardless.
- */
-function isProseOnlyReview(body: string): boolean {
-    if (isPlaceholderBody(body)) return true; // placeholder — always tolerated as a scaffold
-    if (hasPopulatedPriorityTable(body)) return false; // real findings → not prose-only
-    // A body is prose-only when no line contains a `|` (table-row marker). If any
-    // `|` is present, the operator has started a table (even partially) — that is a
-    // half-authored section and must still trigger the L3 error.
-    const stripped = body.replace(/<!--[\s\S]*?-->/g, '');
-    return !stripped.split('\n').some((l) => l.includes('|'));
-}
-
-/**
- * Detect a file:line citation in markdown table format — a file path in one column
- * and a line number (or line range) in an adjacent column. Example rows:
- *   | `src/foo.ts` | 42 | fixed the bug |
- *   | `src/bar.ts` | 42-45 | refactored range |
- *
- * The file column must contain a recognisable extension (`.ts`, `.js`, `.md`, etc.);
- * the line column must be a bare integer or integer range.
- */
-/**
- * Project root for resolving relative `path:line` citations.
- * `docs/tasks*` → two levels up; otherwise one level up from the tasks folder.
- */
-export function resolveProjectRootFromTasksDir(tasksDir: string): string {
-    const norm = tasksDir.replace(/\\/g, '/');
-    if (/\/docs\/tasks\d*$/.test(norm) || /\/docs\/tasks$/.test(norm)) {
-        return dirname(dirname(tasksDir));
-    }
-    return dirname(tasksDir);
-}
-
 /** Backtick `path:line` / `path:start-end` citations (skips URLs and bare numbers). */
 export function extractBacktickLineAnchors(
     body: string,
@@ -251,227 +90,6 @@ export function extractBacktickLineAnchors(
         m = re.exec(body);
     }
     return out;
-}
-
-/**
- * Frozen external-evidence form (task 0584 / ADR-062): a named origin plus a * backticked path with the line number OUTSIDE the backticks.
- *
- *   Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — …
- *
- * The frozen shape keeps the line number outside the backticks so
- * `extractBacktickLineAnchors` (whose regex requires `path:NN` inside the
- * backticks) can never match it — the work here is classification, not
- * parsing (task 0584 Design decision 1). Reported: external citations whose
- * path is NOT a uniquely-resolvable in-repo basename (R1); if the path
- * resolves in-repo, the citation is in-repo evidence and must use a
- * repo-relative anchor instead — it still reports (R2).
- */
-const EXTERNAL_EVIDENCE_RE = /`([^`\n]+?)`\s+(?:line|lines?)\s+(\d+)(?:-(\d+))?/g;
-
-/**
- * Classify frozen external-evidence citations in a body.
- *
- * Returns citations (named origin + backticked path + line number outside the
- * backticks) for `checkLineAnchors` so external evidence never emits
- * `L4.stale-line-anchor` (R1). The origin must be package/project-like (bear a
- * structural separator — `/`, `@`, `.`, `_`, `-`) so sentence prose like
- * "at `path` line N" is never promoted to external evidence: classifying prose
- * would put pre-existing corpus text into the R2 in-repo net and manufacture
- * new gate debt. Consumed by task 0583's subject-matching rule — it must not
- * re-implement or re-interpret this classification.
- */
-export function classifyExternalEvidence(
-    body: string,
-): Array<{ origin: string; path: string; startLine: number; endLine?: number }> {
-    const out: Array<{ origin: string; path: string; startLine: number; endLine?: number }> = [];
-    const re = new RegExp(EXTERNAL_EVIDENCE_RE.source, 'g');
-    let m: RegExpExecArray | null = re.exec(body);
-    while (m !== null) {
-        const raw = m[0] ?? '';
-        const path = m[1] ?? '';
-        if (!path) {
-            m = re.exec(body);
-            continue;
-        }
-        // The frozen shape is origin + `path` + line N — no colon-line inside the
-        // backticks, so no `:line` suffix to strip.
-        const before = body.slice(Math.max(0, re.lastIndex - raw.length - 80), re.lastIndex - raw.length);
-        const originMatch = /([^\s`]+)\s*$/.exec(before);
-        const origin = originMatch?.[1] ?? '';
-        // Named-origin gate: only package/project-like tokens count. Prepositions
-        // and sentence words ("at", "in", "lines:") are prose, not origins.
-        if (!/[/@._-]/.test(origin)) {
-            m = re.exec(body);
-            continue;
-        }
-        const startLine = Number(m[2]);
-        const endLine = m[3] !== undefined ? Number(m[3]) : undefined;
-        if (Number.isFinite(startLine) && startLine >= 1) {
-            out.push({ origin, path, startLine, endLine });
-        }
-        m = re.exec(body);
-    }
-    return out;
-}
-
-/**
- * Subject-matching for in-repo evidence anchors (task 0583 R4/R5).
- *
- * Given the requirement/AC row that names an anchor and the cited source text,
- * decide whether the cited lines really address the citing requirement's subject.
- * The subject is the row's noun — prefer symbols/identifiers over free text so a
- * citation whose line content names the same symbol passes even under ordinary
- * wording drift (R5): a test whose identifier paraphrases the requirement counts.
- *
- * Extracts candidate subject tokens from the citing row (backticked symbols,
- * PascalCase/camelCase identifiers, and the R-/AC-n API), then checks whether any
- * appears in the cited window. If none does, the anchor's lines do not name the
- * requirement's subject → mismatch (R4). Never re-reads the whole file: the caller
- * already holds the in-range window.
- */
-
-/**
- * Subject tokens from a citing row — the identifier-like words a citation's
- * evidence text carries, so the anchor-checker can require the cited window to
- * name them (task 0583 R4/R5; the exclude-citation argument was removed by 0688).
- * Row metadata (status words, the citation itself) never becomes a token.
- *
- * 0804 R9: the row is scanned with complete parsed citation spans removed —
- * not with a post-hoc token blacklist. A blacklist only matched the whole
- * `path:line` token, so the bare-identifier scans still lifted snake_case/
- * CamelCase fragments of the cited filename (`cmd_example` out of
- * `docs/help/cmd_example.md:12`) and could reject an otherwise valid row whose
- * cited lines never repeat their own filename.
- */
-export function extractSubjectTokens(row: string): string[] {
-    const tokens = new Set<string>();
-
-    // Tokens that can never appear in cited SOURCE lines, so keeping them only
-    // guarantees a mismatch on well-formed rows:
-    //   - verdict-table metadata (`MET`, `PARTIAL`, …) — row status, not subject.
-    //     Citation spans are removed below before any scan (0804 R9), which also
-    //     keeps the multi-anchor policy from 0688 R2: every parsed anchor in the
-    //     row disappears, not only the one under test.
-    const ROW_METADATA = new Set(['met', 'partial', 'unmet', 'n/a', 'na', 'pass', 'fail', 'todo', 'done']);
-    // 0804 R9: blank every parsed anchor span before scanning, replacing each
-    // with a space so adjacent tokens cannot splice across the removed citation.
-    let citationFree = row;
-    for (const anchor of extractBacktickLineAnchors(row)) {
-        citationFree = citationFree.split(`\u0060${anchor.raw}\u0060`).join(' ');
-    }
-    // Backticked symbols/identifiers in the row outside parsed citations (the
-    // strongest subject signal).
-    for (const m of citationFree.matchAll(/`([^`]+)`/g)) {
-        const t = m[1]?.trim();
-        if (!t || !/[A-Za-z0-9_./-]+/.test(t)) continue;
-        tokens.add(t.toLowerCase());
-        // A backticked PHRASE (`spur task migrate-anchors --dry-run`) is one atomic
-        // token that source can never contain verbatim, even when the code plainly
-        // names the verb. Contribute its identifier-ish words too, so the phrase
-        // still carries a matchable subject instead of guaranteeing a mismatch.
-        if (/\s/.test(t)) {
-            for (const part of t.split(/\s+/)) {
-                const word = part.replace(/^-+/, '').replace(/[^A-Za-z0-9_./-]+$/, '');
-                if (word.length >= 3 && /[A-Za-z]/.test(word)) tokens.add(word.toLowerCase());
-            }
-        }
-        // `key()` must match `function key(e: {...})`, and `BaselineEntry.severity`
-        // must match the `severity?: …` field it names. A call-signature suffix and a
-        // qualifying owner are how humans cite a symbol; neither survives a literal
-        // substring test against the declaration, so contribute the bare identifier too.
-        const bare = t.replace(/\(\s*\)$/, '');
-        if (bare !== t && /^[A-Za-z_][A-Za-z0-9_]*$/.test(bare)) tokens.add(bare.toLowerCase());
-        if (/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(bare)) {
-            const last = bare.split('.').pop();
-            if (last !== undefined && last.length >= 3) tokens.add(last.toLowerCase());
-        }
-    }
-    // CamelCase / PascalCase / snake_case identifiers (bare symbols) — scanned
-    // on the citation-free text so filename fragments never leak in (0804 R9).
-    for (const m of citationFree.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*\b/g)) {
-        if (m[0]) tokens.add(m[0].toLowerCase());
-    }
-    for (const m of citationFree.matchAll(/\b[a-z0-9_]+_[a-z0-9_]+\b/g)) {
-        if (m[0]) tokens.add(m[0].toLowerCase());
-    }
-    // R-/AC- references.
-    for (const m of citationFree.matchAll(/\b(R|AC)-?\d+\b/g)) {
-        if (m[0]) tokens.add(m[0].toLowerCase());
-    }
-    return [...tokens].filter((t) => !ROW_METADATA.has(t));
-}
-
-/**
- * Whether the cited lines name the requirement's subject (R5 paraphrase-tolerance).
- * True when any extracted subject token appears in the cited window. An empty
- * token set (no identifiable subject) counts as matching — we only report a
- * mismatch when we know what the subject should be and it is absent.
- */
-export function citedLinesNameSubject(subjectTokens: string[], cited: string): boolean {
-    if (subjectTokens.length === 0) return true;
-    const lower = cited.toLowerCase();
-    if (subjectTokens.some((t) => lower.includes(t))) return true;
-    // An `R3`/`AC-2` id is matchable evidence when a code comment cites it, but it is
-    // not a SUBJECT: a row whose only remaining token is its own requirement id names
-    // nothing to look for in the code, so demanding a match there reports every
-    // correctly-cited minimal row. Absence of a real identifier ⇒ nothing to assert.
-    const isRowId = (t: string) => /^(r|ac)-?\d+$/.test(t);
-    return subjectTokens.every(isRowId);
-}
-
-function hasAdjacentFileLineColumns(body: string): boolean {
-    const lines = body.split('\n');
-    for (const line of lines) {
-        if (!line.includes('|')) continue;
-        const cells = line.split('|').map((c) => c.trim());
-        // Need at least 2 content cells for an adjacent pair.
-        if (cells.length < 3) continue;
-        for (let i = 0; i < cells.length - 1; i++) {
-            const a = cells[i];
-            const b = cells[i + 1];
-            if (a === undefined || b === undefined) continue;
-            // Column A is a file path (backtick-wrapped or bare, with a known extension).
-            // Strip backticks before testing the extension so `\`src/foo.ts\`` matches.
-            const fileText = a.replace(/`/g, '');
-            const fileCell = /\.(tsx?|jsx?|mjs|cjs|md|ya?ml|json|css|html|sql|sh|toml)$/i.test(fileText);
-            // Column B is a line number or range.
-            const lineCell = /^\d+(-\d+)?$/.test(b);
-            if (fileCell && lineCell) return true;
-        }
-    }
-    return false;
-}
-
-/** L4.gate-language predicate — shared by `task check` and the write-time warning in TaskService. */
-export const GATE_LANGUAGE_SECTIONS = ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan'] as const;
-// A dotted neighbour (`hitl.confirm`, `kind: hitl.select`) is a workflow action kind, not a gate.
-const GATE_TOKENS = /(?<![\w.-])(HITL|human[- ]in[- ]the-loop|merge event|content-gate|GATED|capstone)(?![\w-]|\.\w)/i;
-const AMBIGUOUS_GATE_TOKENS = /(?<![\w-])(approval|approved|merged)(?![\w-])/i;
-// Composition prose ("the stages merged back into one step", "the approved design") uses these
-// words with no gate in play, so the ambiguous tokens only warn when the same sentence also
-// carries an explicit gating cue (task 1112).
-const GATE_CUES = /\b(until|after|once|before|pending|blocked|wait(?:ing)? for|requires?)\b/i;
-/** True when the body names a gate/human-approval marker that does not belong in a task spec. */
-export function hasGateLanguage(body: string): boolean {
-    if (GATE_TOKENS.test(body)) return true;
-    // ponytail: sentence-level cue co-occurrence, not a syntactic subject check — "after the
-    // stages were merged back" still warns; upgrade to subject parsing only if it recurs.
-    return body
-        .split(/[.!?](?:\s|$)|\n/)
-        .some((sentence) => AMBIGUOUS_GATE_TOKENS.test(sentence) && GATE_CUES.test(sentence));
-}
-
-/**
- * True when a Solution body carries at least one recognized `file:line` citation:
- * a backticked `` `path:line` `` / `` `path:start-end` `` anchor, a bare
- * `path.ext:line` citation, or a markdown table row with a file path and a line
- * number in adjacent columns (e.g. | `src/foo.ts` | 42 | ... |). Single source of
- * truth shared by the L3 checker and the task-write seam (task 0510 R1) so
- * write-time and `task check` behavior cannot drift.
- */
-export function hasSolutionFileLineCitation(body: string): boolean {
-    const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(body) || /[^\s`]\.\w+:\d+/.test(body);
-    return hasFileLine || hasAdjacentFileLineColumns(body);
 }
 
 // ─── TaskCheckService ───────────────────────────────────────────────────
@@ -588,11 +206,6 @@ export class TaskCheckService extends PlanningCheckService {
         // overrides the on-disk status for matrix + status-dependent rules, so a
         // lifecycle guard evaluates the rules the target status will require.
         const effectiveStatus = options?.asStatus ?? status;
-        // A lifecycle guard evaluating the row the task is about to ENTER, not the
-        // row it is in (task 0800 R1): `--as` naming a status different from the
-        // file's own is a transition-target check, and its terminal open-box rule
-        // fires at error severity so the gate can refuse the transition.
-        const isTransitionTarget = options?.asStatus !== undefined && options.asStatus !== status;
         // The template variant is the unified section-layout axis (§3.2); `template`
         // frontmatter selects it, defaulting to `default`. (`type` is the orthogonal
         // task/brainstorm corpus-compat field, not the matrix key.)
@@ -611,20 +224,20 @@ export class TaskCheckService extends PlanningCheckService {
         this.runL2(doc, entry, findings, raw);
 
         // ── L3: Format rules (warning-first, 3 hard-core) ──
-        this.runL3(doc, entry, effectiveStatus, findings, isTransitionTarget);
+        this.runL3(doc, entry, findings);
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
-        await this.runL4(doc, fm, effectiveStatus, findings, featuresDir, tasksDir, wbs, status);
+        await this.runL4(fm, effectiveStatus, findings, featuresDir, tasksDir, wbs);
 
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
-        await this.runL4Rollup(doc, wbs, effectiveStatus, findings, tasksDir, options?.childIndex);
+        await this.runL4Rollup(wbs, effectiveStatus, findings, tasksDir, options?.childIndex);
 
         // ── L4 readiness (0211/R4): dependencies and gate-like prose are prerequisites.
         // Terminal tasks are completion records, not readiness candidates.
         if (effectiveStatus !== 'done' && effectiveStatus !== 'cancelled') {
-            await this.runL4Readiness(doc, fm, wbs, effectiveStatus, findings, tasksDir);
+            await this.runL4Readiness(fm, wbs, effectiveStatus, findings, tasksDir);
         }
 
         // ── Implement-readiness prechecks (1002 R1): size limits + evidence channel.
@@ -695,11 +308,10 @@ export class TaskCheckService extends PlanningCheckService {
         const fm = doc.frontmatterData ?? {};
         const status = (fm.status as string) ?? 'backlog';
         const effectiveStatus = options?.asStatus ?? status;
-        const isTransitionTarget = options?.asStatus !== undefined && options.asStatus !== status;
         const variant = (fm.template as string) ?? DEFAULT_TASK_VARIANT;
         const entry = this.resolveMatrixEntry(variant, effectiveStatus);
         this.runL2(doc, entry, findings, raw);
-        this.runL3(doc, entry, effectiveStatus, findings, isTransitionTarget);
+        this.runL3(doc, entry, findings);
         const { findings: effectiveFindings } = this.summarizeWithStatus(
             effectiveStatus,
             findings,
@@ -730,13 +342,7 @@ export class TaskCheckService extends PlanningCheckService {
         });
     }
 
-    private runL3(
-        doc: MarkdownDocument,
-        entry: MatrixEntry | undefined,
-        status: string,
-        findings: CheckFindings[],
-        isTransitionTarget = false,
-    ): void {
+    private runL3(doc: MarkdownDocument, entry: MatrixEntry | undefined, findings: CheckFindings[]): void {
         // ── F21 task 0787 (R1): a placeholder-only body (HTML comments, `> TBD`,
         // whitespace) is an obligation only where the Section-Status-Matrix
         // declares the section REQUIRED at the effective status. A fresh capture
@@ -773,361 +379,17 @@ export class TaskCheckService extends PlanningCheckService {
                 message: 'Acceptance Criteria is placeholder-only — populate with real scenarios',
             });
         }
-        // Requirements: R-numbering (warning, only when section has real content)
-        const reqBody = doc.getSection('Requirements');
-        if (reqBody !== null && !isPlaceholderBody(reqBody)) {
-            // 0700 R5: count R-numbered *item lines*, not blank-line blocks.
-            // Four contiguous R-item lines are one block, so the block ratio read
-            // 1-of-3 once the implement-ready checklist's non-goals prose blocks
-            // were added, and a well-formed section warned. A plain prose block
-            // AFTER the first R-item is that item's continuation (a blank-line
-            // separated paragraph), not a standalone section — exempt; preamble
-            // prose and bold-labeled blocks (`**Out of scope.**`, `**Non-goals.**`)
-            // still count against the ratio. Multi-line R-item bodies still count
-            // once per item, so the line-count tolerance the block form exists to
-            // provide (the 0174 dogfood bug) survives.
-            const blocks = reqBody
-                .trim()
-                .split(/\n\s*\n/)
-                .filter((b) => b.trim().length > 0);
-            const R_ITEM_RE = /^\s*[-*]?\s*(?:\[[ xX]\]\s*)?[*_]{0,2}R\d+\.?[*_]{0,2}\s/;
-            let numbered = 0;
-            let proseBlocks = 0;
-            let seenItem = false;
-            for (const block of blocks) {
-                const itemLines = block.split('\n').filter((l) => R_ITEM_RE.test(l)).length;
-                if (itemLines > 0) {
-                    numbered += itemLines;
-                    seenItem = true;
-                    continue;
-                }
-                if (!seenItem || /^\s*[*_]{1,2}[^*_\s]/.test(block.trimStart())) {
-                    proseBlocks++;
-                }
-            }
-            if (numbered === 0 || proseBlocks > numbered) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_REQUIREMENTS_FORMAT,
-                    severity: 'warning',
-                    section: 'Requirements',
-                    message: 'Requirements should use R-numbered items (R1., R2., …) — got ~50% or fewer',
-                });
-            }
-        }
-
-        // Requirements ↔ Acceptance Criteria coverage, opt-in via `ac_numbering: task-local`.
-        //
-        // WHY GATED: DD-09 (L4) compares a task's AC to its FEATURE's AC; nothing compared
-        // a task's AC to its OWN Requirements, so a requirement could carry zero scenarios
-        // and every gate stayed green — how task 0465 shipped refined R1–R5 beside stale AC
-        // covering only R1–R2, leaving its highest-risk requirement untested and one
-        // scenario demanding behavior its requirement had explicitly deferred.
-        //
-        // It cannot run unconditionally. An audit of 117 task files found three coexisting
-        // conventions: 43 tasks copy AC verbatim from the feature and carry the FEATURE's
-        // R-numbers (Requirements R1–R5 beside `Scenario: R6` is correct there), 29 number
-        // locally, and 38 use no R-ids at all. Ungated, this fires on nearly every task and
-        // trains everyone to ignore L3. So it runs only where the task declares the
-        // namespace. New tasks number scenarios `AC<n>` and bind requirements via
-        // `(req: R<n>)`; `normalizeTitle` strips both prefixes, so DD-09 cannot see either.
-        const acBodyForCoverage = doc.getSection('Acceptance Criteria');
-        if (
-            doc.frontmatterData?.ac_numbering === 'task-local' &&
-            reqBody !== null &&
-            !isPlaceholderBody(reqBody) &&
-            acBodyForCoverage !== null &&
-            !isPlaceholderBody(stripAcFence(acBodyForCoverage))
-        ) {
-            const reqIds = new Set<string>();
-            for (const line of reqBody.split('\n')) {
-                const m = /^\s*[-*]?\s*(?:\[[ xX]\]\s*)?[*_]{0,2}R(\d+)\.?[*_]{0,2}\s/.exec(line);
-                if (m?.[1] !== undefined) reqIds.add(m[1]);
-            }
-            const acIds = new Set<string>();
-            let scenarioCount = 0;
-            for (const line of stripAcFence(acBodyForCoverage).split('\n')) {
-                const s = /^\s*Scenario(?:\s+Outline)?:\s*(.*)$/.exec(line);
-                if (s === null) continue;
-                scenarioCount++;
-                const title = (s[1] ?? '').trim();
-                // Task-local `AC<n>` scenarios bind requirements via `(req: R1; R2)`;
-                // legacy `Scenario: R<n> —` titles still bind by their own prefix.
-                const req = /\(req:\s*([^)]*)\)/i.exec(title);
-                if (req?.[1] !== undefined) {
-                    for (const m of req[1].matchAll(/\bR(\d+)\b/g)) if (m[1] !== undefined) acIds.add(m[1]);
-                } else {
-                    const id = /^R(\d+)\b/.exec(title);
-                    if (id?.[1] !== undefined) acIds.add(id[1]);
-                }
-            }
-            const byNumber = (a: string, b: string): number => Number(a) - Number(b);
-            if (reqIds.size > 0 && scenarioCount > 0 && acIds.size === 0) {
-                // Declared task-local but nothing binds to it — the third legacy convention.
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE,
-                    severity: 'warning',
-                    section: 'Acceptance Criteria',
-                    message:
-                        'ac_numbering is task-local but no scenario binds a requirement — add `(req: R1)` to each `Scenario: AC<n> — …` title (legacy: `Scenario: R1 — …`)',
-                });
-            } else if (reqIds.size > 0 && acIds.size > 0) {
-                const uncovered = [...reqIds].filter((id) => !acIds.has(id)).sort(byNumber);
-                const stale = [...acIds].filter((id) => !reqIds.has(id)).sort(byNumber);
-                if (uncovered.length > 0) {
-                    findings.push({
-                        layer: 'L3',
-                        code: FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE,
-                        severity: 'warning',
-                        section: 'Acceptance Criteria',
-                        message: `Requirements with no Acceptance Criteria scenario: ${uncovered
-                            .map((id) => `R${id}`)
-                            .join(', ')} — add a scenario or drop the requirement`,
-                    });
-                }
-                if (stale.length > 0) {
-                    findings.push({
-                        layer: 'L3',
-                        code: FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE,
-                        severity: 'warning',
-                        section: 'Acceptance Criteria',
-                        message: `Acceptance Criteria scenarios cite requirements that do not exist: ${stale
-                            .map((id) => `R${id}`)
-                            .join(', ')} — the AC is stale relative to Requirements`,
-                    });
-                }
-            }
-        }
-
-        // Solution: ≥1 file:line citation (hard core). Only meaningful once the
-        // section has real content — an empty heading or guidance-comment-only
-        // placeholder (present at todo/wip before implementation) is skipped, so
-        // a not-yet-implemented task is not forced to cite lines that don't exist.
-        const solBody = doc.getSection('Solution');
-        if (solBody !== null && !isPlaceholderBody(solBody) && !hasSolutionFileLineCitation(solBody)) {
-            findings.push({
-                layer: 'L3',
-                code: FINDING_CODES.L3_SOLUTION_FILE_LINE,
-                severity: 'error',
-                section: 'Solution',
-                // 1090 R3: name the empty *backfill* for what it is. Reported as a
-                // malformed Solution, it sent the author hunting an authoring bug when
-                // the real condition was a diff that named no changed file.
-                message: isEmptyRecordSolution(solBody)
-                    ? 'Solution backfill produced no rows: the run diff named no changed file (empty after ignore-filtering, or no resolvable diff base) — author `## Solution`, or check `.spur/run/<wbs>-base.sha` and the run base commit'
-                    : 'Solution must contain at least one `file:line` citation',
-            });
-        }
-
-        // Review: P1–P4 findings table (hard core). Only fires when Review is
-        // *allowed* at the current status (required or optional) — a forward-reference
-        // scaffold at a status where Review is forbidden/absent is not forced to have
-        // a populated table (L2 already flags the section itself).
-        //
-        // Where Review is *optional* (pre-fix-round window): both the empty-cell
-        // scaffold (shipped template) AND prose-only bodies with no table are tolerated
-        // — either is a legitimate "not yet authored" state. Where Review is *required*
-        // (wip+): only a truly-empty placeholder is tolerated; any authored content
-        // (prose or scaffold) requires a populated findings table.
-        const revBody = doc.getSection('Review');
-        const revRequired = (entry?.required ?? []).includes('Review');
-        const revAllowed = revRequired || (entry?.optional ?? []).includes('Review');
-        const revScaffoldTolerated = revRequired
-            ? isPlaceholderBody(revBody ?? '')
-            : isReviewScaffold(revBody ?? '') || isProseOnlyReview(revBody ?? '');
-        if (revBody !== null && !revScaffoldTolerated && revAllowed) {
-            if (!hasPopulatedPriorityTable(revBody)) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_REVIEW_PRIORITY_TABLE,
-                    severity: 'error',
-                    section: 'Review',
-                    message: 'Review must contain P1–P4 priority findings table',
-                });
-            }
-        }
-
-        // A status-required section that is still the shipped scaffold is not "nothing to
-        // validate" — it is an unfilled obligation. Every other L3 content rule here skips
-        // placeholders (correctly: at `todo`/`wip` an empty Testing is the normal state), which
-        // left a hole at the far end: a task could reach `done` carrying the verbatim
-        // `<!-- Filled during verification: … -->` scaffold and every Testing rule would decline
-        // to look at it. Feature H8's four tasks did exactly that.
-        //
-        // The `record` step (`spur task record`) is what normally fills Testing from the verdict
-        // artifact, so the gap opens whenever a task is driven outside the pipeline — which is the
-        // common case when `agent.run` is unavailable. Matrix-keyed rather than status-hardcoded:
-        // it fires only where the section-matrix already declares the section required, so a `wip`
-        // task with an empty Testing stays clean and the rule tracks the matrix if it changes.
-        //
-        // Same shape as L3.requirements-empty / L3.ac-empty, and an error for the same reason:
-        // `testing → done` is gated by `spur task check --strict-core`, so this blocks the
-        // transition until the section is filled instead of discovering it months later.
-        for (const sectionName of ['Testing', 'Solution'] as const) {
-            if (!requiredAtStatus.has(sectionName)) continue;
-            const body = doc.getSection(sectionName);
-            if (body === null || !isPlaceholderBody(body)) continue;
-            findings.push({
-                layer: 'L3',
-                code: FINDING_CODES.L3_REQUIRED_SECTION_PLACEHOLDER,
-                severity: 'error',
-                section: sectionName,
-                message: `${sectionName} is required at status '${status}' but is still placeholder-only — run \`spur task record <wbs>\` to fill it from the verdict artifact, or author it directly`,
-            });
-        }
-
-        // Note: L4.stale-line-anchor for Testing/Solution file:line citations runs in runL4
-        // (needs tasksDir → project root resolution).
-
-        // Plan: ordered checklist or table, not free-form prose (warning)
-        const planBody = doc.getSection('Plan');
-        if (planBody !== null && !isPlaceholderBody(planBody)) {
-            const isList = /^\s*[-*]\s|^\s*\d+\.\s/m.test(planBody);
-            const isTable = /\|/.test(planBody);
-            if (!isList && !isTable) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_PLAN_FORMAT,
-                    severity: 'warning',
-                    section: 'Plan',
-                    message: 'Plan should be ordered checklist or table, not free-form prose',
-                });
-            }
-        }
-
-        // Terminal-status open checkboxes (0182 R7-optional): a `done`/`cancelled` task
-        // should carry zero unchecked `- [ ] ` boxes anywhere in its body — an open box
-        // on closed work means the reader can't tell "done" from "abandoned" by the
-        // boxes alone. Warning on an already-terminal task (0182): a task can be
-        // legitimately closed with an intentionally-unchecked box (e.g. a deferred
-        // sub-item noted in prose); error only when `--as` names a differing
-        // transition target, so the gate can still refuse the close (0800 R1).
-        // Gated strictly on terminal status so it never fires on a roster-bearing
-        // umbrella/tracking parent still in progress (todo/wip) — the 0176 roster
-        // pattern's Plan is expected to carry open boxes until every child lands.
-        if (status === 'done' || status === 'cancelled') {
-            const fullBody = doc.bodyWithoutFrontmatter;
-            const openBoxes = (fullBody.match(/^\s*[-*]\s\[ \]\s/gm) ?? []).length;
-            if (openBoxes > 0) {
-                findings.push({
-                    layer: 'L3',
-                    code: FINDING_CODES.L3_UNCHECKED_CHECKLIST,
-                    // Error when `--as` names a transition target (task 0800 R1):
-                    // closing a task with an open box becomes an explicit refusal.
-                    // An already-terminal task keeps 0182's warning-only tolerance.
-                    severity: isTransitionTarget ? 'error' : 'warning',
-                    section: '',
-                    message: `Task is ${status} but carries ${openBoxes} unchecked checklist box(es) — flip to [x] or remove before closing`,
-                });
-            }
-
-            // 0700 R2: a closed task must not carry a non-passing Review
-            // verdict beside a PASS Testing verdict. Nothing reconciles a stale
-            // Review: `task record` backfills `### Review` only when the
-            // section is bare, and the verify pass is barred from writing
-            // `## Review` — so 0693's `PARTIAL — request-changes` lived on a
-            // done task unchecked. Semantics (decided in 0700 ### Solution):
-            // the LAST `Verdict:` line in the section is authoritative — an
-            // append is a correction — so only a task whose final Review
-            // verdict still contradicts a PASS Testing verdict is flagged.
-            const reviewBody = doc.getSection('Review');
-            const testingBody = doc.getSection('Testing');
-            if (reviewBody !== null && testingBody !== null) {
-                const lastVerdict = (body: string): string => {
-                    const lines = [...body.matchAll(/\**\s*Verdict\b\**\s*[:：]?\s*([^*()\n]+)/gi)];
-                    return (lines[lines.length - 1]?.[1] ?? '').replace(/\*/g, '').trim();
-                };
-                const reviewVerdict = lastVerdict(reviewBody);
-                const nonPassing = /\bPARTIAL\b|\bFAIL\b|request-changes/i.test(reviewVerdict);
-                const testingVerdict = lastVerdict(testingBody);
-                if (nonPassing && /^PASS\b/i.test(testingVerdict)) {
-                    findings.push({
-                        layer: 'L3',
-                        code: FINDING_CODES.L3_REVIEW_TESTING_CONTRADICTION,
-                        severity: 'error',
-                        section: 'Review',
-                        message: `Review verdict is "${reviewVerdict}" while Testing records PASS — reconcile the stale Review via /sp:dev-review (semantics: the last Verdict line in the section is authoritative)`,
-                    });
-                }
-            }
-        }
     }
 
     // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage ──
     private async runL4(
-        doc: MarkdownDocument,
         fm: Record<string, unknown>,
         status: string,
         findings: CheckFindings[],
         featuresDir: string,
         tasksDir: string,
         wbs: string,
-        /**
-         * The record's OWN frontmatter status, which `status` above is not: `status` is the
-         * effective (possibly `--as`) status every policy rule evaluates as. The anchor rule
-         * needs both — the stored status decides the terminal exemption (ADR-092), the
-         * effective one decides whether this check is the completion target.
-         */
-        recordStatus: string,
     ): Promise<void> {
-        // ── R1: Done-gate verdict artifact check (testing/done status) ──
-        if (status === 'testing' || status === 'done') {
-            await this.checkVerdictArtifact(wbs, tasksDir, findings);
-        }
-
-        // ── R3 (0625): hollow-Testing stub detection. A `## Testing` section
-        // carrying the `record` UNKNOWN stub row (`| — | — | No requirements
-        // recorded; verify verdict <V> |`) reports a state the verdict artifact
-        // contradicts. The clobber that produced the stub is fixed; nothing detects
-        // one already sitting in a done task. Warning severity (two-sided-ratchet:
-        // the corpus holds tasks in this shape today — reconciling the baseline is
-        // this task's same-commit obligation, T10). Warning-first, promote to error
-        // only after the corpus is migrated.
-        const testingBody = doc.getSection('Testing');
-        if (testingBody !== null && TESTING_VERDICT_STUB_RE.test(testingBody)) {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_TESTING_VERDICT_STUB,
-                severity: 'warning',
-                section: 'Testing',
-                message:
-                    'Testing section carries the record UNKNOWN stub row ("No requirements recorded; verify verdict …") — the verdict artifact contradicts this; re-run the verify/record hop so Testing reflects a real verdict',
-            });
-        }
-
-        // ── R4 (task 0294): Design placeholder warning ──
-        // Standard tasks retain Design as historical intent after it stops being
-        // status-required at `testing`/`done`. Key this content warning to the
-        // template, not the current matrix entry, so an empty scaffold cannot
-        // become silent merely because the task advanced. L2 remains responsible
-        // for a missing required heading; this warning only covers a present but
-        // empty / HTML-comment-only / `> TBD` body.
-        const template = typeof fm.template === 'string' ? fm.template : DEFAULT_TASK_VARIANT;
-        if (template === DEFAULT_TASK_VARIANT) {
-            const designBody = doc.getSection('Design');
-            if (designBody !== null && isPlaceholderBody(designBody)) {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_DESIGN_PLACEHOLDER,
-                    severity: 'warning',
-                    section: 'Design',
-                    message:
-                        'Design section is present but empty (placeholder-only) — populate it so the task retains an explicit implementation approach',
-                });
-            }
-        }
-
-        // ── Stale file:line anchors in Testing / Solution (dogfood F81 P2) ──
-        // Re-check backtick citations ``path:line`` / ``path:start-end`` against
-        // the working tree: file must exist and the line number must fall within
-        // the file. Resolution failures ERROR at the completion target
-        // (`L4.anchor-unresolved`) and warn elsewhere; subject matching stays a
-        // warning, and TERMINAL records (by their own status, not `--as`) are exempt
-        // — so the gate bites at the live certification window without blocking
-        // `wip → testing`, and a done record is never re-litigated (ADR-092).
-        await this.checkLineAnchors(doc, tasksDir, findings, recordStatus, status === 'done');
-
         // Resolve feature_id from either snake_case or legacy kebab-case key.
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
         const parentWbs = (fm.parent_wbs as string | undefined) ?? (fm['parent-wbs'] as string | undefined);
@@ -1179,11 +441,6 @@ export class TaskCheckService extends PlanningCheckService {
                         message: `Feature "${featureId}" is deprecated (frozen) — re-parent this live task (\`spur task update <wbs> --feature <otherId>\`) or cancel it.`,
                     });
                 }
-                // ── AC coverage (R1, DD-09): task AC ⊆ linked feature AC ──
-                // Declared altitude (task 0584 R3): `task-local` skips the subset
-                // rule; absent/`graduating` enforces it. Field-only — never inferred.
-                const acAltitude = fm.ac_altitude as 'graduating' | 'task-local' | undefined;
-                await this.checkAcCoverage(doc, featurePath, featureId, acAltitude, findings);
             }
         } else {
             findings.push({
@@ -1277,7 +534,6 @@ export class TaskCheckService extends PlanningCheckService {
      * kid references this wbs. Batch readers pass an index from their parsed snapshot instead.
      */
     private async runL4Rollup(
-        doc: MarkdownDocument,
         wbs: string,
         status: string,
         findings: CheckFindings[],
@@ -1319,53 +575,9 @@ export class TaskCheckService extends PlanningCheckService {
                 message: `All ${kids.length} sub-task(s) are done/cancelled/deprecated but parent is still ${status} — close the parent`,
             });
         }
-
-        // R2: parent has kids but no sub-task roster in its Plan (the 0109 gap).
-        const planBody = doc.getSection('Plan') ?? '';
-        if (!this.hasSubtaskRoster(planBody, kids)) {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_ROLLUP_MISSING_ROSTER,
-                severity: 'warning',
-                section: 'Plan',
-                message: 'Parent task has sub-tasks but its Plan has no sub-task roster (decomposition.md)',
-            });
-            return;
-        }
-
-        // 0713 R1: a Plan roster is an ordering claim the batch resolver cannot read.
-        // `dev-runall`/`dev-verifyall` topo-sort on frontmatter `dependencies[]` only, so a
-        // parent whose Plan says "implementation happens in the children below" but declares
-        // no edges ties on WBS and is resolved FIRST — its verify ran before any child was
-        // implemented and reported 37 unmet requirements. Name the missing edges here, where
-        // the roster and the frontmatter can be compared, rather than leaving the batch to
-        // discover the contradiction by running in the wrong order.
-        const declared = new Set(this.extractDependencyWbs(doc.frontmatterData?.dependencies));
-        const undeclared = openKids.filter((kid) => !declared.has(kid.wbs)).map((kid) => kid.wbs);
-        if (undeclared.length > 0) {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_ROLLUP_ROSTER_NOT_DECLARED_DEPENDENCY,
-                severity: 'warning',
-                section: 'Plan',
-                message: `Plan rosters open sub-task(s) ${undeclared.join(', ')} that frontmatter dependencies[] does not declare — batch ordering reads dependencies[], not the Plan (repair: spur task deps ${wbs} add ${undeclared.join(' ')})`,
-            });
-        }
-    }
-
-    /**
-     * A Plan body counts as carrying a sub-task roster when it references at least
-     * one sub-task WBS inside a markdown table. Heuristic, intentionally permissive
-     * (warning, not error): a table row mentioning a real sub-task WBS is the roster
-     * signal — a bare prose Plan or a checklist without WBS refs is not.
-     */
-    private hasSubtaskRoster(planBody: string, kids: { wbs: string }[]): boolean {
-        if (!/\|/.test(planBody)) return false; // no table at all
-        return kids.some((c) => planBody.includes(c.wbs));
     }
 
     private async runL4Readiness(
-        doc: MarkdownDocument,
         fm: Record<string, unknown>,
         wbs: string,
         status: string,
@@ -1382,30 +594,10 @@ export class TaskCheckService extends PlanningCheckService {
             });
         }
 
-        const declaredDeps = this.extractDependencyWbs(fm.dependencies);
-        const proseDeps = this.extractProsePrerequisites(doc);
-        for (const dep of proseDeps) {
-            if (!declaredDeps.includes(dep.wbs)) {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
-                    severity: 'warning',
-                    section: dep.section,
-                    message: `Prose prerequisite ${dep.wbs} is not mirrored in frontmatter dependencies[]`,
-                });
-            }
+        for (const depWbs of this.extractDependencyWbs(fm.dependencies)) {
+            if (depWbs === wbs) continue;
+            await this.checkDependencyReadiness(depWbs, wbs, findings, tasksDir, new Set([wbs]), false);
         }
-
-        const declaredSet = new Set(declaredDeps);
-        const directDeps = [...new Set([...declaredDeps, ...proseDeps.map((d) => d.wbs)])].filter((dep) => dep !== wbs);
-        for (const depWbs of directDeps) {
-            // R3: a prose-inferred seed edge never closes a prerequisite-cycle — only a
-            // frontmatter dependencies[] edge can. proseSeeded marks the path's origin.
-            const proseSeeded = !declaredSet.has(depWbs);
-            await this.checkDependencyReadiness(depWbs, wbs, findings, tasksDir, new Set([wbs]), false, proseSeeded);
-        }
-
-        this.checkGateLanguage(doc, findings);
     }
 
     private extractDependencyWbs(raw: unknown): string[] {
@@ -1417,51 +609,6 @@ export class TaskCheckService extends PlanningCheckService {
             if (match?.[1] !== undefined) deps.push(match[1]);
         }
         return deps;
-    }
-
-    /**
-     * Infer prerequisite WBS values from prose. Frozen rule (task 0475): a strong-verb
-     * keyword must *precede* the WBS within a bounded same-sentence window, list
-     * continuation captures the "tasks X and Y" form, and non-assertive text (fenced
-     * code blocks, table rows, inline code spans) is excluded — quoted or illustrative
-     * dependency language does not assert an edge.
-     */
-    private extractProsePrerequisites(doc: MarkdownDocument): { wbs: string; section: string }[] {
-        const refs: { wbs: string; section: string }[] = [];
-        // Ordered, sentence-bounded adjacency: keyword precedes the WBS within 40 chars,
-        // with no sentence boundary (. or ;) between them.
-        const headRe = /(?:depends on|depends upon|gated on|blocked by|waiting for)\b[^.;\n]{0,40}?\b(\d{4})\b/gi;
-        // List continuation after a head match: ", 0003" / "and 0003" / "and tasks 0003".
-        const listRe = /\s*(?:,|and)\s*(?:tasks?\s+)?(\d{4})\b/gi;
-        for (const section of ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan']) {
-            const body = doc.getSection(section);
-            if (body === null) continue;
-            let inFence = false;
-            for (const line of body.split('\n')) {
-                // R2: fenced code blocks toggle on ``` and are skipped entirely.
-                if (/^\s*```/.test(line)) {
-                    inFence = !inFence;
-                    continue;
-                }
-                if (inFence) continue;
-                // R2: markdown table rows quote/illustrate rather than assert.
-                if (/^\s*\|/.test(line)) continue;
-                // R2: blank inline code spans before matching (backtick examples, finding output).
-                const cleaned = line.replace(/`[^`]*`/g, ' ');
-                headRe.lastIndex = 0;
-                for (let head = headRe.exec(cleaned); head !== null; head = headRe.exec(cleaned)) {
-                    const wbs = head[1];
-                    if (wbs !== undefined) refs.push({ wbs, section });
-                    // Consume any continuation list immediately after the head match.
-                    listRe.lastIndex = headRe.lastIndex;
-                    for (let cont = listRe.exec(cleaned); cont !== null; cont = listRe.exec(cleaned)) {
-                        const cw = cont[1];
-                        if (cw !== undefined) refs.push({ wbs: cw, section });
-                    }
-                }
-            }
-        }
-        return refs;
     }
 
     /**
@@ -1559,27 +706,6 @@ export class TaskCheckService extends PlanningCheckService {
         return null;
     }
 
-    private checkGateLanguage(doc: MarkdownDocument, findings: CheckFindings[]): void {
-        // 0700 R6: a task that already models its gate via a non-empty
-        // frontmatter `dependencies` list has done exactly what this advisory
-        // demands — repeating the advice there is pure noise (0694, 0698).
-        const declaredDeps = doc.frontmatterData?.dependencies;
-        if (Array.isArray(declaredDeps) && declaredDeps.length > 0) return;
-        for (const section of GATE_LANGUAGE_SECTIONS) {
-            const body = doc.getSection(section);
-            if (body === null) continue;
-            if (hasGateLanguage(body)) {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_GATE_LANGUAGE,
-                    severity: 'warning',
-                    section,
-                    message: `${section} contains gate language; model the gate as a frontmatter dependency or verify it before treating the task as ready`,
-                });
-            }
-        }
-    }
-
     private async readTaskSnapshot(tasksDir: string, wbs: string): Promise<TaskSnapshot | null> {
         const path = await this.findTaskFile(tasksDir, wbs);
         if (path === null) return null;
@@ -1594,232 +720,6 @@ export class TaskCheckService extends PlanningCheckService {
         } catch {
             return null;
         }
-    }
-
-    /**
-     * Validate backtick `path:line` / `path:start-end` citations in Testing and
-     * Solution against the working tree.
-     *
-     * Two distinct failures, two severities (task 0994 follow-up, 2026-09-28):
-     *
-     * - **Resolution gates the completion target.** A citation whose file is missing, or whose
-     *   line range falls outside the file, reports `L4.anchor-unresolved` — at **error** when the
-     *   check is the completion target (`--as done`, i.e. the `testing → done` guard) and at
-     *   **warning** on any other live check, so `wip → testing` is never blocked for evidence that
-     *   is still being assembled. The two conditions are objective, and a citation that points at
-     *   nothing certifies nothing. Measured before promotion: 0 of the 17 live records in this
-     *   corpus carried an unresolvable Testing/Solution anchor, so the gate's blast radius is new
-     *   work, not the existing corpus (T10 `corpus-check`: 377 findings before and after).
-     * - **Subject matching stays advisory.** `L4.anchor-subject-mismatch` remains a
-     *   warning. The repo already tried it as an error (0583 R6, reverted): the matcher
-     *   left 982 frozen-legacy residuals rather than a worked-down true-positive set, and
-     *   a fresh census agrees — 2,173 mismatches over 4,078 checked anchors (53%), because
-     *   a row's subject tokens legitimately live in prose beside the anchor. Promoting it
-     *   would block correct work; it stays a hint pointing at the row to re-read.
-     *
-     * Caps findings per section to 5. Terminal records (`done`/`cancelled`) are not
-     * checked at all: their evidence is historical (ADR-092) and re-verifying it after
-     * later code moves only manufactures permanent warnings on recorded `## Testing`
-     * bodies (task 0862 R3, reversing 0714 R1 for terminal records only). The gate therefore
-     * bites while the record is still live, and only when the check is the completion target —
-     * `recordStatus` decides the terminal exemption, `completionGate` decides the severity — so
-     * certification checks anchors while the evidence is still current, and a done record is
-     * never re-litigated. Before this split the rule read the EFFECTIVE status, so `--as done`
-     * tripped the terminal exemption and the check never ran at the done gate at all.
-     *
-     * A live record then gets repository-relative path existence and line bounds; task 0714 R1
-     * narrows content matching to its provable form: subject-matched only when its citing row
-     * carries exactly one parsed anchor and yields real subject tokens; failed exact-range
-     * matching then reports `L4.anchor-subject-mismatch`. No filename-derived subjects and no
-     * whole-file "first matching line" scan: neither verifies evidence, both guess it.
-     */
-    private async checkLineAnchors(
-        doc: MarkdownDocument,
-        tasksDir: string,
-        findings: CheckFindings[],
-        recordStatus: string,
-        completionGate: boolean,
-    ): Promise<void> {
-        // 1090 follow-up — measured, then deliberately NOT enabled. A terminal record used to
-        // skip this pass, so a done task's citations were never re-checked: 1090's own
-        // `## Solution` kept four anchors on the wrong code after a later commit shifted the
-        // lines, and `spur task check --as done` reported `pass: true, findings: []`. Removing
-        // the early return was tried and rejected on evidence — over 40 recently-done tasks the
-        // pass emitted 115 findings (3 per task) and `pass` stayed true for all of them, i.e.
-        // pure noise. Precision is the blocker, not coverage:
-        //   - L4.anchor-subject-mismatch (73): the subject tokens come from the row's PROSE, so an
-        //     emphasized word (`IS replaced`) or a backticked literal the row quotes
-        //     (`` `(no changes detected)` ``) becomes a subject the cited line cannot contain.
-        //   - L4.anchor-unresolved (36): citations written as project-internal shorthand
-        //     (`taste-refactoring-architect/SKILL.md:1-16`, relative to plugins/sp/skills/) are
-        //     resolved from the project root and reported missing.
-        //   - L4.stale-line-anchor (6): the external-evidence form, by design.
-        // On 1090 itself the rule produced 3 false positives to 1 true positive. Until the
-        // subject extraction is restricted to real symbols, enabling this for landed records
-        // would teach operators to ignore L4 rather than catch drift.
-        const terminal = recordStatus === 'done' || recordStatus === 'cancelled';
-        if (terminal) return;
-        const resolutionSeverity = completionGate ? ('error' as const) : ('warning' as const);
-        const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
-        for (const section of ['Testing', 'Solution'] as const) {
-            const body = doc.getSection(section);
-            if (body === null || isPlaceholderBody(body)) continue; // External-evidence form (task 0584 R1): a named origin + backticked
-            // path + line number OUTSIDE the backticks is evidence that lives
-            // outside this repo — never a repo-root anchor, never stale. R2: a
-            // citation whose basename resolves uniquely inside this repo is NOT
-            // eligible for the external form — it is in-repo evidence and must
-            // use a repo-relative anchor; the external form still reports.
-            const external = classifyExternalEvidence(body);
-            let reported = 0;
-            if (external.length > 0) {
-                const uniqueInRepo = await this.uniqueRepoBasenames(projectRoot, external);
-                for (const e of external) {
-                    if (reported >= 5) break;
-                    // Only THIS citation resolving uniquely in-repo disqualifies it.
-                    if (!uniqueInRepo.has(basename(e.path).toLowerCase())) continue;
-                    reported++;
-                    findings.push({
-                        layer: 'L4',
-                        code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
-                        severity: 'warning',
-                        section,
-                        message: `External evidence form used for in-repo path \`${e.path}\` (origin ${e.origin}, line ${e.startLine}) — resolve it repo-relative instead (task 0584 R2)`,
-                    });
-                }
-            }
-            const citations = extractBacktickLineAnchors(body);
-            for (const cite of citations) {
-                if (reported >= 5) break;
-                const abs = join(projectRoot, cite.path);
-                let exists = false;
-                try {
-                    exists = await this.fs.exists(abs);
-                } catch {
-                    exists = false;
-                }
-                if (!exists) {
-                    // Task 1055 R1(b): a scope-shaped path (`@pkg/...`) can never resolve
-                    // repo-relative — it cites an external package. Stay fail-closed (same
-                    // code/severity) but emit the exact frozen external-evidence rewrite
-                    // (task 0584 / ADR-062 form) instead of the generic pointer, so the
-                    // author can fix the citation in one step rather than diagnosing the
-                    // checker's classification rules.
-                    const scoped = /^(@[^/\s]+\/[^/\s]+)\/(.+)$/.exec(cite.path);
-                    const detail = scoped
-                        ? `external package path — rewrite in the frozen external-evidence form: Evidence: ${scoped[1]} \`${scoped[2]}\` line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} (origin and line number outside the backticks; task 0584 / ADR-062)`
-                        : `file not found at ${cite.path} (from project root). Point the citation at the code that implements this row, or move it to the external-evidence form if the file is not in this repo.`;
-                    findings.push({
-                        layer: 'L4',
-                        code: FINDING_CODES.L4_ANCHOR_UNRESOLVED,
-                        severity: resolutionSeverity,
-                        section,
-                        message: `Unresolved line anchor \`${cite.raw}\` — ${detail}`,
-                    });
-                    reported++;
-                    continue;
-                }
-                // Line-count bounds: only when we can cheaply read the file.
-                try {
-                    const raw = await this.fs.readFile(abs);
-                    const lineCount = raw.split('\n').length;
-                    const end = cite.endLine ?? cite.startLine;
-                    if (cite.startLine < 1 || end > lineCount) {
-                        findings.push({
-                            layer: 'L4',
-                            code: FINDING_CODES.L4_ANCHOR_UNRESOLVED,
-                            severity: resolutionSeverity,
-                            section,
-                            message: `Unresolved line anchor \`${cite.raw}\` — line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} outside file (${lineCount} lines). Re-derive the range from the file the row is certifying.`,
-                        });
-                        reported++;
-                        continue;
-                    }
-                    const citingRow =
-                        body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??
-                        body.split('\n').find((l) => l.includes(cite.raw)) ??
-                        '';
-                    // A row carrying several anchors provides no anchor↔subject
-                    // association, so no row-level token set can be attributed to THIS
-                    // citation (task 0688 excluded sibling anchors from tokens; 0714
-                    // skips matching when the association itself is ambiguous).
-                    if (extractBacktickLineAnchors(citingRow).length !== 1) continue;
-                    // A tokenless row names no subject — nothing to assert (and no
-                    // filename-derived fallback: a path basename does not prove what
-                    // the citation moved).
-                    const tokens = extractSubjectTokens(citingRow);
-                    if (tokens.length === 0) continue;
-                    const citedWindow =
-                        raw
-                            .split('\n')
-                            .slice(cite.startLine - 1, cite.endLine ?? cite.startLine)
-                            .join('\n') || '';
-                    if (!citedLinesNameSubject(tokens, citedWindow)) {
-                        findings.push({
-                            layer: 'L4',
-                            code: FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
-                            severity: 'warning',
-                            section,
-                            message: `Anchor \`${cite.raw}\` subject mismatch — cited lines do not name the requirement's subject (${tokens.join(', ') || 'none identifiable'}). Rewrite the citation to point at the code that implements this row.`,
-                        });
-                        reported++;
-                    }
-                } catch {
-                    // Unreadable — skip bounds; existence already passed.
-                }
-            }
-        }
-    }
-
-    /**
-     * R2 (task 0584): true when any external-form citation's basename resolves
-     * uniquely inside this repo — i.e. exactly one file in the tree (excluding
-     * gitignored/build/generated surfaces) shares the basename. Unique resolution
-     * means the citation is in-repo evidence, so the external form is ineligible.
-     */
-    /**
-     * Basenames from `external` that resolve to EXACTLY ONE file in the repo.
-     *
-     * Per-citation, deliberately: an earlier shape answered a single boolean for the
-     * whole set, so one in-repo basename flagged every external citation in the
-     * section — each with a message naming ITS path as in-repo, which was false for
-     * all but one. One tree walk still serves the whole set.
-     */
-    private async uniqueRepoBasenames(projectRoot: string, external: Array<{ path: string }>): Promise<Set<string>> {
-        const toMatch = new Set(external.map((e) => basename(e.path).toLowerCase()).filter(Boolean));
-        if (toMatch.size === 0) return new Set();
-        const counts = new Map<string, number>();
-        const stack = [projectRoot];
-        while (stack.length > 0) {
-            const dir = stack.pop();
-            if (!dir) continue;
-            if (/\.spur$/.test(dir) || /(^|\/)(node_modules|\.git|dist|build|coverage)(\/|$)/.test(dir)) continue;
-            let entries: string[];
-            try {
-                entries = await this.fs.readDir(dir);
-            } catch {
-                continue;
-            }
-            for (const name of entries) {
-                const lower = name.toLowerCase();
-                if (toMatch.has(lower)) {
-                    counts.set(lower, (counts.get(lower) ?? 0) + 1);
-                    continue;
-                }
-                try {
-                    const abs = join(dir, name);
-                    const stat = await this.fs.stat(abs);
-                    if (
-                        stat !== null &&
-                        stat !== undefined &&
-                        (stat as { isDirectory?: () => boolean }).isDirectory?.()
-                    )
-                        stack.push(abs);
-                } catch {
-                    // unreadable entry — skip
-                }
-            }
-        }
-        return new Set([...counts].filter(([, n]) => n === 1).map(([k]) => k));
     }
 
     /**
@@ -1870,58 +770,6 @@ export class TaskCheckService extends PlanningCheckService {
         return null;
     }
 
-    /**
-     * AC coverage (L4, DD-09): every task scenario must map to a feature scenario
-     * by normalized title (subset rule). Uncovered task scenarios are warnings by
-     * default (C04: errors only if the hard core elevates; `--strict` does that).
-     * Uses the shared 0043 `checkAcCoverage` — never a private matcher.
-     * Declared `ac_altitude: task-local` (task 0584 / ADR-062) skips the subset
-     * rule entirely; the field is the only input, never inferred from notation.
-     */
-    private async checkAcCoverage(
-        taskDoc: MarkdownDocument,
-        featurePath: string,
-        featureId: string,
-        acAltitude: 'graduating' | 'task-local' | undefined,
-        findings: CheckFindings[],
-    ): Promise<void> {
-        const taskAc = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
-        if (taskAc.trim().length === 0) return; // no task AC → nothing to cover
-        // task-local: criteria sit at a finer altitude than the feature's ship
-        // contract — the DD-09 subset rule does not apply (task 0584 R3).
-        if (acAltitude === 'task-local') return;
-
-        let featureAc: string;
-        let featureTags: string[] = [];
-        try {
-            const raw = await this.fs.readFile(featurePath);
-            const featureDoc = MarkdownDocument.parse(raw, 'feature');
-            // DD-09 subset rule is category-wrong for wayfinder maps: a map's AC is
-            // destination-level or absent, so comparing task scenarios against it
-            // produces noise, not signal (task 0476).
-            featureTags = Array.isArray(featureDoc.frontmatterData?.tags)
-                ? (featureDoc.frontmatterData.tags as unknown[]).filter((t): t is string => typeof t === 'string')
-                : [];
-            if (featureTags.includes(WAYFINDER_MAP_TAG)) return;
-            featureAc = stripAcFence(featureDoc.getSection('Acceptance Criteria') ?? '');
-        } catch {
-            return; // feature unreadable — the edge warning above already covered it
-        }
-        if (featureAc.trim().length === 0) return;
-
-        const taskChecklist = parseChecklist(taskAc);
-        const result = checkAcCoverage(featureAc, taskAc, taskChecklist, acAltitude);
-        for (const scenario of result.uncovered) {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO,
-                severity: 'warning',
-                section: 'Acceptance Criteria',
-                message: `Task scenario "${scenario}" is not in feature "${featureId}"'s AC (DD-09 subset rule)`,
-            });
-        }
-    }
-
     /** Read the status from a feature file's frontmatter. */
     private async readFeatureStatus(featurePath: string): Promise<string | null> {
         try {
@@ -1937,73 +785,5 @@ export class TaskCheckService extends PlanningCheckService {
     /** Find a task file by WBS number across every registered task folder. */
     private async findTaskFile(tasksDir: string, wbs: string): Promise<string | null> {
         return await this.locatorFor(tasksDir).findPathByWbs(wbs);
-    }
-
-    /**
-     * R1 (0479): Done-gate verdict artifact check.
-     * Emits L4.malformed-verdict-artifact when status is testing/done and the
-     * verdict artifact is UNKNOWN, malformed, or has empty requirements[] and AC[].
-     */
-    private async checkVerdictArtifact(wbs: string, tasksDir: string, findings: CheckFindings[]): Promise<void> {
-        const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
-        const runDir = join(projectRoot, '.spur', 'run');
-        const loaded = await readVerdictArtifact(this.fs, runDir, wbs);
-        const verdictPath = loaded.path;
-        if (loaded.readError) {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-                severity: 'error',
-                section: 'Testing',
-                message: `Verdict artifact at ${verdictPath} is unusable: ${loaded.readError}`,
-            });
-            return;
-        }
-        if (loaded.artifact === undefined) return;
-        // Task 0592 R1: consume via the single canonical parser so task validation,
-        // feature validation, record rendering, and the done gate all read the same
-        // validity verdict (missing / malformed / invalid / valid non-PASS).
-        const outcome = parseVerifyVerdict(JSON.stringify(loaded.artifact), wbs);
-
-        if (outcome.kind === 'missing') return;
-
-        if (outcome.kind === 'malformed') {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-                severity: 'error',
-                section: 'Testing',
-                message: `Verdict artifact at ${verdictPath} is malformed: ${outcome.message}`,
-            });
-            return;
-        }
-
-        if (outcome.kind === 'invalid') {
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-                severity: 'error',
-                section: 'Testing',
-                message: `Verdict artifact at ${verdictPath} is invalid: ${outcome.reason}`,
-            });
-            return;
-        }
-
-        const artifact = outcome.verdict;
-        const reqs = artifact.requirements;
-        const acs = artifact.acceptanceCriteria;
-        const isUnknown = artifact.verdict === 'UNKNOWN';
-        const isEmpty = reqs.length === 0 && acs.length === 0;
-
-        if (isUnknown || isEmpty) {
-            const reason = isUnknown ? 'verdict is UNKNOWN' : 'requirements and AC are empty';
-            findings.push({
-                layer: 'L4',
-                code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-                severity: 'error',
-                section: 'Testing',
-                message: `Verdict artifact at ${verdictPath} is malformed: ${reason}`,
-            });
-        }
     }
 }

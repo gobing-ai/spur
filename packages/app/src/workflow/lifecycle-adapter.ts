@@ -21,10 +21,9 @@ import {
     type StateMachineWorkflowDef,
     type TransitionDenied,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { redactAndBound } from '../observability/agent-execution';
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
-import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
 import { createRunLogTraceFailureRecorder, withActionTrace } from './action-trace';
 import { StreamingShellActionRunner, utf8SafeByteTail } from './actions/shell';
 import {
@@ -124,13 +123,6 @@ export interface LifecycleAdapterOptions {
      *  Injected so guards bypass PATH ambiguity (the `spur` on PATH may be
      *  a different version or compiled without the `task`/`feature` commands). */
     spurBin: string;
-    /**
-     * Optional loader for task markdown used by the in-process Review L3 done-gate
-     * (task 0278 R1). When omitted, the adapter reads `ref.filePath` from disk.
-     * Return `null` to skip the content gate (shell `task check --strict-core` still runs).
-     * Tests inject synthetic bodies without touching the filesystem.
-     */
-    readTaskMarkdown?: (ref: EntityRef) => Promise<string | null>;
     /**
      * Opt-in audited bypass of the P2 provenance gate (task 0902 wave 2; was the
      * `SPUR_PROVENANCE_OVERRIDE` env var). When `true`, a `* → done` transition with no
@@ -233,21 +225,6 @@ export class LifecycleAdapter implements LifecyclePort {
                             `\`spur task run-link ${ref.id}\` from this tree).`,
                     };
                 }
-            }
-
-            // ── 0278 R1: Review L3 content gate (populated P1–P4 table) ──
-            // Defense-in-depth alongside the shell guard
-            // `${spurBin} task check ${wbs} --strict-core`. Provenance alone is
-            // not enough — 0277 reached done with a prose-only Review when the
-            // shell path was unreliable.
-            const reviewDenial = await this.checkReviewReadyForDone(ref);
-            if (reviewDenial !== null) {
-                return {
-                    allowed: false,
-                    from: currentStatus,
-                    to,
-                    report: reviewDenial,
-                };
             }
         }
 
@@ -487,39 +464,6 @@ export class LifecycleAdapter implements LifecyclePort {
             ...workflow,
             vars: { ...workflow.vars, [this.opts.profile.varKey]: id, spurBin: this.opts.spurBin },
         };
-    }
-
-    /**
-     * In-process Review L3 gate for `testing → done` (task 0278 R1).
-     * @returns denial report string, or `null` when the gate passes or is skipped.
-     */
-    private async checkReviewReadyForDone(ref: EntityRef): Promise<string | null> {
-        const markdown = await this.loadTaskMarkdown(ref);
-        if (markdown === null) {
-            // File unreadable / not injected — shell strict-core still runs.
-            return null;
-        }
-        const reviewBody = extractReviewSectionBody(markdown);
-        if (reviewBody === null || !hasPopulatedPriorityTable(reviewBody)) {
-            return (
-                `Review L3 gate failed for task ${ref.id}: ### Review must contain a populated ` +
-                `P1–P4 priority findings table before testing→done (strict-core). ` +
-                `Author the table via /sp:dev-review, then re-run the done transition.`
-            );
-        }
-        return null;
-    }
-
-    private async loadTaskMarkdown(ref: EntityRef): Promise<string | null> {
-        if (this.opts.readTaskMarkdown) {
-            return this.opts.readTaskMarkdown(ref);
-        }
-        try {
-            const fs = createNodeFileSystem(this.opts.cwd);
-            return await fs.readFile(ref.filePath);
-        } catch {
-            return null;
-        }
     }
 
     /** Compose a human-readable guard report from the engine denial. */

@@ -50,39 +50,6 @@ afterEach(() => {
 });
 
 describe('TaskRecordOps.record', () => {
-    test('a bare basename anchor in the verdict evidence is qualified when record transcribes it', async () => {
-        // Tracked file so the basename index has exactly one candidate for `widget.ts`.
-        mkdirSync(join(root, 'src'), { recursive: true });
-        writeFileSync(join(root, 'src', 'widget.ts'), 'export const w = 1;\n');
-        const git = (args: string[]) => Bun.spawnSync(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
-        git(['init', '-q']);
-        git(['config', 'user.email', 'test@example.com']);
-        git(['config', 'user.name', 'test']);
-        git(['add', 'src/widget.ts']);
-        git(['commit', '-qm', 'base']);
-
-        const filePath = writeTask('0007', 'wip', '\n### Testing\n\n');
-        const verdictFile = join(root, '0007-verdict.json');
-        writeFileSync(
-            verdictFile,
-            JSON.stringify({
-                wbs: '0007',
-                verdict: 'PASS',
-                requirements: [{ id: 'R1', status: 'MET', evidence: '`widget.ts:12` guards the thing' }],
-                acceptanceCriteria: [],
-                checks: [],
-            }),
-        );
-
-        const result = await ops().record('0007', { verdictFile });
-
-        expect(result.testingWritten).toBe(true);
-        const written = readFileSync(filePath, 'utf8');
-        // Qualified to the tracked repo-relative path, line spec byte-for-byte.
-        expect(written).toContain('`src/widget.ts:12`');
-        expect(written).not.toContain('`widget.ts:12`');
-    });
-
     test('without a verdict artifact an authored Testing section is preserved and the state is reported', async () => {
         const filePath = writeTask('0001', 'wip', '\n### Testing\n\nHand-written evidence.\n');
         const result = await ops().record('0001');
@@ -91,16 +58,26 @@ describe('TaskRecordOps.record', () => {
         expect(readFileSync(filePath, 'utf8')).toContain('Hand-written evidence.');
     });
 
-    test('a bare Testing section is written from the UNKNOWN stub; a throwing feature link adds no warning', async () => {
-        const filePath = writeTask('0002', 'wip', '\n### Testing\n\n');
-        const resolveFeatureAcBody = mock(async () => {
-            throw new Error('feature tree unreadable');
-        });
-        const result = await ops({ resolveFeatureAcBody }).record('0002');
-        expect(result.testingWritten).toBe(true);
-        expect(result.scenarioWarnings).toBeUndefined();
-        expect(resolveFeatureAcBody).toHaveBeenCalled();
-        expect(readFileSync(filePath, 'utf8')).toContain('### Testing');
+    test('a feature read failure only disables AC-N keying; proven requirement boxes still flip', async () => {
+        const filePath = writeTask(
+            '0002',
+            'wip',
+            '\n### Requirements\n\n- [ ] **R1. Guard.** Do it.\n\n### Testing\n\nold\n',
+        );
+        mkdirSync(join(root, '.spur', 'run'), { recursive: true });
+        writeFileSync(
+            join(root, '.spur', 'run', '0002-verdict.json'),
+            JSON.stringify({
+                wbs: '0002',
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'ok' }],
+            }),
+        );
+        const result = await ops({
+            resolveFeatureAcBody: mock(async () => Promise.reject(new Error('unreadable'))),
+        }).record('0002');
+        expect(result.verdictState).toBe('readable');
+        expect(readFileSync(filePath, 'utf8')).toContain('- [x] **R1. Guard.**');
     });
 
     test('--transition to the current status is an idempotent no-op', async () => {
