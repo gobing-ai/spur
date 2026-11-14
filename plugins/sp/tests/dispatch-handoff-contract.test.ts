@@ -2,7 +2,7 @@
  * Task 0818 R2 — the native-subagent dispatch handoff contract.
  *
  * The surviving boundary is checked with real artifacts: an answer fixture round-trips through the
- * real `spur task verdict` — which owns the answer lint and the derivation (task 1003 R2). The
+ * real `spur task verdict` — which owns verdict derivation (task 1003 R2). The
  * driver-reference half of the original contract retired with the inline driver (task 1242).
  */
 
@@ -28,12 +28,8 @@ const TASK_CONTENT = `## 0818. Handoff fixture task
 `;
 
 function answer(reqStatus: string, acEvidenceType: string): string {
-    // ADR-141: the answer states the level its own rows derive (MET + test/command -> HIGH).
-    const executable = acEvidenceType.includes('test') || acEvidenceType.includes('command');
-    const confidence = reqStatus === 'MET' && executable ? 'HIGH' : reqStatus === 'MET' ? 'MEDIUM' : 'LOW';
     return [
         'Verdict: PASS',
-        `Confidence: ${confidence}`,
         '',
         '### Per-Requirement Traceability',
         '| Req | Status | Evidence |',
@@ -51,7 +47,6 @@ function answer(reqStatus: string, acEvidenceType: string): string {
 interface RoundTrip {
     code: number | null;
     verdict?: string;
-    lintFindings: unknown[];
     verdictFile: boolean;
 }
 
@@ -68,11 +63,10 @@ function roundTrip(body: string): RoundTrip {
         stdout: 'pipe',
         stderr: 'pipe',
     });
-    const parsed = JSON.parse(derived.stdout.toString()) as { verdict?: string; lintFindings?: unknown[] };
+    const parsed = JSON.parse(derived.stdout.toString()) as { verdict?: string };
     return {
         code: derived.exitCode,
         verdict: parsed.verdict,
-        lintFindings: parsed.lintFindings ?? [],
         verdictFile: existsSync(join(dir, '.spur', 'run', '0818-verdict.json')),
     };
 }
@@ -82,7 +76,6 @@ describe('0818 R2 — answer fixtures round-trip through the real verdict gate',
         const r = roundTrip(answer('MET', 'test'));
         expect(r.code).toBe(0);
         expect(r.verdict).toBe('PASS');
-        expect(r.lintFindings).toEqual([]);
     });
 
     test('a behavioral MET AC carried only by static evidence cannot yield PASS', () => {

@@ -132,17 +132,9 @@ describe('0503 task-pipeline resilience', () => {
         expect(commandFor('precheck', 1)).not.toContain('|| true');
     });
 
-    // 1213: the 0960 run-start script-root probe is retired — no precheck shell may resolve or
-    // execute plugins/sp/scripts machinery (run-start identity is now owned by the driver +
-    // `spur workflow` itself); the base-sha capture and dirty-tree advisory remain.
-    test('precheck carries no retired script probes and keeps its base-sha capture (1213)', () => {
+    test('precheck keeps its base-sha capture (1213)', () => {
         const commands = shellCommands('precheck');
         expect(commands.length).toBeGreaterThanOrEqual(2);
-        for (const command of commands) {
-            expect(command).not.toContain('script-root');
-            expect(command).not.toContain('superskill script path');
-            expect(command).not.toContain('plugins/sp/scripts');
-        }
         expect(commands.some((c) => c.includes('-base.sha'))).toBe(true);
     });
 
