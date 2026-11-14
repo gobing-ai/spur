@@ -5,8 +5,7 @@
  *
  * Output: `dist/cli/spur-<os>-<arch>` (Windows assets end in `.exe`, which is what
  * `bun build --compile` writes) plus `dist/cli/SHA256SUMS`. `scripts/install.sh`
- * downloads the macOS and Linux names. It still rejects Windows; the desktop
- * stage script consumes `spur-windows-*` directly.
+ * downloads the macOS and Linux names. It still rejects Windows.
  */
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';

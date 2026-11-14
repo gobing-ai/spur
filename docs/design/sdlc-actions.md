@@ -242,10 +242,6 @@ and lands here in the same change.
 | `prepare` | repo tool | installs the git hooks (lefthook) |
 | `tree` | repo tool | tree with the generated dirs pruned |
 | `dev` | binding | bun preset `dev` |
-| `desktop:dev` | repo tool | workspace filter → `spur-desktop` `dev` |
-| `desktop:start` | repo tool | workspace filter → `spur-desktop` `start` |
-| `desktop:smoke` | repo tool | workspace filter → `spur-desktop` `smoke` |
-| `desktop:stage` | repo tool | workspace filter → `spur-desktop` `stage` |
 | `clean` | binding | bun preset `clean` |
 | `build` | binding | bun preset `build` |
 | `typecheck` | binding | bun preset `typecheck` |

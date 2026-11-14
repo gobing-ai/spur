@@ -32,7 +32,6 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Downstream Board modules — embedded config, native React contributions and iframe URLs | [downstream-board-modules](design/downstream-board-modules.md) |
 | Data and output contracts | [data-output-contracts](design/data-output-contracts.md) |
 | Server bootstrap and scheduler contracts | [server-contracts](design/server-contracts.md) |
-| Desktop shell — Electron launch, project and binary env, packaging, IPC, title-bar overlay | [desktop-shell](design/desktop-shell.md) |
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |
 | Planning workflow and operation contracts | [planning-workflow-contracts](design/planning-workflow-contracts.md) |
 | Feature `deprecated` status — frozen lifecycle state and affected surfaces (F42) | [feature-deprecated-status](design/feature-deprecated-status.md) |
@@ -476,13 +475,4 @@ pass (ADR-119). A candidate graph change is shadow-run and promoted-or-deleted
 on measured run history (ADR-076 amendment).
 
 See [contract detail](design/workflow-execution-economy.md).
-
-## Desktop shell
-
-Electron (`apps/desktop`) is a thin shell around the Board. It attaches to a verified live project
-server, or spawns one child server on `127.0.0.1`, and loads `/board`. It does not open SQLite. Launch mode, project root, binary
-override, the staged CLI companion for standalone-server history refresh, preload IPC, and the
-Windows/Linux window-controls overlay inset are the contract.
-
-See [contract detail](design/desktop-shell.md).
 

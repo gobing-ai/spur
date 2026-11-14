@@ -39,7 +39,6 @@ idea → agent detection + health → constraint checking → workflow orchestra
 - **CLI** — Single `spur` binary for every operation.
 - **Server / Web** — Hono on Bun (or Cloudflare Workers) exposing an oRPC OpenAPI handler, plus an
   Astro dashboard consuming the typed oRPC client.
-- **Desktop** — optional Electron shell (`bun run desktop:dev`) that spawns that local server and opens `/board`. See [`apps/desktop/README.md`](apps/desktop/README.md).
 
 ---
 
@@ -283,7 +282,6 @@ Installed and authenticated by the operator. Spur never stores agent or provider
 | `apps/web`                       | `dompurify`, `hast-util-from-html`, `hast-util-to-html`                                          | `3.4.11` / `2.0.3` / `9.0.5` | Sanitized Markdown → HTML render path     | HIGH       | `apps/web/src/lib/markdown-safety.ts`                                              |
 | `apps/web`                       | `@orpc/client`, `@orpc/contract`, `@orpc/openapi-client`, `@orpc/shared`                        | `1.14.4`  | Typed client over the generated OpenAPI contract              | HIGH       | `apps/web/src/lib/rpc-client.ts`                                                   |
 | `apps/web` (dev)                 | `happy-dom`, `@happy-dom/global-registrator`, `@testing-library/{dom,react}`, `vite`            | `20.10.4` / `10.4.1` / `16.3.2` / `7.3.3` | DOM integration tests                 | MEDIUM     | harness files exist under `apps/web/tests`; `bun run test` not run                 |
-| `apps/desktop` (dev)             | `electron`, `electron-builder`                                                                  | `44.5.1` / `26.15.3` | Desktop shell that attaches to the project server     | MEDIUM     | declared with `electron-builder.yml`; `bun run desktop:smoke` not run              |
 | `packages/*`                     | `zod`                                                                                           | `4.4.3`   | Config, contract and payload validation                       | HIGH       | schemas across `packages/*` + typecheck                                            |
 | `packages/*`                     | `yaml`                                                                                          | `2.9.0`   | Catalog, workflow and rules parsing                          | HIGH       | `apps/cli/src/config.ts` and the catalog loaders                                    |
 | `packages/app`                   | `@gobing-ai/ts-ai-decision`, `@gobing-ai/ts-decision-clef`, `@gobing-ai/ts-laya-mlx`            | `0.5.32`  | Decision catalog hub + the hosted and local makers            | HIGH       | imported in `packages/app/src/decision/decision-service.ts`                        |
