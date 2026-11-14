@@ -596,11 +596,10 @@ describe('renderReview', () => {
     });
 
     test('passing checks are gate outcomes, not findings: an all-pass verdict renders only the no-findings row', () => {
-        // A P4 row per passing gate made the residual sweep report advisory residuals on every clean task.
         const v = makeVerdict({
             checks: [
                 { name: 'spur task check', status: 'pass', evidence: 'task check passed' },
-                { name: 'residual-sweep', status: 'pass', evidence: 'blocking=0' },
+                { name: 'coverage gate', status: 'pass', evidence: '90%' },
             ],
         });
         const out = renderReview(v);

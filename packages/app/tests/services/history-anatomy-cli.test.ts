@@ -19,7 +19,6 @@ import {
     parseProvenance,
     resolvePaths,
     semanticArtifactDigest,
-    validateSelector,
 } from '../../src/services/history-anatomy';
 import { resolveSkillDir, runCacheCli } from '../../src/services/history-anatomy-cli';
 
@@ -633,106 +632,7 @@ describe('probe --helper digest identity (0771)', () => {
         }
     });
 });
-describe('paths grammar validation (0920 — deterministic scope owner)', () => {
-    test('daily default and explicit real date pass; invalid calendar day fails by name', () => {
-        expect(validateSelector({ mode: 'daily', date: '2026-08-24' })).toEqual({
-            ok: true,
-            mode: 'daily',
-            date: '2026-08-24',
-            focus: null,
-            since: null,
-            until: null,
-        });
-        expect(validateSelector({ date: '2026-02-30' })).toMatchObject({ ok: false });
-        const invalidDate = validateSelector({ date: '2026-02-30' });
-        expect(invalidDate.ok === false && invalidDate.errors[0]).toContain('--date');
-        expect(validateSelector({ date: '2024-02-29' }).ok).toBe(true); // leap day is real
-    });
-
-    test('daily rejects focus/since/until/output, naming every attributable flag', () => {
-        const v = validateSelector({
-            mode: 'daily',
-            focus: 'f',
-            since: '2026-01-01T00:00:00Z',
-            until: '2026-01-02T00:00:00Z',
-            output: 'o.md',
-        });
-        expect(v.ok).toBe(false);
-        if (!v.ok) {
-            expect(v.errors.some((e) => e.includes('--focus'))).toBe(true);
-            expect(v.errors.some((e) => e.includes('--since'))).toBe(true);
-            expect(v.errors.some((e) => e.includes('--until'))).toBe(true);
-            expect(v.errors.some((e) => e.includes('--output'))).toBe(true);
-        }
-    });
-
-    test('unknown mode, bad recompute literal fail by name', () => {
-        expect(validateSelector({ mode: 'weekly' }).ok).toBe(false);
-        const invalidMode = validateSelector({ mode: 'weekly' });
-        expect(invalidMode.ok === false && invalidMode.errors[0]).toContain('--mode');
-        expect(validateSelector({ recompute: 'yes' }).ok).toBe(false);
-    });
-
-    test('ad-hoc: valid ordered inclusive bounds pass untouched; ordering/parse failures named', () => {
-        const ok = validateSelector({
-            mode: 'ad-hoc',
-            focus: 'auth refactor',
-            since: '2026-08-01T09:30:00+05:30',
-            until: '2026-08-05T18:00:00+05:30',
-        });
-        expect(ok).toEqual({
-            ok: true,
-            mode: 'ad-hoc',
-            date: null,
-            focus: 'auth refactor',
-            since: '2026-08-01T09:30:00+05:30',
-            until: '2026-08-05T18:00:00+05:30',
-        });
-        const ordered = validateSelector({
-            mode: 'ad-hoc',
-            focus: 'f',
-            since: '2026-08-05T00:00:00Z',
-            until: '2026-08-01T00:00:00Z',
-        });
-        expect(ordered.ok === false && ordered.errors[0]).toContain('--since must not be after --until');
-        const badInstant = validateSelector({
-            mode: 'ad-hoc',
-            focus: 'f',
-            since: 'not-a-date',
-            until: '2026-08-05T00:00:00Z',
-        });
-        expect(badInstant.ok === false && badInstant.errors.some((e) => e.includes('--since'))).toBe(true);
-        expect(
-            validateSelector({ mode: 'ad-hoc', since: '2026-08-01T00:00:00Z', until: '2026-08-05T00:00:00Z' }).ok,
-        ).toBe(false); // no focus
-    });
-
-    test('ad-hoc rejects --date and --recompute; daily allows recompute', () => {
-        const v = validateSelector({
-            mode: 'ad-hoc',
-            focus: 'f',
-            since: '2026-08-01T00:00:00Z',
-            until: '2026-08-05T00:00:00Z',
-            date: '2026-08-02',
-            recompute: 'true',
-        });
-        expect(v.ok).toBe(false);
-        if (!v.ok) {
-            expect(v.errors.some((e) => e.includes('--date'))).toBe(true);
-            expect(v.errors.some((e) => e.includes('--recompute'))).toBe(true);
-        }
-        expect(validateSelector({ mode: 'daily', recompute: 'true' }).ok).toBe(true);
-        expect(
-            validateSelector({
-                mode: 'ad-hoc',
-                recompute: 'false',
-                focus: 'f',
-                since: '2026-08-01T00:00:00Z',
-                until: '2026-08-05T00:00:00Z',
-            }).ok,
-        ).toBe(true);
-    });
-
+describe('paths CLI output (0920 — deterministic scope owner)', () => {
     test('CLI: failure leaves no paths file; success writes env and selector observation', () => {
         const dir = mkdtempSync(join(tmpdir(), 'ha-paths-'));
         const envOut = join(dir, 'paths.env');

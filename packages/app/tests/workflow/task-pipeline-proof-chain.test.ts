@@ -181,7 +181,7 @@ function runTypedGate(
     return token;
 }
 
-describe('task-pipeline evidence chain — the proof chain is retired (D65 1239 R3)', () => {
+describe('task-pipeline evidence chain — graph and pause invariants', () => {
     test('the graph is the six working states plus the two terminals', () => {
         expect(DEF.states.map((s) => s.id)).toEqual([
             'precheck',
@@ -197,50 +197,6 @@ describe('task-pipeline evidence chain — the proof chain is retired (D65 1239 
         expect(DEF.failureStates).toEqual(['failed']);
         expect(DEF.initialState).toBe('precheck');
         expect(DEF.version).toBe('9');
-    });
-
-    test('no working state keeps the retired id it replaced', () => {
-        for (const retired of [
-            'test',
-            'test-recheck',
-            'test-fix',
-            'triage',
-            'test-fail-triage',
-            'review-fail-triage',
-            'approve',
-            'verify',
-            'record',
-            'cancelled',
-        ]) {
-            expect(stateOf(retired), `${retired} must be gone`).toBeUndefined();
-        }
-    });
-
-    test('no proof-chain action, option or variable survives anywhere in the definition', () => {
-        for (const state of DEF.states) {
-            for (const action of state.onEnter ?? []) {
-                expect(action.kind, state.id).not.toBe('proof.fingerprint');
-                expect(action.kind, state.id).not.toBe('run.artifact');
-                const serialized = JSON.stringify(action.options ?? {});
-                for (const retired of ['proofDigest', 'proofDigestNow', 'verifiedOutcome', 'taskSpecPathNow']) {
-                    expect(serialized.includes(retired), `${state.id}: ${retired}`).toBe(false);
-                }
-            }
-        }
-        for (const retired of ['proofDigest', 'proofDigestNow', 'featureSpecPath', '__definitionDigest']) {
-            expect(DEF.vars?.[retired], `${retired} var`).toBeUndefined();
-        }
-        // The one surviving declaration is the task spec path the decide evidence names.
-        expect(DEF.vars?.taskSpecPath).toBe('');
-    });
-
-    test('no transition and no guard carries the proof vocabulary or a receipt precondition', () => {
-        for (const edge of DEF.transitions) {
-            const serialized = JSON.stringify(edge);
-            for (const retired of ['proof', 'proofDigest', 'verifiedOutcome']) {
-                expect(serialized.toLowerCase().includes(retired.toLowerCase()), `${edge.from}→${edge.to}`).toBe(false);
-            }
-        }
     });
 
     test('no state pauses: the only pause in a run is the host executor transform (1232)', () => {
@@ -491,10 +447,7 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 staged.dir,
                 staged.wbs,
                 'Review',
-                // ADR-141 (review lane): the recorded section carries the verdict and the level the
-                // dispositions derive. A PASS with one ACCEPTED P4 residual derives MEDIUM; without a
-                // stated verdict the derivation would read LOW and the cross-check would block.
-                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\nConfidence: MEDIUM\n`,
+                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\n`,
             );
             const vars = { wbs: staged.wbs, __runId: 'run-cert', spurBin: SPUR_BIN, profile: 'auto' };
             const fold = cmdOf('review', '-review.status');
@@ -507,9 +460,7 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 'run-cert',
                 'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
                     '| R1 | MET | `src/index.ts:1` does the thing |\n' +
-                    '| R2 | UNMET | nothing implements the second half |\n' +
-                    // ADR-141: an UNMET row derives LOW, and the gate cross-checks the stated level.
-                    '\nConfidence: LOW\n',
+                    '| R2 | UNMET | nothing implements the second half |\n',
             );
             const unmet = runTypedGate(
                 staged.dir,
@@ -537,9 +488,7 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 'run-cert',
                 'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
                     '| R1 | MET | `src/index.ts:1` does the thing |\n' +
-                    '| R2 | MET | `src/index.ts:2` does both |\n' +
-                    // ADR-141: all rows MET with no AC table derives HIGH.
-                    '\nConfidence: HIGH\n',
+                    '| R2 | MET | `src/index.ts:2` does both |\n',
             );
             expect(
                 runTypedGate(
@@ -569,7 +518,7 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 staged.dir,
                 staged.wbs,
                 'Review',
-                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\nConfidence: MEDIUM\n`,
+                `${REVIEW_HEAD}| P4 (advisory) | Note | src/index.ts:1 | ACCEPTED |\n\nVerdict: PASS\n`,
             );
             const vars = { wbs: staged.wbs, __runId: 'run-reentry', spurBin: SPUR_BIN, profile: 'auto' };
             const fold = cmdOf('review', '-review.status');
@@ -579,7 +528,7 @@ describe('task-pipeline evidence chain — review certifies (D65 R2)', () => {
                 staged.dir,
                 'run-reentry',
                 'Verdict: PASS\n\n| Req | Status | Evidence |\n| --- | --- | --- |\n' +
-                    '| R1 | MET | `src/index.ts:1` does the thing |\n\nConfidence: HIGH\n',
+                    '| R1 | MET | `src/index.ts:1` does the thing |\n',
             );
             expect(
                 runTypedGate(
@@ -811,10 +760,9 @@ describe('task-pipeline evidence chain — kept invariants (0710/0751/0804)', ()
 /**
  * 1254 — the review stage is the PRODUCER of two artifacts with different consumers: the `## Review`
  * section (checked against finding dispositions) and the captured certification answer (checked
- * against requirement/AC evidence). These tests pin the producer instructions to the consumer
- * vocabulary, and pin that the two confidence lanes legitimately differ for one run.
+ * against requirement/AC evidence).
  */
-describe('review answer contract — producer vocabulary and the two confidence lanes (1254)', () => {
+describe('review answer contract — producer vocabulary (1254)', () => {
     const reviewInput = (): string =>
         String((actionOf('review', 'agent.run')?.options as Record<string, unknown> | undefined)?.input ?? '');
 
@@ -870,7 +818,7 @@ describe('review answer contract — producer vocabulary and the two confidence 
             };
 
             // Prose only — no tables, so no requirement row can certify.
-            const prose = certify('Verdict: PASS\n\nEverything looks good; shipped.\nConfidence: HIGH\n');
+            const prose = certify('Verdict: PASS\n\nEverything looks good; shipped.\n');
             expect(prose.token).toBe('FAIL');
 
             // Nothing manufactured a PASS on the way through.

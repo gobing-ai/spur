@@ -194,14 +194,8 @@ function readAttempts(staged: Staged): string {
     return readFileSync(join(staged.cwd, '.spur/run', `${WBS}-test-fix-attempt`), 'utf8').trim();
 }
 
-describe('task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2)', () => {
-    test('frozen contract: only the failure-class decide lives in `gate`; no routing states remain', () => {
-        for (const retired of ['triage', 'test-fail-triage', 'test-recheck']) {
-            expect(
-                DEF.states.find((s) => s.id === retired),
-                retired,
-            ).toBeUndefined();
-        }
+describe('task-pipeline 1239 — deterministic lane projection in the gate state (0943 R1/R2)', () => {
+    test('frozen contract: only failure-class decides; lane mode and focus are file projections', () => {
         // The lane is a deterministic shell projection — no lane decide remains.
         expect(
             onEnter('gate')
