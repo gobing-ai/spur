@@ -174,23 +174,18 @@ fails it. One explicit mapping, no transcription step anywhere downstream:
 Severity words stay visible in the same cell — the mapping adds the machine-readable label, it does
 not replace the semantics.
 
-**Disposition column (1089, E71).** The findings table carries a `Disposition` cell. It is not
-cosmetic: the record stage's residual sweep reads these rows (`parseReviewFindings` in
-`packages/app/src/services/residual-scan.ts`), and a `P1`–`P3` row with no disposition classifies as
-**blocking**, which downgrades a PASS verdict to PARTIAL and closes the `done` gate. A finding you
-resolved inside the same task therefore says so in that cell — `RESOLVED`/`FIXED`/`DONE` (optionally
-with the commit) drops the row from the sweep; `DEFER(<reason>)` reclassifies a P3 as deferrable
-(never P1/P2). Prose such as "Closed." inside the *Finding* cell does not count — the sweep reads
-the cell, not the sentence. `OPEN` states "still live", and `ACCEPTED` marks a non-blocking P4
-observation you are deliberately not acting on; both behave as an ordinary open row.
+**Disposition column (1089, E71).** The findings table carries a `Disposition` cell, and it is
+your statement of each finding's state: `RESOLVED`/`FIXED`/`DONE` (optionally with the commit) for a
+finding closed inside the same task, `DEFER(<reason>)` for a P3 you deliberately carry (never
+P1/P2), `ACCEPTED` for a P4 observation you are not acting on, `OPEN` for one still live. Nothing
+parses these rows — your `Verdict:` line is the only gate — so the two must agree: a table with an
+open P1-P3 row carries a non-PASS verdict.
 
-**Pipeline cost of an open finding (1122).** The review certification runs this same classification
-(`spur task residual <wbs> review-gate`): a PASS whose table still carries an open P1-P3 row is a
-non-PASS review, so the `review-failure-class` decision routes it to `remediate` instead of `done`.
-Open P1-P3 findings block `done`; fixing one invalidates the certified digest and re-runs
-gate → review on a fresh digest. Only P4 rows and `DEFER`-ed P3 rows are wrap residuals — disposition the finding in
-its cell now, while you hold the context, instead of leaving the cost to be rediscovered after a
-full cycle.
+**Pipeline cost of an open finding (1122).** A non-PASS review routes through the
+`review-failure-class` decision to `remediate` instead of `done`. Open P1-P3 findings block `done`;
+fixing one invalidates the certified digest and re-runs gate → review on a fresh digest. Only P4 rows
+and `DEFER`-ed P3 rows are wrap residuals — disposition the finding in its cell now, while you hold
+the context, instead of leaving the cost to be rediscovered after a full cycle.
 
 **Section-relative headings.** In WBS mode (standalone or pipeline) the report body is written
 *into* the task's `### Review` section, so every heading inside it MUST be `####` or deeper. A
@@ -228,32 +223,10 @@ FAIL, PARTIAL, a missing line, a line split across two lines — routes the run 
 `review-failure-class` decision into the bounded `remediate` hop. Keep it on one line, in that shape, in every
 review answer; never restate it as prose only.
 
-**State `Confidence: HIGH | MEDIUM | LOW` — the gate derives it from your dispositions (ADR-141).**
-The review report carries exactly one top-level `Confidence:` line, and it is **cross-checked**: a
-stated level that disagrees with the table is a blocking `review-contract` violation, so a PASS
-carrying citation-free or untested claims cannot launder itself as `HIGH`.
-
-| Derived | When the table says so |
-| --- | --- |
-| `LOW` | the verdict is not PASS, or an open (or undispositioned) P1–P3 row survives |
-| `HIGH` | PASS with every finding closed (`RESOLVED` / `FIXED` / `DONE`) and no carried residual |
-| `MEDIUM` | PASS with carried residuals only — `DEFER(...)`, `ACCEPTED`, or an open P4 |
-
-Derivation: `packages/app/src/services/answer-confidence.ts` (shared with the verify answer). This
-does not revive the retired self-grade: the level records **evidence composition** — what a reader
-would otherwise have to re-derive from the rows — and the gate recomputes it rather than trusting it.
-No verdict-artifact field, no receipt level, no per-finding grade, and no operator ack var exists
-(ADR-138 stands for every other carrier). Evidence gaps still belong in the report body: name them,
-then let the dispositions decide the level.
-
-**Two artifacts, one `Confidence:` line each (1254).** The body you write into `### Review` states
-the disposition-derived level above. When the pipeline also captures your final answer as the
-certification input for `spur task verdict`, that text is a *second* artifact with a *different*
-consumer, and it carries the **evidence-derived** level (`deriveVerifyConfidence`): PASS with every
-AC row MET on executable evidence (`test`/`command`) is HIGH; a citation-only (`static-ref`),
-`manual-review`, `llm-judge` or `N/A` AC is MEDIUM; a non-PASS verdict or any PARTIAL/UNMET row is
-LOW. It ends with exactly one plain `Verdict: PASS|PARTIAL|FAIL` line preceded by both tables, in
-this exact shape:
+**The certification answer.** No `Confidence:` line exists on any carrier — name evidence gaps in
+the report body instead. When the pipeline captures your final answer as the certification input
+for `spur task verdict`, it ends with exactly one plain `Verdict: PASS|PARTIAL|FAIL` line preceded
+by both tables, in this exact shape:
 
 | Req | Status | Evidence |
 | --- | --- | --- |
@@ -267,15 +240,10 @@ One row per declared requirement (`MET | PARTIAL | UNMET`, none omitted or merge
 acceptance criterion (`MET | PARTIAL | UNMET | N/A`), with the evidence-type token alone in its own
 cell — `test | command | static-ref | manual-review | llm-judge | n/a`, or a `+` compound when more
 than one kind applies. Evidence cells cite a repo-root-relative `path:line` or a named test/command.
-An absolute path outside the repo (`/tmp/<report>.md:12`) is an unresolved anchor that blocks the
-done projection (`L4.anchor-unresolved`); cite the owning source or a corpus artifact instead. AC
+Cite the owning source or a corpus artifact, never a scratch path. AC
 identities stay the task's own (checklist label, title, bold head, `Scenario:` prefix, bracket tag or
 declared `AC-N` alias): a linked feature's scenario title covers the task that implements it, and a
 task-local criterion is legal as-is — it needs no feature credit.
-Never repeat the section's disposition-derived `Confidence:` line here: a second `Confidence:` line is
-a `confidence-duplicate` rejection of the whole answer, and so is a level the rows do not derive. A
-PASS with executable AC and one accepted P4 therefore certifies as `Confidence: HIGH` in the answer
-while the section keeps `Confidence: MEDIUM`.
 
 **Source citations for external claims (one claim contract, 2026-10-12).** A Finding cell or a
 Functional Traceability `Evidence` cell that asserts an external API/library claim carries a
@@ -289,18 +257,8 @@ finding's subject, not the claim's source. Cell-free receipts (test counts, revi
 assert no external claim and need no citation. An uncited external claim is an assumption: name it
 as an explicit gap in the report body (above), so a reader can re-check it.
 
-
-**Machine-checked at the gate (findings table).** `spur task residual <wbs> review-gate` applies the same two
-predicates to every finding row: a Finding cell carrying one of the verify lint's claim markers with
-no citation form becomes a **blocking** `review-contract` item, so `review → done` stops and the
-run enters the `review-failure-class` decision. The `Location` column is deliberately not consulted as a citation —
-that is the rule stated above, and a gate that accepted it would pass every row that has an anchor.
-Functional Traceability `Evidence` cells stay reviewer-enforced (SECUA review): they are free prose
-in a table the gate does not parse.
-
 **No findings.** Never invent a defect to populate the table. Emit one substantive `P4 (advisory)`
-row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) are
-rejected by the checker, and so they should be:
+row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) tell a reader nothing:
 
 ```markdown
 | # | Priority | Dimension | Finding | Location | Disposition |

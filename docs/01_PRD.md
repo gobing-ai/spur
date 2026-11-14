@@ -136,10 +136,8 @@ Full rd3-migration dispositions: `docs/plans/2026-06-10-rd3-migration-feature-li
 
 ### 5.4 Desktop Board shell
 
-The desktop application is an approved thin Electron transport for the existing Board. It runs
-one local Spur child server, which owns the selected project's database, and requires an explicit
-project selection when packaged. It does not introduce an agent runtime, key storage, or a second
-database owner. The runtime and packaging contract lives in [desktop shell](design/desktop-shell.md).
+Retired 2026-11-13: the Electron shell was removed as premature. The Board is served by
+`spur serve` in the browser; a desktop transport needs scope reconfirmation.
 
 ### 5.5 Out of scope
 

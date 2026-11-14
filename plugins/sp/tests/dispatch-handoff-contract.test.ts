@@ -85,20 +85,6 @@ describe('0818 R2 — answer fixtures round-trip through the real verdict gate',
         expect(r.lintFindings).toEqual([]);
     });
 
-    test('PASS in a requirement Status cell is lint-rejected with no verdict artifact', () => {
-        const r = roundTrip(answer('PASS', 'test'));
-        expect(r.code).not.toBe(0);
-        expect(r.lintFindings.length).toBeGreaterThan(0);
-        expect(r.verdictFile).toBe(false);
-    });
-
-    test('N/A in a requirement Status cell is lint-rejected with no verdict artifact', () => {
-        const r = roundTrip(answer('N/A', 'test'));
-        expect(r.code).not.toBe(0);
-        expect(r.lintFindings.length).toBeGreaterThan(0);
-        expect(r.verdictFile).toBe(false);
-    });
-
     test('a behavioral MET AC carried only by static evidence cannot yield PASS', () => {
         const r = roundTrip(answer('MET', 'static-ref'));
         expect(r.code).not.toBe(0);

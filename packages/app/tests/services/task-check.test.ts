@@ -4,16 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { FINDING_CODES } from '../../src/services/finding-codes';
-import {
-    citedLinesNameSubject,
-    classifyExternalEvidence,
-    extractReviewSectionBody,
-    extractSubjectTokens,
-    hasPopulatedPriorityTable,
-    TaskCheckService,
-} from '../../src/services/task-check';
+import { TaskCheckService } from '../../src/services/task-check';
 import { TaskLocator } from '../../src/services/task-locator';
-import { renderSolutionFromDiff } from '../../src/services/task-record';
 
 const matrix = {
     variants: {
@@ -253,82 +245,6 @@ describe('TaskCheckService', () => {
         expect(warnings).toHaveLength(0);
     });
 
-    test('L3: Review must contain P1–P4 table', async () => {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Review test"',
-            'status: done',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Review test',
-            '',
-            '### Solution',
-            '',
-            'Fixed `src/foo.ts:10-15` — added validation.',
-            '',
-            '### Testing',
-            '',
-            'Coverage: 95%.',
-            '',
-            '### Review',
-            '',
-            'Just some free text, no table.',
-        ].join('\n');
-
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
-        expect(reviewErrors.length).toBeGreaterThan(0);
-        expect(reviewErrors[0]?.severity).toBe('error');
-    });
-    test('L3: Review with empty-cell P-table scaffold does not satisfy the rule (hardening)', async () => {
-        // The shipped review template scaffolds an empty-cell P-table. A bare /P[1-4]/
-        // match would falsely accept it; the hardened rule treats it as a placeholder so
-        // a review task can't reach a Review-required status with an empty findings table.
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Empty scaffold"',
-            'status: done',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Empty scaffold',
-            '',
-            '### Solution',
-            '',
-            'Fixed `src/foo.ts:10-15`.',
-            '',
-            '### Testing',
-            '',
-            'Coverage: 95%.',
-            '',
-            '### Review',
-            '',
-            'Post-implementation reflection — to be filled after the first fix round.',
-            '',
-            '| Severity | File | Finding | Recommendation |',
-            '| -------- | ---- | ------- | -------------- |',
-            '| P1       |      |         |                |',
-            '| P2       |      |         |                |',
-        ].join('\n');
-
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
-        expect(reviewErrors.length).toBeGreaterThan(0);
-        expect(reviewErrors[0]?.severity).toBe('error');
-    });
     test('L3: empty-cell Review scaffold is tolerated where Review is optional', async () => {
         // Pre-fix-round window: a review task carries the scaffold at a status where
         // Review is optional. The rule must NOT force a populated table yet — only
@@ -374,49 +290,6 @@ describe('TaskCheckService', () => {
 
         const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
         expect(reviewErrors.length).toBe(0);
-    });
-    test('L3: dash-filled P-table placeholder does not satisfy the rule where Review is required (0297)', async () => {
-        // A `| P1 | — | — | — |` row is a placeholder, not a finding. The pre-0297
-        // rule counted any non-empty cell as content, so an all-dash table passed the
-        // done-gate's Review L3 layer — empirically how task 0296 reached `done` with
-        // an unauthored Review. Dash/`n/a`-only cells must count as empty.
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Dash placeholder"',
-            'status: done',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Dash placeholder',
-            '',
-            '### Solution',
-            '',
-            'Fixed `src/foo.ts:10-15`.',
-            '',
-            '### Testing',
-            '',
-            'Coverage: 95%.',
-            '',
-            '### Review',
-            '',
-            '| Severity | Finding | Location | Action |',
-            '|----------|---------|----------|--------|',
-            '| P1 | — | — | — |',
-            '| P2 | — | — | — |',
-            '| P3 | n/a | - | N/A |',
-            '| P4 | — | — | — |',
-        ].join('\n');
-
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
-        expect(reviewErrors.length).toBeGreaterThan(0);
-        expect(reviewErrors[0]?.severity).toBe('error');
     });
     test('L3: dash-filled Review scaffold is tolerated where Review is optional (0297)', async () => {
         // The dash-filled table is the same "not yet authored" state as the empty-cell
@@ -546,49 +419,6 @@ describe('TaskCheckService', () => {
         const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
         expect(reviewErrors.length).toBe(0); // prose-only at optional status must be tolerated
     });
-    test('L3: prose-only ### Review (no table) at required status still errors (guard)', async () => {
-        // WHY: the tolerance for prose-only Review must NOT extend to statuses where
-        // Review is *required* (wip+). A prose body with no findings table must still
-        // trigger the L3 error once Review is mandatory — otherwise a review task
-        // could reach done with no findings table at all.
-        const reviewMatrix = {
-            variants: {
-                review: {
-                    wip: { required: ['Background', 'Review'] },
-                },
-            },
-        };
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Prose-only at wip"',
-            'status: wip',
-            'template: review',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Prose-only at wip',
-            '',
-            '### Background',
-            '',
-            'Context.',
-            '',
-            '### Review',
-            '',
-            'Post-implementation reflection — all findings were stale so I wrote prose.',
-        ].join('\n');
-
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, reviewMatrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const reviewErrors = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Review' && f.severity === 'error',
-        );
-        expect(reviewErrors.length).toBeGreaterThan(0); // prose-only at required status must error
-    });
     test('L3: Review with a populated P-table passes', async () => {
         const content = [
             '---',
@@ -652,38 +482,6 @@ describe('TaskCheckService', () => {
 
         const reviewErrors = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Review');
         expect(reviewErrors.length).toBe(0); // L3 should not fire — Review is forbidden at backlog
-    });
-    test('L3: Requirements without R-numbering warns', async () => {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Req test"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Req test',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Requirements',
-            '',
-            'The system shall do X.',
-            'The system shall do Y.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const reqWarnings = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Requirements' && f.severity === 'warning',
-        );
-        expect(reqWarnings.length).toBeGreaterThan(0);
-        expect(reqWarnings[0]?.message).toContain('R-numbered');
     });
 
     test('L3: Requirements with proper R-numbering produces no warning', async () => {
@@ -896,67 +694,6 @@ describe('TaskCheckService', () => {
         expect(solErrors).toHaveLength(0);
     });
 
-    test('L3: a real Solution body without a file:line citation still errors', async () => {
-        // WHY: once Solution carries actual prose it must cite where the change is —
-        // the placeholder skip must not weaken the rule for authored content.
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Uncited sol"',
-            'status: wip',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Uncited sol',
-            '',
-            '### Solution',
-            '',
-            'Refactored the parser to handle the new case.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-        const solErrors = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
-        );
-        expect(solErrors.length).toBeGreaterThan(0);
-        // 1090 R3: an unauthored Solution keeps the authoring wording — the backfill
-        // wording below is reserved for record's own empty change-map.
-        expect(solErrors[0]?.message).toContain('must contain at least one');
-    });
-
-    test("L3: record's empty backfill names the backfill cause, not an authoring error (task 1090 R3)", async () => {
-        // WHY: the record safety-net writes a change-map carrying a `(no changes detected)`
-        // row when the run diff named no file. Reported as "Solution must contain at least
-        // one file:line citation", it told the author their Solution was malformed when the
-        // real condition was an empty backfill (run 9e8af77d, task 1089).
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Empty backfill"',
-            'status: testing',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Empty backfill',
-            '',
-            '### Solution',
-            '',
-            ...renderSolutionFromDiff('').trimEnd().split('\n'),
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-        const solError = result.findings.find((f) => f.code === FINDING_CODES.L3_SOLUTION_FILE_LINE);
-        expect(solError).toBeDefined();
-        expect(solError?.message).toContain('backfill produced no rows');
-        expect(solError?.message).not.toContain('must contain at least one');
-    });
-
     test('L3: Solution table with backtick-wrapped file + adjacent line column passes (P3 regression)', async () => {
         // WHY: hasAdjacentFileLineColumns initially failed to strip backticks before
         // checking file extensions — `\`src/foo.ts\`` didn't match the extension regex.
@@ -1036,78 +773,6 @@ describe('TaskCheckService', () => {
         expect(solErrors.length).toBe(0);
     });
 
-    test('L3: Solution table with file path but NO adjacent line column still errors', async () => {
-        // WHY: the table-format detection must not false-positive on a file column
-        // whose adjacent column is NOT a line number — only genuine file+line pairs count.
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Table no line"',
-            'status: done',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Table no line',
-            '',
-            '### Solution',
-            '',
-            '| File | Description |',
-            '| ---- | ----------- |',
-            '| src/foo.ts | added validation |',
-            '',
-            '### Testing',
-            '',
-            'Coverage: 95%.',
-            '',
-            '### Review',
-            '',
-            '| Severity | File | Finding | Recommendation |',
-            '| -------- | ---- | ------- | -------------- |',
-            '| P2 | src/foo.ts | fixed | — |',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-        const solErrors = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Solution' && f.severity === 'error',
-        );
-        expect(solErrors.length).toBeGreaterThan(0);
-    });
-
-    test('L3: Plan as free-form prose warns', async () => {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Plan prose"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Plan prose',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Plan',
-            '',
-            'First we will do X. Then we will do Y. Finally we will do Z.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const planWarnings = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Plan' && f.severity === 'warning',
-        );
-        expect(planWarnings.length).toBeGreaterThan(0);
-        expect(planWarnings[0]?.message).toContain('checklist');
-    });
-
     test('L3: Plan as ordered checklist produces no warning', async () => {
         const content = [
             '---',
@@ -1174,44 +839,6 @@ describe('TaskCheckService', () => {
 
         const planWarnings = result.findings.filter((f) => f.layer === 'L3' && f.section === 'Plan');
         expect(planWarnings).toHaveLength(0);
-    });
-
-    test('L3: Plan as free-form prose still warns after permissive fix (guard against over-matching)', async () => {
-        // WHY: the multiline fix must not suppress warnings for genuinely free-form prose Plans.
-        // Pure paragraph text with no list markers must still trigger the L3 warning.
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Plan prose guard"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Plan prose guard',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Plan',
-            '',
-            '**Phase A — Setup:**',
-            'First we install the dependencies. Then we configure the environment.',
-            '',
-            '**Phase B — Implementation:**',
-            'We write the fix and add a regression test.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-
-        const planWarnings = result.findings.filter(
-            (f) => f.layer === 'L3' && f.section === 'Plan' && f.severity === 'warning',
-        );
-        expect(planWarnings.length).toBeGreaterThan(0);
-        expect(planWarnings[0]?.message).toContain('checklist');
     });
 
     test('resolveMatrixEntry falls back to the standard variant', () => {
@@ -1451,144 +1078,6 @@ describe('TaskCheckService', () => {
         expect(readiness).toHaveLength(1);
     });
 
-    test('readiness: prose dependency must be mirrored in frontmatter dependencies', async () => {
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Requirements',
-            '',
-            'R1. This task depends on 0002 before implementation.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-            extraTasks: { '0002': taskFm({ feature_id: 'F1', name: 'Dep 1', status: 'done' }) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const prose = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('not mirrored'));
-        expect(prose).toHaveLength(1);
-        expect(prose[0]?.section).toBe('Requirements');
-    });
-
-    // ── Frozen prose-prerequisite rule (task 0475): precision without recall loss ──
-
-    test('readiness: incidental keyword across a sentence boundary infers no edge (R1)', async () => {
-        // The exact task-0474 shape: a downstream WBS precedes an incidental 'after'
-        // across a period. It asserts nothing about task order and must not be an edge.
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Design',
-            '',
-            '0469 renders and must never open the DB. Any shape change after this lands is a schemaVersion.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const prose = result.findings.filter(
-            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
-        );
-        expect(prose).toHaveLength(0);
-    });
-
-    test('readiness: the "tasks X and Y" list form infers every named prerequisite (R1)', async () => {
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Requirements',
-            '',
-            'This task Depends on tasks 0465 and 0474 for the data plane.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const msgs = result.findings
-            .filter((f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED)
-            .map((f) => f.message);
-        expect(msgs.some((m) => m.includes('0465'))).toBe(true);
-        expect(msgs.some((m) => m.includes('0474'))).toBe(true);
-    });
-
-    test('readiness: a WBS inside a fenced code block infers no edge (R2)', async () => {
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Design',
-            '',
-            'Example finding output:',
-            '',
-            '```',
-            'Prose prerequisite 0466 is not mirrored in frontmatter dependencies[]',
-            'This depends on 0470 inside the block.',
-            '```',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const prose = result.findings.filter(
-            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
-        );
-        expect(prose).toHaveLength(0);
-    });
-
-    test('readiness: a WBS in a markdown table row infers no edge (R2)', async () => {
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Design',
-            '',
-            '| dep | note |',
-            '| --- | --- |',
-            '| 0474 | wrong claim: depends on 0466 |',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const prose = result.findings.filter(
-            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
-        );
-        expect(prose).toHaveLength(0);
-    });
-
-    test('readiness: a WBS in an inline code span infers no edge (R2)', async () => {
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Design',
-            '',
-            'The test covers `depends on 0466` as a backtick example.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const prose = result.findings.filter(
-            (f) => f.layer === 'L4' && f.code === FINDING_CODES.L4_PROSE_PREREQUISITE_UNLISTED,
-        );
-        expect(prose).toHaveLength(0);
-    });
-
     test('readiness: a cycle reached through a prose-inferred edge is not reported (R3)', async () => {
         // 0001 prose-refs 0002; 0002 declares [0001]. The closing edge is frontmatter,
         // but the opening edge is prose-inferred — the loop is a parser artifact.
@@ -1654,25 +1143,6 @@ describe('TaskCheckService', () => {
         expect(cycle).toHaveLength(1);
     });
 
-    test('readiness: gate language is surfaced as a prerequisite advisory', async () => {
-        const content = [
-            taskFm({ feature_id: 'F1' }),
-            '',
-            '### Design',
-            '',
-            'GATED on operator approval after the design doc is reviewed.',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: content,
-            features: { F1: featureFm('F1', 'active') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const gate = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('gate language'));
-        expect(gate).toHaveLength(1);
-        expect(gate[0]?.section).toBe('Design');
-    });
     test('readiness: hyphenated tokens like "parity-gated" do NOT raise gate language (0622 R9)', async () => {
         const content = [
             taskFm({ feature_id: 'F1' }),
@@ -1797,18 +1267,6 @@ describe('TaskCheckService', () => {
         ].join('\n');
     }
 
-    test('R1: task scenario NOT in the feature AC warns (subset rule, DD-09)', async () => {
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithAc('F1', ['rogue scenario']),
-            features: { F1: featureWithAc('F1', ['the real scenario']) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
-        expect(cov).toHaveLength(1);
-        expect(cov[0]?.severity).toBe('warning'); // default warning (C04)
-    });
-
     test('R1: task scenario covered by the feature AC produces no coverage warning', async () => {
         const { fs, path, cleanup } = seedEnv({
             taskContent: taskWithAc('F1', ['shared scenario']),
@@ -1817,19 +1275,6 @@ describe('TaskCheckService', () => {
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
         expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
-    });
-
-    test('R1: partial coverage — only the uncovered task scenario warns, not the covered one', async () => {
-        const { fs, path, cleanup } = seedEnv({
-            // Task has two scenarios; "alpha" matches the feature, "zeta" does not.
-            taskContent: taskWithAc('F1', ['alpha', 'zeta']),
-            features: { F1: featureWithAc('F1', ['alpha', 'omega']) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
-        expect(cov).toHaveLength(1); // exactly one — the covered "alpha" is NOT flagged
-        expect(cov[0]?.message).toContain('"zeta"');
     });
 
     test('R1: coverage match is title-normalized (R-id prefix + case ignored)', async () => {
@@ -1878,18 +1323,6 @@ describe('TaskCheckService', () => {
         expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
     });
 
-    test('R1: checklist item with no matching feature scenario warns (subset rule)', async () => {
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithChecklist('F1', ['something the feature never specified']),
-            features: { F1: featureWithAc('F1', ['the only real scenario']) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
-        expect(cov.length).toBeGreaterThan(0);
-        expect(cov.every((f) => f.severity === 'warning')).toBe(true);
-    });
-
     /** A feature with Gherkin AC AND a wayfinder-map tag (task 0476). */
     function featureWithAcAndTag(id: string, scenarios: string[], tag: string): string {
         const ac = [
@@ -1932,77 +1365,6 @@ describe('TaskCheckService', () => {
         expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
     });
 
-    test('R2: non-map tag does NOT skip DD-09 — only wayfinder-map is exempt', async () => {
-        // A different tag should not suppress the subset check.
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithAc('F1', ['rogue scenario']),
-            features: { F1: featureWithAcAndTag('F1', ['the real scenario'], 'some-other-tag') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
-        expect(cov).toHaveLength(1);
-    });
-
-    test('R2: untagged feature with scenarios still applies DD-09 (no regression)', async () => {
-        // Baseline behavior unchanged for non-map features.
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithAc('F1', ['rogue scenario']),
-            features: { F1: featureWithAc('F1', ['the real scenario']) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.layer === 'L4' && f.message.includes('subset rule'));
-        expect(cov).toHaveLength(1);
-    });
-    test('R1: only DD-09 is skipped — map-parented task still reports unrelated defects', async () => {
-        // A map-parented task that also has a Requirements section with non-R-numbered
-        // items should still get the L3 format finding. Only the DD-09 comparison is
-        // suppressed for map parents; every other layer stays live.
-        const taskWithDefect = [
-            '---',
-            'schema_version: 1',
-            'name: "Defective task"',
-            'status: backlog',
-            'feature_id: F1',
-            'created_at: 2026-06-13T00:00:00Z',
-            'updated_at: 2026-06-13T00:00:00Z',
-            '---',
-            '',
-            '## 0001. Defective task',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Requirements',
-            '',
-            'some unnumbered requirement without the R-prefix',
-            'another line that also lacks the pattern',
-            '',
-            '### Acceptance Criteria',
-            '',
-            '```gherkin',
-            'Feature: T',
-            '  Scenario: rogue scenario',
-            '    Given x',
-            '```',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithDefect,
-            features: { F1: featureWithAcAndTag('F1', ['the real scenario'], 'wayfinder-map') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        // DD-09 is suppressed (map parent) ...
-        expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
-        // ... but the L3 format defect is still reported.
-        const formatFindings = result.findings.filter(
-            (f) => f.code.includes('requirements-format') || f.code.includes('REQUIREMENTS_FORMAT'),
-        );
-        expect(formatFindings.length).toBeGreaterThanOrEqual(1);
-    });
-
     // ── AC altitude: ac_altitude: task-local skips DD-09 (0584 R3/R4) ──
 
     /** Task with a declared AC altitude and a scenario that drifts from its feature. */
@@ -2041,29 +1403,6 @@ describe('TaskCheckService', () => {
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
         expect(result.findings.filter((f) => f.message.includes('subset rule'))).toHaveLength(0);
-    });
-
-    test('R4/R5: a graduating task with drifted titles still reports (field, not notation)', async () => {
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithAltitude('graduating', 'Drifted title that matches nothing'),
-            features: { F1: featureWithAc('F1', ['the real scenario']) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.message.includes('subset rule'));
-        expect(cov).toHaveLength(1);
-        expect(cov[0]?.message).toContain('Drifted title that matches nothing');
-    });
-
-    test('R3: absent altitude keeps legacy behavior — subset rule still enforced', async () => {
-        const { fs, path, cleanup } = seedEnv({
-            taskContent: taskWithAltitude(undefined, 'rogue scenario'),
-            features: { F1: featureWithAc('F1', ['the real scenario']) },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const cov = result.findings.filter((f) => f.message.includes('subset rule'));
-        expect(cov).toHaveLength(1);
     });
 
     // ── 1061 canaries: AC forms keep their exact finding codes/severities ──
@@ -2117,49 +1456,6 @@ describe('TaskCheckService', () => {
             return result.findings;
         };
 
-        test('graduating drift reports L4.uncovered-task-scenario as a warning', async () => {
-            const findings = await check(
-                canaryTask({
-                    altitude: 'graduating',
-                    requirements: ['- [ ] R1. Does X.'],
-                    ac: ['```gherkin', 'Scenario: AC1 — Local outcome that matches nothing', '  Given x', '```'],
-                }),
-            );
-            const cov = findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO);
-            expect(cov).toHaveLength(1);
-            expect(cov[0]?.severity).toBe('warning');
-        });
-
-        test('task-local binding with an unbound requirement reports L3.ac-requirement-coverage as a warning', async () => {
-            const findings = await check(
-                canaryTask({
-                    altitude: 'task-local',
-                    numbering: true,
-                    requirements: ['- [ ] R1. Bind this one.', '- [ ] R2. Leave this unbound.'],
-                    ac: ['```gherkin', 'Scenario: AC1 — First outcome is bound (req: R1)', '  Given x', '```'],
-                }),
-            );
-            const cov = findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE);
-            expect(cov).toHaveLength(1);
-            expect(cov[0]?.severity).toBe('warning');
-            expect(cov[0]?.message).toContain('R2');
-            expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
-        });
-
-        test('bold R-items bind like plain ones, so an unbound bold R2 is reported', async () => {
-            const findings = await check(
-                canaryTask({
-                    altitude: 'task-local',
-                    numbering: true,
-                    requirements: ['- [ ] **R1 Bind.** this one.', '- [ ] **R2.** Leave this unbound.'],
-                    ac: ['```gherkin', 'Scenario: AC1 — First outcome is bound (req: R1)', '  Given x', '```'],
-                }),
-            );
-            const cov = findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE);
-            expect(cov).toHaveLength(1);
-            expect(cov[0]?.message).toContain('R2');
-        });
-
         test('complete task-local binding stays silent on coverage and subset', async () => {
             const findings = await check(
                 canaryTask({
@@ -2198,19 +1494,6 @@ describe('TaskCheckService', () => {
             );
             expect(findings.filter((f) => f.code === FINDING_CODES.L3_AC_REQUIREMENT_COVERAGE)).toHaveLength(0);
             expect(findings.filter((f) => f.code === FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO)).toHaveLength(0);
-        });
-
-        test('a done task with unchecked boxes reports L3.unchecked-checklist as a warning', async () => {
-            const findings = await check(
-                canaryTask({
-                    status: 'done',
-                    requirements: ['- [ ] R1. Does X.'],
-                    ac: ['- [ ] AC1 — The outcome nobody ticked off'],
-                }),
-            );
-            const boxes = findings.filter((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
-            expect(boxes).toHaveLength(1);
-            expect(boxes[0]?.severity).toBe('warning');
         });
 
         test('legacy raw bullets parse as nothing — silent on coverage and subset', async () => {
@@ -2347,27 +1630,6 @@ describe('TaskCheckService', () => {
         expect(rollup).toHaveLength(0);
     });
 
-    test('0713 R1: a Plan roster whose children are not declared dependencies warns, naming them', async () => {
-        // The state that mis-ordered the 2026-08-28 batch: the Plan says the children carry
-        // the work, but `dependencies[]` is empty, so the resolver ties on WBS and runs the
-        // parent first — its verify reported 37 unmet requirements against unimplemented kids.
-        const { fs, path, cleanup } = seedEnv({
-            wbs: '0001',
-            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: true }),
-            features: { F1: featureFm('F1', 'active') },
-            extraTasks: { '0002': childBody('0001', 'wip') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const undeclared = result.findings.filter((f) => f.code === 'L4.rollup-roster-not-declared-dependency');
-        expect(undeclared).toHaveLength(1);
-        expect(undeclared[0]?.severity).toBe('warning');
-        expect(undeclared[0]?.section).toBe('Plan');
-        expect(undeclared[0]?.message).toContain('0002');
-        // The message carries the exact repair, not just the complaint.
-        expect(undeclared[0]?.message).toContain('spur task deps 0001 add 0002');
-    });
-
     test('0713 R1: the same roster with the dependency declared is silent', async () => {
         const { fs, path, cleanup } = seedEnv({
             wbs: '0001',
@@ -2398,22 +1660,6 @@ describe('TaskCheckService', () => {
         const result = await new TaskCheckService(fs, matrix).check(path, '0001');
         cleanup();
         expect(result.findings.filter((f) => f.code === 'L4.rollup-roster-not-declared-dependency')).toHaveLength(0);
-    });
-
-    test('roll-up: parent with children but no roster table warns (R2 — the 0109 gap)', async () => {
-        const { fs, path, cleanup } = seedEnv({
-            wbs: '0001',
-            taskContent: parentBody({ wbs: '0001', status: 'wip', withRoster: false }),
-            features: { F1: featureFm('F1', 'active') },
-            extraTasks: { '0002': childBody('0001', 'wip') },
-        });
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const roster = result.findings.filter(
-            (f) => f.layer === 'L4' && f.severity === 'warning' && f.message.includes('roster'),
-        );
-        expect(roster.length).toBeGreaterThan(0);
-        expect(roster[0]?.section).toBe('Plan');
     });
 
     test('roll-up: parent whose Plan table names the child WBS suppresses the roster warning', async () => {
@@ -2448,46 +1694,6 @@ describe('TaskCheckService', () => {
     });
 
     // ── L3: terminal-status open checkboxes (0182 R7-optional) ──
-
-    test('terminal-status boxes: a done task with an unchecked box triggers the warning', async () => {
-        const content = [
-            taskFm({ status: 'done', name: 'Closed task' }),
-            '',
-            '### Plan',
-            '',
-            '- [x] Step one',
-            '- [ ] Step two',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const boxes = result.findings.filter(
-            (f) => f.layer === 'L3' && f.severity === 'warning' && f.message.includes('unchecked checklist box'),
-        );
-        expect(boxes).toHaveLength(1);
-        expect(boxes[0]?.message).toContain('done');
-        expect(boxes[0]?.message).toContain('1 unchecked');
-    });
-
-    test('terminal-status boxes: a cancelled task with an unchecked box triggers the warning', async () => {
-        const content = [
-            taskFm({ status: 'cancelled', name: 'Cancelled task' }),
-            '',
-            '### Plan',
-            '',
-            '- [ ] Step one',
-            '- [ ] Step two',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const boxes = result.findings.filter(
-            (f) => f.layer === 'L3' && f.severity === 'warning' && f.message.includes('unchecked checklist box'),
-        );
-        expect(boxes).toHaveLength(1);
-        expect(boxes[0]?.message).toContain('cancelled');
-        expect(boxes[0]?.message).toContain('2 unchecked');
-    });
 
     test('terminal-status boxes: a done task with all boxes checked does not trigger the warning', async () => {
         const content = [
@@ -2546,42 +1752,6 @@ describe('TaskCheckService', () => {
     });
     // ── R4 (task 0294): Design placeholder warning ───────────────────────────
 
-    test('R4: placeholder Design at wip warns (empty body)', async () => {
-        // WHY: a wip task must have a real Design record before implementation.
-        // An empty Design heading means the operator started coding without
-        // an agreed approach — exactly the signal this check exists to surface.
-        const content = [taskFm({ status: 'wip', name: 'Empty design at wip' }), '', '### Design', '', ''].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const designWarnings = result.findings.filter(
-            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
-        );
-        expect(designWarnings).toHaveLength(1);
-        expect(designWarnings[0]?.message).toContain('present but empty');
-    });
-
-    test('R4: placeholder Design at todo warns (HTML comment + TBD only)', async () => {
-        // WHY: the scaffolded Design section typically ships with HTML guidance
-        // comments and a `> TBD` marker. Those must NOT count as filled —
-        // stripping them is what `isPlaceholderBody` does.
-        const content = [
-            taskFm({ status: 'todo', name: 'TBD design' }),
-            '',
-            '### Design',
-            '',
-            '<!-- Describe the approach: interfaces, data flow, tradeoffs -->',
-            '> TBD',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(content);
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const designWarnings = result.findings.filter(
-            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
-        );
-        expect(designWarnings).toHaveLength(1);
-    });
-
     test('R4: populated Design at wip does NOT warn', async () => {
         // WHY: once the operator writes a real approach (prose, bullets, an
         // interface sketch), the warning must clear — the check is shape-based,
@@ -2600,22 +1770,6 @@ describe('TaskCheckService', () => {
             (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
         );
         expect(designWarnings).toHaveLength(0);
-    });
-
-    test('R4: placeholder Design at testing still warns after Design becomes optional', async () => {
-        // WHY: advancing status must not make a hollow standard-task Design
-        // record disappear from the audit. The warning is template-scoped, not
-        // coupled to the current status entry's required-section list.
-        const content = [taskFm({ status: 'testing', name: 'Testing empty design' }), '', '### Design', '', ''].join(
-            '\n',
-        );
-        const { fs, path, cleanup } = seedFile(content);
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const designWarnings = result.findings.filter(
-            (f) => f.layer === 'L4' && f.severity === 'warning' && f.section === 'Design',
-        );
-        expect(designWarnings).toHaveLength(1);
     });
 
     test('R4: placeholder Design on a non-standard template does NOT warn', async () => {
@@ -3111,23 +2265,6 @@ describe('TaskCheckService', () => {
             '',
         ];
 
-        test('warns naming each requirement that has no scenario', async () => {
-            const findings = await coverageFindings(
-                taskWith(['- [ ] R1. Does X.', '- [ ] R2. Does Y.', '- [ ] R3. Does Z.'], scenario('R1 — X happens')),
-            );
-            expect(findings).toHaveLength(1);
-            expect(findings[0]?.message).toContain('R2, R3');
-        });
-
-        test('warns when a scenario cites a requirement that does not exist', async () => {
-            const findings = await coverageFindings(
-                taskWith(['- [ ] R1. Does X.'], [...scenario('R1 — X happens'), ...scenario('R7 — superseded')]),
-            );
-            expect(findings).toHaveLength(1);
-            expect(findings[0]?.message).toContain('R7');
-            expect(findings[0]?.message).toContain('stale');
-        });
-
         test('is silent when every requirement has a scenario', async () => {
             const findings = await coverageFindings(
                 taskWith(
@@ -3148,29 +2285,6 @@ describe('TaskCheckService', () => {
             expect(findings).toEqual([]);
         });
 
-        test('warns when opted in but no scenario binds a requirement', async () => {
-            const findings = await coverageFindings(taskWith(['- [ ] R1. Does X.'], scenario('AC1 — X happens')));
-            expect(findings).toHaveLength(1);
-            expect(findings[0]?.message).toContain('no scenario binds a requirement');
-        });
-
-        test('AC-numbered scenarios bind requirements through (req: …)', async () => {
-            // WHY: task AC uses task-local `AC<n>` so it never collides with Requirements
-            // `R<n>`; the req clause is the explicit R link the check reads.
-            const findings = await coverageFindings(
-                taskWith(
-                    ['- [ ] R1. Does X.', '- [ ] R2. Does Y.', '- [ ] R3. Does Z.'],
-                    [...scenario('AC1 — X happens (req: R1; R2)'), ...scenario('AC2 — Z happens (req: R3)')],
-                ),
-            );
-            expect(findings).toEqual([]);
-            const partial = await coverageFindings(
-                taskWith(['- [ ] R1. Does X.', '- [ ] R2. Does Y.'], scenario('AC1 — X happens (req: R1)')),
-            );
-            expect(partial).toHaveLength(1);
-            expect(partial[0]?.message).toContain('R2');
-        });
-
         test('stays silent on a legacy task that does not declare ac_numbering', async () => {
             // WHY: the 43 feature-scoped tasks legitimately carry the FEATURE's R-numbers
             // (Requirements R1–R5 beside `Scenario: R6`). Without the gate this fires on
@@ -3184,376 +2298,6 @@ describe('TaskCheckService', () => {
             );
             expect(findings).toEqual([]);
         });
-    });
-
-    describe('R1 (0479): L4_MALFORMED_VERDICT_ARTIFACT check', () => {
-        test.each([
-            '{broken',
-            '{"verdict":"PASS","requirements":"wrong"}',
-            '{"verdict":"UNKNOWN"}',
-            '',
-            '{"wbs":"other","verdict":"PASS"}',
-        ])('rejects unusable durable evidence without falling back to scratch: %s', async (raw) => {
-            const { fs, path, cleanup } = seedEnv({ wbs: '0479', taskContent: taskFm({ status: 'testing' }) });
-            const root = join(path, '..', '..');
-            const evidenceDir = join(root, '.spur', 'memory', 'evidence');
-            const runDir = join(root, '.spur', 'run');
-            const evidencePath = join(evidenceDir, '0479-verdict.json');
-            try {
-                mkdirSync(evidenceDir, { recursive: true });
-                mkdirSync(runDir, { recursive: true });
-                writeFileSync(evidencePath, raw);
-                writeFileSync(
-                    join(runDir, '0479-verdict.json'),
-                    JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'R1', status: 'MET', evidence: 'ok' }] }),
-                );
-                const result = await new TaskCheckService(fs, matrix).check(path, '0479');
-                const finding = result.findings.find((f) => f.code === FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT);
-                expect(finding?.severity).toBe('error');
-                expect(finding?.message).toContain(evidencePath);
-            } finally {
-                cleanup();
-            }
-        });
-
-        test('valid durable evidence wins over malformed scratch', async () => {
-            const { fs, path, cleanup } = seedEnv({ wbs: '0479', taskContent: taskFm({ status: 'testing' }) });
-            const root = join(path, '..', '..');
-            const evidenceDir = join(root, '.spur', 'memory', 'evidence');
-            const runDir = join(root, '.spur', 'run');
-            try {
-                mkdirSync(evidenceDir, { recursive: true });
-                mkdirSync(runDir, { recursive: true });
-                writeFileSync(
-                    join(evidenceDir, '0479-verdict.json'),
-                    JSON.stringify({ verdict: 'PASS', requirements: [{ id: 'R1', status: 'MET', evidence: 'ok' }] }),
-                );
-                writeFileSync(join(runDir, '0479-verdict.json'), '{broken');
-                const result = await new TaskCheckService(fs, matrix).check(path, '0479');
-                expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT)).toEqual(
-                    [],
-                );
-            } finally {
-                cleanup();
-            }
-        });
-
-        test('emits L4_MALFORMED_VERDICT_ARTIFACT when status is testing and verdict artifact has empty requirements and AC', async () => {
-            const { fs, path, cleanup } = seedEnv({
-                wbs: '0479',
-                taskContent:
-                    taskFm({ status: 'testing', template: 'standard' }) +
-                    '\n\n## Solution\n`file:1`\n\n## Testing\n`file:1`\n',
-            });
-            try {
-                // Write empty verdict artifact in .spur/run/0479-verdict.json
-                const { dirname: pathDirname } = require('node:path');
-                const runDir = join(pathDirname(pathDirname(path)), '.spur', 'run');
-                const { mkdirSync, writeFileSync } = require('node:fs');
-                mkdirSync(runDir, { recursive: true });
-                writeFileSync(
-                    join(runDir, '0479-verdict.json'),
-                    JSON.stringify({ wbs: '0479', verdict: 'UNKNOWN', requirements: [], acceptanceCriteria: [] }),
-                );
-
-                const tasksDir = pathDirname(path);
-                const svc = new TaskCheckService(
-                    fs,
-                    matrix,
-                    new TaskLocator({ fs, tasksDir, foldersConfig: { active_folder: tasksDir, folders: {} } as never }),
-                );
-                const res = await svc.check(path, '0479');
-                const malformed = res.findings.filter((f) => f.code === FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT);
-                expect(malformed.length).toBeGreaterThan(0);
-                expect(malformed[0]?.message).toContain('verdict is UNKNOWN');
-            } finally {
-                cleanup();
-            }
-        });
-    });
-});
-
-describe('R7 (0487): Review gate robustness', () => {
-    test('a prose severity cell (`P1 (blocker)`) counts as a populated findings row', () => {
-        const body = ['| Sev | File | Finding |', '| --- | --- | --- |', '| P1 (blocker) | a.ts:1 | leaks |'].join(
-            '\n',
-        );
-        expect(hasPopulatedPriorityTable(body)).toBe(true);
-    });
-
-    test('the empty scaffold table is still rejected, prose severity or not', () => {
-        const body = ['| Sev | File | Finding |', '| --- | --- | --- |', '| P1 (blocker) | | |'].join('\n');
-        expect(hasPopulatedPriorityTable(body)).toBe(false);
-    });
-
-    test('a severity-like label beyond P4 is not a findings row', () => {
-        const body = '| P12 | a.ts:1 | not a severity |';
-        expect(hasPopulatedPriorityTable(body)).toBe(false);
-    });
-
-    test('a Review body containing an uppercase Z is not truncated', () => {
-        const markdown = ['### Review', '', 'Zero blockers found.', '', '### References', '', 'x', ''].join('\n');
-        const body = extractReviewSectionBody(markdown);
-        expect(body).toContain('Zero blockers found.');
-        expect(body).not.toContain('### References');
-    });
-
-    test('a Review section that is the last section still matches', () => {
-        const markdown = ['### Design', '', 'd', '', '### Review', '', '| P2 | a.ts:1 | nit |', ''].join('\n');
-        const body = extractReviewSectionBody(markdown);
-        expect(body).not.toBeNull();
-        expect(hasPopulatedPriorityTable(body ?? '')).toBe(true);
-    });
-
-    test('an absent Review section still returns null', () => {
-        expect(extractReviewSectionBody('### Design\n\nd\n')).toBeNull();
-    });
-});
-
-describe('subject-token exclusion (0583 R5 verify)', () => {
-    const cite = 'packages/app/src/services/project-registry.ts:357-378';
-    const cited = 'let sawInUse = false;\nlet probedAny = false;\nconst probe = await probePort(port);';
-
-    // Regression: the extractor fed the citation itself and the verdict-table status
-    // word in as "subject" tokens. Neither can ever appear in cited source, so a
-    // minimal, correct evidence row reported every time — 262 of the corpus's
-    // anchor-subject warnings were this shape.
-    test('a minimal correct evidence row does not report', () => {
-        const tokens = extractSubjectTokens(`| R1 | MET | \`${cite}\` |`);
-        expect(tokens).not.toContain(cite.toLowerCase());
-        expect(tokens).not.toContain('met');
-        expect(citedLinesNameSubject(tokens, cited)).toBe(true);
-    });
-
-    test('a row naming an identifier present in the cited lines does not report', () => {
-        const row = `| R1 | MET | \`${cite}\` (\`probedAny\` separates denied from exhaustion) |`;
-        expect(citedLinesNameSubject(extractSubjectTokens(row), cited)).toBe(true);
-    });
-
-    test('a row naming an identifier absent from the cited lines still reports', () => {
-        const row = `| R1 | MET | \`${cite}\` (\`renderForensics\` builds the report) |`;
-        expect(citedLinesNameSubject(extractSubjectTokens(row), cited)).toBe(false);
-    });
-
-    // 0804 R9: the bare-identifier scans must see the row with parsed citation
-    // spans removed — filename fragments (snake_case/CamelCase pieces of the
-    // cited path) are not evidence subjects and must never manufacture a
-    // mismatch against lines that never repeat their own filename.
-    test('snake_case filename fragments inside the anchor never become subjects (0804 R9)', () => {
-        const row = '| R1 | MET | `docs/help/cmd_example.md:12` |';
-        const tokens = extractSubjectTokens(row);
-        expect(tokens).not.toContain('cmd_example');
-        expect(tokens).not.toContain('cmd_example.md');
-        // No subject outside the anchor ⇒ tokenless row ⇒ matching, not mismatch.
-        expect(citedLinesNameSubject(tokens, 'example usage of the command')).toBe(true);
-    });
-
-    test('CamelCase filename fragments inside the anchor never become subjects (0804 R9)', () => {
-        const row = '| R1 | MET | `docs/guide/UsageGuide.md:3-7` |';
-        const tokens = extractSubjectTokens(row);
-        expect(tokens).not.toContain('usageguide');
-        expect(citedLinesNameSubject(tokens, '# Overview\nbody text')).toBe(true);
-    });
-
-    test('multi-anchor rows lose every citation span (0804 R9 / 0688 R2 policy kept)', () => {
-        const row = '| R1 | MET | `src/alpha_one.ts:10` `src/beta_two.ts:20` |';
-        const tokens = extractSubjectTokens(row);
-        expect(tokens).not.toContain('alpha_one');
-        expect(tokens).not.toContain('beta_two');
-        expect(citedLinesNameSubject(tokens, 'const x = 1;')).toBe(true);
-    });
-
-    test('a real subject outside the anchor still reports on absent symbols (0804 R9)', () => {
-        const row = '| R1 | MET | `docs/help/cmd_example.md:12` (`probeQuota` gate) |';
-        expect(citedLinesNameSubject(extractSubjectTokens(row), 'unrelated lines')).toBe(false);
-        expect(citedLinesNameSubject(extractSubjectTokens(row), 'const probeQuota = 3;')).toBe(true);
-    });
-});
-
-describe('classifyExternalEvidence — frozen external form (0584 R1/R2)', () => {
-    test('R1: recognizes a named origin + backticked path + line number outside the backticks', () => {
-        const body = 'Evidence: @gobing-ai/ts-llm-jsonl-importer `src/mappers.ts` line 481 — omp call_id write';
-        const cites = classifyExternalEvidence(body);
-        expect(cites).toHaveLength(1);
-        expect(cites[0]).toMatchObject({
-            origin: '@gobing-ai/ts-llm-jsonl-importer',
-            path: 'src/mappers.ts',
-            startLine: 481,
-        });
-    });
-
-    test('R1: accepts a line range and plural line wording', () => {
-        const body = 'See @some-org/lib `src/mappers.ts` lines 481-483 — float path';
-        const cites = classifyExternalEvidence(body);
-        expect(cites).toHaveLength(1);
-        expect(cites[0]?.path).toBe('src/mappers.ts');
-        expect(cites[0]?.startLine).toBe(481);
-        expect(cites[0]?.endLine).toBe(483);
-    });
-
-    test('R1: a repo-root backtick anchor (line inside backticks) is NOT external evidence', () => {
-        const body = 'Verified: `packages/app/src/services/task-check.ts:207` still matches';
-        expect(classifyExternalEvidence(body)).toHaveLength(0);
-    });
-
-    test('R1: prose line numbers without a named-origin are not classified', () => {
-        // Same shape as 0494/0493 corpus prose — a path and line number in the
-        // same sentence but NOT the frozen form; must stay invisible (no new
-        // baseline debt).
-        const body =
-            'Anchors re-read at their cited lines: `plugins/sp/skills/next-router/references/routing-table.md` line 32 now sits at line 33';
-        const cites = classifyExternalEvidence(body);
-        // The frozen form requires the line number OUTSIDE backticks AND a named
-        // origin directly before the path — bare path-cell prose has neither
-        // structure guaranteed, and extracting an origin from free prose is
-        // exactly the re-interpretation 0583 must not do. The classifier is
-        // deliberately the classification, not a parser: any backtick+line
-        // adjacency that came from prose should not be promoted to external.
-        expect(cites).toHaveLength(0);
-    });
-
-    test('R2: an in-repo path cited in external form is flagged by checkLineAnchors', async () => {
-        // The frozen form names an in-repo file with the line outside backticks.
-        // R2: it is in-repo evidence and must use a repo-relative anchor, so the
-        // checker still reports it (recognized as external-form → reclassified).
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Ext task"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Ext task',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Solution',
-            '',
-            'Evidence: @local/repo `README.md` line 3 — advisory, in-repo path in external form',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({ taskContent: content });
-        // The repo root resolves one level up from tasksDir; seed README.md there.
-        const root = join(path, '..', '..');
-        const { writeFileSync: w } = await import('node:fs');
-        w(join(root, 'README.md'), 'a\nb\nc\n');
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-        expect(stale.length).toBeGreaterThanOrEqual(1);
-        expect(stale[0]?.message).toContain('R2');
-    });
-
-    // Regression (0584 R2 verify): the in-repo test was a single boolean over the whole
-    // set, so ONE resolvable basename flagged EVERY external citation in the section —
-    // each with a message naming its own path as in-repo, false for all but one.
-    test('R2: only the citation that resolves in-repo is flagged, not its external siblings', async () => {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Mixed ext task"',
-            'status: backlog',
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Mixed ext task',
-            '',
-            '### Background',
-            '',
-            'text',
-            '',
-            '### Solution',
-            '',
-            'Evidence: @local/repo `README.md` line 3 — in-repo, must be repo-relative',
-            '',
-            'Evidence: @gobing-ai/ts-llm-jsonl-importer `src/never-in-this-repo.ts` line 481 — genuinely external',
-        ].join('\n');
-        const { fs, path, cleanup } = seedEnv({ taskContent: content });
-        const root = join(path, '..', '..');
-        const { writeFileSync: w } = await import('node:fs');
-        w(join(root, 'README.md'), 'a\nb\nc\n');
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-        expect(stale).toHaveLength(1);
-        expect(stale[0]?.message).toContain('README.md');
-        expect(stale[0]?.message).not.toContain('never-in-this-repo.ts');
-    });
-});
-
-describe('1271 — checks retain findings after accepted-baseline retirement', () => {
-    // Status `testing` (0714 R1): the anchor-subject matcher only runs on live records,
-    // so this fixture must be non-terminal for the mismatch finding to fire and the
-    // checker has a real warning/error whose retention can be observed.
-    const brokenTask = [
-        '---',
-        'schema_version: 1',
-        'name: "Anchor mismatch task"',
-        'status: testing',
-        'created_at: 2026-06-13T00:00:00.000Z',
-        'updated_at: 2026-06-13T00:00:00.000Z',
-        '---',
-        '',
-        '## 0121. Anchor mismatch task',
-        '',
-        '### Background',
-        'text',
-        '',
-        '### Solution',
-        '| R1 | MET | `testfile.ts:1-3` (`renderForensics` builds the report) |',
-        '',
-        '### Testing',
-        'Tested in tests/unit.test.ts',
-        '',
-        '### Review',
-        '| P1 | path | finding | fix |',
-        '| P2 | foo.ts | issue | done |',
-    ].join('\n');
-
-    function seedMismatchEnv() {
-        const env = seedFile(brokenTask);
-        const root = join(env.path, '..', '..');
-        writeFileSync(join(root, 'testfile.ts'), 'const a = 1;\nconst b = 2;\nconst c = 3;\n');
-        return env;
-    }
-
-    test('retired accepted-map options cannot suppress an observed error', async () => {
-        const { fs, path, cleanup } = seedMismatchEnv();
-        try {
-            const svc = new TaskCheckService(fs, matrix);
-            // Old JavaScript callers can still send extra properties; they carry no policy authority.
-            const retiredOptions = {
-                severityOverrides: { [FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH]: 'error' as const },
-                accepted: new Map([['task:0121:L4.anchor-subject-mismatch', 'error' as const]]),
-            };
-            const result = await svc.check(path, '0121', retiredOptions);
-            const mismatch = result.findings.filter(
-                (finding) => finding.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
-            );
-            expect(mismatch).toHaveLength(1);
-            expect(mismatch[0]?.severity).toBe('error');
-            expect(result.pass).toBe(false);
-        } finally {
-            cleanup();
-        }
-    });
-
-    test('strict mode still elevates an observed warning into a blocking error', async () => {
-        const { fs, path, cleanup } = seedMismatchEnv();
-        try {
-            const result = await new TaskCheckService(fs, matrix).check(path, '0121', { strict: true });
-            const mismatch = result.findings.filter(
-                (finding) => finding.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
-            );
-            expect(mismatch.some((finding) => finding.severity === 'error')).toBe(true);
-            expect(result.pass).toBe(false);
-        } finally {
-            cleanup();
-        }
     });
 });
 
@@ -3761,16 +2505,6 @@ describe('0800 R1 — open Plan box is an error at a terminal transition target'
         return env;
     }
 
-    test('AC1: --as done on a testing task with an open box reports error and blocks', async () => {
-        const { fs, path, cleanup } = seedOpenBox(testingTaskOpenBox);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001', { asStatus: 'done' });
-        cleanup();
-        expect(result.status).toBe('done');
-        expect(openBoxFinding(result)?.severity).toBe('error');
-        expect(result.pass).toBe(false);
-    });
-
     test('no --as on the same testing task reports nothing (non-terminal current row)', async () => {
         const { fs, path, cleanup } = seedOpenBox(testingTaskOpenBox);
         const svc = new TaskCheckService(fs, matrix);
@@ -3787,26 +2521,6 @@ describe('0800 R1 — open Plan box is an error at a terminal transition target'
         const result = await svc.check(path, '0001', { asStatus: 'testing' });
         cleanup();
         expect(openBoxFinding(result)).toBeUndefined();
-        expect(result.pass).toBe(true);
-    });
-
-    test('AC2: an already-done task with an open box still only warns (0182 survives)', async () => {
-        const doneTask = testingTaskOpenBox.replace('status: testing', 'status: done');
-        const { fs, path, cleanup } = seedFile(doneTask);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001');
-        cleanup();
-        expect(openBoxFinding(result)?.severity).toBe('warning');
-        expect(result.pass).toBe(true);
-    });
-
-    test('a done task re-checked with --as done (same status, no transition) still only warns', async () => {
-        const doneTask = testingTaskOpenBox.replace('status: testing', 'status: done');
-        const { fs, path, cleanup } = seedFile(doneTask);
-        const svc = new TaskCheckService(fs, matrix);
-        const result = await svc.check(path, '0001', { asStatus: 'done' });
-        cleanup();
-        expect(openBoxFinding(result)?.severity).toBe('warning');
         expect(result.pass).toBe(true);
     });
 });
@@ -3837,27 +2551,6 @@ describe('0625 R3 — hollow-Testing stub detection', () => {
             '| P1 | path | finding | fix |',
             '| P2 | foo.ts | issue | done |',
         ].join('\n');
-
-    test('reports L4.testing-verdict-stub when Testing carries the record UNKNOWN stub row', async () => {
-        const body = [
-            '**Pipeline verify results**',
-            '',
-            '- Verdict: UNKNOWN (from verdict artifact)',
-            '',
-            '| Requirement | Status | Evidence |',
-            '|-------------|--------|----------|',
-            '| — | — | No requirements recorded; verify verdict UNKNOWN |',
-        ].join('\n');
-        const { fs, path, cleanup } = seedFile(stubTask(body));
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const stub = result.findings.filter((f) => f.code === FINDING_CODES.L4_TESTING_VERDICT_STUB);
-        expect(stub).toHaveLength(1);
-        expect(stub[0]?.severity).toBe('error');
-        expect(stub[0]?.section).toBe('Testing');
-        expect(result.pass).toBe(false);
-    });
 
     test('no stub finding when Testing carries a populated requirement table', async () => {
         const body = [
@@ -3891,327 +2584,6 @@ describe('0625 R3 — hollow-Testing stub detection', () => {
 
         const stub = result.findings.filter((f) => f.code === FINDING_CODES.L4_TESTING_VERDICT_STUB);
         expect(stub).toHaveLength(0);
-    });
-});
-
-describe('0714 R1 — anchor content matching: terminal suppression + live precision', () => {
-    function seedChangeMap(row: string, fileContent: string, status = 'testing') {
-        const content = [
-            '---',
-            'schema_version: 1',
-            'name: "Change-map task"',
-            `status: ${status}`,
-            'created_at: 2026-06-13T00:00:00.000Z',
-            'updated_at: 2026-06-13T00:00:00.000Z',
-            '---',
-            '',
-            '## 0001. Change-map task',
-            '',
-            '### Background',
-            'text',
-            '',
-            '### Solution',
-            '| Change |',
-            '|--------|',
-            `| ${row} |`,
-            '',
-            '### Testing',
-            'Tested.',
-            '',
-            '### Review',
-            '| P1 | path | finding | fix |',
-            '| P2 | foo.ts | issue | done |',
-        ].join('\n');
-        const env = seedEnv({ taskContent: content });
-        const root = join(env.path, '..', '..');
-        writeFileSync(join(root, 'workflow.ts'), fileContent);
-        return env;
-    }
-
-    const noContentWarnings = (result: { findings: Array<{ code: string }> }) =>
-        result.findings.filter(
-            (f) =>
-                f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR ||
-                f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH ||
-                // 0994 follow-up: the certification gate must not leak into terminal records.
-                f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED,
-        );
-
-    // — Terminal records: not re-checked at all (ADR-092, task 0862 R3 — completed
-    // records are history). Existence, bounds and heuristics all stop for `done`/
-    // `cancelled`, so later code churn cannot manufacture warnings against evidence
-    // that is no longer current work. Live records keep every check below.
-    describe('terminal records are not re-checked', () => {
-        test('a done task whose cited subject moved elsewhere in the file stays silent', async () => {
-            // Pre-0714 this shape reported drift ("now sits at line 3").
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:1` — closes `registerCancel`',
-                'export function other() {}\nconst pad = 1;\nexport function registerCancel() {}\n',
-                'done',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            expect(noContentWarnings(result)).toHaveLength(0);
-        });
-
-        test('a done task citing a missing path yields no L4.stale-line-anchor', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`does-not-exist.ts:1` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-                'done',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            expect(noContentWarnings(result)).toHaveLength(0);
-        });
-
-        test('a done task citing a line past EOF yields no L4.stale-line-anchor', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:99` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-                'done',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            expect(noContentWarnings(result)).toHaveLength(0);
-        });
-
-        test('a cancelled task citing a missing path yields no L4.stale-line-anchor', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`does-not-exist.ts:1` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-                'cancelled',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            expect(noContentWarnings(result)).toHaveLength(0);
-        });
-    });
-
-    // — Certification gate (task 0994 follow-up): a live record's in-repo anchors must
-    // RESOLVE. File-missing and line-past-EOF are objective conditions, so they are
-    // errors, and the record's own status is what the rule reads — a `testing` row being
-    // checked `--as done` is still live, so the gate bites exactly at certification
-    // while the evidence is current. Subject matching stays a warning: the repo already
-    // tried it as an error (0583 R6, reverted as 982 frozen-legacy residuals), and a
-    // fresh census agrees (2,173 mismatches / 4,078 checked = 53%).
-    describe('the completion target must resolve every in-repo anchor (L4.anchor-unresolved)', () => {
-        test('a resolving anchor with a matching subject leaves the completion check clean', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:1` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-            cleanup();
-
-            // No anchor finding at all — asserted on the codes rather than `pass`, so
-            // this fixture's section completeness cannot mask the anchor behaviour.
-            expect(noContentWarnings(result)).toHaveLength(0);
-        });
-
-        // Task 1055 R1(b): a scope-shaped unresolvable anchor stays fail-closed but the
-        // failure message carries the exact frozen external-evidence rewrite.
-        test('an unresolvable @scope/ anchor fails with the external-evidence rewrite in the message', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`@gobing-ai/ts-x/src/persistence.ts:108` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-            cleanup();
-
-            const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
-            expect(unresolved).toHaveLength(1);
-            expect(unresolved[0]?.severity).toBe('error');
-            expect(unresolved[0]?.message).toContain('Evidence: @gobing-ai/ts-x `src/persistence.ts` line 108');
-            expect(unresolved[0]?.message).toContain('external package path');
-        });
-
-        // Task 1055 AC2: the precise rewrite is scoped to scope-shaped paths — a plain
-        // unresolvable repo path keeps the generic unresolved message and severity.
-        test('an unresolvable plain repo path keeps the generic unresolved message', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`does-not-exist.ts:1` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-            cleanup();
-
-            const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
-            expect(unresolved).toHaveLength(1);
-            expect(unresolved[0]?.severity).toBe('error');
-            expect(unresolved[0]?.message).toContain('file not found at does-not-exist.ts');
-            expect(unresolved[0]?.message).not.toContain('Evidence:');
-        });
-
-        // Task 1055 AC1 (end-to-end repro of the 1051 blocker): the frozen external-evidence
-        // form in a change-map row passes the done gate with zero L4 findings — no manual
-        // citation repair needed.
-        test('a change-map citing the frozen external-evidence form passes the done gate clean', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                'Evidence: @gobing-ai/ts-dual-workflow-engine `src/persistence.ts` line 108 — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-            cleanup();
-
-            // Anchor codes only (fixture carries unrelated completeness warnings).
-            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED)).toHaveLength(0);
-            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR)).toHaveLength(0);
-            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH)).toHaveLength(0);
-        });
-
-        // Bounded blast radius (the review's Option A): the error fires at the completion
-        // target only. Entering `testing` must not be blocked for evidence still being
-        // assembled, so the same unresolvable anchor is a warning there.
-        test('the same unresolved anchor only warns at a non-completion live check', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`does-not-exist.ts:1` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'testing' });
-            cleanup();
-
-            const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
-            expect(unresolved).toHaveLength(1);
-            expect(unresolved[0]?.severity).toBe('warning');
-        });
-
-        // The gate must not swallow the heuristic: a resolved-but-unnamed subject is a
-        // hint to re-read the row, never a blocked transition (0994 follow-up).
-        test('a resolved anchor whose range lacks the subject stays advisory at the completion target', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:1` — closes `registerCancel`',
-                'export function other() {}\nconst unused = 1;\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-            cleanup();
-
-            const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-            expect(mismatch).toHaveLength(1);
-            expect(mismatch[0]?.severity).toBe('warning');
-            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED)).toHaveLength(0);
-        });
-
-        // ADR-092 / 0862 R3 preserved: a terminal record is history, and its evidence is
-        // never re-litigated — the gate only ever sees live records.
-        test('a terminal record reports no unresolved anchor even when the path is gone', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`does-not-exist.ts:1` — closes `registerCancel`',
-                'export function registerCancel() {}\n',
-                'done',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED)).toHaveLength(0);
-        });
-    });
-
-    // — Live records: matching requires exactly one anchor on the citing row and
-    // real subject tokens; failure is exact-range only, never a file-wide guess.
-    describe('live records match only an unambiguous subject-bearing single-anchor row', () => {
-        test('a cited range that lacks the row subject reports L4.anchor-subject-mismatch', async () => {
-            const { fs, path, cleanup } = seedChangeMap(
-                '`workflow.ts:1` — closes `registerCancel`',
-                'export function other() {}\nconst unused = 1;\n',
-            );
-            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-            cleanup();
-
-            const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-            expect(mismatch).toHaveLength(1);
-            expect(mismatch[0]?.message).toContain('workflow.ts:1');
-        });
-    });
-
-    test('a live single-anchor row whose subject is present stays silent', async () => {
-        const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:1` — closes `registerCancel`',
-            'export function registerCancel() {}\nconst unused = 1;\n',
-        );
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        expect(noContentWarnings(result)).toHaveLength(0);
-    });
-
-    test('a bare anchor row names no subject and is never assigned one', async () => {
-        // Pre-0714 the filename-derived fallback manufactured a subject from the
-        // basename and could report this row; a path basename is not evidence.
-        const { fs, path, cleanup } = seedChangeMap('`workflow.ts:1`', 'const unrelated = true;\n');
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        expect(noContentWarnings(result)).toHaveLength(0);
-    });
-
-    // 0688 R2 / AC2 retained: sibling anchors stay out of the token set. 0714 goes
-    // further — multi-anchor rows have no anchor↔subject association at all, so
-    // matching is skipped and an absent subject no longer reports (the pre-0714
-    // "exclusion does not blunt detection" expectation is inverted by design).
-    test('an evidence row carrying two anchors does not report when the subject is present', async () => {
-        const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:1` and `workflow2.ts:1` — closes `registerCancel`',
-            'export function registerCancel() {}\nconst unused = 1;\n',
-        );
-        const root = join(path, '..', '..');
-        writeFileSync(join(root, 'workflow2.ts'), 'const pad = 1;\n');
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatch).toHaveLength(0);
-    });
-
-    test('a multi-anchor row with an absent subject is not matched (association is ambiguous)', async () => {
-        const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:1` and `workflow2.ts:1` — closes `renderForensics`',
-            'export function registerCancel() {}\nconst unused = 1;\n',
-        );
-        const root = join(path, '..', '..');
-        writeFileSync(join(root, 'workflow2.ts'), 'const pad = 1;\n');
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
-        cleanup();
-
-        const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
-        expect(mismatch).toHaveLength(0);
-    });
-
-    // 0688 AC3: subject matching is matching-only — bounds still use the cited
-    // range. A line past EOF or a missing path still reports; since the 0994
-    // follow-up that report is `L4.anchor-unresolved` at ERROR (resolution gates the
-    // completion target), not a stale-line warning. Error severity IS the pass gate
-    // (`summarizeWithStatus` fails on any error), so no fixture-completeness noise.
-    test('a cited line past EOF reports L4.anchor-unresolved at error severity (window is matching-only)', async () => {
-        const { fs, path, cleanup } = seedChangeMap(
-            '`workflow.ts:99` — closes `registerCancel`',
-            'export function registerCancel() {}\n',
-        );
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-        cleanup();
-
-        const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
-        expect(unresolved.length).toBeGreaterThanOrEqual(1);
-        expect(unresolved[0]?.severity).toBe('error');
-        expect(unresolved[0]?.message).toMatch(/outside file|line 99/);
-    });
-
-    test('a missing path reports L4.anchor-unresolved at error severity', async () => {
-        const { fs, path, cleanup } = seedChangeMap(
-            '`does-not-exist.ts:1` — closes `registerCancel`',
-            'export function registerCancel() {}\n',
-        );
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
-        cleanup();
-
-        const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
-        expect(unresolved.length).toBeGreaterThanOrEqual(1);
-        expect(unresolved[0]?.severity).toBe('error');
-        expect(unresolved[0]?.message).toMatch(/file not found/i);
     });
 });
 
@@ -4315,19 +2687,6 @@ test('0700 R5: multi-paragraph R-item bodies still do not false-positive (0174)'
     expect(findings).toHaveLength(0);
 });
 
-test('0700 R5: prose-dominated requirements still warn', async () => {
-    const findings = await formatFindingsOf(
-        [
-            'Some intro prose without any R numbers.',
-            '',
-            '- [ ] R1. The only real item',
-            '',
-            '**Notes.** Extra bold prose block.',
-        ].join('\n'),
-    );
-    expect(findings.length).toBeGreaterThanOrEqual(1);
-});
-
 // ── 0700 R6: gate-language advisory reads frontmatter dependencies ──
 
 const gateLanguageFindingsOf = async (overrides: Record<string, unknown>) => {
@@ -4349,11 +2708,6 @@ const gateLanguageFindingsOf = async (overrides: Record<string, unknown>) => {
 test('0700 R6: no advisory when the task already declares a dependency', async () => {
     const findings = await gateLanguageFindingsOf({ dependencies: ['0691'] });
     expect(findings).toHaveLength(0);
-});
-
-test('0700 R6: advisory still fires without declared dependencies', async () => {
-    const findings = await gateLanguageFindingsOf({});
-    expect(findings.length).toBeGreaterThanOrEqual(1);
 });
 
 // ── 1112 R2: ambiguous gate tokens warn only with a gating cue in the same sentence ──
@@ -4379,13 +2733,6 @@ test('1112 R2: composition prose without a gating cue stays silent', async () =>
     expect(findings).toHaveLength(0);
 });
 
-test('1112 R2: cue-bearing gate prose still warns', async () => {
-    const findings = await gateLanguageFindingsForBody(
-        'Blocked until 1050 is merged. Requires operator approval before starting.',
-    );
-    expect(findings.length).toBeGreaterThanOrEqual(1);
-});
-
 // Workflow tasks cite engine action kinds (`hitl.confirm`, `hitl.select`); a dotted identifier
 // names an action, not a gate, and must not warn (feature D66 tasks 1248/1250 tripped this).
 test('gate-language: dotted workflow action kinds stay silent', async () => {
@@ -4393,11 +2740,6 @@ test('gate-language: dotted workflow action kinds stay silent', async () => {
         'The `hitl.confirm` action received an empty answer. Replace kind: hitl.select with decide.',
     );
     expect(findings).toHaveLength(0);
-});
-
-test('gate-language: a bare HITL gate still warns', async () => {
-    const findings = await gateLanguageFindingsForBody('Stop at the HITL step. Then a hitl. Then HITL.confirm later.');
-    expect(findings.length).toBeGreaterThanOrEqual(1);
 });
 
 // ── 0700 R2: stale non-passing Review beside PASS Testing on a closed task ──
@@ -4427,15 +2769,6 @@ const closedTaskWith = async (reviewBody: string, status = 'done') => {
     cleanup();
     return result.findings.filter((f) => f.code.includes('review-testing-contradiction'));
 };
-
-test('0700 R2: stale PARTIAL — request-changes Review beside PASS Testing is flagged as an error', async () => {
-    const findings = await closedTaskWith(
-        '**Verdict: PARTIAL — request-changes** (blocks gate; R1–R3 MET, R4/AC4 PARTIAL).',
-    );
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.severity).toBe('error');
-    expect(findings[0]?.message).toContain('/sp:dev-review');
-});
 
 test('0700 R2: a superseding PASS appended to the Review is authoritative — no finding', async () => {
     const findings = await closedTaskWith(

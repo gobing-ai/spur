@@ -9,13 +9,11 @@ import { registerTaskDiffstatCommand } from './diffstat';
 import { registerTaskGateCommand } from './gate';
 import { registerTaskListCommand } from './list';
 import { registerTaskMigrateCommand } from './migrate';
-import { registerTaskMigrateAnchorsCommand } from './migrate-anchors';
 import { registerTaskPathCommand } from './path';
 import { registerTaskPreflightCommand } from './preflight';
 import { registerTaskRecordCommand } from './record';
 import { registerTaskRefreshCommand } from './refresh';
 import { registerTaskRefreshRosterCommand } from './refresh-roster';
-import { registerTaskResidualCommand } from './residual';
 import { registerTaskResolveCommand } from './resolve';
 import { registerTaskRunLinkCommand } from './run-link';
 import { registerTaskScaffoldTestsCommand } from './scaffold-tests';
@@ -37,7 +35,6 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     registerTaskListCommand(task, context);
     registerTaskRefreshCommand(task, context);
     registerTaskMigrateCommand(task, context);
-    registerTaskMigrateAnchorsCommand(task, context);
     registerTaskRefreshRosterCommand(task, context);
     registerTaskBatchCreateCommand(task, context);
     // Script-absorption PR-5: batch driver + wrapup-pipeline steps.
@@ -53,7 +50,6 @@ export function registerTaskCommand(program: Command, context: CliContext): void
     registerTaskRunLinkCommand(task, context);
     registerTaskScaffoldTestsCommand(task, context);
     registerTaskGateCommand(task, context);
-    registerTaskResidualCommand(task, context);
     registerTaskDiffstatCommand(task, context);
 }
 

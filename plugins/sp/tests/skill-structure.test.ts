@@ -774,19 +774,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(implementBlock).toContain(`timeoutMs: ${varsImplementTimeout}`);
         expect(implementBlock).not.toContain(`timeoutMs: \${vars.stepTimeoutMs}`);
 
-        // 1109 R3 — the scoped anchor repair runs in the implement stage, after the format
-        // step and before the gate reads the tree, so the receipt is keyed to the final tree.
-        // Scoped and non-fatal by construction.
-        const anchorRepair = 'task migrate-anchors --wbs $wbs --json ; exit 0';
-        expect(implementBlock).toContain(anchorRepair);
-        expect(implementBlock.indexOf(anchorRepair)).toBeGreaterThan(
-            implementBlock.indexOf('command: \'sh -c "$formatCmd" ; exit 0\''),
-        );
-
-        // 1111 R1/R2 — the opt-in deferred gate policy. Failure cases first: the var defaults
-        // to "false" (no behavior change), the deferred mode is reachable only through the var,
-        // and the triage guards accept DEFERRED only while the var is "true".
-        expect(taskPipeline).toContain('deferQualityGate: "false"');
+        // The incremental gate is the default; the deferred mode is reachable only through the
+        // var, and the guards accept DEFERRED only while the var is "true".
+        expect(taskPipeline).toContain('deferQualityGate: "true"');
         const gateBlock = taskPipeline.split('  - id: gate\n')[1]?.split('  - id: remediate\n')[0] ?? '';
         expect(gateBlock).toContain('M=run;');
         expect(gateBlock).toContain('M=recheck;');
@@ -1576,28 +1566,6 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             '## Dependency Discipline',
         ]) {
             expect(lenses, `review-lenses.md must contain "${section}"`).toContain(section);
-        }
-    });
-
-    test('the answer-confidence contract (ADR-141) is stated on both answer lanes and denied nowhere', () => {
-        // ADR-141 revived the level for the two ANSWER artifacts only, with the gate deriving it from
-        // the answer's own rows. The machinery is pinned elsewhere (verify-answer-lint, residual-scan);
-        // this pin guards the half that failed silently once: the documents a verifier and a reviewer
-        // actually read must ask for the line, and nothing may still say the answer carries none.
-        const lanes = [
-            'plugins/sp/skills/code-verification/SKILL.md',
-            'plugins/sp/skills/code-verification/references/verdict-schema.md',
-            'plugins/sp/commands/dev-review.md',
-            'plugins/sp/skills/spur-dev/references/execution-workflow.md',
-        ];
-        const denial = /carries no `Confidence:` line|No confidence line exists|No confidence is read/i;
-        for (const rel of lanes) {
-            const raw = readFileSync(join(REPO_ROOT, rel), 'utf8');
-            expect(raw, `${rel} must state the ADR-141 level rule`).toMatch(
-                /Confidence:?\s*`?(HIGH|HIGH\|MEDIUM\|LOW)/,
-            );
-            expect(raw, `${rel} must not still deny the line`).not.toMatch(denial);
-            expect(raw, `${rel} must name the superseding decision`).toContain('ADR-141');
         }
     });
 

@@ -32,7 +32,6 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Downstream Board modules — embedded config, native React contributions and iframe URLs | [downstream-board-modules](design/downstream-board-modules.md) |
 | Data and output contracts | [data-output-contracts](design/data-output-contracts.md) |
 | Server bootstrap and scheduler contracts | [server-contracts](design/server-contracts.md) |
-| Desktop shell — Electron launch, project and binary env, packaging, IPC, title-bar overlay | [desktop-shell](design/desktop-shell.md) |
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |
 | Planning workflow and operation contracts | [planning-workflow-contracts](design/planning-workflow-contracts.md) |
 | Feature `deprecated` status — frozen lifecycle state and affected surfaces (F42) | [feature-deprecated-status](design/feature-deprecated-status.md) |
@@ -107,7 +106,6 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Execution deadlines and renewable job ownership | [execution-deadlines.md](design/execution-deadlines.md) |
 | System-event ingestion and presentation | [observabilities-module-polish.md](design/observabilities-module-polish.md) |
 | Task creation and readiness | [task-creation-readiness.md](design/task-creation-readiness.md) |
-| Task residual sweep | [task-residual-sweep.md](design/task-residual-sweep.md) |
 | Historical forensics measurement (2026-08-17; evidence, not a current contract) | [sqlite-forensics-token-time-per-step.md](design/sqlite-forensics-token-time-per-step.md) |
 | Gate bounds, verdict replay, and host-pause attribution (1319) | [gate-bounds-and-pause-attribution.md](design/gate-bounds-and-pause-attribution.md) |
 
@@ -476,13 +474,4 @@ pass (ADR-119). A candidate graph change is shadow-run and promoted-or-deleted
 on measured run history (ADR-076 amendment).
 
 See [contract detail](design/workflow-execution-economy.md).
-
-## Desktop shell
-
-Electron (`apps/desktop`) is a thin shell around the Board. It attaches to a verified live project
-server, or spawns one child server on `127.0.0.1`, and loads `/board`. It does not open SQLite. Launch mode, project root, binary
-override, the staged CLI companion for standalone-server history refresh, preload IPC, and the
-Windows/Linux window-controls overlay inset are the contract.
-
-See [contract detail](design/desktop-shell.md).
 

@@ -37,7 +37,7 @@ export const BUN_PRESET: Readonly<Record<ReservedAction, string>> = {
     'check-feature': 'bun run spur-check-feature',
     'lint-changed': 'bunx biome check {files}',
     'typecheck-changed': 'cd {workspace} && bun run typecheck',
-    'test-changed': 'cd {workspace} && bun test {paths}',
+    'test-changed': 'cd {workspace} && bun test --coverage --coverage-reporter=text {paths}',
 };
 
 /**

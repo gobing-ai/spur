@@ -326,9 +326,6 @@ esac`,
     // green gates print a one-line status, red gates print at most the last 40 lines, and the
     // durable log keeps everything — is asserted in packages/app/tests/services/quality-gate.test.ts.
 
-    // F96 residual sweep (0950, reordered 0983): scan/fold wired into record AFTER the
-    // `task record` box flips and before the done guard; settle/report at the terminal
-    // states; base capture is resume-safe.
     function shellCommands(stateId: string): string[] {
         return (
             PIPELINE.states
@@ -345,12 +342,9 @@ esac`,
         expect(cmd).toMatch(/\[ -f "?\.spur\/run\/\$wbs-base\.sha"? \] \|\|/);
     });
 
-    // 0983: the sweep left verify — a pre-record scan folds unticked-but-verdict-proven
-    // boxes (flipped only later by `task record`) and makes the done guard unreachable
-    // (0967). D65 1239: `verify` merged into `review`, which derives its verdict from the
-    // reviewer's own traceability and sweeps nothing; the deterministic close (record →
-    // sweep) lives in `done`'s onEnter.
-    test('review no longer sweeps; the verdict is derived from the reviewer answer (0983 R1)', () => {
+    // D65 1239: `verify` merged into `review`, which derives its verdict from the reviewer's own
+    // traceability.
+    test('the verdict is derived from the reviewer answer (0983 R1)', () => {
         const cmds = shellCommands('review');
         const verdictGate = (PIPELINE.states.find((s) => s.id === 'review')?.onEnter ?? []).find(
             (a) => a.kind === 'command.gate' && (a.options as { id?: string })?.id === 'review-verdict',
@@ -369,187 +363,9 @@ esac`,
         expect(answerFile).toContain('-review-answer.txt');
         expect(verdictArgs).toContain('-review-cert.md');
         expect(cmds.some((c) => c.includes('review-answer.txt') && c.includes('review-cert.md'))).toBe(true);
-        // The 1122 review-gate residual CHECK is not the sweep: no scan/fold may run here (a
-        // pre-record sweep folds unticked-but-proven boxes and makes the close unreachable).
-        expect(cmds.find((c) => c.includes('task residual') && / (scan|fold)\b/.test(c))).toBeUndefined();
         expect(cmds.find((c) => c.includes('+ {proof:'))).toBeUndefined();
     });
 
-    // 1254: the review stage produces TWO artifacts — the `## Review` section (finding
-    // dispositions -> deriveReviewConfidence) and the captured certification answer
-    // (requirement/AC evidence -> deriveVerifyConfidence). The two derivations legitimately
-    // disagree (PASS + executable AC + one carried P4 is answer HIGH, section MEDIUM), so the
-    // prompt teaches both lanes, refuses a second `Confidence:` line in the answer, and points
-    // at the owner that carries the exhaustive wording (the YAML prompt is under the 1000-char
-    // composition cap, ADR-115).
-    test('the review prompt teaches both confidence lanes and points at its owner (1254 R1-R3)', () => {
-        const dispatch = (PIPELINE.states.find((s) => s.id === 'review')?.onEnter ?? []).find(
-            (a) => a.kind === 'agent.run',
-        );
-        const input = String((dispatch?.options as { input?: string })?.input ?? '');
-        expect(input).toContain('deriveReviewConfidence');
-        expect(input).toContain('deriveVerifyConfidence');
-        expect(input).toContain("never the section's disposition level");
-        expect(input).toContain('has one `Confidence:');
-        expect(input).toContain('super-reviewer Output Format');
-        // The consumer vocabularies the prompt must spell out (lint parity for these tokens is
-        // pinned in packages/app/tests/workflow/task-pipeline-proof-chain.test.ts).
-        expect(input).toContain('| Req | Status | Evidence |');
-        expect(input).toContain('| AC | Status | Evidence Type | Evidence |');
-        expect(input).toContain('MET | PARTIAL | UNMET | N/A');
-        expect(input).toContain('static-ref');
-        // The named owner carries the full contract the prompt only summarises.
-        const reviewer = readFileSync(join(ROOT, 'plugins', 'sp', 'agents', 'super-reviewer.md'), 'utf8');
-        expect(reviewer).toContain('certifies as `Confidence: HIGH` in the answer');
-        expect(reviewer).toContain('keeps `Confidence: MEDIUM`');
-        expect(reviewer).toContain('| AC | Status | Evidence Type | Evidence |');
-        expect(reviewer).toContain('llm-judge | n/a');
-        expect(reviewer).toContain('confidence-duplicate');
-        expect(reviewer).toContain('task-local criterion is legal as-is');
-    });
-
-    test('the close sweeps after the box flips and before the done transition (0983 R1/R3)', () => {
-        const cmds = shellCommands('done');
-        const actions = PIPELINE.states.find((s) => s.id === 'done')?.onEnter ?? [];
-        const recordIdx = actions.findIndex(
-            (a) => a.kind === 'command.gate' && (a.options as { id?: string })?.id === 'task-record-close',
-        );
-        expect(recordIdx).toBeGreaterThanOrEqual(0);
-        const foldIdx = cmds.findIndex((c) => c.includes('task residual') && c.includes('fold'));
-        expect(foldIdx).toBeGreaterThanOrEqual(0);
-        // The record write runs first (it flips the verdict-proven boxes), then the sweep.
-        const syncIdx = cmds.findIndex((c) => c.includes('feature sync'));
-        expect(syncIdx).toBe(0);
-        expect(foldIdx).toBe(syncIdx + 1); // the sweep follows the sync, before the re-record
-        // Hard action: no exit-0 blanket — a scanner crash must fail the close closed.
-        expect(cmds[foldIdx]?.trim().endsWith('exit 0')).toBe(false);
-        // Scan then fold through `spur task residual` (PR-3); a non-zero exit fails the close.
-        expect(cmds[foldIdx]).toContain(
-            '$spurBin task residual "$wbs" scan --no-logo && $spurBin task residual "$wbs" fold',
-        );
-        expect(cmds[foldIdx]).not.toContain('script-root.json');
-        // The re-assert after the sweep is the verdict artifact (the review's own evidence): a
-        // fold-downgraded PARTIAL verdict can never certify done (0983 R3).
-        const reassertIdx = cmds.findIndex((c) => c.includes('jq -e') && c.includes('-verdict.json'));
-        expect(reassertIdx).toBeGreaterThan(foldIdx);
-        expect(cmds[reassertIdx]).toContain('PASS');
-        // ...and the done transition still runs AFTER it, so the stored status reflects the
-        // certified state.
-        const doneTransitionIdx = actions.findIndex(
-            (a) => a.kind === 'command.gate' && (a.options as { id?: string })?.id === 'task-done-transition',
-        );
-        expect(doneTransitionIdx).toBe(actions.length - 2); // followed only by the checkpoint
-    });
-
-    test('post-record sweep passes a flipped task and downgrades an open box (0983 R1/R2)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0983-sweep-'));
-        try {
-            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            // Script-absorption PR-3: the sweep is `spur task residual`, which reads the task
-            // in-process — seed a REAL task through the source CLI and hand that CLI as spurBin.
-            const spurCli = [process.execPath, join(ROOT, 'apps', 'cli', 'src', 'index.ts')];
-            const spurIn = (args: string[]): string => {
-                const run = Bun.spawnSync([...spurCli, ...args, '--no-logo'], {
-                    cwd: dir,
-                    stdout: 'pipe',
-                    stderr: 'pipe',
-                });
-                if (run.exitCode !== 0) throw new Error(`spur ${args.join(' ')} failed: ${run.stderr.toString()}`);
-                return run.stdout.toString();
-            };
-            mkdirSync(join(dir, 'docs', 'tasks'), { recursive: true });
-            const wbs = (
-                JSON.parse(spurIn(['task', 'create', '--skip-ready', 'Sweep fixture', '--json'])) as { wbs: string }
-            ).wbs;
-            const setPlan = (plan: string): void => {
-                writeFileSync(join(dir, 'plan.md'), plan);
-                spurIn(['task', 'update', wbs, '--section', 'Plan', '--from-file', join(dir, 'plan.md')]);
-            };
-            const fold = shellCommands('done').find((c) => c.includes('task residual') && c.includes('fold'));
-            if (fold === undefined) throw new Error('record sweep command missing');
-            const verdict = { wbs, verdict: 'PASS', requirements: [], checks: [] };
-            const spurBin = spurCli.join(' ');
-            // Pass path: post-record, every box flipped (record flipped the proven R/AC ones).
-            setPlan('- [x] plan step\n');
-            writeFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), `${JSON.stringify(verdict)}\n`);
-            const pass = runShell(fold, dir, { __runId: '0983', wbs, spurBin });
-            expect(pass.exitCode).toBe(0);
-            const kept = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), 'utf8')) as {
-                verdict: string;
-                checks: Array<{ name: string; status: string }>;
-            };
-            expect(kept.verdict).toBe('PASS');
-            expect(kept.checks.find((c) => c.name === 'residual-sweep')?.status).toBe('pass');
-
-            // Fail path: one open Plan box stays blocking and downgrades PASS → PARTIAL —
-            // no section becomes deferrable (0983 R2).
-            setPlan('- [ ] open plan step\n');
-            writeFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), `${JSON.stringify(verdict)}\n`);
-            const fail = runShell(fold, dir, { __runId: '0983', wbs, spurBin });
-            expect(fail.exitCode).toBe(0);
-            const folded = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${wbs}-verdict.json`), 'utf8')) as {
-                verdict: string;
-                checks: Array<{ name: string; status: string }>;
-            };
-            expect(folded.verdict).toBe('PARTIAL');
-            expect(folded.checks.find((c) => c.name === 'residual-sweep')?.status).toBe('fail');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('a downgraded verdict re-records Testing; a PASS sweep is a no-op (0983 R5)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0983-rerecord-'));
-        try {
-            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            const rerun = shellCommands('done').find((c) => c.includes('jq -r .verdict') && c.includes('task record'));
-            if (rerun === undefined) throw new Error('post-downgrade re-record step missing');
-            // Soft: the step always exits 0 — only the record → done guard decides.
-            expect(rerun.trim().endsWith('exit 0')).toBe(true);
-            // PASS sweep → the re-record never runs (canary spurBin untouched).
-            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), '{"verdict":"PASS"}\n');
-            const canary = executable(dir, 'spur-canary', 'echo invoked >> canary.log');
-            expect(runShell(rerun, dir, { wbs: '0983', spurBin: canary }).exitCode).toBe(0);
-            expect(existsSync(join(dir, 'canary.log'))).toBe(false);
-            // Downgraded sweep → re-record from the final artifact.
-            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), '{"verdict":"PARTIAL"}\n');
-            const result = runShell(rerun, dir, { wbs: '0983', spurBin: canary });
-            expect(result.exitCode).toBe(0);
-            expect(readFileSync(join(dir, 'canary.log'), 'utf8')).toContain('invoked');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('the repair hop appends the residual artifact to the gate log (F96 R3)', () => {
-        const cmd = shellCommands('remediate').find((c) => c.includes('-residuals.json'));
-        expect(cmd).toBeDefined();
-        expect(cmd).toContain('-test-gate.log');
-    });
-
-    test('done settles residuals as a soft action after certification (F96 R4)', () => {
-        const cmds = shellCommands('done');
-        const settleIdx = cmds.findIndex((c) => c.includes('task residual') && c.includes('settle'));
-        // D65 1239: the close is `done`'s onEnter, so settle now follows the sweep + the
-        // post-sweep verdict re-assert instead of following a record→done transition guard.
-        const reassertIdx = cmds.findIndex((c) => c.includes('jq -e') && c.includes('-verdict.json'));
-        expect(reassertIdx).toBeGreaterThan(-1);
-        expect(settleIdx).toBeGreaterThan(reassertIdx);
-        expect(cmds[settleIdx]?.trim().endsWith('exit 0')).toBe(true);
-    });
-
-    test('failed renders the residual report as a soft action (F96 R5)', () => {
-        const cmds = shellCommands('failed');
-        expect(cmds.length).toBeGreaterThan(0);
-        const report = cmds.find((c) => c.includes('task residual') && c.includes('report'));
-        expect(report).toBeDefined();
-        expect(report?.trim().endsWith('exit 0')).toBe(true);
-    });
-
-    // 0931 R5: parallel batches launch each pipeline with deferFeatureSync "true" so a task
-    // branch never touches feature files; the record-step sync shell must skip cleanly. The
-    // default "false" keeps sequential/inline behavior unchanged — 1004 R4 inlined the sync
-    // (repeated-BLOCKED suppression lives in the feature sync service now).
     test('deferFeatureSync "true" skips the record-step feature sync and notes the deferral (0931 R5)', () => {
         expect(PIPELINE.vars?.deferFeatureSync).toBe('false');
 
@@ -771,40 +587,5 @@ describe('0933 operator-question escalation', () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
-    });
-});
-
-// 0987: the standalone verify surfaces sweep in the same order as the pipeline `record`
-// state (0983) — `spur task record` flips the verdict-proven boxes first, then scan+fold,
-// then a downgrade-only re-record. A pre-record scan reads unticked-but-proven boxes and
-// folds a clean PASS to PARTIAL (0967); these pins fail if any surface regresses to that.
-describe('standalone verify residual-sweep ordering (0987 R4)', () => {
-    const PLUGIN = join(import.meta.dir, '..');
-    const surfaces = {
-        'dev-verify': join(PLUGIN, 'commands', 'dev-verify.md'),
-        'dev-verifyall': join(PLUGIN, 'commands', 'dev-verifyall.md'),
-        'code-verification': join(PLUGIN, 'skills', 'code-verification', 'SKILL.md'),
-    };
-
-    for (const [name, path] of Object.entries(surfaces)) {
-        test(`${name}: residual sweep is post-record, never "before spur task record"`, () => {
-            const text = readFileSync(path, 'utf8');
-            expect(text).not.toMatch(/before\s+`?spur task record/);
-            expect(text).not.toContain('scan + fold BEFORE record');
-            expect(text).toContain('0987');
-        });
-    }
-
-    test('code-verification: record precedes scan and fold; re-record only on a non-PASS verdict', () => {
-        const text = readFileSync(surfaces['code-verification'], 'utf8');
-        const block = text.slice(text.indexOf('# write .spur/run/<wbs>-verdict.json'));
-        const record = block.indexOf('spur task record <wbs> --verdict-file');
-        const scan = block.indexOf('spur task residual <wbs> scan');
-        const fold = block.indexOf('spur task residual <wbs> fold');
-        const rerecord = block.indexOf('= PASS ]');
-        expect(record).toBeGreaterThanOrEqual(0);
-        expect(scan).toBeGreaterThan(record);
-        expect(fold).toBeGreaterThan(scan);
-        expect(rerecord).toBeGreaterThan(fold);
     });
 });

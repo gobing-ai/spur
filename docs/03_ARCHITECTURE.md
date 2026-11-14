@@ -27,8 +27,7 @@ spur/
 ├── apps/
 │   ├── cli/         Primary surface — commander dispatch (ADR-014) + transport-wrapper commands
 │   ├── server/      Hono + oRPC OpenAPI handler; Bun + Cloudflare Worker entrypoints
-│   ├── web/         Static Astro/React Board; typed oRPC OpenAPI client
-│   └── desktop/     Electron shell; spawns the Bun server and loads /board (no SQLite)
+│   └── web/         Static Astro/React Board; typed oRPC OpenAPI client
 ├── packages/
 │   ├── app/         Application services — agents, coordination, fleets, history, planning, rules, workflows (ADR-021)
 │   ├── contracts/   oRPC transport contracts ONLY (health/DTOs) — @gobing-ai/spur-contracts
@@ -53,7 +52,6 @@ Runtime ownership (manifests also include build and test dependencies):
 apps/cli ────► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/server ─► packages/{app, config, contracts, domain} + engine/runtime facades
 apps/web ────► packages/contracts (oRPC) + domain status vocabulary
-apps/desktop ► verified project server or child `spur serve` + config gateway + type-only process DTOs — no server, domain, or SQLite import
 packages/app ───► packages/{config, contracts, domain} + engine packages
 packages/contracts ► packages/domain schema vocabulary (status/type enums, ID patterns) only
 packages/domain ► @gobing-ai/ts-db (persistence owner — §8.1)
@@ -176,17 +174,7 @@ Tasks and feature detail panels consume its additive contracted HTTP read and th
 subscription; commands are displayed without dispatch. Shape and failure behavior live in
 [planning records](design/planning-record-contracts.md#daily-readiness-read).
 
-### Desktop shell (`apps/desktop`)
-
-The Electron app is a window around the existing Board. It does not import the server, open
-SQLite, or ship a second UI build. It first discovers a live project owner’s loopback listener and verifies Spur health, the canonical project path and the unchanged ownership claim. Shared servers and their agents remain alive on desktop quit. With no live owner, in development it takes a free loopback port and spawns
-`bun apps/cli/src/index.ts serve --host 127.0.0.1 --port <port> --no-open --cwd <projectRoot>`.
-Packaged builds spawn the compiled `spur` binary the same way, or `dist/server/spur-server` with
-`PORT` and `HOST` when that CLI binary is absent. Web assets stay on the server's
-`resolveWebDistPath` search (a sibling `web/` directory next to the shipped binary). The selected server is
-the only SQLite owner (`<projectRoot>/.spur/spur.db`). Renderer IPC goes through the preload
-bridge; the page has Node integration disabled. A desktop drag strip turns on only when the
-preload sets `html[data-spur-desktop]`, so the browser and Cloudflare boards are unchanged.
+### Project server ownership
 
 Server startup acquires an application-owned atomic project lifetime claim before database/runtime boot, retains it until runtime shutdown and the separately owned lazy server-context database close complete, and uses the registry guard to refuse an already-live older project server. CLI serve dispatch bypasses the CLI database/runtime boot. The owned desktop child has a private inherited JSON IPC channel for startup errors, Windows graceful shutdown, and parent-disconnect cleanup. Renderer code cannot access this process channel.
 
@@ -249,9 +237,9 @@ and the unchanged `agent.run` step budgets. A deadline is `BLOCKED`/exit 2, neve
 writes no check receipt — a FAIL receipt keyed to the tree would arm the no-progress skip. Host
 pauses are measured by the resume (the only Spur-owned moment that sees both ends) into run metadata
 `hostPauses[]`, which `spur workflow profile`/`trace` read; a still-open pause past its budget gets a
-derived `stalled` label with the resume hint, never a status change. Verdict certification can
-re-execute the test files its rows cite (`spur task verdict --replay`, ≤5 files, 120 s each, outside
-the gate lock), downgrading an unearned PASS to PARTIAL. Contract:
+derived `stalled` label with the resume hint, never a status change. `spur task verdict --replay` can
+re-execute the test files a verdict's rows cite (≤5 files, 120 s each, outside the gate lock),
+downgrading an unearned PASS to PARTIAL; it is a manual flag — the pipeline does not pass it. Contract:
 [`gate-bounds-and-pause-attribution.md`](design/gate-bounds-and-pause-attribution.md).
 
 Two execution models behind one host (ADR-009):
@@ -1049,13 +1037,8 @@ Only `verified(D)` may cross the completion boundary, and the boundary re-captur
 before transition. This statically disqualified the former `task-pipeline2.yaml`: both its
 editing-capable verify action and post-PASS residual `agent.run` could mutate proof inputs before
 record. That graph was deleted rather than promoted (ADR-076, 2026-08-20). The canonical task
-pipeline now carries residual completeness under this rule (F96): a deterministic `residual-scan`
-runs inside `record`, after `spur task record` flips the verdict-proven boxes (0983), with evidence
-writes confined to `.spur/run/`; a blocking residual folds a failing `residual-sweep` check into the
-verdict and downgrades PASS to PARTIAL, so the `record → done` guard fails closed into
-`record → failed` and Testing is re-recorded from the final artifact. The bounded `verify → test-fix`
-loop stays reserved for a verifier non-PASS; follow-up filing and staging cleanup are confined to
-`done` entry, after certification. Shapes live in `docs/design/task-residual-sweep.md`.
+pipeline carries no post-verdict residual sweep (retired with the slim-harness refactor): a green
+gate receipt for the tree plus one reviewer verdict is the whole completion contract.
 
 Enforceable invariants:
 
@@ -1306,11 +1289,11 @@ unit:
   (`deferFeatureSync`), so their branches never touch feature files or the generated feature index;
   after the last integration the orchestrator runs the bounded sync plus one `feature refresh` per
   touched feature on the base ref and commits it once.
-- **One integrated full gate per batch (opt-in).** With `deferQualityGate: "true"`
-  (`--defer-gate` on a parallel — explicit or `--mode auto`-resolved — `/sp:dev-runall`), each task's `test` state runs
+- **Incremental gate per task, one full gate per feature or batch (default).** With `deferQualityGate: "true"`
+  (the pipeline default; `"false"` restores the full gate on every task), each task's `gate` state runs
   the light tier and records `DEFERRED` — never `PASS` — so the batch's one `full` gate runs on the
   integrated base ref over the merged slices, before the deferred corpus sync. The per-task
-  "review only after a green full gate" invariant therefore holds at batch scope; default off keeps
+  "review only after a green full gate" invariant therefore holds at feature/batch scope; `"false"` keeps
   the per-task `full` gate, and an integrated FAIL fails the batch without running the sync. ADR-124's
   2026-10-07 clarification owns the scope change; detail in
   [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.

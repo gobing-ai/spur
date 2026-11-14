@@ -212,43 +212,6 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(0);
         expect(lastMessage(output)).toContain("Updated section 'Solution'");
     });
-    test('update --section Solution with no file:line citation exits 3 without mutating (0510 R1)', async () => {
-        const cOut = createCapturedOutput();
-        await main(['task', 'create', '--skip-ready', 'R1 solution reject'], { cwd, output: cOut });
-        const wbs = createdWbs(cOut);
-        const taskPath = createdPath(cOut);
-        const before = await Bun.file(taskPath).text();
-
-        const bodyFile = join(cwd, 'sol-no-cite.md');
-        await Bun.write(bodyFile, 'Changed everything but forgot the citation.\n');
-
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile], {
-            cwd,
-            output,
-        });
-        expect(exitCode).toBe(3);
-        expect(output.errors.join('\n')).toContain('Solution must contain at least one `file:line` citation');
-        // Rejection happens before the write service: file content is byte-identical.
-        const after = await Bun.file(taskPath).text();
-        expect(after).toBe(before);
-    });
-    test('update --section Solution rejection is non-zero under --json too (0510 R1)', async () => {
-        const cOut = createCapturedOutput();
-        await main(['task', 'create', '--skip-ready', 'R1 solution reject json'], { cwd, output: cOut });
-        const wbs = createdWbs(cOut);
-
-        const bodyFile = join(cwd, 'sol-no-cite-json.md');
-        await Bun.write(bodyFile, 'No citation anywhere in this body.\n');
-
-        const output = createCapturedOutput();
-        const exitCode = await main(
-            ['task', 'update', wbs, '--section', 'Solution', '--from-file', bodyFile, '--json'],
-            { cwd, output },
-        );
-        expect(exitCode).toBe(3);
-        expect(output.errors.join('\n')).toContain('Solution must contain at least one `file:line` citation');
-    });
     test('update --append without --section exits 2 (1057)', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Append guard'], { cwd, output: cOut });
@@ -530,11 +493,14 @@ describe('spur task CLI', () => {
             await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
             await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
 
+            // The defect the done gate must see: a required section is missing (L2).
+            await Bun.write(taskPath, (await Bun.file(taskPath).text()).replace('### Review\n', ''));
+
             // Now attempt done WITHOUT --no-lifecycle: the adapter is unavailable (spy
             // forces bundledConfigRoot to null; SPUR_GLOBAL_RULES_DIR redirects the 0071
             // R5 global-fallback tier to a nonexistent dir so the adapter stays truly
             // unavailable regardless of what this machine has seeded under ~/.config/spur),
-            // so the inline gate must run `task check` and block the L3 citation error.
+            // so the inline gate must run `task check` and block the missing section.
             const output = createCapturedOutput();
             const exitCode = await main(['task', 'update', wbs, 'done'], {
                 cwd,
@@ -641,60 +607,6 @@ describe('spur task CLI', () => {
             // With the fix (strict:false), the L4 warning stays a warning → pass:true → done succeeds.
             expect(exitCode).toBe(0);
             expect(output.errors.every((e) => !e.includes('blocked'))).toBe(true);
-        } finally {
-            spy.mockRestore();
-        }
-    });
-    test('fallback done-gate still blocks a task with a hard L3 error (regression guard)', async () => {
-        // WHY: fixing Issue B (strict→strict-core) must not loosen the gate for real
-        // hard-core errors. L3 "Solution must contain at least one file:line citation"
-        // is a hard error even under --strict-core — it must still block done.
-        const spy = spyOn(configModule, 'bundledConfigRoot').mockReturnValue(null);
-        try {
-            const cOut = createCapturedOutput();
-            await main(['task', 'create', '--skip-ready', 'Hard L3 gate target'], { cwd, output: cOut });
-            const wbs = createdWbs(cOut);
-
-            // Plant Solution WITHOUT a file:line citation → L3 hard error.
-            // R1 (0510) rejects such a body at the CLI write seam, so plant it directly
-            // in the file so the done-gate regression still sees the real L3 defect.
-            const taskPath = createdPath(cOut);
-            const rawTask = await Bun.file(taskPath).text();
-            await Bun.write(
-                taskPath,
-                `${rawTask.replace(/\s*$/, '')}\n\n### Solution\n\nChanged everything but forgot the citation.\n`,
-            );
-            const testingBody = join(cwd, 'test-no-cite.md');
-            await Bun.write(testingBody, 'Tests pass. N/A.\n');
-            await main(['task', 'update', wbs, '--section', 'Testing', '--from-file', testingBody], {
-                cwd,
-                output: createCapturedOutput(),
-            });
-            const reviewBody = join(cwd, 'rev-no-cite.md');
-            await Bun.write(
-                reviewBody,
-                '| Priority | Status | Note |\n|----------|--------|------|\n| P1 | DONE | ok |\n',
-            );
-            await main(['task', 'update', wbs, '--section', 'Review', '--from-file', reviewBody], {
-                cwd,
-                output: createCapturedOutput(),
-            });
-
-            await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
-            await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
-            await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
-
-            // Attempt done: hard L3 error → fallback must block even with strict:false.
-            // (SPUR_GLOBAL_RULES_DIR redirect: same reason as the P3 backstop test above —
-            // keep the adapter genuinely unavailable post-0071/R5's global-fallback tier.)
-            const output = createCapturedOutput();
-            const exitCode = await main(['task', 'update', wbs, 'done'], {
-                cwd,
-                output,
-                env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
-            });
-            expect(exitCode).toBe(1);
-            expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
         } finally {
             spy.mockRestore();
         }
@@ -878,28 +790,13 @@ describe('spur task CLI', () => {
         expect(exitCode).toBe(1);
         expect(await readStatus(wbs)).toBe('testing');
     });
-    test('--no-lifecycle does not bypass the structural gate on wip→testing', async () => {
-        const cOut = createCapturedOutput();
-        await main(['task', 'create', '--skip-ready', 'bypass regression testing hop'], { cwd, output: cOut });
-        const wbs = createdWbs(cOut);
-        // Deliberately NOT filled — placeholder Requirements/AC are L3 errors.
-        await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
-        await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'update', wbs, 'testing', '--no-lifecycle'], { cwd, output });
-        expect(exitCode).toBe(1);
-        const blocked = output.errors.join('\n');
-        expect(blocked).toContain('Lifecycle transition blocked');
-        // 0808 R3: the message names the target-status probe and its error findings,
-        // so a passing plain check no longer reads as a contradiction.
-        expect(blocked).toContain(`spur task check ${wbs} --as testing`);
-        expect(blocked).toContain('L3.');
-        expect(await readStatus(wbs)).toBe('wip');
-    });
     test('--no-lifecycle --force-done together cannot land a structurally invalid task at done', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'bypass regression done hop'], { cwd, output: cOut });
         const wbs = createdWbs(cOut);
+        // A required section is missing — an L2 error at testing/done.
+        const taskPath = createdPath(cOut);
+        await Bun.write(taskPath, (await Bun.file(taskPath).text()).replace('### Solution\n', ''));
         await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: nullOutput() });
         await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: nullOutput() });
         const output = createCapturedOutput();

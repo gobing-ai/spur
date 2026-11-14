@@ -54,7 +54,7 @@ const PRE_CHANGE_PLAN_JSON = `[
   },
   {
     "id": "test:packages/app",
-    "cmd": "cd packages/app && bun test tests/services/quality-gate-receipt.test.ts"
+    "cmd": "cd packages/app && bun test --coverage --coverage-reporter=text tests/services/quality-gate-receipt.test.ts"
   }
 ]`;
 

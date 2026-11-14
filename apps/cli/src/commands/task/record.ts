@@ -57,12 +57,6 @@ export function registerTaskRecordCommand(task: Command, context: CliContext): v
                     transition: options.transition,
                     ...(checkGate !== undefined ? { checkGate } : {}),
                 });
-                // 0936 R1: scenario-key carry-forward warnings — loud on stderr in
-                // both modes (stderr never pollutes the --json stdout payload, which
-                // carries the same array on `scenarioWarnings`). Exit stays 0.
-                for (const warning of result.scenarioWarnings ?? []) {
-                    context.output.error(warning);
-                }
                 if (options.json) {
                     context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                 } else {

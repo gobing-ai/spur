@@ -412,9 +412,8 @@ loop?**
 
 - **External evidence** — evidence that lives outside `spur`'s working tree uses the frozen non-anchor
   form `origin`path`line N` (line OUTSIDE the backticks), e.g.
-  `@gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 481`. It is classified external, never
-  `L4.stale-line-anchor`. In-repo evidence MUST use the repo-relative backtick form `path:line` —
-  citing an in-repo file in the external form still reports (R1/R2). See `ac-style-guide.md` and the
+  `@gobing-ai/ts-llm-jsonl-importer`src/mappers.ts`line 481`. In-repo evidence uses the repo-relative backtick form `path:line`. Reviewer-facing convention —
+  nothing resolves anchors mechanically. See `ac-style-guide.md` and the
   `code-verification` skill for when each applies.
 
 **Why this is a rule and not a preference.** A decision filed as a task sits in `spur task list` and

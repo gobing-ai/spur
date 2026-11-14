@@ -2096,6 +2096,16 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
   batches never set the var; `--defer-gate` without `--mode parallel` is rejected. Rationale for
   reusing the light tier rather than skipping the `test` state: that state is also the proof-chain
   entry (ADR-071 digest capture), which deferral must not disturb.
+- **Amendment (2026-11-13, operator-directed):** the per-task default flips. Each task runs the
+  **incremental** gate — changed-scope lint and rules, typecheck of touched workspaces and their
+  dependents, related and sibling suites, and the per-file 90/90 coverage floor on changed files —
+  and the full project gate runs once per feature (`spur-check-feature`) or batch
+  (`deferQualityGate` defaults to `"true"`; `"false"` restores the full gate per task). Why: the
+  full gate cost minutes on every task and dominated pipeline wall time, while the receipt
+  binding already guarantees the integrated tree is fully gated before a feature closes. Rejected:
+  keeping the full gate per task with more caching (the fingerprint changes on every task, so
+  reuse rarely hits). The coverage floor is unchanged. The review-verdict step also stops
+  replaying tests: the gate receipt for the same tree is the test evidence.
 - **Retains:** ADR-119 (repo-wide checks stay feature-scoped), ADR-118 (stage outcomes).
 - **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.
 
@@ -2333,6 +2343,13 @@ owner split this entry established.
 - **Retains:** ADR-113 (layered resolution), ADR-125 (non-pausing, default-on-degrade decide and its
   `workflow.decideDecisionMaker` switch, unchanged until P1), ADR-117 (inline/subprocess parity).
 - **Detail:** [decision catalog](design/decision-catalog.md).
+- **Amendment (2026-11-13, operator-directed):** the task pipeline's review-lane decision
+  (`task-semantic-risk`) is retired from the catalog; the lane is a deterministic diffstat rule
+  (docs/tests-only → fast, sensitive path or >400 changed lines → safety, otherwise standard).
+  Why: with the decision maker off — the default — the decision always served its fallback, so the
+  fast lane was unreachable and every task paid for the full review. `failure-class` remains the
+  pipeline's only catalog decision. Rejected: turning the maker on by default (a model call per
+  task for a question the changed paths already answer).
 - **Amendment (2026-10-11 · task 1171 follow-up):** Owning the maker includes owning its process
   lifetime. A maker backend that holds resources outside the JS heap (today only `laya-local`,
   whose Python worker stays warm for the client's lifetime) MUST be released at the boundary of the
@@ -2474,6 +2491,15 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   answer states a level that the gate **derives from that answer's own rows and cross-checks**. Every
   other carrier listed above stays retired, including verdict-artifact fields and receipts.
 
+**Amendment (2026-11-13, operator-directed) — the answer-text gates are retired.** The decision
+named `evidence-citation`, `evidence-hedged` and the findings-disposition scan among the evidence
+gates read. Those lints, the anchor checks and the residual sweep are removed: they parsed
+free-form answer prose, failed work that was complete, and cost a retry round per failure. Done
+now requires a green gate receipt for the tree plus one reviewer verdict; task sections are prose
+that nothing parses. The binding invariant above is unchanged and now holds without exception for
+answers (ADR-141 is superseded). Rejected: keeping the lints as advisory warnings (the same
+re-import pressure this entry already records).
+
 ## ADR-139: SDLC Commands Resolve Through a Project-Bound Action Map
 
 - **Status:** Accepted (implemented) · **Date:** 2026-10-16 (implemented 2026-10-17) · **Feature:** A92
@@ -2564,6 +2590,11 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
 
 - **Status:** Accepted · **Date:** 2026-10-17 · **Supersedes:** the ADR-138 amendment's blanket
   "no HIGH|MEDIUM|LOW label anywhere" invariant, **for the two answer artifacts only**
+- **Superseded (2026-11-13, operator-directed):** retired by the ADR-138 amendment of the same
+  date. Verify and review answers carry no `Confidence:` line, nothing derives or cross-checks
+  one, and `answer-confidence.ts`, `verify-answer-lint` and the `review-contract` violations are
+  removed. Why: the level summarized rows that the retired answer lint had to parse first, so it
+  could not outlive that lint. The text below is history.
 - **Decision:** a verify answer and a review answer each carry one top-level
   `Confidence: HIGH|MEDIUM|LOW` line. The level is a **function of the answer's rows**, not a
   judgment; the gate recomputes it and rejects a disagreement.
@@ -2690,6 +2721,9 @@ has 11 fields, skill/agent output contracts carry no level, and `response.valida
   tree resolution, and shares the three-token vocabulary with the answer lanes.
 - **Retains:** ADR-138's invariant for every other surface; ADR-141's answer-lane derivation,
   rejections and owner module unchanged.
+- **Amendment (2026-11-13):** ADR-141 is superseded, so the changelog lane is the only surface
+  that states a derived level; the references above to the answer lanes and their owner module
+  are history. This entry's own decision is unchanged.
 - **Detail:** `repo-wide-tests/changelog-confidence.test.ts`;
   `plugins/sp/skills/spur-dev/references/dev-operations.md` §8 step 7.
 

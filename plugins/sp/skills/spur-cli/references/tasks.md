@@ -89,7 +89,6 @@ content up front — not to accumulate more into one oversized task.
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |
 | `refresh` | Re-scan the corpus and report counts (**`kanban.md` retired** — web Task Kanban is SSOT) | `--folder` `--json` |
 | `migrate` | One-time A17 corpus normalization pass | `--dry-run` `--folder` `--json` |
-| `migrate-anchors` | Qualify in-repo evidence anchors to repo-relative paths (0583 R1–R3); `--wbs` scopes to one task file (1109 R1); retargets scratch `done_reason` verdict pointers (1140) | `--wbs` `--dry-run` `--json` |
 | `refresh-roster <wbs>` | Regenerate a parent task's sub-task roster block in `## Plan` | `--folder` `--json` |
 | `batch-create` | Create many tasks from a validated JSON array | `--file <path>` `--skip-ready` `--agent <selector>` `--folder` `--json` |
 | `batch-plan <mode>` | Batch plan projection: `waves` / `order` (JSON on stdout; the batch driver's visible plan) | `--tasks <file>` `--concurrency <n>` |
@@ -105,13 +104,11 @@ content up front — not to accumulate more into one oversized task.
 | `verifyall-aggregate` | Aggregate per-task verify outcomes into a batch verdict (NOT-STARTED excluded) | `--from-file <path>` `--json` |
 | `scaffold-tests <wbs>` | Generate BDD test stubs from task Acceptance Criteria | `--file <path>` `--folder` `--json` |
 | `gate <wbs> <mode>` | Task-pipeline quality gate (`run`, `recheck`, `light`, `deferred`, `status`); mode-specific exits and git-tree-keyed receipts (see `sp:spur-check`) | `--cmd <c>` `--probe-cmd <c>` `--run-id <id>` |
-| `residual <wbs> <step>` | F96 residual sweep step (`scan`, `review-gate`, `fold`, `settle`, `report`) | `--root <dir>` `--tmp-dir <dir>` `--folder` |
 | `diffstat <wbs>` | Write the triage diffstat artifact against the run base (fails safe to `sensitive: true`) | — |
 
 Use only the flags listed for the selected verb. `batch-plan` emits JSON without `--json`;
-`wrapup`, `gate`, `residual` and `diffstat` use their operation-specific stdout/artifact contracts.
-`run-link`, `verifyall-aggregate` and `migrate-anchors` accept `--json` but no `--folder`;
-`residual` accepts `--folder` but no `--json`. Do not append shared flags to every command.
+`wrapup`, `gate` and `diffstat` use their operation-specific stdout/artifact contracts.
+`run-link` and `verifyall-aggregate` accept `--json` but no `--folder`. Do not append shared flags to every command.
 General exit codes are `0` success, `1` error, `2` invalid usage; consult the operation contract
 for soft gate modes and specialized refusal codes.
 
@@ -203,7 +200,7 @@ refused (ready-set resolver and pipeline preflight), and a live dependent is rep
 reported, never rewritten.
 
 Writes that stay **permitted** on a `deprecated` task (each edits the record rather than declaring
-the work resumable): `spur task record`, `migrate-anchors` and verdict writes, and
+the work resumable): `spur task record` and verdict writes, and
 `spur task update <wbs> --section <any>` — the section write lands and returns a freeze warning.
 
 **`--no-lifecycle`** suppresses lifecycle workflow *run record* creation (use during pipeline-driven

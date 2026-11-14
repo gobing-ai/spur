@@ -25,7 +25,7 @@ Decisions resolve first-wins across three layers:
 | `registered` | folders listed in config `decisions.paths` | Operator-added catalogs |
 | `shared` | `decisions/` under the bundled config root | Shipped catalogs (`config/decisions/` in-repo) |
 
-The bundled shared catalog ships `task-semantic-risk`, `failure-class`,
+The bundled shared catalog ships `failure-class`,
 `gate-evidence`, `idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and
 `maker-liveness` (the last served only by `spur decision status --probe`; no workflow references
 it). Layers win **per file basename** (a project `gates.yaml` replaces the shipped `gates.yaml`
@@ -84,8 +84,7 @@ row lands in `system_events` beside `decision.end`, on the same `run_id`, so the
 **Scoring one.** `decisions.outcomeMap` in config (project or global layer) holds Spur's reading of
 Spur's own artifacts — per decision id, which recorded outcomes count as correct for each served
 value (`String(value)` keys, so a yes/no decision uses `"true"`/`"false"`). The shipped defaults
-score `failure-class` (`fix` → `fixed`, `stop` → `not-fixed`) and `task-semantic-risk`
-(`"false"` → `none`/`p4`/`p3`, `"true"` → `p1`/`p2`).
+score `failure-class` (`fix` → `fixed`, `stop` → `not-fixed`).
 
 `spur decision status --reliability` then reports, per (decision × maker) group:
 
@@ -237,9 +236,7 @@ guards: [decision/lifecycle.md](decision/lifecycle.md) §1, §3.
 
 ```bash
 spur decision list --json | jq -r '.[].id'
-spur decision show task-semantic-risk               # inspect contract before serving
-spur decision run task-semantic-risk --param wbs=1093 \
-    --evidence .spur/run/1093-diffstat.json --evidence docs/tasks/1093_*.md --json
+spur decision show failure-class                    # inspect contract before serving
 spur decision run failure-class --param wbs=1093 \
     --evidence .spur/run/<runId>-test-output.txt    # redacted evidence -> instructions
 spur decision status --json | jq '.loadErrors'      # audit catalog health

@@ -40,38 +40,6 @@ interface VerifyVerdict {
 }
 ```
 
-## Answer confidence is derived and cross-checked (ADR-141, superseding F511 for answers)
-
-A verify answer carries exactly one top-level `Confidence: HIGH|MEDIUM|LOW` line — conventionally
-right after `Verdict:`, and legal anywhere at top level. The label is **not** a self-assessment: the
-lint recomputes it from the answer's own rows and rejects a disagreement.
-
-| Derived | When the answer's rows say so |
-| --- | --- |
-| `LOW` | the verdict is not PASS, or any requirement/AC row is PARTIAL/UNMET |
-| `HIGH` | PASS, and every AC row is MET on executable evidence (`test`/`command`; compounds allowed) |
-| `MEDIUM` | PASS with every AC MET, but at least one row rests on `static-ref`, `manual-review`, `llm-judge` or `N/A` |
-
-Rejections (`spur task verdict --from-answer`, exit 1, no artifact): `confidence-missing`,
-`confidence-duplicate`, `confidence-mismatch` — the last names both the stated and the derived level
-plus the clause the rows turn on. Derivation lives once, in
-`packages/app/src/services/answer-confidence.ts`; the review lane uses the same module for its own
-dispositions.
-
-Still retired and not revived by this: **verdict artifacts** carry no `confidence` field (the answer
-stays the record of truth, and a test pins the field's absence), feature-verification receipts keep
-no level (ADR-131, 1196), no operator `ackLowConfidence`-style var exists, and history-anatomy
-findings carry no per-finding grade. A verifier that can write a PASS can still write a wrong
-`HIGH` — which is exactly why the gate derives the level instead of trusting it.
-
-**A review run carries two answer artifacts, one `Confidence:` line each (1254).** The `## Review`
-section states the disposition-derived level (`deriveReviewConfidence`); the captured answer handed
-to `spur task verdict --from-answer` states the evidence-derived level (`deriveVerifyConfidence`)
-under the table above and carries exactly one `Confidence:` line. The two legitimately disagree — a
-PASS with executable AC and one carried P4 is section `MEDIUM`, answer `HIGH` — so the captured
-answer must not repeat the section's line (`confidence-duplicate` rejects the whole answer). The
-review stage's prompt owns that instruction; this schema owns the shape it must produce.
-
 ## Compatibility alias: `scenario` row key
 
 Task 0410 hardened the verdict reader. Producers SHOULD use the canonical `id` field for every
@@ -81,17 +49,7 @@ as a compatibility alias for the row identifier, with these rules:
 - Row with `id` only → canonical; accepted as-is.
 - Row with `scenario` only → accepted; normalized to `{ id: scenario, … }`.
 - Row with both `id` and `scenario` where they are EQUAL → `id` is authoritative; accepted.
-- Row with both `id` and `scenario` where they DIFFER or either value is not a string → **rejected**
-  (conflict); the rejected row
-  count and invalid fields surface as a bounded `L4.malformed-verdict-artifact` warning naming the
-  task WBS and artifact path.
-- Row missing both `id` and `scenario`, or missing `status`, or not an object → rejected and warned.
-
-Empty `requirements` / `acceptanceCriteria` arrays are valid and produce no warning. The required
-`requirements` array being absent, either coverage field being a non-array value, a missing artifact,
-malformed JSON, and a non-object JSON root are distinct diagnostic outcomes. Each emits one bounded
-`L4.malformed-verdict-artifact` warning per task/artifact whose message names the failure mode;
-optional `acceptanceCriteria` may remain absent.
+- Row with both `id` and `scenario` where they DIFFER, or a row missing both → ignored.
 
 Canonical producers and docs continue to use `id`. The `scenario` alias exists so older or
 third-party verdict emitters keyed on scenario titles are not silently dropped.
@@ -144,65 +102,28 @@ For answer files, emit a matching parseable table:
 
 **Authoring contract under the pipeline (0726 R3).** The verifier owns the answer file: write
 `Verdict: PARTIAL` first, append one complete row at a time, and replace the first verdict line only
-after every row is certified. `spur task verdict --from-answer` lints the file before deriving the
-verdict and rejects, with row-level diagnostics: missing/duplicate/unknown requirement IDs,
-AC ids that do not resolve to one accepted identity — a task AC checklist label or its declared
-`AC-N`/checklist-token alias, or a linked feature scenario title, in the ac-style-guide forms
-(exact/bare title, `Scenario:` prefix, bracket tags, `AC-N`); paraphrases and ambiguous aliases
-fail — invalid status (`MET | PARTIAL | UNMET` for requirements;
-`N/A` additionally allowed for AC), invalid evidence type (`test | command | static-ref |
-manual-review | llm-judge | n/a`, or a `+` compound), and empty evidence. Evidence cells that assert an
-external API/library claim without a same-cell citation are rejected with `evidence-citation` (see
-"Source citations for external claims" below). Interrupted runs keep the
-rows that pass the lint and complete only the missing IDs on retry.
+after every row is certified. `spur task verdict --from-answer` derives the verdict from that file;
+nothing lints the rows, so their accuracy is the verifier's responsibility. Vocabularies: status
+`MET | PARTIAL | UNMET` (`N/A` additionally allowed for AC); evidence type `test | command |
+static-ref | manual-review | llm-judge | n/a`, or a `+` compound. Interrupted runs keep the rows
+already written and complete only the missing IDs on retry.
 
-**Feature-credited AC ids are narrower than the lint's accepted set (task 0966 finding).** A row keyed
-by a bare checklist ordinal (`AC1`) passes the `spur task verdict` answer lint — it resolves to the task's AC
-checklist label — but `feature-check.rowMatchesScenario` credits a linked feature scenario only by the
-scenario's normalized title or its `AC-N` ordinal alias. Such a row therefore carries a PASS verdict
-while crediting no scenario, and the feature's `verifying → done` gate denies with
-`L4.scenario-unverified` / `L4.verdict-rows-match-no-scenario`. When the task has a linked feature,
-key each AC row `AC-N` (1-based scenario ordinal, hyphenated) or by the exact scenario title.
-A scenario-keyed row (`R3 — <title>`) ticks the task AC box whose line aliases that scenario
-(`- [ ] AC1 — R3 — <title>`) during `spur task record` (0996); a scenario key no AC line aliases
-ticks nothing, so alias every graduated scenario on its AC line.
+**Key AC rows so `record` can tick them.** A scenario-keyed row (`R3 — <title>`, `AC-N`, or the exact
+scenario title) ticks the task AC box whose line aliases that scenario (`- [ ] AC1 — R3 — <title>`)
+during `spur task record` (0996); a key no AC line aliases ticks nothing.
 
-**Concrete anchors only (task 0804 R9).** An evidence anchor must be a concrete existing `file:line`
-(or `file:start-end`) path. A glob or directory summary (`src/services/*.ts`, `the retry
-classifiers in task-pipeline.yaml`) is not an anchor: expand it into the specific cited files/ranges
-the run actually verified. Since 0804 R9 the checker ignores complete parsed citation spans before
-scanning for subjects, so a citation's filename (including snake_case paths) can never become a
-false subject — a real absent symbol, nonexistent file, or invalid range still reports.
-
-## Basename-only anchors are unresolved anchors (task 1110 R1)
-
-`spur task verdict --from-answer` accepts the citation *shape*, but the `--as done` gate resolves
-every Testing/Solution anchor against the repo root. A basename citation — `decision-events.ts:83`,
-`task.test.ts:42` — reports `L4.anchor-unresolved` at **error** and blocks
-`spur task update <wbs> done`, because the gate cannot tell which file the row meant. Write the
-repo-root-relative form from the first pass:
+**Concrete anchors only.** Cite a concrete existing repo-root-relative `file:line` (or
+`file:start-end`), never a glob, directory summary or basename. Nothing resolves anchors
+mechanically — a reviewer who cannot open the cited line treats the row as unproven.
 
 - Right: `packages/app/src/decision/decision-events.ts:83`, `apps/cli/tests/commands/task/verdict.test.ts:42`
 - Wrong: `decision-events.ts:83`, `../services/foo.ts:12`, `@gobing-ai/ts-x/src/persistence.ts:108`
   (a scoped package is never repo-relative — use the external named-origin form below)
 
-The pipeline's implement stage also runs a scoped `spur task migrate-anchors --wbs <wbs>` pass
-before the proof capture (task 1109), but it qualifies **unique** basenames only: an ambiguous
-basename (two tracked files share it) is reported and left untouched, and line drift and
-`L4.anchor-subject-mismatch` are never repaired by that pass — those remain the author's rows.
-
-A **workspace-relative** path fails the same way, and is the easier mistake to make because the
-command it came from is real. `(cd apps/cli && bun test tests/commands/builder/pr.test.ts)` is the
-right way to run the suite, but `tests/commands/builder/pr.test.ts` does not resolve from the repo
-root, so the AC-coverage guard reports `missing: <AC> — <path>` and refuses `done` (observed
-2026-10-16, task 1215 — the repair was a fresh verify pass over the whole answer). Cite both halves:
-the workspace-rooted command you ran, then the repo-root-relative anchor of the file it names
-(`apps/cli/tests/commands/builder/pr.test.ts`). One anchor per cited file per cell is enough.
-
 ## Source citations for external claims (task 1070)
 
 A Requirement/AC evidence cell that asserts an external API/library claim must carry a verifiable
-citation in the SAME cell, or lint rejects the row with `evidence-citation` (blocking derivation).
+citation in the SAME cell. Nothing machine-checks this — the reviewer enforces it.
 
 - Claim markers (closed set): a scoped-package mention (`@scope/name`), a `node_modules/` reference,
   a semver version claim (`x.y.z`), or a backticked function-call-shaped token (`` `name(args)` ``).
@@ -212,27 +133,6 @@ citation in the SAME cell, or lint rejects the row with `evidence-citation` (blo
 - The rule is cell-local: a citation in another row or a "receipt above" cross-reference does not
   satisfy it. Marker-free receipts (test counts, reviewed-log notes) need no citation. The check is
   presence-only — which citation proves which claim is not deterministically decidable.
-- The same two predicates (`hasClaimMarker` / `hasCitationForm` in
-  `packages/app/src/services/verify-answer-lint.ts`) gate the review report's findings table through
-  `spur task residual <wbs> review-gate` as the blocking `review-contract` category — one definition of
-  "external claim" and one set of accepted citation forms for both paths.
-
-## Hedged evidence is rejected on MET rows
-
-A MET row asserts the requirement is satisfied; evidence that hedges ("the guard likely prevents
-the leak") contradicts the assertion the row is making. The lint rejects such rows with
-`evidence-hedged`, naming the detected phrase, with two remedies: state the deterministic fact
-with a concrete anchor, or downgrade the row to PARTIAL (which is what suspected-but-unproven
-behavior actually is).
-
-- Detected phrases (closed set, word-anchored, case-insensitive): `likely`, `unlikely`,
-  `probably`, `presumably`, `apparently`, `seems/seeming/seemingly to`, `appears to`. Modal verbs
-  (`might`/`may`/`could`/`should`) are deliberately out of set — they are constant in remediation
-  prose and would drown the signal.
-- Only MET rows are scanned. Hedging a gap in an UNMET row ("the stale path likely still loads
-  the old bundle") is honest reporting and stays clean.
-- Citation spans are stripped before scanning, so a filename or test name containing a hedge
-  word (`likely-match.test.ts`) cannot fire.
 
 ## Checks evidence
 
@@ -245,14 +145,13 @@ Wave C verification can emit the following additive `checks[]` rows:
 | `evidence-rule-pass` | All behavior-bearing AC rows had executable evidence or were explicitly non-behavioral. |
 | `evidence-rule-failed` | One or more MET behavior-bearing AC rows lacked `test` / `command` evidence and were downgraded to PARTIAL. |
 | `cli-golden-path-present` | CLI-surface tasks supplied, or failed to supply, one golden-path command evidence row. |
-| `residual-sweep` | Post-verdict residual scan (F96): `fail` when blocking leftovers exist (P1–P3 findings, added diff markers, unchecked boxes); evidence lists blocking/deferrable/advisory/housekeeping counts plus blocking and deferrable item ids. A `fail` downgrades an otherwise-PASS verdict to PARTIAL via the fold step. |
 
 ## How the gate reads it
 
 In `task-pipeline.yaml` the `review` state writes this artifact: `spur task verdict <wbs>
---from-answer` lints the review answer and derives `.spur/run/<wbs>-verdict.json`. A fold step then
-writes `.spur/run/<wbs>-review.status` = PASS only when the typed verdict is PASS, the artifact's own
-`verdict` is PASS (`jq -r '.verdict // empty'`) and `spur task residual <wbs> review-gate` is clean.
+--from-answer` derives `.spur/run/<wbs>-verdict.json` from the review answer. A fold step then
+writes `.spur/run/<wbs>-review.status` = PASS only when the typed verdict is PASS and the artifact's
+own `verdict` is PASS (`jq -r '.verdict // empty'`).
 The `review → done` guard reads that status **and** the approval decision point's token:
 
 ```yaml

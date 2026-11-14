@@ -124,10 +124,5 @@ Current seam: architecture §11; historical choices: ADR-012.
 
 ## Deferred / under review
 
-The approved desktop Board shell integrates after the existing server and Board builds. Its
-release exit requires native macOS packaging and startup/shutdown validation; Windows and Linux
-packaging remain separate platform validation work. Scope: [01 PRD](01_PRD.md) §5.4;
-contract: [desktop shell](design/desktop-shell.md).
-
 Asset SSOT, remote/multi-tenant execution and mobile require scope reconfirmation in
 [01 PRD](01_PRD.md). Feature/task records own individual dispositions.

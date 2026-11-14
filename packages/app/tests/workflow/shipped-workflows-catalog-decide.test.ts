@@ -99,19 +99,10 @@ describe('shipped decision catalog content — frozen routing contract', () => {
 
     // The fallback IS the degraded routing value the guards consume — freeze it per decision.
     test('fallback values match the routing the retired inline defaults produced', () => {
-        // 1262 R5: `task-semantic-risk` fallback true routes the standard lane (the old
-        // `task-triage` `standard` fallback); R6 retired `review-failure-class` entirely.
-        expect(decisions['task-semantic-risk']?.fallback).toBe(true);
+        // The lane decision is deterministic now; only `failure-class` ships.
+        expect(decisions['task-semantic-risk']).toBeUndefined();
         expect(decisions['failure-class']?.fallback).toBe('fix');
         expect(decisions['task-triage']).toBeUndefined();
         expect(decisions['review-failure-class']).toBeUndefined();
-    });
-
-    // 1262 R5: the projection shell reads this decision's noul label `no` for the fast lane —
-    // a catalog edit renaming the outcome keys would silently kill that lane.
-    test('task-semantic-risk criteria keep the noul outcome vocabulary the projection reads', () => {
-        expect(Object.keys((decisions['task-semantic-risk']?.criteria ?? {}) as Record<string, string>).sort()).toEqual(
-            ['false', 'true'],
-        );
     });
 });

@@ -60,7 +60,7 @@ Use small path functions/constants at existing app seams where multiple callers 
 
 7. Scratch is volatile: `.spur/run/` may be absent in a later run, so no tracked source, document or task record cites it as evidence of record or as an input required to exist. Recorded citations (`done_reason`, Testing evidence, review pointers) name the durable owner or the tracked task Testing section, and executable source never lives under `.spur/run/`. A reader whose input is cross-run scratch recomputes it or refuses with a named reason; recomputable receipts follow ADR-124, so a cleaned receipt costs a re-run and never a wrong verdict. The `cited-directory:<name>` skip vocabulary below remains a compatibility allowance for historical citations, not a license for new ones.
 
-Recorded verdict discovery includes corpus sweep, suppression inputs, residual folding and wrap-up metrics. Residual folding atomically updates the canonical recorded verdict and mirrors it to the attempt copy consumed by the pipeline. A malformed canonical verdict remains authoritative rejection. Registered summaries may use their original scratch name only when retained source provenance proves the mapping; their envelope still binds the producer run/action.
+Recorded verdict discovery includes corpus sweep, suppression inputs and wrap-up metrics. A malformed canonical verdict remains authoritative rejection. Registered summaries may use their original scratch name only when retained source provenance proves the mapping; their envelope still binds the producer run/action.
 
 ## 4. Compatibility and migration
 

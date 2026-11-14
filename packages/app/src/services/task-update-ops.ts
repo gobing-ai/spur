@@ -11,7 +11,6 @@ import {
 import { FINDING_CODES } from './planning-check-base';
 import type { EntityRef, PlanningWriteService, WriteResult } from './planning-write-service';
 import { structuralFindings } from './structural-repair';
-import { GATE_LANGUAGE_SECTIONS, hasGateLanguage, hasSolutionFileLineCitation } from './task-check';
 import type { TaskFeatureLink } from './task-feature-link';
 import type { TaskFiles } from './task-files';
 import { isTaskFrozen, undeprecateTaskCommand } from './task-freeze';
@@ -396,19 +395,6 @@ export class TaskUpdateOps {
         // loop disappears. Gherkin-only AC bodies instead imply the task-local frontmatter.
         const normalization = normalizeTaskSection(sectionName, stripLeadingSectionHeader(raw, sectionName));
         const body = normalization.body;
-        // R1 (0510): an explicit Solution update must carry a recognized `file:line`
-        // citation. Reject before any write so an invalid authored Solution never lands
-        // on disk for a later lifecycle check to reject — the same predicate the L3
-        // checker uses, so write-time and `task check` behavior cannot drift. The write
-        // service is never reached, so file content, `updated_at`, and history are
-        // unchanged. Placeholder creation via task templates / `sections init` uses the
-        // `writeService.updateSection` path directly and is unaffected.
-        if (sectionName === 'Solution' && !hasSolutionFileLineCitation(body)) {
-            throw new SectionMutationError(
-                'invalid-solution',
-                'Solution must contain at least one `file:line` citation',
-            );
-        }
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
         // ADR-137 (S6): a section write is a RECORD write, not a status move, so it is
         // exempt from the deprecated freeze — but the operator gets a note on the result
@@ -441,23 +427,6 @@ export class TaskUpdateOps {
             const warnings = await this.checkAcSubsetWarning(filePath, body);
             if (warnings.length > 0) {
                 result = { ...result, warnings: [...(result.warnings ?? []), ...warnings] };
-            }
-        }
-
-        // Write-time mirror of L4.gate-language: same predicate and same
-        // `dependencies[]` exemption as `task check`, surfaced when the prose is
-        // authored instead of at the next check.
-        if ((GATE_LANGUAGE_SECTIONS as readonly string[]).includes(sectionName) && hasGateLanguage(body)) {
-            const deps = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData
-                ?.dependencies;
-            if (!Array.isArray(deps) || deps.length === 0) {
-                result = {
-                    ...result,
-                    warnings: [
-                        ...(result.warnings ?? []),
-                        `L4.gate-language: ${sectionName} contains gate language (HITL/approval/approved/merged/…) — say "operator answer"/"accepted", or model the gate as a frontmatter dependency`,
-                    ],
-                };
             }
         }
 

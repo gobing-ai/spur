@@ -264,9 +264,6 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const recordIdx = doneSteps.findIndex((a) => a.kind === 'command.gate');
         const syncIdx = doneSteps.findIndex((a) => String(a.options?.command ?? '').includes('feature sync'));
         expect(syncIdx).toBeGreaterThan(recordIdx);
-        // The completion contract is re-asserted after the residual sweep, on the verdict
-        // artifact (the review's own evidence) instead of the retired proof digest.
-        expect(cmds.some((c) => c.includes('jq -e') && c.includes('-verdict.json') && c.includes('PASS'))).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
@@ -320,10 +317,8 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const certifyIdx = reviewSteps.findIndex((a) => String(a.options?.command ?? '').includes('-review.status'));
         expect(certifyIdx).toBeGreaterThanOrEqual(0);
         expect(hitlIdx).toBeGreaterThan(certifyIdx);
-        // 1319 R5(b): the lint-retry token is decided in a second trailing shell, AFTER the answer
-        // fold, because removing the stale cert/answer earlier would let a fold read the previous
-        // visit's verdict. Order stays: ... hitl.confirm → answer fold → retry token.
-        expect(reviewSteps.slice(hitlIdx + 1).map((a) => a.kind)).toEqual(['shell', 'shell']);
+        // Order stays: ... hitl.confirm → answer fold.
+        expect(reviewSteps.slice(hitlIdx + 1).map((a) => a.kind)).toEqual(['shell']);
         expect(String(hitl?.options?.prompt ?? '')).toContain(tpl('wbs'));
         // 1236: answered through the decision-point responder, not a `pause: true` state.
         expect(String(JSON.stringify(hitl?.options?.decision ?? {}))).toContain('"mode":"evidence"');
@@ -363,7 +358,7 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             (c) =>
                 // Literal form and 0931's resolver form (`S=plugins/sp/scripts/x.ts; … bun "$S"`)
                 // both shell spur through a bundled script.
-                // (Script-absorption PR-3: the gate, diffstat and residual sweep are `spur task` verbs
+                // (Script-absorption PR-3: the gate and diffstat are `spur task` verbs
                 // now — they take `$spurBin` as the command itself, not a `--spur-bin` flag.)
                 c.includes('bun plugins/sp/scripts/') || c.includes('S=plugins/sp/scripts/'),
         );

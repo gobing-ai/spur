@@ -16,8 +16,6 @@
  */
 import type { SystemEventDao } from '@gobing-ai/spur-domain';
 import { SYSTEM_EVENT_CATALOG } from '../services/event-names';
-import type { ReviewFindingsOptions } from '../services/residual-scan';
-import { parseReviewFindings } from '../services/residual-scan';
 import { buildSystemEventEnvelope, systemEventProjectContext } from '../services/system-event-envelope';
 
 /** Outcome vocabulary that may be recorded — lowercase slug, bounded. */
@@ -106,15 +104,19 @@ const SEVERITY_ORDER = ['p1', 'p2', 'p3', 'p4'] as const;
  *
  * Resolved rows count on purpose (Q&A): a P2 the remediation later fixed was still in the diff,
  * and the question this outcome answers is "was the change risky?", not "is it still broken?".
- * `parseReviewFindings` keeps its own default (resolved rows dropped) — the option is explicit.
  */
 export function reviewSeverityOutcome(taskContent: string): string {
-    const options: ReviewFindingsOptions = { includeResolved: true };
-    const rows = parseReviewFindings(taskContent, options);
-    // `parseReviewFindings` only admits P1-P4 rows, so a parsed row always matches one of these.
-    for (const severity of SEVERITY_ORDER) {
-        const prefix = severity.toUpperCase();
-        if (rows.some((row) => row.priority.trim().toUpperCase().startsWith(prefix))) return severity;
-    }
-    return 'none';
+    // ponytail: naive scan — any `P1`–`P4` table cell in the Review section, header rows (the
+    // line above a `|---|` separator) skipped. Upgrade to a real table parse if lanes misroute.
+    const review = taskContent.split(/^### Review\b/m)[1]?.split(/^### /m)[0] ?? '';
+    const lines = review.split('\n');
+    const seen = new Set<string>();
+    lines.forEach((line, i) => {
+        if (!line.trimStart().startsWith('|') || /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] ?? '')) return;
+        for (const cell of line.split('|')) {
+            const match = /^\**(P[1-4])\b/i.exec(cell.trim());
+            if (match?.[1] !== undefined) seen.add(match[1].toLowerCase());
+        }
+    });
+    return SEVERITY_ORDER.find((severity) => seen.has(severity)) ?? 'none';
 }

@@ -1438,26 +1438,6 @@ describe('TaskService', () => {
             return path;
         }
 
-        test('rejects an authored Solution without a file:line citation before any write', async () => {
-            const created = await svc.create({ title: 'R1 invalid solution' });
-            const fs = createNodeFileSystem(root());
-            const before = await fs.readFile(created.ref.filePath);
-            const beforeUpdatedAt = MarkdownDocument.parse(before, 'task').frontmatterData?.updated_at;
-
-            const src = await writeSource('r1-sol-no-cite', 'Changed everything but forgot the citation.\n');
-            await expect(svc.updateSection(created.ref.id, 'Solution', src)).rejects.toMatchObject({
-                name: 'SectionMutationError',
-                code: 'invalid-solution',
-                message: 'Solution must contain at least one `file:line` citation',
-            });
-
-            // No mutation: file content and updated_at are unchanged.
-            const after = await fs.readFile(created.ref.filePath);
-            expect(after).toBe(before);
-            const afterUpdatedAt = MarkdownDocument.parse(after, 'task').frontmatterData?.updated_at;
-            expect(afterUpdatedAt).toBe(beforeUpdatedAt);
-        });
-
         test('accepts a Solution with a backticked path:line citation', async () => {
             const created = await svc.create({ title: 'R1 sol backtick' });
             const src = await writeSource(
@@ -2583,8 +2563,8 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         });
     });
 
-    // Write-time mirror of L4.gate-language and the late `--feature` attach path.
-    describe('updateSection / updateField — gate-language and late-attach warnings', () => {
+    // The late `--feature` attach path.
+    describe('updateSection / updateField — late-attach warnings', () => {
         const root = () => tasksDir.replace('/tasks', '');
 
         async function writeTmp(name: string, body: string): Promise<string> {
@@ -2593,34 +2573,6 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
             await fs.writeFile(path, `${body}\n`);
             return path;
         }
-
-        test('Background with gate vocabulary warns without blocking', async () => {
-            const created = await svc.create({ title: 'Gate words' });
-            const src = await writeTmp('gate', 'Blocked until HITL approval of the parent.');
-
-            const result = await svc.updateSection(created.ref.id, 'Background', src);
-
-            expect((result.warnings ?? []).join('\n')).toContain('L4.gate-language');
-        });
-
-        test('gate vocabulary stays silent once dependencies[] is declared', async () => {
-            const created = await svc.create({ title: 'Gate words deps' });
-            await svc.mutateDependencies(created.ref.id, 'set', ['0001']);
-            const src = await writeTmp('gate-deps', 'Blocked until HITL approval of the parent.');
-
-            const result = await svc.updateSection(created.ref.id, 'Background', src);
-
-            expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
-        });
-
-        test('1112 R2: write-time path stays silent for composition prose without a cue', async () => {
-            const created = await svc.create({ title: 'Gate words composition' });
-            const src = await writeTmp('gate-comp', 'The review steps merged back into one step.');
-
-            const result = await svc.updateSection(created.ref.id, 'Background', src);
-
-            expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
-        });
 
         test('attaching feature_id after the AC write re-runs the DD-09 subset warning', async () => {
             const fs = createNodeFileSystem(root());

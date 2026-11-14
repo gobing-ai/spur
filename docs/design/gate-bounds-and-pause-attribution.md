@@ -44,12 +44,12 @@ Invariants:
 
 ## 2. Verdict evidence replay (`spur task verdict --replay`)
 
-`--replay` is opt-in, off by default, and does exactly one thing: after the answer lint passes and
-the verdict is derived, it re-executes the **test files the verdict rows cite**.
+`--replay` is opt-in, off by default and not passed by `task-pipeline` (the gate already ran the
+tests for the tree); it does exactly one thing: after the verdict is derived, it re-executes the **test files the verdict rows cite**.
 
 | Rule | Value |
 | --- | --- |
-| Source of files | backticked `path:line` / `path:start-end` anchors in each derived row's `evidence` (the grammar `spur task migrate-anchors` qualifies), test files only (`*.test.*` / `*.spec.*`) |
+| Source of files | backticked `path:line` / `path:start-end` anchors in each derived row's `evidence`, test files only (`*.test.*` / `*.spec.*`) |
 | Cap | 5 distinct files, first-cited order |
 | Execution | the project's `test-changed` SDLC binding from the owning workspace (`cd <workspace> && bun test <path>`); a workspace whose `bunfig.toml` declares `coverageThreshold` (the repo root here) is **skipped with a reason**, because Bun applies that threshold per measured file and a passing suite can exit 1 with `0 fail` — Bun 1.4 has no CLI switch to turn it off |
 | Bound | 120 s per file, via `ProcessExecutor` with `timeout` (group-owned) |
@@ -63,22 +63,9 @@ deterministic, and "the cited test does not pass" is exactly the defect class th
 
 ## 3. Lint-shape repair inside `review`
 
-`spur task verdict` deletes `.spur/run/<wbs>-verdict-lint.txt` on every invocation and rewrites it
-(with `line N: message` rows) only on a lint failure. The `review` state:
-
-1. reads that file (capped at 600 chars) into the `reviewLint` var at the top of `onEnter`, so the
-   prompt carries the findings *and* the declared R/AC ids the lint names — empty on the happy path,
-   so the prompt pays nothing when nothing is wrong;
-2. writes a **run-scoped** retry token `.spur/run/<runId>-review-lint-retry` as the LAST `onEnter`
-   step (after the review fold and the operator-answer fold, because deleting the stale
-   `-review-cert.md` / `-review-answer.txt` earlier would make a fold read the previous visit's
-   verdict), and touches `-review-lint-retried` so the retry happens at most once per run;
-3. declares `review → review` after the denial route and before `retry-exhausted`: a lint retry is
-   not a repair attempt, so it does not consume the shared `test-fix-attempt` counter.
-
-A second lint failure leaves the token `NONE` and routes to `remediate` exactly as before. Exit codes
-are unchanged (lint failure and a real non-PASS both exit 1): changing them would change
-`command.gate`'s typed outcome for every caller. The distinguishing signal is the lint file.
+Retired with the slim-harness refactor: `spur task verdict --from-answer` no longer lints the
+answer, so there is no lint file, no `reviewLint` var and no `review → review` retry edge. A
+non-PASS verdict routes to `remediate` as any other failure.
 
 ## 4. Host-pause attribution and the stalled label
 

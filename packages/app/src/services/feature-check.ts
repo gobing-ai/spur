@@ -9,12 +9,10 @@
 
 import { dirname, join } from 'node:path';
 import {
-    checkAcCoverage,
     featureFrontmatterSchema,
     MarkdownDocument,
     normalizeTitle,
     parseChecklist,
-    parseFeature,
     stripAcFence,
     validateAcceptanceCriteria,
     WAYFINDER_MAP_TAG,
@@ -31,7 +29,6 @@ import {
     validateFeatureVerificationReceipt,
 } from '../workflow/feature-verification-receipt';
 import { resolveWorkflowDefinition } from '../workflow/workflow-resolver';
-import { computeAggregate, readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import { checkInventoryCoverage } from './feature-inventory';
 import {
     type CheckFindings,
@@ -45,9 +42,6 @@ import {
 import type { PlanningSnapshot } from './planning-snapshot';
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
 import { TaskLocator } from './task-locator';
-import { parseTesting } from './task-record';
-import { type AnswerLintFinding, lintVerifyAnswer } from './verify-answer-lint';
-import { aggregateVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -61,12 +55,6 @@ export type CheckFeatureFindings = CheckFindings;
 export type FeatureSectionMatrix = SectionMatrix;
 /** Per-status matrix entry defining required/optional/forbidden feature sections. */
 export type FeatureMatrixEntry = MatrixEntry;
-
-/**
- * 1153 R1: scenario-level gherkin tag marking a structural/placement scenario no task can own.
- * Only scenario-level tags exempt; a `Feature:`-level tag does not. Read via `parseFeature`.
- */
-const HOME_NODE_TAG = '@home-node';
 
 /** Result of a `spur feature check` validation run. */
 export interface CheckFeatureResult {
@@ -385,30 +373,13 @@ export class FeatureCheckService extends PlanningCheckService {
         }
 
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
-        const dogfoodDir =
-            options?.dogfoodDir ?? (options?.featuresDir ? join(dirname(options.featuresDir), 'dogfood') : undefined);
-        // Verdict artifacts live at <repo>/.spur/run (CLI cwd), not under docs/.
-        // When tasksDir is `docs/tasks*` (this monorepo layout), dirname(tasksDir)
-        // is `docs` — walking one extra level reaches the repo root. Callers that
-        // know the root should pass `runDir` explicitly.
-        const primaryTasksDir = options?.tasksDir ?? options?.tasksDirs?.[0];
-        const runDir = options?.runDir ?? (primaryTasksDir ? defaultVerdictRunDir(primaryTasksDir) : undefined);
         const taskScanDirs =
             options?.tasksDirs && options.tasksDirs.length > 0
                 ? options.tasksDirs
                 : options?.tasksDir
                   ? [options.tasksDir]
                   : [];
-        await this.runL4(
-            doc,
-            featureId,
-            effectiveStatus,
-            taskScanDirs,
-            dogfoodDir,
-            runDir,
-            findings,
-            options?.snapshot,
-        );
+        await this.runL4(doc, featureId, effectiveStatus, taskScanDirs, findings, options?.snapshot);
 
         // ── 1004 R1: requirement-inventory ↔ AC coverage (feature check --inventory) ──
         if (typeof options?.inventory === 'string') {
@@ -700,8 +671,6 @@ export class FeatureCheckService extends PlanningCheckService {
         featureId: string,
         status: string,
         tasksDirs: string[],
-        dogfoodDir: string | undefined,
-        runDir: string | undefined,
         findings: CheckFeatureFindings[],
         snapshot?: PlanningSnapshot,
     ): Promise<void> {
@@ -712,13 +681,6 @@ export class FeatureCheckService extends PlanningCheckService {
         // phase folder (active + archive) so edges in docs/tasks2 still count.
         let linkedTasks = 0;
         const incompleteTasks: string[] = [];
-        const linkedTaskAc: string[] = [];
-        const linkedTaskSolutions: string[] = [];
-        // Per-task linkage record for scenario-satisfaction classification (0340).
-        // A scenario is "covered" by a task when DD-09 normalized-title matching
-        // links them; "verified" only when that task is done AND its resolved
-        // evidence is an internally consistent PASS with a matching MET row.
-        const linkedTaskRecords: Array<{ wbs: string; status: string; ac: string; testing: string }> = [];
         if (snapshot !== undefined) {
             for (const task of snapshot.tasks) {
                 if (task.featureId !== featureId) continue;
@@ -726,15 +688,6 @@ export class FeatureCheckService extends PlanningCheckService {
                 if (task.status !== 'done' && task.status !== 'cancelled') {
                     incompleteTasks.push(task.wbs);
                 }
-                const tac = stripAcFence(task.document.getSection('Acceptance Criteria') ?? '');
-                if (tac.trim().length > 0) linkedTaskAc.push(tac);
-                linkedTaskSolutions.push(task.document.getSection('Solution') ?? '');
-                linkedTaskRecords.push({
-                    wbs: task.wbs,
-                    status: task.status,
-                    ac: tac,
-                    testing: task.document.getSection('Testing') ?? '',
-                });
             }
         } else {
             for (const tasksDir of tasksDirs) {
@@ -755,15 +708,6 @@ export class FeatureCheckService extends PlanningCheckService {
                             if (tStatus !== 'done' && tStatus !== 'cancelled') {
                                 incompleteTasks.push(wbs);
                             }
-                            const tac = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
-                            if (tac.trim().length > 0) linkedTaskAc.push(tac);
-                            linkedTaskSolutions.push(taskDoc.getSection('Solution') ?? '');
-                            linkedTaskRecords.push({
-                                wbs,
-                                status: tStatus,
-                                ac: tac,
-                                testing: taskDoc.getSection('Testing') ?? '',
-                            });
                         } catch {
                             // A task that references this feature but fails to parse is a
                             // dangling edge — surface it as a traceability warning.
@@ -794,49 +738,8 @@ export class FeatureCheckService extends PlanningCheckService {
                 section: 'Acceptance Criteria',
                 message: `Feature "${featureId}" has acceptance scenarios but no linked task (orphan scenarios)`,
             });
-        } else if (hasScenarios && linkedTaskAc.length > 0) {
-            // R2 coverage-based orphans (DD-09): feature scenarios covered by no
-            // linked task's AC — warnings only (a feature legitimately precedes
-            // full decomposition). A feature scenario is orphaned only when NO
-            // linked task covers it. `checkAcCoverage(featureAc, taskAc).orphans`
-            // = scenarios not covered by THAT task; the intersection across all
-            // tasks = scenarios covered by none. (Concatenating multiple `Feature:`
-            // blocks would only parse the first, so check per-task.)
-            // Start with all feature scenarios as orphans, then remove any covered
-            // by at least one task (set difference accumulated across tasks).
-            // 1153 R1: a scenario-level `@home-node` tag removes the scenario from the initial
-            // orphan set — it describes planning placement, not behaviour, so no task can cover it.
-            // Only the sweep changes: satisfaction (0340), verdict-row matching and the ratchet
-            // are untouched, so a tagged scenario a task does cover is classified as before.
-            const homeNodeScenarios = new Set(
-                (parseFeature(acBody.includes('Feature:') ? acBody : `Feature: acceptance\n${acBody}`)?.scenarios ?? [])
-                    .filter((s) => s.tags?.includes(HOME_NODE_TAG))
-                    .map((s) => s.name),
-            );
-            let stillOrphan = new Set(checkAcCoverage(acBody, '').orphans.filter((o) => !homeNodeScenarios.has(o)));
-            for (const taskAc of linkedTaskAc) {
-                if (stillOrphan.size === 0) break;
-                const orphanedByThisTask = new Set(checkAcCoverage(acBody, taskAc, parseChecklist(taskAc)).orphans);
-                // A scenario covered by THIS task drops out of the orphan set.
-                stillOrphan = new Set([...stillOrphan].filter((o) => orphanedByThisTask.has(o)));
-            }
-            for (const orphan of stillOrphan) {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_UNCOVERED_FEATURE_SCENARIO,
-                    severity: 'warning',
-                    section: 'Acceptance Criteria',
-                    message: `Feature scenario "${orphan}" is not covered by any linked task (DD-09)`,
-                });
-            }
         }
 
-        // 0340: Scenario-satisfaction classification. For each linked (non-orphan)
-        // scenario, check whether any covering task is `done` AND resolves to an
-        // internally consistent PASS with a matching MET row. Unverified
-        // scenarios emit L4.scenario-unverified (warning by default; --strict
-        // elevates to error). Orphans were already handled above and are excluded.
-        await this.checkScenarioSatisfaction(acBody, linkedTaskRecords, runDir, findings);
         // DD-13 verifying-readiness: a feature in (or entering) `verifying` should
         // have all its linked tasks done/cancelled. Pre-completion this is a
         // WARNING (non-blocking) so the operator is warned but not stopped
@@ -862,315 +765,6 @@ export class FeatureCheckService extends PlanningCheckService {
                 message: `Feature "${featureId}" is done but ${incompleteTasks.length} linked task(s) are not done/cancelled: ${incompleteTasks.join(', ')}`,
             });
         }
-
-        // ── P3: Dogfood requirement for self-referential workflow changes ──
-        // When a feature touches Spur's own workflow infrastructure, a dogfood
-        // artifact must exist in docs/dogfood/ before the feature can be marked
-        // done. Fires as a warning; elevated to error by --strict during the
-        // verifying→done lifecycle guard.
-        if (status === 'verifying' || status === 'done') {
-            const SELF_REFERENTIAL_PATTERNS = [
-                /\.spur\/workflows\//,
-                /plugins\/sp\//,
-                /packages\/app\/src\/services\/\w*workflow/i,
-                /packages\/app\/src\/workflow\//,
-            ];
-            const touchesSelfRef = linkedTaskSolutions.some((sol) =>
-                SELF_REFERENTIAL_PATTERNS.some((p) => p.test(sol)),
-            );
-            if (touchesSelfRef && dogfoodDir !== undefined) {
-                let hasDogfood = false;
-                try {
-                    // 0700 R4: the gate must read repository state, not
-                    // machine-local files. docs/dogfood/ is gitignored, so a
-                    // readdir decided feature readiness from evidence a fresh
-                    // clone does not have (41 features passed on untracked
-                    // reports). The tracked ledger docs/dogfood/INDEX.md is the
-                    // evidence source when present; readdir stays as the
-                    // fallback for a ledger-less tree.
-                    let entries: string[];
-                    try {
-                        const ledger = await this.fs.readFile(`${dogfoodDir}/INDEX.md`);
-                        entries = ledger.split('\n');
-                    } catch {
-                        entries = await this.fs.readDir(dogfoodDir);
-                    }
-                    // R5b (0625): anchor the match to a filename segment, not a raw
-                    // substring. `f.includes('A3')` matched any filename merely
-                    // CONTAINING `A3` — an unrelated report (or a report for another
-                    // feature with A3 as an incidental substring) cleared this gate.
-                    // The id must be delimited by `-`/`.`/`_`/boundary, so a filename
-                    // segment must equal the feature id (feature ids are `[A-Z][0-9]*`,
-                    // so the delimiters cannot be alphanumeric).
-                    const segmentRe = new RegExp(`(^|[^A-Za-z0-9])${featureId}([^A-Za-z0-9]|$)`, 'i');
-                    hasDogfood = entries.some((f) => segmentRe.test(f));
-                } catch {
-                    // Directory doesn't exist — no dogfood artifact.
-                }
-                if (!hasDogfood) {
-                    findings.push({
-                        layer: 'L4',
-                        code: FINDING_CODES.L4_DOGFOOD_MISSING,
-                        severity: 'warning',
-                        section: 'Dogfood',
-                        message:
-                            `Feature "${featureId}" touches self-referential workflow infrastructure ` +
-                            'but no dogfood artifact exists in docs/dogfood/. ' +
-                            'Run the dogfood workflow and write a report before marking the feature done.',
-                    });
-                }
-            }
-        }
-    }
-
-    /**
-     * 0340: Classify each linked (non-orphan) AC scenario as verified or
-     * unverified against resolved per-task evidence. A scenario is verified when
-     * ANY covering task is `done` AND its artifact-first, tracked-Testing-fallback
-     * evidence is an internally consistent PASS with a matching MET row. Otherwise
-     * the scenario is linked-but-unverified → L4.scenario-unverified.
-     */
-    private async checkScenarioSatisfaction(
-        featureAc: string,
-        linkedTasks: Array<{ wbs: string; status: string; ac: string; testing: string }>,
-        runDir: string | undefined,
-        findings: CheckFeatureFindings[],
-    ): Promise<void> {
-        if (linkedTasks.length === 0 || runDir === undefined) return;
-        const parsed = parseFeature(featureAc);
-        if (parsed === null) return;
-        if (parsed.scenarios.length === 0) return;
-
-        // Index AC-N aliases (1-based ordinal) so verdict rows keyed by either
-        // normalized title or AC-N ordinal both match. 0958 R1: the `R<n>` label
-        // additionally enables the embedded-reference branch of `rowMatchesScenario`.
-        const scenarioAliases = scenarioKeys(parsed.scenarios);
-
-        // Build covering-task sets per scenario using DD-09 normalized matching.
-        // A scenario is "covered" by a task when that task's AC contains a
-        // scenario whose normalized title matches (checkAcCoverage semantics).
-        const covers: Record<string, Array<{ wbs: string; status: string }>> = {};
-        for (const sc of scenarioAliases) {
-            const linked: Array<{ wbs: string; status: string }> = [];
-            for (const task of linkedTasks) {
-                if (taskCoversScenario(task.ac, sc)) {
-                    linked.push({ wbs: task.wbs, status: task.status });
-                }
-            }
-            covers[sc.title] = linked;
-        }
-
-        // 0410 R3/R4: pre-read each unique done-task artifact once, emit a bounded
-        // L4.malformed-verdict-artifact finding per artifact with rejected rows,
-        // then verify scenarios against the cache instead of re-reading files.
-        const doneWbs = new Set<string>();
-        for (const sc of scenarioAliases) {
-            for (const task of covers[sc.title] ?? []) {
-                if (task.status === 'done') doneWbs.add(task.wbs);
-            }
-        }
-        const artifacts = new Map<string, ParsedVerdictArtifact>();
-        // F93 (0672): the tracked `## Testing` section is the durable copy — thread it in
-        // with zero extra I/O (the same already-parsed task document supplied `ac`).
-        const testingByWbs = new Map(linkedTasks.map((t) => [t.wbs, t.testing]));
-        for (const wbs of doneWbs) {
-            const artifact = await this.readVerdictArtifact(runDir, wbs);
-            artifacts.set(wbs, artifact);
-            // F93 (0672): supersedes 0451 R7's "missing artifact ⇒ unverified for this
-            // coverer only" path. Outcome unchanged (missing still never reads as
-            // verified), but missing now consults the tracked `## Testing` section
-            // first via parseTesting (0671). The artifact stays authoritative whenever
-            // it exists; the fallback never merges and never tiebreaks.
-            const missing = artifact.diagnostics.artifactError === 'artifact is missing';
-            if (missing) {
-                const parsed = parseTesting(testingByWbs.get(wbs) ?? '', wbs);
-                if (parsed.kind === 'valid') {
-                    artifacts.set(wbs, {
-                        path: 'tracked ## Testing section',
-                        verdict: parsed.verdict.verdict,
-                        computedVerdict: aggregateVerifyVerdict({
-                            requirements: parsed.verdict.requirements,
-                            acceptanceCriteria: parsed.verdict.acceptanceCriteria,
-                        }),
-                        requirements: parsed.verdict.requirements.map((r) => ({ id: r.id, status: r.status })),
-                        acceptanceCriteria: parsed.verdict.acceptanceCriteria.map((r) => ({
-                            id: r.id,
-                            status: r.status,
-                        })),
-                        diagnostics: {
-                            rejectedRowCount: 0,
-                            invalidFields: [],
-                            arrayStates: { requirements: 'populated', acceptanceCriteria: 'populated' },
-                        },
-                    });
-                } else {
-                    // Evidence was never durably recorded — a named state that reads as
-                    // neither verified nor failed (R3/R4). Distinct from
-                    // L4.scenario-unverified ("we looked and it was not verified") and
-                    // from L4.malformed-verdict-artifact (artifact exists, corrupt).
-                    findings.push({
-                        layer: 'L4',
-                        code: FINDING_CODES.L4_EVIDENCE_NOT_RECOVERABLE,
-                        severity: 'warning',
-                        section: 'Acceptance Criteria',
-                        message:
-                            `Task ${wbs} has no verdict artifact and its tracked ## Testing section ` +
-                            `carries no recoverable coverage evidence (${parsed.kind}); its evidence ` +
-                            'predates durable recording, so it is neither verified nor failed.',
-                    });
-                }
-            }
-            const diagnosticParts: string[] = [];
-            if (artifact.diagnostics.artifactError !== undefined) {
-                // Only flag as malformed when the artifact file exists but is corrupt.
-                // A missing artifact is expected for archive tasks and was already
-                // offered the tracked-Testing fallback above. Only an artifact that
-                // exists but is corrupt belongs in this diagnostic.
-                if (artifact.diagnostics.artifactError !== 'artifact is missing') {
-                    diagnosticParts.push(artifact.diagnostics.artifactError);
-                }
-            }
-            if (artifact.diagnostics.rejectedRowCount > 0) {
-                diagnosticParts.push(`${artifact.diagnostics.rejectedRowCount} rejected coverage row(s)`);
-            }
-            if (artifact.diagnostics.invalidFields.length > 0) {
-                diagnosticParts.push(`invalid fields: ${artifact.diagnostics.invalidFields.join(', ')}`);
-            }
-            if (diagnosticParts.length > 0) {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_MALFORMED_VERDICT_ARTIFACT,
-                    severity: 'warning',
-                    section: 'Acceptance Criteria',
-                    message:
-                        `Task ${wbs} verdict artifact (${artifact.path}) is invalid: ${diagnosticParts.join('; ')}. ` +
-                        'Rows were not silently dropped — verify the artifact uses canonical `id` ' +
-                        '(or `scenario` alias) and `status` fields.',
-                });
-            }
-        }
-
-        // 0700 R3 (AC5): promote the verdict-time "no verdict row matches any
-        // scenario" stderr warning to a finding here at the feature done gate,
-        // where it can be acted on, instead of re-warning on every `task
-        // verdict` derivation. Warning by default; --strict (the done gate)
-        // elevates it to error, so done-task evidence keyed to nothing in the
-        // feature cannot advance silently.
-        for (const [taskWbs, artifact] of artifacts) {
-            if (artifact.diagnostics.artifactError === 'artifact is missing') continue;
-            const rows = [...artifact.requirements, ...artifact.acceptanceCriteria];
-            if (rows.length === 0) continue;
-            const anyMatch = rows.some((r) => scenarioAliases.some((sc) => rowMatchesScenario(r.id, sc)));
-            if (!anyMatch) {
-                // 0958 R5: name the offending ids (bounded: first 5 + count) and every
-                // accepted key form, so the repair is derivable from the finding alone.
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO,
-                    severity: 'warning',
-                    section: 'Acceptance Criteria',
-                    message:
-                        `Task ${taskWbs} verdict evidence (${artifact.path}) carries ${rows.length} row(s) ` +
-                        `matching no scenario of this feature — offending row ids: ${summarizeRowIds(rows.map((r) => r.id))}; ` +
-                        `key rows by ${VERDICT_SCENARIO_KEY_FORMS} (repair: /sp:dev-verify ${taskWbs})`,
-                });
-            }
-        }
-
-        for (const sc of scenarioAliases) {
-            const linked = covers[sc.title] ?? [];
-            if (linked.length === 0) continue; // orphan — already handled above
-            const verified = this.isScenarioVerified(sc, linked, artifacts);
-            if (!verified) {
-                findings.push({
-                    layer: 'L4',
-                    code: FINDING_CODES.L4_SCENARIO_UNVERIFIED,
-                    severity: 'warning',
-                    section: 'Acceptance Criteria',
-                    message:
-                        `Feature scenario "${sc.title}" is linked but unverified: covering task(s) ` +
-                        `${linked.map((l) => l.wbs).join(', ')} have no PASS verdict with MET requirement`,
-                });
-            }
-        }
-    }
-
-    /**
-     * A scenario is verified when ANY covering task is `done` AND its resolved
-     * evidence shows both stored and recomputed PASS with a matching
-     * requirement **or acceptanceCriteria** row of status MET. Matching id =
-     * normalized scenario title, optional
-     * `Scenario: ` prefix, or AC-N alias.
-     *
-     * 0410: reads from the pre-built artifact cache (no per-scenario file I/O).
-     */
-    private isScenarioVerified(
-        sc: ScenarioKey,
-        linked: Array<{ wbs: string; status: string }>,
-        artifacts: Map<string, ParsedVerdictArtifact>,
-    ): boolean {
-        for (const task of linked) {
-            if (task.status !== 'done') continue;
-            const artifact = artifacts.get(task.wbs);
-            if (artifact === undefined) continue;
-            if (artifact.verdict !== 'PASS' || artifact.computedVerdict !== 'PASS') continue;
-            const rows = [...artifact.requirements, ...artifact.acceptanceCriteria];
-            const matched = rows.find((r) => rowMatchesScenario(r.id, sc));
-            if (matched !== undefined && matched.status === 'MET') return true;
-        }
-        return false;
-    }
-
-    /**
-     * Read and parse `<runDir>/<wbs>-verdict.json` (0410: hardened parser).
-     *
-     * Returns accepted rows plus structured diagnostics for missing/unreadable
-     * artifacts, malformed JSON/root values, absent/invalid arrays, and rejected
-     * rows so callers can emit one bounded finding per artifact.
-     *
-     * Row acceptance (R1/R2): each row yields a canonical `{ id, status }` when:
-     * - `status` is a string AND
-     * - `id` is a string (canonical) OR `scenario` is a string (compatibility alias)
-     * - When both `id` and `scenario` are present and differ → rejected (R2 conflict)
-     */
-    private async readVerdictArtifact(runDir: string, wbs: string): Promise<ParsedVerdictArtifact> {
-        const loaded = await readGuardVerdictArtifact(this.fs, runDir, wbs);
-        if (loaded.artifact === undefined) {
-            return {
-                path: loaded.path,
-                requirements: [],
-                acceptanceCriteria: [],
-                diagnostics: {
-                    artifactError: loaded.readError ?? 'artifact is missing',
-                    rejectedRowCount: 0,
-                    invalidFields: [],
-                    arrayStates: { requirements: 'unavailable', acceptanceCriteria: 'unavailable' },
-                },
-            };
-        }
-        // SAFETY: readGuardVerdictArtifact returns the artifact only when the
-        // JSON root parsed; every field is re-validated by decodeVerdictRows
-        // below, so the unknown-shaped cast cannot smuggle a bad row through.
-        const parsed = loaded.artifact as unknown as {
-            verdict?: unknown;
-            requirements?: unknown;
-            acceptanceCriteria?: unknown;
-        };
-        const req = decodeVerdictRows(parsed.requirements, 'requirements', true);
-        const ac = decodeVerdictRows(parsed.acceptanceCriteria, 'acceptanceCriteria', false);
-        return {
-            path: loaded.path,
-            verdict: typeof parsed.verdict === 'string' ? parsed.verdict : undefined,
-            computedVerdict: computeAggregate(loaded.artifact),
-            requirements: req.rows,
-            acceptanceCriteria: ac.rows,
-            diagnostics: {
-                artifactError: typeof parsed.verdict === 'string' ? undefined : 'invalid `verdict` field',
-                rejectedRowCount: req.rejected + ac.rejected,
-                invalidFields: [...new Set([...req.invalidFields, ...ac.invalidFields])],
-                arrayStates: { requirements: req.state, acceptanceCriteria: ac.state },
-            },
-        };
     }
 }
 
@@ -1220,115 +814,6 @@ export async function findOtherP0InStatus(
     return null;
 }
 
-/** Canonical coverage row after verdict parsing (0410). */
-interface VerdictRow {
-    id: string;
-    status: string;
-}
-
-/** Structured result of reading a verdict artifact (0410). */
-interface ParsedVerdictArtifact {
-    path: string;
-    verdict?: string;
-    computedVerdict?: string;
-    requirements: VerdictRow[];
-    acceptanceCriteria: VerdictRow[];
-    diagnostics: {
-        artifactError?: string;
-        rejectedRowCount: number;
-        invalidFields: string[];
-        arrayStates: {
-            requirements: VerdictArrayState;
-            acceptanceCriteria: VerdictArrayState;
-        };
-    };
-}
-
-type VerdictArrayState = 'unavailable' | 'absent' | 'empty' | 'invalid' | 'populated';
-
-interface DecodedVerdictRows {
-    rows: VerdictRow[];
-    rejected: number;
-    invalidFields: string[];
-    state: VerdictArrayState;
-}
-
-/**
- * Decode a verdict coverage array into accepted canonical rows plus diagnostics
- * for rejected rows (0410 R1–R5).
- *
- * Acceptance rules per row:
- * - `status` must be a string.
- * - `id` (canonical) or `scenario` (compatibility alias) must be a string.
- * - Both present and equal → `id` wins (canonical).
- * - Both present and differ → rejected (conflict, R2).
- * - Neither → rejected (missing identifier).
- *
- * `sectionName` labels rejected-row diagnostics for the finding message.
- */
-function decodeVerdictRows(source: unknown, sectionName: string, required: boolean): DecodedVerdictRows {
-    if (source === undefined) {
-        return {
-            rows: [],
-            rejected: 0,
-            invalidFields: required ? [`${sectionName} (missing array)`] : [],
-            state: 'absent',
-        };
-    }
-    if (!Array.isArray(source)) {
-        return {
-            rows: [],
-            rejected: 0,
-            invalidFields: [`${sectionName} (expected array)`],
-            state: 'invalid',
-        };
-    }
-    const rows: VerdictRow[] = [];
-    const invalidFields = new Set<string>();
-    let rejected = 0;
-    for (const r of source) {
-        if (typeof r !== 'object' || r === null) {
-            rejected++;
-            invalidFields.add(`${sectionName}[non-object]`);
-            continue;
-        }
-        const row = r as { id?: unknown; scenario?: unknown; status?: unknown };
-        const hasId = Object.hasOwn(row, 'id');
-        const hasScenario = Object.hasOwn(row, 'scenario');
-        const idStr = typeof row.id === 'string';
-        const scStr = typeof row.scenario === 'string';
-        const statusOk = typeof row.status === 'string';
-        if (!statusOk) {
-            rejected++;
-            invalidFields.add(`${sectionName}.status`);
-            continue;
-        }
-        if (hasId && hasScenario) {
-            if (idStr && scStr && row.id === row.scenario) {
-                rows.push({ id: row.id as string, status: row.status as string });
-            } else {
-                rejected++;
-                invalidFields.add(`${sectionName}.id/scenario conflict`);
-            }
-            continue;
-        }
-        if (hasId && idStr) {
-            rows.push({ id: row.id as string, status: row.status as string });
-        } else if (hasScenario && scStr) {
-            rows.push({ id: row.scenario as string, status: row.status as string });
-        } else {
-            rejected++;
-            invalidFields.add(`${sectionName}.id/scenario missing`);
-        }
-    }
-    return {
-        rows,
-        rejected,
-        invalidFields: [...invalidFields],
-        state: source.length === 0 ? 'empty' : 'populated',
-    };
-}
-
 /**
  * Resolve `<repo>/.spur/run` from a tasksDir that may be nested under `docs/tasks*`.
  * Prefer an explicit `runDir` from the CLI (cwd-based) when available.
@@ -1356,16 +841,6 @@ interface ScenarioKey {
     label?: string;
 }
 
-/** Build the scenario-key list both the done gate and the verdict gap check match rows against. */
-function scenarioKeys(scenarios: Array<{ name: string }>): ScenarioKey[] {
-    return scenarios.map((s, i) => ({
-        title: s.name,
-        normalized: normalizeTitle(s.name),
-        alias: `AC-${i + 1}`,
-        label: scenarioRLabel(s.name),
-    }));
-}
-
 /**
  * 0958 R1: a scenario's `R<n>` label — the leading id `stripScenarioPrefixes` removes
  * (`@gobing-ai/spur-domain` bdd/coverage), so bracket tags and a `Scenario:` prefix come off
@@ -1384,92 +859,6 @@ function scenarioRLabel(title: string): string | undefined {
     } while (t !== previous);
     const m = /^R(\d+)\b/.exec(t);
     return m?.[1] === undefined ? undefined : `R${m[1]}`;
-}
-
-/**
- * 0958 R1: explicit embedded scenario references accepted in a verdict row id — `(feature R3)`,
- * `(covers: R3 …)`, `[R3]` — case-insensitive and bounded to these delimiters. `covers:` may be
- * followed by a title, so only the leading `R<n>` token is captured. A bare `R<n>` substring
- * anywhere else in the row never matches (AC3): incidental prose cannot over-credit.
- */
-const EMBEDDED_SCENARIO_REF_RES = [/\((?:feature|covers:)[ \t]*(R\d+)\b[^)]*\)/gi, /\[(R\d+)\]/gi] as const;
-
-/** Extract `R<n>` labels (uppercased) from the delimited embedded-reference forms of a row id. */
-function embeddedScenarioRefs(id: string): string[] {
-    const refs: string[] = [];
-    for (const re of EMBEDDED_SCENARIO_REF_RES) {
-        for (const m of id.matchAll(re)) {
-            if (m[1] !== undefined) refs.push(m[1].toUpperCase());
-        }
-    }
-    return refs;
-}
-
-/**
- * True when a verdict row id names the same scenario (title, `Scenario:` prefix, bracket tag,
- * AC-N alias, or an explicit embedded reference — `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`).
- *
- * `normalizeTitle` handles the title forms — including bracket tags since 0398 R7. The alias
- * comparison is a separate, non-normalized path, so it strips the same prefixes itself; otherwise
- * `[doc-only] AC-3` would fail to match the alias `AC-3` even though the title path is tolerant.
- */
-function rowMatchesScenario(id: string, sc: ScenarioKey): boolean {
-    const stripped = id
-        .replace(/^\[[^\]]*\]\s*/, '')
-        .replace(/^Scenario:\s*/i, '')
-        .replace(/^\[[^\]]*\]\s*/, '')
-        .trim();
-    // 0561 R1: a verdict row id may carry a trailing Gherkin body in parentheses
-    // (e.g. `Scenario: R4 — <title> (Given … / Then …)`). Strip the whole greedy
-    // trailing parenthetical — including any nested pairs and line breaks — as an
-    // additional candidate form, so an embedded body cannot fail the scenario gate.
-    // Additive only: the raw/stripped forms above are still evaluated, so a title
-    // that legitimately ends in `(...)` still matches (R2).
-    const bodyStripped = stripped.replace(/\s*\([\s\S]*\)\s*$/, '').trim();
-    // 0958 R1: the embedded-reference branch runs over the RAW id — bodyStripped removes the
-    // trailing parenthetical that carries `(feature R3)`, so this cannot run after that strip.
-    // Scenarios without an `R<n>` label keep the branch off.
-    if (sc.label !== undefined && embeddedScenarioRefs(id).includes(sc.label)) return true;
-    return (
-        normalizeTitle(id) === sc.normalized ||
-        normalizeTitle(stripped) === sc.normalized ||
-        normalizeTitle(bodyStripped) === sc.normalized ||
-        id === sc.alias ||
-        stripped === sc.alias ||
-        bodyStripped === sc.alias
-    );
-}
-
-/**
- * True when at least one verdict row id names a scenario in the given AC body — by normalized title,
- * `Scenario:` prefix, bracket tag, or `AC-N` ordinal.
- *
- * `task verdict` warns when this returns false for the linked feature's AC: rows keyed by bare `R1`-style
- * ids parse and derive a verdict but are credited by NO scenario at the feature `verifying → done` gate,
- * surfacing only as opaque `L4.scenario-unverified` findings there (dogfood 2026-08-15, feature I3).
- */
-export function verdictRowsMatchScenarios(rows: Array<{ id: string }>, ac: string): boolean {
-    const scenarios = indexScenarioAliases(ac);
-    if (scenarios.length === 0 || rows.length === 0) return true;
-    return rows.some((row) => scenarios.some((sc) => rowMatchesScenario(row.id, sc)));
-}
-
-/**
- * 0936 R1: the feature scenario keys (AC scenario titles) matched by at least one
- * **MET-status** verdict row — the carry-forward set a `record` re-transcription
- * must preserve. Same `rowMatchesScenario` + AC-N alias indexing the satisfaction
- * gate uses (`checkScenarioSatisfaction`), so record-time matching stays
- * feature-check's single normalization implementation.
- *
- * MET-rows-only (0936 Q&A): a scenario whose previous match was not MET was never
- * verified, so there is nothing to lose — comparing all rows would warn on
- * non-load-bearing churn. Empty rows / no scenarios → `[]`.
- */
-export function matchedScenarioKeys(rows: Array<{ id: string; status: string }>, ac: string): string[] {
-    const scenarios = indexScenarioAliases(ac);
-    if (scenarios.length === 0 || rows.length === 0) return [];
-    const met = rows.filter((r) => r.status === 'MET');
-    return scenarios.filter((sc) => met.some((r) => rowMatchesScenario(r.id, sc))).map((sc) => sc.title);
 }
 
 /** Feature scenario titles in `AC-<n>` order (index n-1) — the ordinal space verdict `AC-<n>` rows key into. */
@@ -1508,41 +897,6 @@ function indexScenarioAliases(ac: string): ScenarioKey[] {
     return keys;
 }
 
-/**
- * The done gate's covering decision (`checkScenarioSatisfaction`): the task covers the scenario
- * when that scenario is NOT an orphan of the task's AC — the same synthetic-feature
- * `checkAcCoverage` call, shared so the gate and the 0958 verdict gap check cannot disagree.
- */
-function taskCoversScenario(taskAc: string, sc: ScenarioKey): boolean {
-    const taskCov = checkAcCoverage(`Feature: x\n  Scenario: ${sc.title}\n    Given x`, taskAc, parseChecklist(taskAc));
-    return !taskCov.orphans.includes(sc.title);
-}
-
-/**
- * 0958 R5: bounded offending-row-id summary — the first 5 backticked ids plus a `(+N more)`
- * count, so a wide table cannot flood the finding while every id stays reachable.
- */
-export function summarizeRowIds(rowIds: readonly string[]): string {
-    const ids = rowIds.map((id) => `\`${id}\``);
-    const listed = ids.slice(0, 5);
-    const extra = ids.length - listed.length;
-    return extra > 0 ? `${listed.join(', ')} (+${extra} more)` : listed.join(', ');
-}
-
-/**
- * 0958 R2/R5: the accepted verdict-row key forms, shared verbatim by the done-gate finding and
- * the `task verdict` gap error so the two cannot drift apart.
- */
-export const VERDICT_SCENARIO_KEY_FORMS = 'scenario title, AC-N alias, (feature R<n>), (covers: R<n>), or [R<n>]';
-
-/** A covering task's derived verdict rows name no scenario of its linked feature (0958 R2). */
-export interface VerdictScenarioKeyGap {
-    /** The linked feature id whose scenarios no row names. */
-    featureId: string;
-    /** Every derived row id — the gap fires only when no row names a scenario. */
-    offendingIds: string[];
-}
-
 /** Filesystem port and folder paths the gap check resolves the task and its linked feature through. */
 export interface VerdictScenarioKeyGapDeps {
     fs: FileSystem;
@@ -1554,66 +908,6 @@ export interface VerdictScenarioKeyGapDeps {
     featuresDir?: string;
 }
 
-/**
- * 0958 R2: prevention at `spur task verdict --from-answer` — fail BEFORE any evidence is
- * certified when a covering task's rows key to no scenario of its linked feature. The done
- * gate already detects this (`L4.verdict-rows-match-no-scenario`), but by then the task is
- * done and the proof bracket is bound; the recorded repair was a manual re-key + re-derive +
- * re-bind loop.
- *
- * Scope mirrors the gate so the two cannot disagree: the task must cover at least one feature
- * scenario (the same `checkAcCoverage` call `checkScenarioSatisfaction` uses — a task-local
- * task never trips this, 0956 R3), the feature AC must parse with ≥1 scenario (the same
- * `parseFeature` call), and matching runs the same `rowMatchesScenario`. Returns `null` —
- * never a gap — when the task file is unresolvable, there is no linked feature, the feature
- * file/AC is missing, scenarios do not parse, or any row names a scenario.
- */
-export async function verdictScenarioKeyGap(
-    wbs: string,
-    rows: Array<{ id: string }>,
-    deps: VerdictScenarioKeyGapDeps,
-): Promise<VerdictScenarioKeyGap | null> {
-    if (rows.length === 0) return null;
-    let taskAc: string;
-    let featureId: string;
-    try {
-        const hit = await new TaskLocator({
-            fs: deps.fs,
-            tasksDir: deps.tasksDir,
-            ...(deps.foldersConfig !== undefined ? { foldersConfig: deps.foldersConfig } : {}),
-        }).findByWbs(wbs);
-        if (hit === null) return null;
-        const taskDoc = MarkdownDocument.parse(await deps.fs.readFile(hit.filePath), 'task');
-        const tfm = taskDoc.frontmatterData ?? {};
-        const linked = (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined);
-        if (linked === undefined || linked.length === 0) return null; // no linked feature (R6)
-        featureId = linked;
-        taskAc = stripAcFence(taskDoc.getSection('Acceptance Criteria') ?? '');
-    } catch {
-        // Unreadable corpus — no resolution to make; the done gate stays the backstop.
-        return null;
-    }
-    if (deps.featuresDir === undefined) return null;
-    const featureAc = await readFeatureAcBody(deps.fs, deps.featuresDir, featureId);
-    if (featureAc === null) return null; // no feature file or empty AC
-    // Scenarios do not parse (R6), or task-local rows cover none of them.
-    if (!taskCoversAnyFeatureScenario(taskAc, featureAc)) return null;
-    // Mirror of the gate's anyMatch: the gap fires only when NO row names a scenario.
-    if (verdictRowsMatchScenarios(rows, featureAc)) return null;
-    return { featureId, offendingIds: rows.map((r) => r.id) };
-}
-
-/**
- * Whether the task's AC covers at least one scenario of the feature AC — the covering scope the
- * done gate applies, shared by the verdict gap check and the record-time no-match warning so a
- * task-local task never trips either (0984: record warned where gate and verdict stayed silent).
- */
-export function taskCoversAnyFeatureScenario(taskAc: string, featureAc: string): boolean {
-    const parsed = parseFeature(featureAc);
-    if (parsed === null) return false;
-    return scenarioKeys(parsed.scenarios).some((sc) => taskCoversScenario(taskAc, sc));
-}
-
 /** `<id>_<slug>.md` match without a RegExp: the id is operator input (`.*` must not match, `(` must not throw). */
 export function isFeatureFile(name: string, id: string): boolean {
     return name.startsWith(`${id}_`) && name.endsWith('.md') && name.length > id.length + 4;
@@ -1621,8 +915,8 @@ export function isFeatureFile(name: string, id: string): boolean {
 
 /**
  * Raw markdown of `<featuresDir>/<featureId>_*.md`, or `null` on any miss — the single
- * `<id>_<slug>.md` prefix-scan resolution shared with `task-service` (task 1003 R2 adds the
- * full-file form for the answer lint; the AC-only form delegates here).
+ * `<id>_<slug>.md` prefix-scan resolution shared with `task-service` (the AC-only form
+ * delegates here).
  */
 export async function readFeatureBody(fs: FileSystem, featuresDir: string, featureId: string): Promise<string | null> {
     try {
@@ -1674,37 +968,4 @@ export async function readTaskAcceptanceCriteria(wbs: string, deps: VerdictScena
     } catch {
         return '';
     }
-}
-
-/**
- * 1003 R2: run the verify-answer lint over one task's answer with corpus-resolved context.
- * Resolution mirrors {@link verdictScenarioKeyGap}: an unresolvable task file or linked
- * feature fails OPEN (no findings — checklist labels/scenario titles are simply unavailable)
- * and the verdict derivation plus the done gate stay backstops.
- */
-export async function lintVerifyAnswerForTask(
-    wbs: string,
-    answerText: string,
-    deps: VerdictScenarioKeyGapDeps,
-): Promise<AnswerLintFinding[]> {
-    let taskContent: string;
-    let featureId = '';
-    try {
-        const hit = await new TaskLocator({
-            fs: deps.fs,
-            tasksDir: deps.tasksDir,
-            ...(deps.foldersConfig !== undefined ? { foldersConfig: deps.foldersConfig } : {}),
-        }).findByWbs(wbs);
-        if (hit === null) return [];
-        taskContent = await deps.fs.readFile(hit.filePath);
-        const tfm = MarkdownDocument.parse(taskContent, 'task').frontmatterData ?? {};
-        featureId = (tfm.feature_id as string | undefined) ?? (tfm['feature-id'] as string | undefined) ?? '';
-    } catch {
-        return []; // unreadable corpus — fail open; the verdict derivation and done gate stay backstops
-    }
-    const featureContent =
-        featureId !== '' && deps.featuresDir !== undefined
-            ? await readFeatureBody(deps.fs, deps.featuresDir, featureId)
-            : null;
-    return lintVerifyAnswer(answerText, taskContent, featureContent);
 }

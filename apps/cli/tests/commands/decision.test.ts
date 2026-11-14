@@ -112,7 +112,7 @@ describe('spur decision list (AC1)', () => {
         expect(parsed.ok).toBe(true);
         const ids = parsed.data.map((entry) => entry.id);
         expect(ids).toContain('triage-test');
-        expect(ids).toContain('task-semantic-risk'); // shipped shared catalog
+        expect(ids).toContain('failure-class'); // shipped shared catalog
         const fixture = parsed.data.find((entry) => entry.id === 'triage-test');
         expect(fixture?.layer).toBe('project');
         expect(fixture?.source.endsWith('fixture.yaml')).toBe(true);
@@ -120,7 +120,7 @@ describe('spur decision list (AC1)', () => {
         const shared = await main(['decision', 'list', '--layer', 'shared', '--json', '--json-envelope'], CLEAN);
         expect(shared.code).toBe(0);
         const sharedIds = (JSON.parse(shared.out) as { data: Array<{ id: string }> }).data.map((entry) => entry.id);
-        expect(sharedIds).toContain('task-semantic-risk');
+        expect(sharedIds).toContain('failure-class');
         expect(sharedIds).not.toContain('triage-test');
     });
 
@@ -147,7 +147,7 @@ describe('spur decision list (AC1)', () => {
         });
         const result = await main(['decision', 'list'], broken);
         expect(result.code).toBe(0);
-        expect(result.out).toContain('task-semantic-risk'); // shared catalog still serves; broken file is dropped
+        expect(result.out).toContain('failure-class'); // shared catalog still serves; broken file is dropped
     });
 });
 
@@ -586,7 +586,7 @@ describe('spur decision status --reliability (task 1096)', () => {
         const gate = parsed.data.groups.find((g) => g.decisionId === 'gate-test');
         expect(gate).toMatchObject({ evidence: 'recorded', samples: 1 });
         // Catalog ids without rows report evidence none (shared catalog included).
-        const shared = parsed.data.groups.find((g) => g.decisionId === 'task-semantic-risk');
+        const shared = parsed.data.groups.find((g) => g.decisionId === 'failure-class');
         expect(shared).toMatchObject({ evidence: 'none', samples: 0 });
         // A recorded id is never duplicated as a none row.
         expect(parsed.data.groups.filter((g) => g.decisionId === 'triage-test')).toHaveLength(1);

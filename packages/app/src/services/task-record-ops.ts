@@ -1,17 +1,9 @@
 import { dirname, join, relative, sep } from 'node:path';
 import { atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
-import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
 import { resolveDurableArtifactPath } from '../workflow/actions/run-path';
 import { reconcileExistingLifecycleRow, TASK_LIFECYCLE_PROFILE } from '../workflow/lifecycle-adapter';
-import { extractRunCitations, RUN_CITATION_DIRS } from '../workflow/run-citation';
-import { buildTrackedBasenameIndex, qualifySectionBody } from './anchor-qualifier';
-import {
-    defaultVerdictRunDir,
-    featureScenarioTitles,
-    matchedScenarioKeys,
-    taskCoversAnyFeatureScenario,
-} from './feature-check';
+import { defaultVerdictRunDir, featureScenarioTitles } from './feature-check';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import type { EntityRef, PlanningWriteService } from './planning-write-service';
 import { ensureDurablePlaneIgnored, runStoragePaths } from './run-storage';
@@ -23,7 +15,6 @@ import {
     isRecordAuthoredReview,
     isRecordAuthoredSolution,
     listUntrackedFiles,
-    parseTesting,
     type RecordOptions,
     type RecordResult,
     readVerdictClassified,
@@ -34,26 +25,6 @@ import {
 import { sectionIsBare } from './task-section-bodies';
 import type { TaskService, TaskServiceContext } from './task-service';
 import { reconcileDoneCloseAudit, runTransitionCheckGate } from './task-transition';
-import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
-
-/**
- * R6 diagnostics: name the verdict row whose evidence carries the citation, so the operator
- * knows which producer answer to fix. Requirements/AC rows render into the Testing section
- * directly; a `checks[]` row is named when it is the only carrier.
- */
-function citationOrigin(verdict: CanonicalVerifyVerdict, name: string): string {
-    const needle = `.spur/run/${name}`;
-    for (const row of verdict.requirements) {
-        if (row.evidence.includes(needle)) return `requirement ${row.id}`;
-    }
-    for (const row of verdict.acceptanceCriteria) {
-        if (row.evidence.includes(needle)) return `acceptance criterion ${row.id}`;
-    }
-    for (const row of verdict.checks) {
-        if (row.evidence?.includes(needle)) return `check ${row.name}`;
-    }
-    return 'the verdict';
-}
 
 /**
  * `spur task record` for {@link TaskService}: verdict-driven Testing/Status writes, the
@@ -67,78 +38,6 @@ export class TaskRecordOps {
         private readonly featureLink: TaskFeatureLink,
         private readonly files: TaskFiles,
     ) {}
-
-    /**
-     * 0936 R1: record-time scenario-key carry-forward guard. Compares the feature
-     * scenario keys the previous `## Testing` body matched with MET rows against
-     * the keys the new verdict artifact matches with MET rows, and warns (never
-     * blocks) on each dropped key — the write that would otherwise silently
-     * regress `feature check` to `L4.scenario-unverified`. Also warns, in parity
-     * with the `L4.verdict-rows-match-no-scenario` wording (0700 R3), when the
-     * new artifact's rows match no feature scenario at all. Matching is owned by
-     * feature-check's {@link matchedScenarioKeys} — no second normalization.
-     */
-    private async checkScenarioKeyRegression(
-        wbs: string,
-        taskFilePath: string,
-        prevTestingBody: string,
-        verdict: CanonicalVerifyVerdict,
-    ): Promise<string[]> {
-        try {
-            const resolved = await this.featureLink.resolveFeatureAcBody(taskFilePath);
-            if (resolved === null) return [];
-
-            const prev = parseTesting(prevTestingBody, wbs);
-            const prevRows =
-                prev.kind === 'valid' ? [...prev.verdict.requirements, ...prev.verdict.acceptanceCriteria] : [];
-            const newRows = [...verdict.requirements, ...(verdict.acceptanceCriteria ?? [])];
-
-            const prevKeys = matchedScenarioKeys(prevRows, resolved.ac);
-            const newKeys = matchedScenarioKeys(newRows, resolved.ac);
-
-            const warnings: string[] = [];
-            for (const key of prevKeys) {
-                if (newKeys.includes(key)) continue;
-                warnings.push(
-                    `Task ${wbs} record drops scenario key "${key}": the previous ## Testing section matched it ` +
-                        `with a MET row but the new verdict artifact has no MET row for it — re-key a row by ` +
-                        `scenario title or AC-N alias to preserve the feature "${resolved.featureId}" ` +
-                        `satisfaction edge (L4.scenario-unverified regresses otherwise).`,
-                );
-            }
-            // No-match parity with `task verdict` / L4.verdict-rows-match-no-scenario — including
-            // their covering scope: a task-local task's rows are not expected to name a scenario.
-            if (
-                newRows.length > 0 &&
-                newKeys.length === 0 &&
-                taskCoversAnyFeatureScenario(resolved.taskAc, resolved.ac)
-            ) {
-                warnings.push(
-                    `Task ${wbs} verdict evidence carries ${newRows.length} row(s) matching no scenario of this ` +
-                        `feature — key rows by scenario title or AC-N alias (repair: /sp:dev-verify ${wbs})`,
-                );
-            }
-            return warnings;
-        } catch {
-            return [];
-        }
-    }
-
-    /**
-     * Rewrite unambiguous bare-basename anchors in a rendered section body to their repo-relative
-     * form — the same pass `spur task migrate-anchors` runs over task sections, applied where `record`
-     * creates the citation. Best-effort: an unreadable index or an ambiguous basename leaves the body
-     * exactly as rendered (the check still reports the unresolved anchor; nothing is guessed).
-     */
-    private async qualifyRenderedAnchors(body: string): Promise<string> {
-        try {
-            const projectRoot = this.ctx.fs.resolve('.');
-            const index = await buildTrackedBasenameIndex(projectRoot);
-            return qualifySectionBody(body, index).newBody;
-        } catch {
-            return body;
-        }
-    }
 
     /** Implementation of {@link TaskService.record} (see its doc comment for the contract). */
     async record(wbs: string, opts: RecordOptions = {}): Promise<RecordResult> {
@@ -195,25 +94,7 @@ export class TaskRecordOps {
         // Mirrors the Review fallback-only precedent (0593 R1): with a real verdict
         // (PASS/PARTIAL/FAIL) record still owns Testing.
         if (!(verdict.verdict === 'UNKNOWN' && !sectionIsBare(doc, 'Testing'))) {
-            // 0936 R1: compare feature scenario keys before overwriting Testing so a
-            // re-transcription that drops a previously-carried MET-matched key warns
-            // at this write instead of at the next `feature check`.
-            const scenarioWarnings = await this.checkScenarioKeyRegression(
-                wbs,
-                filePath,
-                doc.getSection('Testing') ?? '',
-                verdict,
-            );
-            if (scenarioWarnings.length > 0) result.scenarioWarnings = scenarioWarnings;
-            // Session review 2026-10-19: the evidence cells are the reviewer's own text, transcribed
-            // verbatim from the certification answer. A bare basename anchor in that prose failed the
-            // `--as done` check (L4.anchor-unresolved) on tasks whose implementation had already
-            // qualified its own anchors — twice in the 1254–1260 batch. Qualify at the transcription
-            // point so the recorded Testing and the done gate share one anchor vocabulary.
-            const testingBody = await this.qualifyRenderedAnchors(renderTesting(verdict));
-            // R6 (1139): a rendered Testing citation must resolve in THIS tree's planes, so
-            // teardown is never the first detector of a phantom `.spur/run/<name>` reference.
-            await this.assertTestingCitationsResolved(verdict, testingBody);
+            const testingBody = renderTesting(verdict);
             const currentTesting = doc.getSection('Testing');
             // 1040 R1: an identical generated section is not rewritten (no
             // spurious updated_at bump); authored-preservation gate above stands.
@@ -356,7 +237,6 @@ export class TaskRecordOps {
                             if (hop === 'done') {
                                 result.closeAuditError = await reconcileDoneCloseAudit(this.host, wbs, {
                                     forced: false,
-                                    passArtifactPath: verdictPath,
                                 });
                             }
                         } catch (err) {
@@ -380,10 +260,7 @@ export class TaskRecordOps {
                     }
                     // 1040 R2: reconcile after the successful done write.
                     if (target === 'done') {
-                        result.closeAuditError = await reconcileDoneCloseAudit(this.host, wbs, {
-                            forced: false,
-                            passArtifactPath: verdictPath,
-                        });
+                        result.closeAuditError = await reconcileDoneCloseAudit(this.host, wbs, { forced: false });
                     }
                 }
             } else {
@@ -429,38 +306,6 @@ export class TaskRecordOps {
             return undefined;
         } catch (err) {
             return err instanceof Error ? err.message : String(err);
-        }
-    }
-
-    /**
-     * R6 (1139): refuse a rendered Testing section that cites a direct-child `.spur/run/<name>`
-     * resolving in none of this tree's planes — `.spur/run/`, `.spur/memory/evidence/`,
-     * `.spur/memory/runs/`. The producer must fix its evidence; synthesizing a citation would
-     * invent evidence, so the record writes nothing and names the citation and its source row.
-     */
-    private async assertTestingCitationsResolved(verdict: CanonicalVerifyVerdict, testingBody: string): Promise<void> {
-        const citations = extractRunCitations(testingBody);
-        if (citations.length === 0) return;
-        const projectRoot = this.ctx.fs.resolve('.');
-        for (const citation of citations) {
-            let resolved = false;
-            for (const dir of RUN_CITATION_DIRS) {
-                try {
-                    await this.ctx.fs.readFile(join(projectRoot, dir, citation.name));
-                    resolved = true;
-                    break;
-                } catch {
-                    /* try the next plane */
-                }
-            }
-            if (resolved) continue;
-            const origin = citationOrigin(verdict, citation.name);
-            throw new ValidationError(
-                `record refuses an unresolved run citation: .spur/run/${citation.name} ` +
-                    `(cited by ${origin}) resolves in neither .spur/run/ nor ` +
-                    '.spur/memory/{evidence,runs}/ — fix the verdict evidence before recording; ' +
-                    'no section was written',
-            );
         }
     }
 }

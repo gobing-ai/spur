@@ -8,7 +8,6 @@ import { createCapturedOutput } from './helpers';
 const commands = [
     ['task', 'diffstat', '../../outside'],
     ['task', 'gate', '../../outside', 'run', '--cmd', 'touch should-not-run'],
-    ['task', 'residual', '../../outside', 'fold'],
     ['task', 'wrapup', 'drift-probe', '--run-id', '../../outside'],
     ['workflow', 'commit-guard-start', '--run', '../../outside'],
     ['workflow', 'commit-guard-stage', '--run', '../../outside', 'file.txt'],

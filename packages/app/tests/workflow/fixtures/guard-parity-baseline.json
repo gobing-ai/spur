@@ -104,12 +104,6 @@
         },
         {
             "from": "review",
-            "to": "review",
-            "kind": "shell",
-            "command": "test \"$(cat \".spur/run/$__runId-review-lint-retry\" 2>/dev/null)\" = RETRY"
-        },
-        {
-            "from": "review",
             "to": "failed",
             "kind": "shell",
             "command": "fix_attempts=\"$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)\"; test \"$fix_attempts\" -ge \"$qualityGateMaxFixAttempts\""

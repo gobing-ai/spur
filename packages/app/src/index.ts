@@ -231,19 +231,6 @@ export {
     type UsageSource,
     UsageSourceError,
 } from './services/agent-usage-source';
-export type {
-    AnchorFileReport,
-    AnchorQualifyReport,
-    QualifiedAnchor,
-} from './services/anchor-qualifier';
-export {
-    anchorQualify,
-    buildTrackedBasenameIndex,
-    normalizeDoneReason,
-    qualifyAnchors,
-    qualifySectionBody,
-    resolveConfiguredTaskDirs,
-} from './services/anchor-qualifier';
 export {
     type AttachedTurnBinding,
     type AttachedTurnDiagnostic,
@@ -329,15 +316,9 @@ export {
     DEFAULT_FEATURE_MATRIX,
     FeatureCheckService,
     isFeatureFile,
-    lintVerifyAnswerForTask,
     readFeatureBody,
     readTaskAcceptanceCriteria,
-    summarizeRowIds,
-    VERDICT_SCENARIO_KEY_FORMS,
-    type VerdictScenarioKeyGap,
     type VerdictScenarioKeyGapDeps,
-    verdictRowsMatchScenarios,
-    verdictScenarioKeyGap,
 } from './services/feature-check';
 export { createFeatureReceiptRunPort } from './services/feature-receipt-run-port';
 export type {
@@ -859,11 +840,7 @@ export {
 export type { AttributeSessionsInput } from './services/task-attribution';
 export { attributeSessions } from './services/task-attribution';
 export type { CheckFindings, CheckResult as TaskCheckResult, SectionMatrix } from './services/task-check';
-export {
-    extractReviewSectionBody,
-    hasPopulatedPriorityTable,
-    TaskCheckService,
-} from './services/task-check';
+export { TaskCheckService } from './services/task-check';
 export type { TaskFileHit, TaskFolderSource } from './services/task-locator';
 export { TaskLocator } from './services/task-locator';
 export {
@@ -977,8 +954,6 @@ export {
     replayCitedTests,
     replayWorkspace,
 } from './services/verdict-replay';
-export type { AnswerLintFinding } from './services/verify-answer-lint';
-export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
 export { createWarmTurnDispatcher, type TurnSessionBinding } from './services/warm-turn-dispatch';
 export { reapIfWorkerLost } from './services/workflow-clean-ops';
 export type {

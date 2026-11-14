@@ -14,7 +14,6 @@
         "./quality-gate": "./src/services/quality-gate.ts",
         "./sdlc-actions": "./src/services/sdlc-actions.ts",
         "./shell-quote": "./src/services/shell-quote.ts",
-        "./residual-scan-run": "./src/services/residual-scan-run.ts",
         "./task-diffstat": "./src/workflow/task-diffstat.ts",
         "./testing": "./src/testing/history-board-mock.ts",
         "./pipeline-steps": "./src/workflow/pipeline-steps.ts",

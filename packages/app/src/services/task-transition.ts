@@ -21,9 +21,7 @@
  *      where a same-status `done → done` is a no-op result and a forced
  *      non-PASS override is remembered for the audit-trail write,
  *   4. `updateStatus`,
- *   5. best-effort `done_forced`/`done_reason` frontmatter audit fields (the unforced
- *      close reason records the accepted artifact **relative to the project root**
- *      — 1089 R2).
+ *   5. best-effort `done_forced`/`done_reason` frontmatter audit fields.
  *
  * The CLI remains responsible for its operator-facing transport concerns
  * (adapter availability decision, stderr warnings, history-refresh trigger,
@@ -32,17 +30,10 @@
  * `tasks.show`/`updateStatus` (0966 Q&A) rather than a guard denial.
  */
 
-import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { MarkdownDocument, normalizeTaskStatus } from '@gobing-ai/spur-domain';
+import { normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../errors';
-import { retargetScratchVerdictPointer } from './anchor-qualifier';
-import {
-    evaluateDoneTransition,
-    findUnresolvedTestEvidence,
-    readVerdictArtifact,
-    type VerdictAggregate,
-} from './done-transition-guard';
+import { evaluateDoneTransition, readVerdictArtifact, type VerdictAggregate } from './done-transition-guard';
 import type { WriteResult } from './planning-write-service';
 import type { TaskCheckService } from './task-check';
 import type { TaskService } from './task-service';
@@ -182,15 +173,6 @@ export async function reconcileDoneCloseAudit(
     opts: {
         forced: boolean;
         reason?: string;
-        passArtifactPath?: string;
-        /**
-         * ADR-131 / 1140 R1: does the durable `.spur/memory/evidence/<wbs>-verdict.json`
-         * copy exist? Resolved by the caller (it owns the filesystem) and used only on the
-         * unforced path, where the reason must not cite the disposable run scratch.
-         */
-        durableVerdictCopy?: boolean;
-        /** The task's tracked `## Testing` body; the fallback owner when no durable copy exists. */
-        testingBody?: string | null;
     },
 ): Promise<string | undefined> {
     try {
@@ -203,82 +185,11 @@ export async function reconcileDoneCloseAudit(
         }
         // Unforced close: the forced flag from any earlier override is stale.
         await tasks.updateField(wbs, 'done_forced', 'false');
-        const base =
-            opts.passArtifactPath !== undefined
-                ? `unforced close; PASS artifact at ${opts.passArtifactPath}`
-                : 'unforced close';
-        // ADR-131 (1140 R1/R2): `.spur/run/` may be absent in any later run, so the reason
-        // cites durable evidence instead: the `.spur/memory/evidence/` copy when it exists,
-        // else the tracked Testing section. This is the same resolution the repair pass
-        // (`spur task migrate-anchors`) applies, so a fresh close needs no repair. With
-        // neither owner the pointer is dropped rather than persisted as a dead reference —
-        // the previous `unforced close; PASS artifact at .spur/run/…` shape is exactly what
-        // the `no-scratch-verdict-pointer` rule rejects.
-        const retargeted = retargetScratchVerdictPointer(base, {
-            durableVerdictExists: () => opts.durableVerdictCopy === true,
-            testingBody: opts.testingBody ?? null,
-        });
-        await tasks.updateField(
-            wbs,
-            'done_reason',
-            retargeted.unresolved !== undefined ? 'unforced close' : retargeted.value,
-        );
+        await tasks.updateField(wbs, 'done_reason', 'unforced close');
         return undefined;
     } catch (auditErr) {
         return String(auditErr);
     }
-}
-
-/**
- * Resolve the two durable owners {@link reconcileDoneCloseAudit} may cite. Best-effort by
- * construction: the close is already committed when this runs, so a failed probe degrades to
- * "no durable owner" (the reason then omits the pointer) instead of blocking the transition.
- */
-async function resolveCloseReasonContext(
-    deps: GuardedTransitionDeps,
-    wbs: string,
-): Promise<{ durableVerdictCopy: boolean; testingBody: string | null }> {
-    let durableVerdictCopy = false;
-    try {
-        // Sibling of the run dir's parent — the same resolution the done gate reads
-        // (`done-transition-guard.ts`), so the writer and the reader agree on the owner.
-        durableVerdictCopy = await deps.fs.exists(
-            join(dirname(deps.runDir), 'memory', 'evidence', `${wbs}-verdict.json`),
-        );
-    } catch {
-        // Absent owner.
-    }
-    let testingBody: string | null = null;
-    try {
-        const shown = await deps.tasks.show(wbs);
-        testingBody = MarkdownDocument.parse(await deps.fs.readFile(shown.filePath), 'task').getSection('Testing');
-    } catch {
-        // Absent owner.
-    }
-    return { durableVerdictCopy, testingBody };
-}
-
-/**
- * Record the accepted verdict artifact relative to the project root (1089 R2).
- *
- * `done_reason` is tracked corpus, so an absolute path commits one machine's home
- * directory into the tracked task files and stops resolving the moment that tree is
- * removed (a `--worktree` close wrote `PASS artifact at /Users/<someone>/<worktree>/
- * .spur/memory/evidence/<wbs>-verdict.json`, and the worktree is deleted on the
- * success path). The project root is the tree
- * that owns `.spur/run` — `dirname(dirname(runDir))`, the same derivation
- * `done-transition-guard.ts` uses for the evidence dir. An artifact outside that
- * root (a foreign evidence dir) is recorded as-is rather than mangled into a
- * `../..` walk.
- */
-export function projectRelativeArtifactPath(runDir: string, artifactPath: string): string {
-    const root = dirname(dirname(runDir));
-    const rel = relative(root, artifactPath);
-    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return artifactPath;
-    // POSIX separators in the recorded value: `relative` yields `\` on Windows, and the
-    // corpus form (`.spur/memory/evidence/<wbs>-verdict.json`) plus the `done_reason`
-    // normalization rule in `anchor-qualifier.ts` both read it as POSIX.
-    return rel.split(sep).join('/');
 }
 
 /**
@@ -320,13 +231,9 @@ export async function transitionTaskGuarded(
     // `allow | deny | noop`; a forced `allow` is remembered below so the
     // audit-trail frontmatter is written after the transition commits.
     let forced: { verdict: VerdictAggregate } | undefined;
-    // 1040 R2: the done-gate's selected artifact path feeds the unforced
-    // close reason; kept undefined for non-done targets.
-    let doneLoaded: { path: string } | undefined;
     if (status === 'done') {
         const current = checkedTask ?? (await deps.tasks.show(wbs));
         const loaded = await readVerdictArtifact(deps.fs, deps.runDir, wbs);
-        doneLoaded = loaded;
         const guardOutcome = evaluateDoneTransition({
             wbs,
             taskFilePath: current.filePath,
@@ -342,10 +249,6 @@ export async function transitionTaskGuarded(
             // 1042 R2: surface identity/parse read errors in the denial instead
             // of the misleading "missing verify verdict artifact" text.
             readError: loaded.readError,
-            unresolvedTestEvidence:
-                input.forceDone === true
-                    ? []
-                    : await findUnresolvedTestEvidence(deps.fs, dirname(dirname(deps.runDir)), loaded.artifact),
         });
         if (guardOutcome.kind === 'noop') {
             // R9: same-status no-op. The transport exits success so scripts
@@ -373,17 +276,9 @@ export async function transitionTaskGuarded(
     // return or throw above, so they never reconcile.
     let closeAuditError: string | undefined;
     if (status === 'done') {
-        const doneArtifactPath = doneLoaded?.path;
-        // ADR-131 (1140): the unforced reason cites a durable owner, so resolve it before the
-        // write. Forced closes keep the operator's rationale verbatim and need neither probe.
-        const reasonContext = forced === undefined ? await resolveCloseReasonContext(deps, wbs) : undefined;
         closeAuditError = await reconcileDoneCloseAudit(deps.tasks, wbs, {
             forced: forced !== undefined,
             ...(forced !== undefined ? { reason: input.reason } : {}),
-            ...(forced === undefined && doneArtifactPath !== undefined
-                ? { passArtifactPath: projectRelativeArtifactPath(deps.runDir, doneArtifactPath) }
-                : {}),
-            ...(reasonContext !== undefined ? reasonContext : {}),
         });
     }
 

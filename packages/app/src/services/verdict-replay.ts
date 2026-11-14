@@ -6,7 +6,7 @@
  * the cost — 7 of 7 already-`done` tasks failed an independent re-verification.
  *
  * Replay is deliberately narrow: it executes the *test files* the verdict rows cite (backticked
- * `path:line` anchors, the grammar `spur task migrate-anchors` qualifies), never arbitrary prose
+ * `path:line` anchors), never arbitrary prose
  * commands. That keeps it deterministic, cheap (≤5 files, 120 s each, run from the owning workspace
  * through the `test-changed` binding; a coverage-threshold workspace is skipped, not run) and impossible to turn into a second full gate — the
  * host-contention failure mode task 1127 measured.

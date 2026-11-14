@@ -821,8 +821,6 @@ Feature: Disposal
             expect(await check()).toEqual(before);
             rmSync(runDir, { recursive: true, force: true });
             expect(await check()).toEqual(before);
-            await fs.writeFile(join(root, '.spur/memory/evidence/1027-verdict.json'), '{broken');
-            expect((await check()).pass).toBe(false);
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
@@ -905,36 +903,6 @@ Feature: Disposal
         expect(result.verdictState).toBe('readable');
         const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
         expect(raw).toContain('found under the fixture root');
-    });
-
-    test('records a Testing section only when its .spur/run citations resolve (F8/AC6)', async () => {
-        const wbs = await createTask(svc);
-        const root = tasksDir.replace('/tasks', '');
-        const fs = createNodeFileSystem(root);
-        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
-        await fs.writeFile(
-            verdictPath,
-            JSON.stringify({
-                wbs,
-                verdict: 'PASS',
-                requirements: [
-                    {
-                        id: 'R1',
-                        status: 'MET',
-                        evidence: 'artifacts `.spur/run/bb-base.sha` and `.spur/run/missing.log`',
-                    },
-                ],
-                checks: [{ name: 'Security', status: 'P4', evidence: 'clean' }],
-            }),
-        );
-
-        const taskPath = `${tasksDir}/${wbs}_record-test-task.md`;
-        const before = await fs.readFile(taskPath);
-
-        await expect(svc.record(wbs, { verdictFile: verdictPath })).rejects.toThrow(/\.spur\/run\/bb-base\.sha/);
-        await expect(svc.record(wbs, { verdictFile: verdictPath })).rejects.toThrow(/requirement R1/);
-        // The task file is unchanged — the refusal happens before any section is written.
-        expect(await fs.readFile(taskPath)).toBe(before);
     });
 
     test('a Testing citation resolving in the durable planes is accepted (F8/AC6)', async () => {
@@ -1523,112 +1491,11 @@ Feature: Disposal
             return verdictPath;
         }
 
-        test('dropped MET-matched scenario key warns and names the scenario; Review backfill unchanged', async () => {
-            await seedRecordFeature('Z1', ['Record preserves scenario keys', 'Second scenario stays verified']);
-            const wbs = await createTask(svc);
-            await svc.updateField(wbs, 'feature_id', 'Z1');
-            // First record: Testing carries MET rows for both feature scenarios.
-            const first = await writeVerdictRows(wbs, [
-                { id: 'Scenario: Record preserves scenario keys', status: 'MET' },
-                { id: 'AC-2', status: 'MET' },
-            ]);
-            await svc.record(wbs, { verdictFile: first });
-
-            // Re-record from a fresh artifact that re-keys scenario 1 to a bare R-id
-            // (the 0921 regression shape) while scenario 2 stays keyed — no parity warning.
-            const second = await writeVerdictRows(wbs, [
-                { id: 'R1', status: 'MET' },
-                { id: 'AC-2', status: 'MET' },
-            ]);
-            const result = await svc.record(wbs, { verdictFile: second });
-
-            expect(result.testingWritten).toBe(true);
-            expect(result.scenarioWarnings).toHaveLength(1);
-            expect(result.scenarioWarnings?.[0]).toContain('Record preserves scenario keys');
-            expect(result.scenarioWarnings?.[0]).toContain('Z1');
-            // The bare-placeholder Review backfill (F92 0593 R1) is unchanged by the guard.
-            // 1040 R1: the re-render is byte-identical here (same verdict, no checks),
-            // so the identical section is NOT rewritten — flag stays false.
-            expect(result.reviewWritten).toBe(false);
-            const fs = createNodeFileSystem(root());
-            const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
-            expect(raw).toContain('### Review');
-        });
-
-        test('preserved scenario key stays silent', async () => {
-            await seedRecordFeature('Z2', ['Only scenario']);
-            const wbs = await createTask(svc);
-            await svc.updateField(wbs, 'feature_id', 'Z2');
-            const first = await writeVerdictRows(wbs, [{ id: 'AC-1', status: 'MET' }]);
-            await svc.record(wbs, { verdictFile: first });
-
-            const second = await writeVerdictRows(wbs, [{ id: 'Scenario: Only scenario', status: 'MET' }]);
-            const result = await svc.record(wbs, { verdictFile: second });
-
-            expect(result.scenarioWarnings).toBeUndefined();
-        });
-
-        test('MET-only comparison: a previously non-MET match lost is silent', async () => {
-            await seedRecordFeature('Z3', ['Scenario one', 'Scenario two']);
-            const wbs = await createTask(svc);
-            await svc.updateField(wbs, 'feature_id', 'Z3');
-            // Scenario 1 matched only by an UNMET row — never verified, nothing to lose.
-            const first = await writeVerdictRows(
-                wbs,
-                [
-                    { id: 'AC-1', status: 'UNMET' },
-                    { id: 'AC-2', status: 'MET' },
-                ],
-                'PARTIAL',
-            );
-            await svc.record(wbs, { verdictFile: first });
-
-            const second = await writeVerdictRows(wbs, [{ id: 'AC-2', status: 'MET' }]);
-            const result = await svc.record(wbs, { verdictFile: second });
-
-            expect(result.scenarioWarnings).toBeUndefined();
-        });
-
-        test('no feature_id stays silent', async () => {
-            const wbs = await createTask(svc);
-            const verdictPath = await writeVerdictRows(wbs, [{ id: 'R1', status: 'MET' }]);
-            const result = await svc.record(wbs, { verdictFile: verdictPath });
-            expect(result.scenarioWarnings).toBeUndefined();
-        });
-
         async function writeTaskAc(wbs: string, ac: string): Promise<void> {
             const acFile = join(root(), `${wbs}-ac.md`);
             await createNodeFileSystem(root()).writeFile(acFile, ac);
             await svc.updateSection(wbs, 'Acceptance Criteria', acFile);
         }
-
-        test('a covering task whose rows match no feature scenario warns in parity with task verdict', async () => {
-            await seedRecordFeature('Z5', ['Only scenario']);
-            const wbs = await createTask(svc);
-            await svc.updateField(wbs, 'feature_id', 'Z5');
-            await writeTaskAc(wbs, '```gherkin\n  Scenario: Only scenario\n    Given x\n    Then y\n```\n');
-            const verdictPath = await writeVerdictRows(wbs, [
-                { id: 'R1', status: 'MET' },
-                { id: 'R2', status: 'MET' },
-            ]);
-            const result = await svc.record(wbs, { verdictFile: verdictPath });
-
-            expect(result.scenarioWarnings).toHaveLength(1);
-            expect(result.scenarioWarnings?.[0]).toContain('matching no scenario of this feature');
-        });
-
-        // 0984: the done gate and `task verdict` scope the no-match check to covering tasks;
-        // record warned for task-local tasks too, so a PASS task-local record always nagged.
-        test('a task-local task whose rows match no feature scenario stays silent', async () => {
-            await seedRecordFeature('Z6', ['Only scenario']);
-            const wbs = await createTask(svc);
-            await svc.updateField(wbs, 'feature_id', 'Z6');
-            await writeTaskAc(wbs, '- [ ] AC1 — a task-local outcome the feature does not name\n');
-            const verdictPath = await writeVerdictRows(wbs, [{ id: 'AC1', status: 'MET' }]);
-            const result = await svc.record(wbs, { verdictFile: verdictPath });
-
-            expect(result.scenarioWarnings).toBeUndefined();
-        });
 
         // 0993 residual: `AC-<n>` is the feature's scenario ordinal, so one row credits the scenario
         // AND ticks the AC box aliasing that scenario — even when the task numbers its ACs differently.
@@ -1641,14 +1508,12 @@ Feature: Disposal
                 { id: 'AC-1', status: 'MET' },
                 { id: 'AC-2', status: 'MET' },
             ]);
-            const first = await svc.record(wbs, { verdictFile: verdictPath });
-            const again = await svc.record(wbs, { verdictFile: verdictPath });
+            await svc.record(wbs, { verdictFile: verdictPath });
+            await svc.record(wbs, { verdictFile: verdictPath });
 
             const raw = await createNodeFileSystem(root()).readFile(`${tasksDir}/${wbs}_record-test-task.md`);
             expect(raw).toContain('- [x] AC1 — R2 — Second outcome');
             expect(raw).toContain('- [x] AC2 — R1 — First outcome');
-            expect(first.scenarioWarnings).toBeUndefined();
-            expect(again.scenarioWarnings).toBeUndefined();
         });
     });
 });

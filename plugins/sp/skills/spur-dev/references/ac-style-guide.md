@@ -126,14 +126,8 @@ scenario, it matches by title. Rules:
   Registered user can log in with email and password" is traceable.
 - **No synonyms in cross-references.** The title in the feature file and the title in the
   task's AC reference must be byte-identical.
-- **Avoid gate vocabulary in titles.** `spur task check` (L4.gate-language) rejects task sections
-  containing `HITL`, `merge event`, `content-gate`, `GATED`, or `capstone` as standalone words in any
-  case (dotted action kinds such as `hitl.confirm` are fine);
-  ambiguous words (`approval`, `approved`, `merged`) warn only when the same sentence also carries
-  a gating cue (`until`, `after`, `once`, `before`, `pending`, `blocked`, `wait for`, `requires`)
-  — plain composition prose like "the stages merged back into one step" stays silent. Task AC
-  bullets copy scenario titles verbatim, so a title using the unconditional tokens fails every
-  child task. Write "pause for an operator answer" instead of "HITL approval".
+- **Avoid gate vocabulary in titles** (`HITL`, `merge event`, `GATED`, `capstone`): it reads as a
+  dependency nothing declares. Convention only — nothing checks it. Write "pause for an operator answer" instead of "HITL approval".
 
 ## Verdict AC ↔ feature scenario linkage
 
@@ -174,7 +168,7 @@ Any of the four may additionally carry a **bracket tag** in any position — `[d
 `Scenario: [advisory] Foo`. Tags are stripped before matching (0398 R7), so tagging never breaks
 the linkage.
 
-Task-side, the `spur task verdict` answer lint additionally accepts a fifth declared id source — a **bold-trajectory
+Task-side, a fifth declared id source is accepted — a **bold-trajectory
 paragraph**: a whole-line `**AC id…**` paragraph inside the task's `### Acceptance Criteria`
 block (task 0817 R3). The id up to its first `:` and the paragraph's full spelling are both
 declared; two bold spans on one line are not a declaration (an interpolated bold id stays
@@ -190,13 +184,12 @@ unmatchable):
 
 ### A bullet's bold head is its id
 
-The `spur task verdict` answer lint declares the bold span of a single-line criterion bullet
+`spur task verdict` treats the bold span of a single-line criterion bullet
 (`- **AC2 — The roster runtime is gone (R3).** Given …, when …, then …`) and its head before the
 first ` — ` or `:` — so answer rows may key `AC2` or `AC2 — The roster runtime is gone (R3).`. Keep
 at least one answer row keyed to the verbatim feature scenario title the task graduates, and keep
 requirement ids in the template-taught corpus form, `- [ ] R1. <text>`: that (or an unbolded `R1.`
-variant) is what the task-local binding loop parses — bold wrapping (`**R1**`) passes the
-`L3.requirements-format` ratio but binds nothing — and a colon after the bold span still silently
+variant) is what the task-local binding loop parses — bold wrapping (`**R1**`) binds nothing — and a colon after the bold span still silently
 drops the whole section to a warning. Bold AC heads are likewise a verdict-table id form, not the AC
 authoring form: author new AC rows in the plain `- [ ] AC1 —` / `Scenario: AC1 —` shapes.
 

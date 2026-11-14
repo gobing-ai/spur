@@ -102,8 +102,7 @@ restricted sandbox - port-binding and `ps` denials produce failures that are not
 project's sandbox notes). Real regressions are *additional* failures.
 
 **3. Finish the work the step abandoned.** Write the sections the killed step would have written
-(`## Solution`, `## Testing`, and the `## Review` P1-P4 table - the L3 `review-priority-table`
-gate will reject the task without it). Use the normal `--section --from-file` contract.
+(`## Solution`, `## Testing`, and the `## Review` P1-P4 table). Use the normal `--section --from-file` contract.
 
 **4. Force-done with an honest reason.**
 
@@ -131,13 +130,13 @@ silently incomplete (H6 shipped at 23/48 that way, with one verdict carrying an 
 `acceptanceCriteria` array and still reading PASS). See `ac-style-guide.md` §
 "Verdict AC ↔ feature scenario linkage" for the id forms and evidence vocabulary.
 
-**Parser contract (`spur task verdict` answer lint, 0817 re-verify findings):**
+**Parser contract (`spur task verdict --from-answer`; nothing lints — a malformed row is silently dropped):**
 
 1. The requirement id cell must be the **bare** id — `| R1 | MET | … |`. Suffixes (`R1 (AC1)`) or
-   decoration (`**R1**`) fail the exact-match completeness check (`missing requirement row`).
+   decoration (`**R1**`) do not match the requirement and the row is dropped.
 2. The AC table only opens when the header's **third** cell contains the word "evidence" — use
    `| AC | Status | Evidence Type | Evidence |`. `| AC | Status | Type | Evidence |` silently
-   parses zero AC rows while lint still reports PASS.
+   parses zero AC rows.
 3. A behavioral AC marked `MET` with a non-executable evidence type (`static-ref`,
    `manual-review`, `llm-judge`) is **downgraded to PARTIAL** by `task verdict`, making the whole
    verdict PARTIAL. Use `test`/`command` (grep-based verification counts as `command`). Only the

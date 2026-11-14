@@ -84,9 +84,7 @@ not have and work you were not asked to do.
   prerequisite. If the target genuinely cannot proceed without it, stop and say so — a blocked task
   is a cheap finding; a two-task diff costs the reverts.
 - **Flip the target's `## Plan` boxes as each step completes.** They are this pass's progress
-  ledger, and the record-time residual sweep treats an *unchecked* Plan box as blocking: it
-  downgrades the verdict to PARTIAL and closes the `done` gate
-  (`docs/design/task-residual-sweep.md`), which costs a remediation cycle and a manual re-record.
+  ledger.
   Leave every finished step ticked through `spur task update <wbs> --section Plan --from-file`, and
   if you deliberately skipped one, say so in the Solution change map.
 

@@ -15,7 +15,7 @@ Decisions resolve first-wins across three layers:
 | `registered` | config `decisions.paths` folders + programmatic registrations |
 | `shared` | bundled `config/decisions/` |
 
-The shared layer ships `task-semantic-risk`, `failure-class`, `gate-evidence`,
+The shared layer ships `failure-class`, `gate-evidence`,
 `idea-recommendation`, `needs-design`, `anatomy-validation-verdict` and `maker-liveness` (the last
 served only by `spur decision status --probe`; no workflow references it).
 

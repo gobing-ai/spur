@@ -51,13 +51,11 @@ runs, which have no executor to pin.
 ```
 | WBS | Status | Recovery |
 |-----|--------|--------|
-| 0042 | failed | C6 recovery: /sp:dev-run 0042 (residual report: .spur/run/0042-residual-report.md) |
+| 0042 | failed | /sp:dev-run 0042 |
 | 0050 | not-attempted | /sp:dev-next 0050 |
 ```
 
-A task with a residual report (failing `residual-sweep` check in its verdict artifact) uses the
-C6 recovery line (re-run the pipeline); every other excluded task uses the next-router A-row
-command for its status (F96 task 0952 R2).
+Every excluded task uses the next-router A-row command for its status (task 0952 R2).
 
 The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`,
 plus the resume-only `recheck` (stale/mismatched evidence — pipeline re-run), `not-admitted`
