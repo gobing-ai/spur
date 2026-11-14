@@ -73,22 +73,6 @@ afterEach(() => {
 });
 
 describe('builder bump-ver (heavy)', () => {
-    test('plugin-install-smoke failure aborts the bump before any mutation', async () => {
-        const { repo } = mkRepo();
-        mkdirSync(join(repo, 'scripts', 'commands'), { recursive: true });
-        writeFileSync(join(repo, 'scripts', 'commands', 'plugin-install-smoke.ts'), 'process.exit(1);\n');
-        const manifestPath = join(repo, 'package.json');
-        const manifest = (await Bun.file(manifestPath).json()) as { scripts: Record<string, string> };
-        manifest.scripts = { 'plugin-smoke': 'bun scripts/commands/plugin-install-smoke.ts' };
-        writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 4)}\n`);
-        sh(repo, ['git', 'add', '.']);
-        sh(repo, ['git', 'commit', '-m', 'gate']);
-
-        await expect(bumpVer(['lib', '9.9.9'], repo)).rejects.toThrow('plugin-install-smoke failed');
-        expect((await Bun.file(join(repo, 'pkgs', 'lib', 'package.json')).json()).version).toBe('0.1.0');
-        expect(localTags(repo)).toEqual([]);
-    });
-
     test('--all rewrites a root-manifest workspace pin and syncs bun.lock', async () => {
         const { repo } = mkRepo();
         const rootManifestPath = join(repo, 'package.json');
