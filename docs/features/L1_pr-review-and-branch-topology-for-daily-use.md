@@ -171,8 +171,8 @@ Feature: PR review and branch topology for daily use
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1218 | Add spur builder show-branches branch topology report | done |
-| 1219 | Register spur builder pr operations as real Commander subcommands | done |
 | 1220 | Redesign /sp:dev-pr-review as a local-first status, review and fix command | done |
+| 1219 | Register spur builder pr operations as real Commander subcommands | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

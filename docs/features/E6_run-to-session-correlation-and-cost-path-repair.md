@@ -164,7 +164,7 @@ Feature: Run-to-session and task-to-session correlation
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1308 | Show verified outcomes and reconcilable measured cost through current run links | done |
-| 1324 | History provenance and capture fidelity: worktree run merge and antigravity ETL | todo |
+| 1324 | History provenance and capture fidelity: worktree run merge and antigravity ETL | done |
 | 0558 | Correlate existing history retroactively by time window, marked estimated | done |
 | 0722 | Recover task attribution from imported agent sessions | done |
 | 0559 | Repoint cost attribution at typed columns and retire the dead ETL path | done |

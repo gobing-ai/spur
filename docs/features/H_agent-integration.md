@@ -26,8 +26,8 @@ new runtime execution work belongs under B, and new `sp` plugin harness work bel
 | 0239 | Extend spur agent doctor to detect token quota and model availability | done |
 | 0410 | Harden verdict artifact parsing: accept scenario key, warn on zero-coverage PASS verdicts, and add fuzzy AC title matching | done |
 | 0411 | Stop batch orchestration from retrying unchanged blocked feature sync | done |
-| 0500 | Ship plugins/sp and marketplace.json in the @gobing-ai/spur npm tarball for superskill install | done |
 | 0510 | Fix feature-E batch run lessons: Solution file:line first-write, feature Scope hygiene, gate-adjacent test coverage, release trigger verification, host cache-read growth | done |
+| 0500 | Ship plugins/sp and marketplace.json in the @gobing-ai/spur npm tarball for superskill install | done |
 | 0511 | Fix 0510-run inefficiencies: per-file coverage preflight, verify anchor hygiene, coverage-diagnosis protocol, mocking conventions, precheck corpus-dirt note | done |
 <!-- END AUTO-GENERATED -->
 

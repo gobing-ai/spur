@@ -48,7 +48,7 @@ Feature: Complete planning corpus reads with explicit diagnostics
 | --- | ---- | ------ |
 | 1297 | Reuse an operation-scoped planning snapshot across corpus readers | done |
 | 1296 | Reject incomplete planning inputs before deriving feature state | done |
-| 1325 | Add sectioned and summary output to spur task show | todo |
+| 1325 | Add sectioned and summary output to spur task show | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

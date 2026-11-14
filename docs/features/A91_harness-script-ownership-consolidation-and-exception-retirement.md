@@ -82,15 +82,15 @@ Feature: Harness script ownership consolidation
 | --- | ---- | ------ |
 | 1173 | Enforce script ownership and retire proven legacy scaffolding | done |
 | 1174 | Normalize hook entries helpers and tests without changing host behavior | done |
-| 1175 | Relocate behavioral evaluation tooling and preserve both evaluation tiers | done |
-| 1176 | Centralize task readiness triage and feature receipt operations | done |
-| 1177 | Consolidate inline workflow adapters on the application runtime owner | done |
-| 1178 | Unify workflow and history measurements used by repo and skill tools | done |
-| 1211 | Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review | done |
-| 1212 | Complete PR-9 release and workflow-cost CLI absorption | done |
-| 1213 | Retire obsolete script infrastructure and finalize the sp CLI prerequisite | done |
-| 1214 | Preserve destructive git guards with global options across hook hosts | done |
 | 1215 | Bind builder PR operations to the caller execution context | done |
+| 1213 | Retire obsolete script infrastructure and finalize the sp CLI prerequisite | done |
+| 1176 | Centralize task readiness triage and feature receipt operations | done |
+| 1211 | Script-absorption and hook-boundary handoff: finish PR-6..PR-9, retire Pi guard-extension, merge stack, comprehensive review | done |
+| 1177 | Consolidate inline workflow adapters on the application runtime owner | done |
+| 1212 | Complete PR-9 release and workflow-cost CLI absorption | done |
+| 1175 | Relocate behavioral evaluation tooling and preserve both evaluation tiers | done |
+| 1178 | Unify workflow and history measurements used by repo and skill tools | done |
+| 1214 | Preserve destructive git guards with global options across hook hosts | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -183,11 +183,11 @@ Feature: sp command surface coherence
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0399 | Author the --next chain contract and canonical flag glossary in dev-operations.md | done |
-| 0400 | Encode chain-to-completion semantics in the sp:next-router skill | cancelled |
-| 0401 | Reconcile --next across the seven declaring commands and adopt it on dev-runall | done |
-| 0402 | Normalize --json and --auto availability across the 28 dev commands | cancelled |
-| 0403 | Extend command-flag-parity to anchor shared flags to one glossary entry | done |
 | 0404 | Add a cohesion dimension to the decomposition granularity standard | done |
+| 0403 | Extend command-flag-parity to anchor shared flags to one glossary entry | done |
+| 0400 | Encode chain-to-completion semantics in the sp:next-router skill | cancelled |
+| 0402 | Normalize --json and --auto availability across the 28 dev commands | cancelled |
+| 0401 | Reconcile --next across the seven declaring commands and adopt it on dev-runall | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -114,7 +114,7 @@ Feature: Faster default quality gate while keeping per-file 90/90 coverage
 | 1295 | Restore ordinary-suite execution of real-renderer Markdown security proofs | done |
 | 1316 | Reduce duplicated test mocks behind retained behavioral and gate evidence | done |
 | 1154 | Implement the faster default gate without lowering the 90/90 coverage floor | done |
-| 1322 | Task-pipeline gate efficiency: detached execution and affected-scope test selection | todo |
+| 1322 | Task-pipeline gate efficiency: detached execution and affected-scope test selection | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

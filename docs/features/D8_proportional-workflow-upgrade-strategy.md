@@ -55,9 +55,9 @@ This feature is a **wayfinder map** (`wayfinder-map` tag), not a specified deliv
 | --- | ---- | ------ |
 | 0729 | Audit workflow ADRs, gates, baselines, and capability ownership | done |
 | 0730 | Measure workflow cost, human attention, and bypass pressure | done |
+| 0733 | Synthesize the task-ready workflow upgrade strategy | done |
 | 0731 | Classify shipped workflows by fit and select surrounding pilots | done |
 | 0732 | Prototype proportional gates on a surrounding workflow | done |
-| 0733 | Synthesize the task-ready workflow upgrade strategy | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

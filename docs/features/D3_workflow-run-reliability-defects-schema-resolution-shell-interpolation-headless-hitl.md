@@ -103,7 +103,7 @@ Feature: Workflow run reliability defects
 | --- | ---- | ------ |
 | 1117 | feature-verification leaks the async launcher's expected definition digest into verificationCmd | done |
 | 1067 | enforce e71 persist out before worktree removal in wt4 landings | done |
-| 1323 | Adaptive agent-run timeouts and executor circuit breaker | todo |
+| 1323 | Adaptive agent-run timeouts and executor circuit breaker | done |
 | 1065 | make residual scan fold freshness aware between run and durable verdict copies | done |
 | 0902 | Design upstream ts-dual-workflow-engine checkpoint/interruption contract (ts-libs packages/dual-workflow-engine) — prerequisite for 0901 R2 safe-resume | done |
 | 1317 | Fail closed when an async workflow run loses its worker so followers stop polling a dead run | done |

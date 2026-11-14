@@ -89,9 +89,9 @@ Feature: dev-review target selectors and review-scope correctness
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1021 | dev-review honest review scope: tagged-commit task diff and path-mode SECUA scope | done |
-| 1022 | dev-review contract hygiene: single target forwarding, coordinator Review ownership, triage tools, one --focus vocabulary, stale flags | done |
 | 1023 | dev-review target selectors: --tasks / --feature / --scope multi-target with deprecated positional alias | done |
 | 1032 | Dev-review P4 advisory cleanup sweep from I33 reviews (1021-1023) | done |
+| 1022 | dev-review contract hygiene: single target forwarding, coordinator Review ownership, triage tools, one --focus vocabulary, stale flags | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

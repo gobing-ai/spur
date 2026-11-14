@@ -94,11 +94,11 @@ Feature: 0451 pipeline post-mortem process and infrastructure hardening
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0453 | 0451 pipeline post-mortem: process and infrastructure hardening | done |
+| 0487 | Post-mortem (task 0486): implement-skill sibling-task conflation, precheck auth gate, and large-task executor sizing | done |
+| 0476 | Skip the DD-09 task-scenario subset check for map-parented tasks | done |
 | 0472 | Detect ungraduated wayfinder fog: fail when a feature's Not-yet-specified shrinks without new tickets | done |
 | 0473 | Teach feature check about wayfinder maps so a map's deliberate no-AC contract stops failing the BDD gate | done |
 | 0475 | Refine-loop friction: narrow prose-prerequisite heuristic, fix DD-09 for map-parented tasks, add premise-verification to the implement-ready checklist | done |
-| 0476 | Skip the DD-09 task-scenario subset check for map-parented tasks | done |
-| 0487 | Post-mortem (task 0486): implement-skill sibling-task conflation, precheck auth gate, and large-task executor sizing | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

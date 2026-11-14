@@ -64,9 +64,9 @@ Feature: Teams residual polish for release (post-M1)
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0265 | Wire Processes Attach to TerminalTab local selection | deprecated |
+| 0268 | Extract shared useTeamsData and remove dead TeamsContext selection | deprecated |
 | 0266 | Add Teams bulk Up/Down controls without Roster | deprecated |
 | 0267 | Process watch list filters and teamId tagging | deprecated |
-| 0268 | Extract shared useTeamsData and remove dead TeamsContext selection | deprecated |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

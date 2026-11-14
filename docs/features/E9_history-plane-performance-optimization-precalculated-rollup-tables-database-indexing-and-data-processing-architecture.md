@@ -74,8 +74,8 @@ Feature: History plane performance optimization: precalculated rollup tables, da
 | 0632 | Eliminate raw scan fallback in getSummary by routing skill time series and previous period queries to precalculated rollups | done |
 | 0633 | Automated rollup materialization and latency regression tests for History data plane | done |
 | 0735 | Add history_skill_call derived table for skill-load behavior | done |
-| 0736 | Populate history_skill_call during LLM history import with per-agent skill-load extraction | done |
 | 0737 | History module Summary tab skill-load breakdown with materialized rollup | done |
+| 0736 | Populate history_skill_call during LLM history import with per-agent skill-load extraction | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

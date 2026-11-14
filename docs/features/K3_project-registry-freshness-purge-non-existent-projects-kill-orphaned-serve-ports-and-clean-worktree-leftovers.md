@@ -76,10 +76,10 @@ Scenario: R4 — Cleanup projects.json on worktree removal across plugins/sp
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0922 | Implement ProjectRegistry.refreshProjects with process termination | done |
-| 0923 | Integrate refreshProjects into registry list and spur projects CLI | done |
+| 1157 | Keep live registry lock owners exclusive past the retry timeout | done |
 | 0924 | Clean up projects.json in plugins/sp worktree teardown lifecycles | done |
 | 1156 | Require project ownership before registry and CLI cleanup signal a listener | done |
-| 1157 | Keep live registry lock owners exclusive past the retry timeout | done |
+| 0923 | Integrate refreshProjects into registry list and spur projects CLI | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

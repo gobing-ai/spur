@@ -153,10 +153,10 @@ Scenario: R14 — Stale port entries are detected and cleaned
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0380 | Project registry schema and ProjectRegistry service | done |
-| 0381 | spur serve auto-register port and deregister on stop | done |
-| 0382 | spur projects CLI noun (add remove list start stop) | done |
 | 0383 | HTTP GET /api/projects and POST /api/projects/start | done |
 | 0384 | Board ProjectSwitcher UI in LeftSidebar | done |
+| 0381 | spur serve auto-register port and deregister on stop | done |
+| 0382 | spur projects CLI noun (add remove list start stop) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

@@ -138,10 +138,10 @@ Feature: Project fleet, orchestrator binding, and rest/GTD strategy runtime
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0835 | Project fleet declaration with stable instance identity | done |
-| 0836 | Orchestrator binding with a single active owner | done |
-| 0837 | Per-project write-slot lease with ownerEpoch and strategyVersion fencing | done |
-| 0838 | Persisted rest and GTD strategy runtime with restart resume | done |
 | 0839 | Event-driven orchestrator wakeup replacing the drain poll | done |
+| 0837 | Per-project write-slot lease with ownerEpoch and strategyVersion fencing | done |
+| 0836 | Orchestrator binding with a single active owner | done |
+| 0838 | Persisted rest and GTD strategy runtime with restart resume | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

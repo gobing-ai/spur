@@ -4,13 +4,13 @@ name: Residuals from 1322
 status: done
 template: standard
 created_at: 2026-11-10T19:52:54.958Z
-updated_at: "2026-11-11T17:51:01.841Z"
+updated_at: "2026-11-14T06:20:00.000Z"
 
 done_forced: "false"
-done_reason: unforced close; PASS artifact at .spur/memory/evidence/1326-verdict.json
+done_reason: unforced close; PASS recorded in Testing; former 1326 verdict pointer removed during renumber because it belongs to the canonical 1326 task
 ---
 
-## 1326. Residuals from 1322
+## 1330. Residuals from 1322
 
 ### Background
 
@@ -64,7 +64,7 @@ Source task: 1322 (feature H16) — deferred residuals filed by residual-scan se
 
 | Priority | Finding | Disposition |
 | --- | --- | --- |
-| P3 | WBS collision discovered during closure: `docs/tasks5/` held two `1326_*` files (this residual and a done history-anatomy task), and the locator's first-prefix-match sent every `spur task … 1326` write to the unrelated done task. `spur task residual settle` allocated ids without a collision check. | Worked around for this closure by temporarily hiding the colliding file (name-only move, restored byte-identical). Root cause — settle's id allocation — is a new finding, not fixed here. |
+| P3 | WBS collision discovered during closure: `docs/tasks5/` held two `1326_*` files (this residual and a done history-anatomy task), and the locator's first-prefix-match sent every `spur task … 1326` write to the unrelated done task. `spur task residual settle` allocated ids without a collision check. | Resolved 2026-11-13 by renumbering this residual to 1330; the history-anatomy task retains 1326. The residual-settle command whose allocator caused the collision has since been removed. |
 | P4 | No findings in the fix itself; the unsupported-shape predicate is a pure prefix/`endsWith` check with tests for the standalone and mixed-list cases. | Accepted. |
 
 ### References

@@ -100,10 +100,10 @@ Feature: E7 workflow run record and inspection
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0925 | Persist redacted two-file workflow records for new runs | done |
-| 0926 | Continue and inspect legacy workflow runs with stable identity | done |
 | 0927 | Preserve task-pipeline proof while moving its run state to the pair | done |
-| 0928 | Move the remaining canonical workflows to the run record | done |
 | 0929 | Inspect a bounded run record from the existing Board | done |
+| 0928 | Move the remaining canonical workflows to the run record | done |
+| 0926 | Continue and inspect legacy workflow runs with stable identity | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

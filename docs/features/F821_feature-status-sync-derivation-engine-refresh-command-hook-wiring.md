@@ -36,9 +36,9 @@ R5 @edge — after the backfill run, no linked done task sits under a feature st
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0327 | Implement feature-status derivation engine, spur feature sync verb, and Board sync endpoint | done |
+| 0330 | Backfill drifted corpus via /sp:dev-refresh --all (operator-confirmed) | done |
 | 0328 | Wire feature sync into task-pipeline record, wrapup feature-transition, and dev-verify PASS | done |
 | 0329 | Author /sp:dev-refresh command (feature-id \| wbs \| --all \| --auto) | done |
-| 0330 | Backfill drifted corpus via /sp:dev-refresh --all (operator-confirmed) | done |
 | 0331 | Normalize legacy 'Done' task statuses to canonical done | done |
 <!-- END AUTO-GENERATED -->
 

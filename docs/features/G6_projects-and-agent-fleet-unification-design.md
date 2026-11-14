@@ -32,8 +32,8 @@ This is a wayfinder design map, not a shippable implementation feature. Its inve
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0828 | Inventory and probe project fleet identity, delivery, and legacy migration | done |
-| 0829 | Prototype rest and GTD dispatch traces with capacity and restart failures | done |
 | 0830 | Prototype Projects conversation, agents, work, and global input interactions | done |
+| 0829 | Prototype rest and GTD dispatch traces with capacity and restart failures | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

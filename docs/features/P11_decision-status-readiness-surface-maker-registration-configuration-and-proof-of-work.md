@@ -124,9 +124,9 @@ Feature: Decision status readiness surface: maker registration, configuration an
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1169 | Add the maker-liveness catalog decision for probe runs | done |
-| 1170 | Map decision readiness facts and recorded evidence onto the status report | done |
 | 1171 | Add the opt-in decision maker liveness probe | done |
 | 1172 | Render the sectioned decision status readiness report and wire --probe | done |
+| 1170 | Map decision readiness facts and recorded evidence onto the status report | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
