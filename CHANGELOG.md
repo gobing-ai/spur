@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.4.34] - 2026-11-14
+
+### Added
+- add `--wrap-pr` to dev-run and dev-runall for wrap, push and PR landing (e55f355b8)
+  <!-- src: plugins/sp/skills/spur-dev/references/flag-glossary.md:220 · confidence: HIGH -->
+- make the incremental gate the per-task default, with the full gate retained per feature or batch (b51454cd1)
+  <!-- src: config/workflows/task-pipeline.yaml:202 · confidence: HIGH -->
+
+### Fixed
+- renumber the residual follow-up to 1330 and refresh generated feature task tables (ada82d492)
+
+### Changed
+- derive pipeline verdicts without replaying tests, and remove the dead finding codes (cd0a9ae02)
+  <!-- src: config/workflows/task-pipeline.yaml:610, packages/config/src/finding-codes.ts:10 · confidence: HIGH -->
+- resolve the review lane deterministically from the diffstat — docs/tests-only to fast, sensitive or large diffs to safety (7558f37c0)
+  <!-- src: config/workflows/task-pipeline.yaml:454 · confidence: HIGH -->
+- record the slim-harness amendments to ADR-124/134/138/141/144 (2e83a9237)
+- merge branch `refactor/slim-harness` — harness phases 1–4 (4ff556ca9)
+- level three retired-source changelog anchors LOW under ADR-144 (4ab50d2b7)
+- sweep stale slim-harness references and retire the affected feature records (a1de6e010)
+- merge branch `refactor/slim-harness` — phase 5 test-suite cleanup (ca364a7cc)
+
+### Removed
+- remove the Electron desktop shell; the Board remains reachable through `spur serve` (2264b7c18)
+  <!-- src: docs/01_PRD.md:139 · confidence: HIGH -->
+- retire answer lint, `file:line` anchor checks, the residual sweep and answer confidence, including `spur task migrate-anchors` and `spur task residual` (eb3057e6a)
+  <!-- src: docs/00_ADR.md:2497 · confidence: HIGH -->
+
+BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are removed; `spur task verdict --from-answer` no longer lints the answer. Completion requires a green gate receipt for the tree plus one reviewer verdict.
+
+### Other
+- remove retired and duplicate app test coverage, and shorten the injected guest-lease TTL proof (11e8badcf)
+  <!-- src: packages/app/tests/services/guest-lease-renewer.test.ts:30 · confidence: HIGH -->
+- drop retired CLI anchor scaffolding and the duplicate release-ops smoke-failure case (55fed292e)
+  <!-- src: apps/cli/tests/release-ops.test.ts:84 · confidence: HIGH -->
+- remove the duplicate status-icon assertion from the domain barrel suite (01d58e519)
+  <!-- src: packages/domain/tests/planning/schema.test.ts:18 · confidence: HIGH -->
+- remove the retired transition-gate evidence file and inert confidence fixture (f517ff05b)
+  <!-- src: apps/server/tests/modules/task/transition-gate.test.ts:78 · confidence: HIGH -->
+- move the composed-board and frame browser proofs to the heavy tier (a9e74e3b2)
+  <!-- src: apps/web/tests/modules/composed-board-browser.heavy.test.ts:10 · confidence: HIGH -->
+- trim retired answer and pipeline assertions in the sp tests (19d53c3e3)
+  <!-- src: plugins/sp/tests/dispatch-handoff-contract.test.ts:30 · confidence: HIGH -->
+- remove the workflow-consolidation absence proof and re-anchor its changelog claim (494a1a332)
+- remove history-anchor and redundant confidence coverage in the app tests (399b30015)
+  <!-- src: packages/app/tests/decision/confidence-level.test.ts:14 · confidence: HIGH -->
+- remove workflow-from and confidence presentation proofs from the CLI tests (e24d9802b)
+  <!-- src: apps/cli/tests/commands/decision.test.ts:230 · confidence: HIGH -->
+- remove the decision-confidence drawer presentation coverage (cea0ce268)
+  <!-- src: apps/web/src/modules/observability/DecisionDetailDrawer.tsx:51 · confidence: HIGH -->
+
 ## [0.4.31] - 2026-11-10
 
 ### Added
