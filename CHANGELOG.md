@@ -351,7 +351,7 @@ filings) and assert no code, API or version fact._
 - redact POSIX home prefixes in probe output regardless of the runner's `$HOME` (bbd541987)
   <!-- src: scripts/commands/fleet-e2e.ts:1537 · confidence: HIGH -->
 - treat review placeholder rows by exact match so a `none found` row is not read as a finding (66864614f)
-  <!-- src: packages/app/src/services/residual-scan.ts:444 · confidence: HIGH -->
+  <!-- src: packages/app/src/services/residual-scan.ts:444 · confidence: LOW -->
 - accept the reviewer-written cert as the pipeline's review verdict (6cdfea7cc)
   <!-- src: config/workflows/task-pipeline.yaml · confidence: MEDIUM -->
 - bind reused warm turns to their agent and correlation holder (a8c3c4509)
@@ -658,7 +658,7 @@ status moves, filings) and assert no code, API or version fact._
 - resolve operator gates as decision points under every profile (4c1e9e43f)
   <!-- src: packages/app/src/workflow/decision-hitl-responder.ts:118 · confidence: HIGH -->
 - derive and cross-check the ADR-141 answer confidence line (90a3a43ac)
-  <!-- src: packages/app/src/services/answer-confidence.ts:17 · confidence: HIGH -->
+  <!-- src: packages/app/src/services/answer-confidence.ts:17 · confidence: LOW -->
 - hold a run's worktree claim across host pauses and dispatch fleet stages as persisted work items (3e0c779dd)
   <!-- src: packages/app/src/services/workflow-worktree-lease.ts:15 · confidence: HIGH -->
 - run feature verification on the engine foundation and add `fleet-e2e --matrix` (8dac0b016)
@@ -674,7 +674,7 @@ status moves, filings) and assert no code, API or version fact._
 - keep the next turn's `api-request` row out of measured work time (135344d8d)
   <!-- src: packages/app/src/workflow/run-summary.ts:201 · confidence: HIGH -->
 - accept the review report's `Item | State | Evidence` table as the requirement table (7b0298dda)
-  <!-- src: packages/app/src/services/verify-answer-lint.ts:415 · confidence: HIGH -->
+  <!-- src: packages/app/src/services/verify-answer-lint.ts:415 · confidence: LOW -->
 - fail loudly when a delegated `scripts/spur-dev.ts` module is missing (50c8790af)
   <!-- src: scripts/spur-dev.ts:94 · confidence: HIGH -->
 - count unbound light-gate actions in the gate summary instead of dropping them (98cf7fe3a)
