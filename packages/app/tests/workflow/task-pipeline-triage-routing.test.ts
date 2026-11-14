@@ -1,6 +1,6 @@
 /**
- * 0943 lanes, re-keyed by D65 1239: the triage lane decision and the failure-class routing are
- * decision CALLS inside the one `gate` state, and the former routing states are gone.
+ * 0943 lanes: the review lane is a deterministic projection of the diffstat and the
+ * failure-class routing is a decision CALL inside the one `gate` state.
  *
  * The engine takes the first passing edge in declaration order, so routing is proven by
  * EXECUTING the live definition's own onEnter shell commands and transition guards against
@@ -9,11 +9,10 @@
  * would produce (including a degraded default row).
  *
  * Covered:
- * - lane production (0943 R1/R2, re-keyed by 1262 R5): `task-semantic-risk` false → fast
- *   (functional-only review depth); true or a degraded row → review; a caller-set mode is never
- *   overridden (R2b); sensitive paths or >400 changed lines pin safety with the decide result
- *   ignored (R2c); a missing/corrupt diffstat row pins safety — never fast; and every lane
- *   appends `<runId> <wbs> <reason>` to the routes log (R5).
+ * - lane production (0943 R1/R2): a docs/tests-only change set → fast (functional-only review
+ *   depth); anything else → review; a caller-set mode is never overridden (R2b); sensitive paths
+ *   or >400 changed lines pin safety (R2c); a missing/corrupt diffstat row pins safety — never
+ *   fast; and every lane appends `<runId> <wbs> <reason>` to the routes log (R5).
  * - failure-class routing (0943 R3): the typed gate outcome gates first (BLOCKED is never read
  *   as red), then stop → failed(failed-check) BEFORE the cap, the cap → failed(retry-exhausted),
  *   fix → remediate, and a missing/corrupt decision fails closed.
@@ -124,7 +123,6 @@ interface Staged {
 function stage(options: {
     files?: Record<string, string>;
     untracked?: string[];
-    laneDecision?: object | null;
     failureDecision?: object | null;
     gateStatus?: string;
     attempts?: string;
@@ -159,9 +157,6 @@ function stage(options: {
     }
     const runDir = join(cwd, '.spur/run');
     mkdirSync(runDir, { recursive: true });
-    if (options.laneDecision !== undefined && options.laneDecision !== null) {
-        writeFileSync(join(runDir, `${WBS}-semantic-risk.decision`), `${JSON.stringify(options.laneDecision)}\n`);
-    }
     if (options.failureDecision !== undefined && options.failureDecision !== null) {
         writeFileSync(join(runDir, `${WBS}-failure-class.decision`), `${JSON.stringify(options.failureDecision)}\n`);
     }
@@ -200,19 +195,19 @@ function readAttempts(staged: Staged): string {
 }
 
 describe('task-pipeline 1239 — the lane is a decision call in the gate state (0943 R1/R2)', () => {
-    test('frozen contract: both catalog decides live in `gate`; no routing states remain', () => {
+    test('frozen contract: only the failure-class decide lives in `gate`; no routing states remain', () => {
         for (const retired of ['triage', 'test-fail-triage', 'test-recheck']) {
             expect(
                 DEF.states.find((s) => s.id === retired),
                 retired,
             ).toBeUndefined();
         }
-        const lane = decideAction('gate', 'task-semantic-risk');
-        expect(lane.options?.decision).toBe('task-semantic-risk');
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-        expect(lane.options?.params).toEqual({ wbs: '${vars.wbs}' });
-        expect(lane.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-semantic-risk.decision`);
-        expect(lane.options?.evidence).toContain(`.spur/run/\${vars.wbs}-diffstat.json`);
+        // The lane is a deterministic shell projection — no lane decide remains.
+        expect(
+            onEnter('gate')
+                .filter((a) => a.kind === 'decide')
+                .map((a) => a.options?.id),
+        ).toEqual(['failure-class']);
         const failure = decideAction('gate', 'failure-class');
         expect(failure.options?.decision).toBe('failure-class');
         expect(failure.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-failure-class.decision`);
@@ -224,40 +219,31 @@ describe('task-pipeline 1239 — the lane is a decision call in the gate state (
         );
     });
 
-    test('R1: task-semantic-risk false on a small clean diff resolves the fast lane (functional review depth)', () => {
+    test('R1: a docs/tests-only change set resolves the fast lane (functional review depth)', () => {
         const staged = stage({
-            files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-            laneDecision: { value: 'no', method: 'noul', degraded: false },
+            files: { 'docs/guide.md': '# guide\n', 'apps/cli/tests/index.test.ts': 'export const t = 1;\n' },
         });
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('fast');
         expect(readFocus(staged)).toBe('functional');
-        expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} fast:semantic-risk mechanical change`);
+        expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} fast:docs/tests-only change`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('R1: task-semantic-risk true (and a degraded row) stays on the review lane with full depth', () => {
-        for (const laneDecision of [
-            { value: 'yes', method: 'noul', degraded: false },
-            // A degraded row carries the catalog fallback, which is the standard lane.
-            { value: 'yes', method: 'noul', degraded: true, reason: 'no-evidence' },
-        ]) {
-            const staged = stage({
-                files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-                laneDecision,
-            });
-            runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
-            expect(readMode(staged)).toBe('');
-            expect(readFocus(staged)).toBe('all');
-            expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:standard lane`);
-            rmSync(staged.cwd, { recursive: true, force: true });
-        }
+    test('R1: any source path in the change set stays on the review lane with full depth', () => {
+        const staged = stage({
+            files: { 'docs/guide.md': '# guide\n', 'apps/cli/src/index.ts': 'export const start = 2;\n' },
+        });
+        runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
+        expect(readMode(staged)).toBe('');
+        expect(readFocus(staged)).toBe('all');
+        expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:standard lane`);
+        rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('R2b: a caller-set mode is projected verbatim — the decide result is never consulted', () => {
+    test('R2b: a caller-set mode is projected verbatim', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-            laneDecision: { value: 'yes', method: 'noul' },
             callerMode: 'fast',
         });
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
@@ -266,11 +252,10 @@ describe('task-pipeline 1239 — the lane is a decision call in the gate state (
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('R2c: a sensitive path pins safety even when the decide result projects the fast lane', () => {
+    test('R2c: a sensitive path pins safety', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
             untracked: ['drizzle/0050_lane.sql'],
-            laneDecision: { value: 'no', method: 'noul' },
         });
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
@@ -279,21 +264,19 @@ describe('task-pipeline 1239 — the lane is a decision call in the gate state (
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('AC5 (1262 R5): a 450-line diffstat pins safety and no lane decision is made', () => {
+    test('AC5 (1262 R5): a 450-line diffstat pins safety', () => {
         const big = Array.from({ length: 450 }, (_, i) => `export const v${i} = ${i};\n`).join('');
         const staged = stage({
             files: { 'apps/cli/src/index.ts': big },
-            laneDecision: { value: 'no', method: 'noul' },
         });
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
-        // The pre-guard already pinned the lane, so the decide row is never read.
         expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:deterministic-high`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
     test('fail-safe: a missing run base (fail-closed diffstat) degrades to safety, never fast', () => {
-        const staged = stage({ anchorBase: false, laneDecision: { value: 'no', method: 'noul' } });
+        const staged = stage({ anchorBase: false });
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
         expect(readFocus(staged)).toBe('all');
@@ -301,7 +284,7 @@ describe('task-pipeline 1239 — the lane is a decision call in the gate state (
     });
 
     test('fail-safe: a producer that wrote no diffstat row pins safety, never fast', () => {
-        const staged = stage({ laneDecision: { value: 'no', method: 'noul' } });
+        const staged = stage({});
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, { ...staged.vars, spurBin: 'true' });
         expect(existsSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`))).toBe(false);
         expect(readMode(staged)).toBe('safety');
@@ -310,7 +293,7 @@ describe('task-pipeline 1239 — the lane is a decision call in the gate state (
     });
 
     test('fail-closed: a spur that cannot run `task diffstat` writes the sensitive row (safety)', () => {
-        const staged = stage({ laneDecision: { value: 'no', method: 'noul' } });
+        const staged = stage({});
         runShellsMatching('gate', LANE_SHELLS, staged.cwd, { ...staged.vars, spurBin: 'false' });
         const row = JSON.parse(readFileSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`), 'utf8'));
         expect(row).toEqual({ files: 0, insertions: 0, deletions: 0, paths: [], sensitive: true });
@@ -418,19 +401,9 @@ describe('task-pipeline 1263 — outcome recording is routing-neutral', () => {
         expect(onEnter('gate')[record]?.options?.command).toContain('[ "$gateMode" = recheck ]');
     });
 
-    test('AC4: the review state records the lane severity after the status write', () => {
-        const status = actionIndex('review', mentions('-review.status'));
-        const record = actionIndex('review', mentions('--review-severity'));
-        expect(record).toBeGreaterThan(status);
-        // It runs only when the lane decision actually produced a row.
-        expect(onEnter('review')[record]?.options?.command).toContain('-semantic-risk.decision');
-    });
-
     test('AC4: a recheck visit with no invocationId is a no-op and routing is unchanged', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-            // Degraded lane decision row: no ledger key, so the outcome step must do nothing.
-            laneDecision: { value: 'no', method: 'noul', invocationId: null },
             gateStatus: 'PASS',
         });
         writeFileSync(join(staged.cwd, '.spur/run', `${WBS}-failure-class.decision`), '{"value":"fix"}\n');
@@ -448,7 +421,6 @@ describe('task-pipeline 1263 — outcome recording is routing-neutral', () => {
     test('AC4: a green recheck hands the previous invocation to the outcome verb; routing unchanged', () => {
         const staged = stage({
             files: { 'apps/cli/src/index.ts': 'export const start = 2;\n' },
-            laneDecision: { value: 'no', method: 'noul', invocationId: null },
             gateStatus: 'PASS',
         });
         writeFileSync(

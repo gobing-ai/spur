@@ -84,10 +84,12 @@ decision point (§3.5).
   decisions go in `config/decisions/task-pipeline.yaml`, one file per owning workflow.
   - `gates.yaml` carries `gate-evidence`; `idea-pipeline.yaml` `idea-recommendation` and
     `needs-design`; `history-anatomy.yaml` `anatomy-validation-verdict`; `task-pipeline.yaml`
-    `task-semantic-risk` and `failure-class`. The workflow audit that maps them to steps is
+    `failure-class`. The workflow audit that maps them to steps is
     `decision-observability-and-adoption.md` §4.
 
-    Current state (2026-10-19, task 1262). The pipeline's lane decision is
+    Current state (2026-11-13). The review lane is a deterministic diffstat rule with no
+    decide call (docs/tests-only → fast; sensitive or >400 lines → safety; else standard); the
+    paragraph below is the 2026-10-19 history. The pipeline's lane decision was
     `task-semantic-risk` (noul, fallback `true`; `false` projects the fast lane) and its
     gate-failure decision is `failure-class`. `task-triage` (low/standard/high) was replaced
     because 36 real calls accepted twice at 0.07–0.45 confidence while duplicating the
@@ -219,7 +221,7 @@ decisions:
     paths: []                # optional extra catalog folders (registered layer)
     maker: typesafe          # default DecisionMaker for every decision point
     makers:                  # per-decision-point overrides
-        task-semantic-risk: laya-local
+        failure-class: laya-local
 ```
 
 The effective maker is resolved per call. The first source that is set wins:

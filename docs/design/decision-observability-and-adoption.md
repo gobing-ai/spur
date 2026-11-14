@@ -161,8 +161,7 @@ null), and a later shell step or operator records what happened —
 `spur decision outcome <invocation-id> <outcome>` with `--review-severity <wbs>` (worst Review
 finding, resolved rows included) or `--gate-status <run-id>` (PASS → `fixed`, else `not-fixed`).
 First write wins; every step ends in `exit 0`, so recording never changes routing. The
-`task-pipeline` records `failure-class` on the recheck visit (it scores the previous visit's answer)
-and `task-semantic-risk` from the Review table when that row exists. What each value *should* have
+`task-pipeline` records `failure-class` on the recheck visit (it scores the previous visit's answer). What each value *should* have
 produced is Spur config (`decisions.outcomeMap`), never a catalog field: the catalog schema belongs
 to ts-libs (ADR-033) and this mapping is Spur's reading of Spur's own artifacts.
 
@@ -303,7 +302,7 @@ Classes:
 
 | Workflow · step | Today | Class | Catalog id · choices · fallback |
 | --- | --- | --- | --- |
-| task-pipeline · `triage` (`task-pipeline.yaml:603`) | catalog `decide` — re-keyed by task 1262 to `task-semantic-risk` (noul, fallback `true`); `task-triage` retired as duplicated by the deterministic pre-guard | adopted | `task-semantic-risk` · yes/no · true |
+| task-pipeline · `triage` (`task-pipeline.yaml:603`) | catalog `decide` — re-keyed by task 1262 to `task-semantic-risk` (noul, fallback `true`); `task-triage` retired as duplicated by the deterministic pre-guard | retired (2026-11-13): the lane is a deterministic diffstat rule — docs/tests-only → fast, sensitive or >400 lines → safety, else standard | — |
 | task-pipeline · `test-fail-triage` (`task-pipeline.yaml:667`) | catalog `decide` — migrated (task 1115) | adopted | `failure-class` · fix/stop · fix |
 | task-pipeline · `review-fail-triage` (`task-pipeline.yaml:758`) | retired by task 1262 R6 — the review status file plus the attempt cap is the whole signal (15/15 runs answered the decision's own fallback) | retired | — |
 | executor · `agent-run-executor` unmatched dispatch failure (`agent-run-executor.ts:672`) | catalog `decide` behind `workflows.executorFailureDecisionMaker`, off by default (task 1264) | adopted (opt-in) | `executor-failure-class` · resource-exhaustion/auth/task-defect · task-defect, minConfidence 0.85 |

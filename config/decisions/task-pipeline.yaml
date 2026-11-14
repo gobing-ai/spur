@@ -1,7 +1,7 @@
 # Decision catalogs for the task pipeline (feature P1, ADR-134).
 #
 # The shipped `config/workflows/task-pipeline.yaml` decide actions reference these ids
-# (`failure-class`, and `task-semantic-risk` once its evidence bar is met). Each entry's
+# (`failure-class`). Each entry's
 # reliability is measured from recorded `decision.*` events — `spur decision status
 # --reliability` — and an adoption slice only keeps a decision point while that evidence
 # shows it adds information the deterministic guards do not.
@@ -16,34 +16,6 @@ defaults:
     minConfidence: 0.8
 
 decisions:
-    task-semantic-risk:
-        type: noul
-        description: >
-            Does this task's change set change behaviour a reviewer must reason about beyond what
-            the diffstat already shows? (false projects the fast lane, true or a fallback the
-            standard lane.)
-        instructions: |
-            You are classifying one Spur task's change set for review depth.
-            Change set: ${params.instructions}
-            Answer true when the change alters behaviour a reviewer must reason about: control
-            flow, a data shape, persistence, security, an external contract, or error handling.
-            Answer false only when the change is mechanical — docs, comments, formatting, renames,
-            test-only edits, or a dependency bump with no source edit.
-            Judge the change set only; do not score its quality or estimate its size.
-        parameters:
-            wbs:
-                type: string
-                description: Task WBS whose change set is being classified.
-        criteria:
-            "true": >
-                The change set touches executable behaviour — a branch, a boundary, a stored
-                schema, a public signature, or a failure path — so a reviewer must read the diff,
-                not only its diffstat.
-            "false": >
-                The change set is mechanical — docs, comments, formatting, renames, test-only
-                edits, or a version bump with no executable change — so the diffstat is enough.
-        fallback: true
-
     failure-class:
         type: choice
         description: Is a failed quality gate fixable by the repair agent, or should the run stop?

@@ -167,7 +167,7 @@ decisions:
     paths: []
     maker: typesafe
     # makers:
-    #     task-semantic-risk: laya-local
+    #     failure-class: laya-local
     # What "the decision was right" means (task 1263 R5): per decision id, the recorded outcomes
     # that count as correct for each served value. `String(value)` keys, so a yes/no decision uses
     # "true"/"false". The outcome verb records them (`spur decision outcome <invocation-id> ...`);
@@ -177,6 +177,3 @@ decisions:
         failure-class:
             fix: [fixed]
             stop: [not-fixed]
-        task-semantic-risk:
-            "false": [none, p4, p3]
-            "true": [p1, p2]
