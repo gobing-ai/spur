@@ -18,9 +18,8 @@ describe('super-reviewer Output Format contract (task 1122 R4)', () => {
 });
 
 // The citation contract (2026-10-12): a review finding that asserts an external API/library claim
-// carries its citation in the same cell — the verify answer's `evidence-citation` rule, which blocks
-// derivation there, owned by verdict-schema.md and enforced here in SECUA review (the same split the
-// docs-corpus rule documents). Pinned so the review path cannot silently lose the claim contract.
+// carries its citation in the same cell — owned by verdict-schema.md (nothing machine-checks it since
+// the slim-harness refactor) and enforced here in SECUA review. Pinned so the review path cannot silently lose the claim contract.
 describe('super-reviewer citation contract', () => {
     test('the Output Format requires a same-cell citation for external claims', () => {
         expect(REVIEWER).toContain('Source citations for external claims');

@@ -34,7 +34,9 @@ const IDEA_ACTION_BUDGET = 36;
 // 55 at 1135: review joins the proof bracket (one `proof.fingerprint` compare before its agent),
 // and `test`/`test-recheck` each gain one gate-entry tree-state snapshot shell so a digest
 // mismatch names the drifted paths. Named in the commit; raising the ratchet here is the record.
-const TASK_ACTION_BUDGET = 55;
+// 42 at the slim-harness refactor (2026-11-13): answer lint, anchor repair, confidence, verdict
+// replay and the semantic-risk decide left the pipeline; the ratchet drops with the definition.
+const TASK_ACTION_BUDGET = 42;
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 
