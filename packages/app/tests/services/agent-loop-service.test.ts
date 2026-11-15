@@ -24,6 +24,7 @@ import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { AgentLoopDeps } from '../../src/services/agent-loop-service';
 import {
     createWriteSlotHeartbeat,
+    loopSleep,
     ORCHESTRATOR_REPLY_INSTRUCTION,
     recordIdleHold,
     runAgentLoopCore,
@@ -48,6 +49,16 @@ async function emit(db: DbAdapter, eventName: string, actor = 'human'): Promise<
         payload_json: JSON.stringify({ eventName }),
     });
 }
+
+describe('0968 loopSleep', () => {
+    test('resolves immediately for an already-aborted signal and on a later abort', async () => {
+        await loopSleep(60_000, AbortSignal.abort());
+        const controller = new AbortController();
+        const sleeping = loopSleep(60_000, controller.signal);
+        controller.abort();
+        await sleeping;
+    });
+});
 
 describe('0968 waitForWake', () => {
     test('returns on the first wake event after consuming non-wake rows, and never replays', async () => {
@@ -239,6 +250,155 @@ describe('0968 runAgentLoopCore', () => {
         expect(seen?.requireDiff).toBe(true);
         const settled = (deps as unknown as { __settled: Array<{ outcome: string }> }).__settled;
         expect(settled).toEqual([{ outcome: 'not-started' }]);
+    });
+
+    test('the reconcile report names unresolved runs and exhausted requests', async () => {
+        const db = await memDb();
+        const written: string[] = [];
+        const deps = memberDeps(db, {
+            write: (text) => {
+                written.push(text);
+            },
+            reconciler: {
+                reconcile: async () => ({
+                    unresolved: [
+                        {
+                            messageId: 'm1',
+                            toId: 'member-1',
+                            reason: 'outcome-unknown',
+                            injectAttempts: 2,
+                            runId: 'run-1',
+                            requestKey: 'k1',
+                            artifacts: [],
+                        },
+                    ],
+                    exhausted: ['m2'],
+                    scanned: 2,
+                }),
+            },
+        });
+        await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
+        expect(written.join('\n')).toContain('unresolved=1 exhausted=1');
+        expect(written.join('\n')).toContain('m1 outcome-unknown attempts=2 run=run-1');
+    });
+
+    test('an a2a spec with no turn service fails the drain instead of starting a local process', async () => {
+        const db = await memDb();
+        const errors: string[] = [];
+        const deps = memberDeps(db, {
+            error: (text) => {
+                errors.push(text);
+            },
+            listAgentSpecs: async () => [
+                {
+                    id: 'member-1',
+                    type: 'a2a',
+                    name: 'member-1',
+                    workspace: '/tmp',
+                    purpose: 'a2a',
+                    tags: [],
+                    config: {},
+                },
+            ],
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(errors.join('\n')).toContain('A2A turn service is not wired');
+    });
+
+    test('a persistent stdin success settles accepted and a send exception is reported', async () => {
+        const db = await memDb();
+        const errors: string[] = [];
+        const persistentSpec = {
+            listAgentSpecs: async () => [
+                {
+                    id: 'member-1',
+                    type: 'pi',
+                    executor: 'e1',
+                    name: 'member-1',
+                    workspace: '/tmp',
+                    purpose: 'coder',
+                    tags: [],
+                    config: {},
+                },
+            ],
+        };
+        const session = (send: (text: string) => Promise<{ ok: boolean }>) => ({
+            executors: [{ name: 'e1', agent: 'pi' }],
+            env: {},
+            getDb: async () => db,
+            warn: () => {},
+            processFactory: () => ({
+                start: async () => {},
+                stop: async () => {},
+                send,
+                getStatus: () => 'running' as const,
+                getExitCode: () => null,
+            }),
+            sessionCapability: () => ({ supportsPersistentStdin: true, supportsResumeById: false }) as never,
+        });
+        const accepted = memberDeps(db, { ...persistentSpec, memberSession: session(async () => ({ ok: true })) });
+        await runAgentLoopCore(accepted, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect((accepted as unknown as { __settled: Array<{ outcome: string }> }).__settled).toEqual([
+            { outcome: 'accepted' },
+        ]);
+        const failed = memberDeps(db, {
+            ...persistentSpec,
+            error: (text) => {
+                errors.push(text);
+            },
+            memberSession: session(async () => {
+                throw new Error('stdin closed');
+            }),
+        });
+        await runAgentLoopCore(failed, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
+        expect(errors.join('\n')).toContain('stdin closed');
+    });
+
+    test('a heartbeat exception marks ownership lost instead of escaping the loop', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-heartbeat-error-'));
+        const proto = ProjectClaimDao.prototype;
+        const { heartbeat, release } = proto;
+        const realSetInterval = globalThis.setInterval;
+        proto.heartbeat = async () => {
+            throw new Error('claim db gone');
+        };
+        proto.release = release;
+        globalThis.setInterval = ((fn: () => void) => realSetInterval(fn, 1)) as typeof setInterval;
+        try {
+            const deps = memberDeps(db, {
+                cwd,
+                fleet: {
+                    load: async () => ({}),
+                    resolveOrchestrator: async () => ({ instanceId: 'orch-1' }),
+                    assertLaunchGroundTruth: async () => {},
+                } as unknown as FleetService,
+                makeStrategyRuntime: async () =>
+                    ({
+                        observe: async () => ({ released: [] }),
+                        tick: async () => ({ dispatched: [], holds: [] }),
+                        resume: async () => {},
+                        stop: () => {},
+                    }) as unknown as StrategyRuntime,
+            });
+            const code = await runAgentLoopCore(deps, { recipient: 'orch-1', pollMs: 5, flags: {}, runtime: {} });
+            expect(code).toBe(2);
+        } finally {
+            proto.heartbeat = heartbeat;
+            proto.release = release;
+            globalThis.setInterval = realSetInterval;
+        }
     });
 
     test('a refused orchestrator claim exits 2 and never starts the loop', async () => {
@@ -580,8 +740,18 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         const settled: Record<string, unknown>[] = [];
         const real = new AiRunner({ processExecutor: new NodeProcessExecutor() });
         const driver = createFakeTurnSessionDriver(
-            [{ op: 'accept' }, { op: 'terminal', kind: 'success', finalText: 'ok' }],
+            [
+                { op: 'accept' },
+                { op: 'stray', line: { turn: 'foreign', type: 'output', data: 'late frame' } },
+                { op: 'terminal', kind: 'success', finalText: 'ok' },
+            ],
             { qualify: () => ({ qualified: true }) },
+        );
+        // The stale-frame diagnostic sink is best-effort: a failed insert is caught, never a gate.
+        await db.exec(
+            `CREATE TRIGGER fail_stale_frame BEFORE INSERT ON system_events
+             WHEN NEW.event_name = 'fleet.turn.stale'
+             BEGIN SELECT RAISE(ABORT, 'stale sink failed'); END;`,
         );
         const deps = memberOnlyDeps(db, {
             cwd,

@@ -279,3 +279,40 @@ test('1271 — an adapter without synchronous transactions fails before inbox wr
         'require the atomic synchronous transaction capability',
     );
 });
+
+describe('1334 R3 — claim-by-id and the remaining inbox read seams', () => {
+    test('claimById claims exactly one queued row once and leaves siblings untouched', async () => {
+        const first = await seed();
+        const second = await seed();
+        const claimed = await dao.claimById(second.id, 100, event('message.claimed'));
+        expect(claimed).toMatchObject({ id: second.id, status: 'claimed', attempts: 1, claimedAt: 100 });
+        expect(await dao.claimById(second.id, 101, event('message.claimed'))).toBeNull();
+        expect((await dao.get(first.id))?.status).toBe('queued');
+        expect(await new SystemEventDao(db).query({ name: 'message.claimed', limit: 5 })).toHaveLength(1);
+    });
+
+    test('expired claims, directional keyset reads, threads, requests and task reads share one row model', async () => {
+        const root = await seed({ kind: 'request', taskId: '1334', createdAt: 1, updatedAt: 1 });
+        const reply = await seed({ threadId: root.id, inReplyTo: root.id, createdAt: 2, updatedAt: 2 });
+        const outbound = await seed({ fromId: 'proj-coder', toId: 'operator', createdAt: 3, updatedAt: 3 });
+        const claimed = await dao.claimById(root.id, 10, event('message.claimed'));
+        expect(claimed).not.toBeNull();
+        expect((await dao.listExpiredClaims(11)).map((row) => row.id)).toEqual([root.id]);
+        expect((await dao.list('proj-coder', 'in', 2)).map((row) => row.id)).toEqual([reply.id, root.id]);
+        expect((await dao.list('proj-coder', 'out', 2)).map((row) => row.id)).toEqual([outbound.id]);
+        expect((await dao.list('proj-coder', 'both', 3)).map((row) => row.id)).toEqual([
+            outbound.id,
+            reply.id,
+            root.id,
+        ]);
+        expect(
+            (await dao.list('proj-coder', 'both', 3, { createdAt: 3, id: outbound.id })).map((row) => row.id),
+        ).toEqual([reply.id, root.id]);
+        expect((await dao.thread(root.id)).map((row) => row.id)).toEqual([root.id, reply.id]);
+        expect((await dao.requests()).map((row) => row.id)).toEqual([root.id]);
+        expect((await dao.requests(['proj-coder'], reply.id)).map((row) => row.id)).toEqual([reply.id]);
+        expect(await dao.requests([])).toEqual([]);
+        expect(await dao.countQueued('proj-coder')).toBe(1);
+        expect((await dao.listByTask('1334')).map((row) => row.id)).toEqual([root.id]);
+    });
+});

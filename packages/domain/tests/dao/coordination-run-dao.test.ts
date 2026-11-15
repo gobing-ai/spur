@@ -48,6 +48,56 @@ describe('CoordinationRunDao', () => {
         adapter.close();
     });
 
+    test('listByParentRunId is oldest-first, and a missing table reads as no lineage', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new CoordinationRunDao(adapter);
+        for (const [runId, startedAt, parentRunId] of [
+            ['child-2', '2026-08-13T02:00:00.000Z', 'parent-1'],
+            ['child-1', '2026-08-13T01:00:00.000Z', 'parent-1'],
+            ['child-3', '2026-08-13T03:00:00.000Z', 'parent-2'],
+        ] as const) {
+            await dao.insertStart({
+                specId: 'reviewer',
+                agentKind: 'codex',
+                processId: null,
+                runId,
+                generation: 1,
+                startedAt,
+                parentRunId,
+            });
+        }
+        expect((await dao.listByParentRunId('parent-1')).map((row) => row.run_id)).toEqual(['child-1', 'child-2']);
+        const empty = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        expect(await new CoordinationRunDao(empty).listByParentRunId('parent-1')).toEqual([]);
+        empty.close();
+        adapter.close();
+    });
+
+    test('1334 R4: remote identity round-trips and remote runs are not reaped as local orphans', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new CoordinationRunDao(adapter);
+        await dao.insertStart({
+            specId: 'remote',
+            agentKind: 'a2a',
+            processId: null,
+            runId: 'a2a-run',
+            generation: 1,
+            startedAt: '2026-11-15T00:00:00.000Z',
+            messageIds: ['msg-a2a'],
+            remoteTaskId: 'remote-task',
+            remoteContextId: 'remote-context',
+        });
+        expect(await dao.getByRunId('a2a-run')).toMatchObject({
+            remote_task_id: 'remote-task',
+            remote_context_id: 'remote-context',
+        });
+        expect(await dao.reapOrphanedRunning('remote', '2026-11-15T01:00:00.000Z')).toEqual([]);
+        expect((await dao.getByRunId('a2a-run'))?.status).toBe('running');
+        adapter.close();
+    });
+
     test('maxGeneration is null then climbs monotonically per spec', async () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);
