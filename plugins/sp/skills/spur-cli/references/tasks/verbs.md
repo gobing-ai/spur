@@ -256,6 +256,9 @@ the active tasks folder (or `--folder`).
 | `--folder <path>` | Custom tasks folder. |
 | `--json` | Machine-readable report envelope. |
 
+For a complete downstream upgrade, use the [migration guide](../../../spur-dev/references/migration-guide.md):
+`task migrate` is only the A17 normalization step, not the whole migration.
+
 ## `resolve <file-path>`
 
 Map a file path to its **owning task** — returns the WBS + task file. Strategies, in order: direct

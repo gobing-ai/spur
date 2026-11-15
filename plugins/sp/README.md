@@ -55,6 +55,8 @@ Entry points that feed the main flow above, or run independently of it — see t
   from git history.
 - The **project bootstrapper** scaffolds a brand-new Spur project (config + docs), then tailors it
   to the target stack.
+- The **[downstream migration guide](skills/spur-dev/references/migration-guide.md)** upgrades an
+  existing project without replacing its `.spur/config.yaml`, feature tree, or task history.
 
 ### Batch and parallel paths
 
@@ -242,8 +244,8 @@ plugins/sp/
 │   │   └── references/  # ac-style-guide, cross-cutting, decision-brief, dev-operations,
 │   │                      done-housekeeping, execution-batch, execution-workflow,
 │   │                      feature-link-helper, flag-glossary, gate-checklists, glossary,
-│   │                      idea-evaluation, execution-workflow, planning-workflow,
-│   │                      product-planning, section-batching  (16 files)
+│   │                      idea-evaluation, migration-guide, execution-workflow, planning-workflow,
+│   │                      product-planning, section-batching  (17 files)
 │   ├── test-driven-development/                    # TDD workflow companion (SKILL.md only)
 │   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit
 │   │   ├── agents/openai.yaml
