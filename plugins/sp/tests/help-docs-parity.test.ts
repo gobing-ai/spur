@@ -36,7 +36,7 @@ const HELP_NOUN = 'help';
 /** Former standalone nouns, now hidden top-level aliases over `spur self <verb>`. */
 const HIDDEN_ALIASES = ['init', 'maintain', 'migrate', 'serve', 'status'] as const;
 /** Verbs registered but hidden from `<noun> --help`. */
-const HIDDEN_VERBS: Record<string, readonly string[]> = { agent: ['loop'] };
+const HIDDEN_VERBS: Record<string, readonly string[]> = { agent: ['loop', 'join', 'leave', 'wait', 'report'] };
 /** Help plumbing flags exempt from R2 documentation coverage. */
 const FLAG_EXEMPT = new Set(['--help', '-h', '--json-envelope']);
 

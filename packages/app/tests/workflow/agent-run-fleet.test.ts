@@ -51,6 +51,7 @@ function subprocessSpy(): { svc: AgentService; calls: () => number } {
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
     return {
         instanceId: 'proj-coder',
+        localId: 'coder',
         role: 'coder',
         executor: 'claude',
         enabled: true,
@@ -298,9 +299,183 @@ describe('agent.run fleet executor surface (0942/ADR-126, G71 R2/R5)', () => {
             { role: 'coder', agent: 'codex', input: 'hello' },
             makeCtx({ workdir, vars: { executor: 'fleet' } }),
         );
+        // 1333 R5: a non-role selector now reads as a MEMBER address — it still never
+        // spawns a locally resolved executor, and an undeclared one is refused by name.
         expect(result.ok).toBe(false);
-        expect(result.error).toContain('declared member executor');
+        expect(result.error).toContain('no declared fleet member "codex"');
         expect(deps.dispatchCalls).toHaveLength(0);
+    });
+
+    test('1333 R5/AC3: a step naming a member dispatches to that member, not the role match', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-member-'));
+        try {
+            const deps = fleetDeps(workdir, {
+                members: [
+                    member(),
+                    member({ instanceId: 'proj-verifier', localId: 'verifier', role: 'reviewer', executor: 'claude' }),
+                ],
+            });
+            deps.dispatcher.awaitReceipt = async () => {
+                writeFileSync(
+                    join(workdir, '.spur/run/test-1/prompts/s1.result.json'),
+                    JSON.stringify({ ok: true, data: { outcome: 'completed' } }),
+                );
+                return { status: 'completed', messageId: 'msg-fleet-1', runId: 'run-1' };
+            };
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, deps).execute(
+                { role: 'reviewer', agent: 'verifier', input: 'review this' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(true);
+            expect(deps.dispatchCalls[0]?.member).toBe('proj-verifier');
+            expect((result.data as Record<string, unknown>).memberId).toBe('proj-verifier');
+            expect(calls()).toBe(0);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('1333 R3: a definite not-started receipt takes the cold subprocess by default', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-notstarted-'));
+        try {
+            const deps = fleetDeps(workdir, { receipt: { status: 'not-started', messageId: 'msg-fleet-1' } });
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, deps).execute(
+                { role: 'coder', input: 'hello' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(true);
+            expect(calls()).toBe(1);
+            const data = result.data as Record<string, unknown>;
+            expect(String(data.fallbackReason)).toContain('did not start');
+            expect(deps.dispatchCalls).toHaveLength(1);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('1333 R3 (P2-2): a member-named step that gets not-started runs the MEMBER executor', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-member-cold-'));
+        try {
+            // The member id is not a role, and its executor is not the step selector.
+            const deps = fleetDeps(workdir, {
+                receipt: { status: 'not-started', messageId: 'msg-fleet-1' },
+                members: [
+                    member({
+                        instanceId: 'proj-verifier',
+                        localId: 'verifier',
+                        role: 'reviewer',
+                        executor: 'codex-fast',
+                    }),
+                ],
+            });
+            const agents: string[] = [];
+            const svc = {
+                runTraced: async (_prompt: string | undefined, flags: Record<string, string | boolean>) => {
+                    agents.push(String(flags.agent));
+                    return { exitCode: 0, stdout: '', invocation: invocation() };
+                },
+            } as unknown as AgentService;
+            const result = await newRunner(svc, deps).execute(
+                { role: 'reviewer', agent: 'verifier', input: 'review this' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(true);
+            // The cold subprocess ran the member's executor, not the member id / role pin.
+            expect(agents).toEqual(['codex-fast']);
+            expect(String((result.data as Record<string, unknown>).fallbackReason)).toContain('did not start');
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('1333 R7 (P3): an explicit executorFallback: traditional does NOT rescue not-started', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-notstarted-traditional-'));
+        try {
+            const deps = fleetDeps(workdir, { receipt: { status: 'not-started', messageId: 'msg-fleet-1' } });
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, deps).execute(
+                { role: 'coder', input: 'hello' },
+                makeCtx({ workdir, vars: { executor: 'fleet', executorFallback: 'traditional' } }),
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('failed-agent');
+            expect(calls()).toBe(0);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test("1333 R3/R7: an explicit executorFallback keeps today's not-started semantics", async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-notstarted-explicit-'));
+        try {
+            const deps = fleetDeps(workdir, { receipt: { status: 'not-started', messageId: 'msg-fleet-1' } });
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, deps).execute(
+                { role: 'coder', input: 'hello' },
+                makeCtx({ workdir, vars: { executor: 'fleet', executorFallback: 'fail' } }),
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('failed-agent');
+            expect(calls()).toBe(0);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('1333 R3 (r2-2): an unavailable fleet AFTER member resolution also runs the MEMBER executor', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-unavailable-member-'));
+        try {
+            const deps = fleetDeps(workdir, {
+                members: [
+                    member({
+                        instanceId: 'proj-verifier',
+                        localId: 'verifier',
+                        role: 'reviewer',
+                        executor: 'codex-fast',
+                    }),
+                ],
+            });
+            // The send fails after the member resolved: `unavailable` carries the member,
+            // so the default cold rung must target ITS executor, not the role pin.
+            deps.dispatcher.enqueue = async () => {
+                throw new Error('mailbox unavailable');
+            };
+            const agents: string[] = [];
+            const svc = {
+                runTraced: async (_prompt: string | undefined, flags: Record<string, string | boolean>) => {
+                    agents.push(String(flags.agent));
+                    return { exitCode: 0, stdout: '', invocation: invocation() };
+                },
+            } as unknown as AgentService;
+            const result = await newRunner(svc, deps).execute(
+                { role: 'reviewer', agent: 'verifier', input: 'review this' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(true);
+            expect(agents).toEqual(['codex-fast']);
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
+    });
+
+    test('1333 R4: an outcome-unknown receipt is never re-run on another delivery', async () => {
+        const workdir = mkdtempSync(join(tmpdir(), 'agent-run-fleet-unknown-'));
+        try {
+            const deps = fleetDeps(workdir, { receipt: { status: 'outcome-unknown', messageId: 'msg-fleet-1' } });
+            const { svc, calls } = subprocessSpy();
+            const result = await newRunner(svc, deps).execute(
+                { role: 'coder', input: 'hello' },
+                makeCtx({ workdir, vars: { executor: 'fleet' } }),
+            );
+            expect(result.ok).toBe(false);
+            expect(calls()).toBe(0);
+            expect(deps.dispatchCalls).toHaveLength(1);
+            expect((result.data as Record<string, unknown>).reason).toBe('outcome-unknown');
+        } finally {
+            rmSync(workdir, { recursive: true, force: true });
+        }
     });
 
     test('requireDiff is delegated and a missing member-side contract result fails closed', async () => {

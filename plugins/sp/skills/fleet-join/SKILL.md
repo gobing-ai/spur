@@ -16,6 +16,10 @@ by concrete id only, and it never receives a stage (`requiresCapabilities` stage
 to it — a guest carries no attestation). Joining registers an occupant row plus a heartbeat lease;
 leaving (or an expired lease) releases it and returns any claimed messages to `queued`.
 
+The three verbs this skill drives (`join`, `wait`, `leave`) are fleet **plumbing**: they are hidden
+from default `spur agent --help` (1335 / ADR-148) and remain registered and documented, so the
+commands below keep working exactly as shown.
+
 ## Join
 
 ```bash

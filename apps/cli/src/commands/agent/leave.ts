@@ -79,8 +79,9 @@ export async function runAgentLeave(
 
 /** Register `spur agent leave`. */
 export function registerAgentLeaveCommand(agent: Command, context: CliContext): void {
+    // Fleet plumbing (1335 / ADR-148) — hidden from default help, verb unchanged.
     agent
-        .command('leave')
+        .command('leave', { hidden: true })
         .description('Leave the fleet: release a guest occupant lease and retire its record.')
         .argument('[id]', 'Guest id (defaults to the guest joined by this session)')
         .option('--session-id <sid>', 'Host session id (defaults to CLAUDE_CODE_SESSION_ID)')

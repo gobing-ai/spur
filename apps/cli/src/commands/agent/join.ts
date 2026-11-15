@@ -211,8 +211,10 @@ async function spawnGuestRenewer(context: CliContext, guest: GuestRecord): Promi
 
 /** Register `spur agent join`. */
 export function registerAgentJoinCommand(agent: Command, context: CliContext): void {
+    // Fleet plumbing (1335 / ADR-148): called by hooks, skills and guests, never typed by a user
+    // dispatching work. Hidden from default help; the verb, its flags and its docs are unchanged.
     agent
-        .command('join')
+        .command('join', { hidden: true })
         .description('Join the fleet as a guest occupant (a live session that pulls its own work).')
         .requiredOption('--role <name>', 'Layer-1 role the guest occupies (scribe | coder | reviewer | planner)')
         .option('--id <id>', 'Guest id (defaults to <role>-g<n>)')

@@ -278,8 +278,10 @@ function waitFail(
 
 /** Register `spur agent wait`. */
 export function registerAgentWaitCommand(agent: Command, context: CliContext): void {
+    // Fleet plumbing (1335 / ADR-148): guests and supervised loops wait on occupants — hidden
+    // from default help, verb unchanged.
     agent
-        .command('wait')
+        .command('wait', { hidden: true })
         .description('Wait for a pinned occupant run to reach a lifecycle state. Address by spec id or --role.')
         .argument('[specId]', 'Agent spec id whose occupant to wait on (mutually exclusive with --role)')
         .option(

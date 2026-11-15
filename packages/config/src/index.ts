@@ -802,6 +802,29 @@ export const AgentConfigSchema = z
                 executorNames.add(executor.name);
             }
         }
+        // Member-id namespace disjointness (1333 R1, ADR-148): `--agent <member>` resolves a
+        // fleet member id BEFORE the executor and reserved-selector rungs, so an id claiming
+        // either silently shadows it. Reject at config-load naming both sides. A member id may
+        // equal a ROLE name (the design's own `{ id: coder }` example): the member rung wins
+        // there, which is the same member an operator naming the role would reach. Binary names
+        // are checked at the app boundary — this CF-safe core cannot know ts-ai-runner's list.
+        for (const [index, member] of (value.fleet?.members ?? []).entries()) {
+            if (member.id === undefined) continue;
+            // `{ id: writer, executor: writer }` is the same target whichever rung wins — allowed.
+            const collision =
+                executorNames.has(member.id) && member.executor !== member.id
+                    ? 'executor'
+                    : member.id === 'auto' || member.id === 'inline'
+                      ? 'reserved --agent selector'
+                      : undefined;
+            if (collision !== undefined) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['fleet', 'members', index, 'id'],
+                    message: `Fleet member id "${member.id}" collides with the ${collision} selector namespace ("${member.id}"); rename the member id or the ${collision} entry — --agent "${member.id}" would otherwise be ambiguous.`,
+                });
+            }
+        }
     });
 
 /** Schema for the `rules` section. */

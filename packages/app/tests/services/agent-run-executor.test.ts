@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { TurnOutcome } from '@gobing-ai/ts-ai-runner';
 import { NodeProcessExecutor, type ProcessOptions, type ProcessResult } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionEvent, type AgentRunDeps, AgentService } from '../../src/index';
@@ -124,6 +127,27 @@ describe('AgentRunExecutor dispatch wiring', () => {
         const finished = events.find((event) => event.kind === 'finished');
         expect(finished?.outcome).toBe('done');
         expect((finished as { pid?: number } | undefined)?.pid).toBe(4242);
+    });
+
+    // 1333 R4 / ADR-148 invariant 6: a named-member dispatch records the delivery it took and
+    // why in the run's durable record, so the cold rung is never invisible.
+    test('a named-member dispatch stamps its delivery and reason into the run log', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-delivery-log-'));
+        try {
+            stubSpawn(async (options) => ok(options, 'done\n'));
+            const svc = new AgentService({ cwd, env: {}, output: { write: () => {}, error: () => {} } });
+            await svc.runTraced(
+                'work',
+                { agent: 'pi', dispatchDelivery: "cold subprocess executor 'codex' — not live under spur serve" },
+                resolutionDeps(),
+                { heartbeatMs: 0 },
+            );
+            const dir = join(cwd, '.spur', 'memory', 'runs');
+            const log = readFileSync(join(dir, readdirSync(dir)[0] as string), 'utf8');
+            expect(log).toContain("delivery: cold subprocess executor 'codex' — not live under spur serve");
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 
     test('an external abort mid-dispatch cancels the run', async () => {

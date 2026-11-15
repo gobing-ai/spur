@@ -12,6 +12,7 @@ import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
     return {
         instanceId: 'proj-m1',
+        localId: 'm1',
         role: 'coder',
         executor: 'claude',
         enabled: true,
@@ -167,7 +168,14 @@ describe('dispatchToFleet', () => {
             { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
             deps(fleetSvc(declaration(), [member()]), dispatch),
         );
-        expect(result).toEqual({ status: 'not-started', memberId: 'proj-m1', messageId: 'msg-1' });
+        // 1333 R3: a definite not-started carries the MEMBER, so the caller's cold rung
+        // can run that member's executor (review P2-2).
+        expect(result).toEqual({
+            status: 'not-started',
+            memberId: 'proj-m1',
+            messageId: 'msg-1',
+            member: member(),
+        });
     });
 
     test('R2: an outcome-unknown wait is neither failed nor re-dispatched', async () => {
@@ -187,6 +195,16 @@ describe('dispatchToFleet', () => {
             deps(fleetSvc(declaration(), [member({ role: 'coder' })], ['no-enabled-members']), dispatch),
         );
         expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining("role 'reviewer'") });
+        expect(calls.length).toBe(0);
+    });
+
+    test('1333 R5: a step naming a DISABLED member is refused by the same resolution as the CLI', async () => {
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
+        const result = await dispatchToFleet(
+            { role: 'coder', member: 'm1', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
+            deps(fleetSvc(declaration(), [member({ enabled: false })]), dispatch),
+        );
+        expect(result).toMatchObject({ status: 'unavailable', reason: expect.stringContaining('disabled') });
         expect(calls.length).toBe(0);
     });
 
@@ -271,7 +289,13 @@ describe('dispatchToFleet', () => {
             { role: 'coder', prompt: 'x', projectPath: tempProject(), runId: 'r', state: 's' },
             deps(fleetSvc(declaration(), [member()]), dispatch),
         );
-        expect(result).toEqual({ status: 'unavailable', reason: expect.stringContaining('inbox db locked') });
+        // 1333 R3: a post-resolution failure carries the member, so the caller can default
+        // a LOCAL member to the cold rung (an unresolved one still fails).
+        expect(result).toMatchObject({
+            status: 'unavailable',
+            reason: expect.stringContaining('inbox db locked'),
+            member: { instanceId: 'proj-m1' },
+        });
     });
 });
 

@@ -197,6 +197,7 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
             expect(fleet.members).toEqual([
                 {
                     instanceId: `${slug}-lead`,
+                    localId: 'lead',
                     role: 'coder',
                     executor: 'writer',
                     enabled: true,
@@ -205,6 +206,7 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
                 },
                 {
                     instanceId: `${slug}-reviewer-1`,
+                    localId: 'reviewer-1',
                     role: 'reviewer',
                     executor: 'readonly',
                     enabled: true,
@@ -319,6 +321,7 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
             expect(fleet.members).toEqual([
                 {
                     instanceId: `${slug}-coder-1`,
+                    localId: 'coder-1',
                     role: 'coder',
                     executor: 'writer',
                     enabled: true,

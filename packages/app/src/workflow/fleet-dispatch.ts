@@ -2,6 +2,7 @@ import type { AgentFleet } from '@gobing-ai/spur-config';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { FleetDispatcher, FleetReceipt } from '../services/fleet-dispatcher';
 import type { FleetService, ResolvedFleet, ResolvedFleetMember } from '../services/fleet-service';
+import { resolveMemberAddress } from '../services/member-dispatch';
 
 /**
  * One `agent.run` stage dispatched to a declared fleet member (task 0942, ADR-126).
@@ -15,6 +16,13 @@ import type { FleetService, ResolvedFleet, ResolvedFleetMember } from '../servic
 export interface FleetDispatchInput {
     /** Declared Layer-1 role the member must match (R1). Pre-validated by the action. */
     role: string;
+    /**
+     * A declared member the step addressed BY NAME (1333 R5, ADR-148 §3.1): the member id
+     * (`coder`, or the full `<slug>-coder` instance id) wins over the role match. Naming a
+     * member is explicit intent, so it is addressable even when `agent.fleet.enabled` is
+     * off — the switch gates autostart, not addressing.
+     */
+    member?: string;
     /** Step prompt — persisted to a durable artifact (ADR-057); the message body names it. */
     prompt: string;
     /** Project the fleet resolves against; also where relative `expectFile` paths land. */
@@ -58,9 +66,20 @@ export type FleetDispatchResult =
           runId?: string;
       }
     | { status: 'failed'; memberId: string; messageId: string; reason: string; runId?: string }
-    | { status: 'not-started'; memberId: string; messageId: string }
+    /**
+     * The member never claimed the request, so no work happened — the one definite
+     * receipt the cold subprocess may take by default (1333 R3). `member` is what
+     * carries the member's EXECUTOR to that subprocess (the CLI path rewrites
+     * `--agent` to it; the workflow must do the same, 1333 review P2-2).
+     */
+    | { status: 'not-started'; memberId: string; messageId: string; member: ResolvedFleetMember }
     | { status: 'outcome-unknown'; memberId: string; messageId: string }
-    | { status: 'unavailable'; reason: string };
+    /**
+     * Nothing was dispatched. `member` is present whenever a member RESOLVED (the failure
+     * was after resolution) — that is what makes it a `localMember` for the cold-fallback
+     * default (1333 R3).
+     */
+    | { status: 'unavailable'; reason: string; member?: ResolvedFleetMember };
 
 /**
  * Roles that must land on a fresh member session per dispatch (ADR-121): a
@@ -82,8 +101,13 @@ function hasReusableSession(member: ResolvedFleetMember): boolean {
 export function fleetUnavailableOutcome(
     reason: string,
     executorFallback: unknown,
+    localMember = false,
 ): { mode: 'fallback'; fallbackReason: string } | { mode: 'fail'; error: string } {
     if (executorFallback === 'traditional') return { mode: 'fallback', fallbackReason: reason };
+    // ADR-148 §3.2 / ADR-126 amendment: for a LOCAL member the cold subprocess rung is the
+    // DEFAULT, not opt-in. An explicitly declared `executorFallback` of any other value keeps
+    // today's semantics (fail), and a dispatch that never resolved a member is unchanged.
+    if (executorFallback === undefined && localMember) return { mode: 'fallback', fallbackReason: reason };
     return { mode: 'fail', error: `agent.run: fleet executor unavailable — ${reason} (terminal reason: failed-agent)` };
 }
 
@@ -153,10 +177,13 @@ export async function dispatchToFleet(
             reason: `no agent.fleet declaration at ${input.projectPath} (agent.fleet.enabled is false by default)`,
         };
     }
-    if (!declaration.enabled) {
+    if (!declaration.enabled && input.member === undefined) {
         return { status: 'unavailable', reason: 'fleet is disabled (agent.fleet.enabled: false)' };
     }
-    const resolution = resolveMember(declaration, resolved, input.role);
+    const resolution =
+        input.member !== undefined
+            ? resolveMemberAddress(resolved.members, input.member)
+            : resolveMember(declaration, resolved, input.role);
     if ('unavailable' in resolution) {
         return { status: 'unavailable', reason: resolution.unavailable };
     }
@@ -175,6 +202,7 @@ export async function dispatchToFleet(
         return {
             status: 'unavailable',
             reason: `prompt artifact write failed at ${promptPath}: ${(error as Error).message}`,
+            member,
         };
     }
     const body = [
@@ -213,6 +241,7 @@ export async function dispatchToFleet(
         return {
             status: 'unavailable',
             reason: `message send to member '${member.instanceId}' failed: ${(error as Error).message}`,
+            member,
         };
     }
     const durationMs = deps.now() - startedAt;
@@ -258,7 +287,7 @@ export async function dispatchToFleet(
                 ...(receipt.runId !== undefined ? { runId: receipt.runId } : {}),
             };
         case 'not-started':
-            return { status: 'not-started', memberId: member.instanceId, messageId: receipt.messageId };
+            return { status: 'not-started', memberId: member.instanceId, messageId: receipt.messageId, member };
         default:
             return { status: 'outcome-unknown', memberId: member.instanceId, messageId: receipt.messageId };
     }

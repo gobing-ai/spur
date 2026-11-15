@@ -18,6 +18,8 @@ import {
     MAX_DELIVERY_ATTEMPTS,
     MEMBER_BINDING_CAPABILITIES,
     type MemberAttachmentState,
+    type MemberDispatchDeps,
+    memberDelivery,
     normalizeProjectPath,
     ProjectRegistry,
     resolvePlanningFolders,
@@ -568,6 +570,58 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
         throw new Error(`invalid --timeout "${raw}" (expected a positive integer ms)`);
     }
     return n;
+}
+
+/**
+ * The declaration + liveness + dispatch seams behind a named-member dispatch (1333, ADR-148).
+ *
+ * Liveness is read from `spur serve` (`GET /api/processes`) — the same probe `spur agent
+ * status` uses, so "no daemon" reads as "not live" instead of an error, and the ladder simply
+ * takes the cold rung. Nothing here starts a server.
+ */
+export async function memberDispatchDeps(context: CliContext): Promise<MemberDispatchDeps> {
+    const coordination = new AgentCoordinationService(context);
+    // One probe per deps instance: `spur agent doctor` classifies N members off ONE server
+    // resolution and ONE /processes read (a per-member probe repeats both, and its warning,
+    // N times for a single command).
+    let probe: Promise<Map<string, LiveProcess> | null> | undefined;
+    const liveness = () =>
+        (probe ??= (async () => {
+            const server = await resolveAgentServer(context.cwd, undefined, {
+                warn: (message) => context.output.error(message),
+            });
+            return await fetchServerProcesses(server);
+        })());
+    return {
+        members: () => coordination.listFleetMembers(),
+        live: async (instanceId) => (await liveness())?.has(instanceId) === true,
+        dispatcher: new FleetDispatcher({
+            coordination,
+            runs: {
+                listByMessageId: async (messageId: string) =>
+                    new CoordinationRunDao(await context.getDb()).listByMessageId(messageId),
+            },
+        }),
+    };
+}
+
+/** One declared member with the delivery it would take now, and why (1333 R6/AC4). */
+export interface MemberDeliveryRow {
+    instanceId: string;
+    delivery: string;
+    reason: string;
+}
+
+/** `spur agent doctor` member block: every declared member, its delivery and the reason. */
+export async function memberDeliveryRows(context: CliContext): Promise<MemberDeliveryRow[]> {
+    const deps = await memberDispatchDeps(context);
+    const members = await deps.members();
+    const rows: MemberDeliveryRow[] = [];
+    for (const member of members) {
+        const chosen = memberDelivery(member, await deps.live(member.instanceId));
+        rows.push({ instanceId: member.instanceId, delivery: chosen.delivery, reason: chosen.reason });
+    }
+    return rows;
 }
 
 /** Build the fleet strategy runtime (coordination + delivery seams) over this CLI context. */

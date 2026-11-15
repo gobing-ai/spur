@@ -31,7 +31,7 @@ spur agent run [options] <prompt>
 
 | Flag | Description |
 |---|---|
-| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` requests host-session execution; on headless surfaces (this command is headless) a role/tier fallback resolves with one warning (ADR-087 — substitution over rejection; the G5 exit-2 rejection is retired). `spur agent run` always starts a subprocess. |
+| `--agent <name>` | Fleet **member id** (a declared `agent.fleet.members[]` id — the member's delivery is chosen for you: a warm inbox turn when it is live under `spur serve`, else a cold subprocess on its executor, ADR-148), role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` requests host-session execution; on headless surfaces (this command is headless) a role/tier fallback resolves with one warning (ADR-087 — substitution over rejection; the G5 exit-2 rejection is retired). For a **fleet member** the delivery is chosen for you: a warm keyed inbox turn when the member is live under `spur serve`, a cold subprocess on the member's declared executor when it is not (default-on, exit 0 when the subprocess starts), or an exit-2 refusal naming the member when it is declared but unusable (`enabled: false`, no resolved executor, ambiguous address). Every other selector starts a subprocess. |
 | `--spec <id>` | Agent spec id (occupant addressing; a fleet member such as `myapp-coder-1`); pairs with `--drain` |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |
@@ -58,9 +58,13 @@ SSOT in
 [cross-cutting.md](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 The resolution steps below are specific to `spur agent run` (the subprocess surface):
 
-1. An explicit `--agent` value wins: **role** first (the closed Layer-1 vocabulary), then
-   configured **executor**, then a bare coding-agent binary (one-time shim warning). Unknown
-   values are rejected with exit 2 at the flag boundary, before any process spawns.
+1. An explicit `--agent` value wins: a declared fleet **member id** first (ADR-148 — the member
+   delivers the work; the delivery and its reason are printed and written to the run's durable
+   record), then **role** (the closed Layer-1 vocabulary), then configured **executor**, then a
+   bare coding-agent binary (one-time shim warning). Unknown values are rejected with exit 2 at
+   the flag boundary, before any process spawns. An active member id that claims a coding-agent
+   binary name, an executor name (when it runs a different executor) or `auto`/`inline` is a
+   config error naming both, so no selector silently changes meaning.
 2. Omitted / `auto` resolves `agent.default` as the **default role** (recommended `coder`; a
    configured executor name still resolves during the transition with a one-time warning), and
    the stage registry's `model_policy` starts on the cheapest eligible executor at that tier.

@@ -1,5 +1,11 @@
 import type { Command } from '@commander-js/extra-typings';
-import type { AgentQuotaEventBus, AgentRunDeps, InboxClaim, SystemEventBus } from '@gobing-ai/spur-app';
+import {
+    type AgentQuotaEventBus,
+    type AgentRunDeps,
+    dispatchToNamedMember,
+    type InboxClaim,
+    type SystemEventBus,
+} from '@gobing-ai/spur-app';
 import { isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { attachAgentQuotaPersistence } from '../../agent-quota-persistence';
@@ -7,7 +13,14 @@ import type { CliContext } from '../../context';
 import { toEnvelopeJson, writeJsonError } from '../../output';
 import { attachSystemEventLedger } from '../../system-event-ledger';
 import { SHARED_OPTIONS } from '../shared-options';
-import { commanderOptionsToFlags, drainIntoPrompt, guestService, settleClaimedMessages } from './shared';
+import {
+    commanderOptionsToFlags,
+    DEFAULT_TRACE_FOLLOW_TIMEOUT_MS,
+    drainIntoPrompt,
+    guestService,
+    memberDispatchDeps,
+    settleClaimedMessages,
+} from './shared';
 
 /**
  * Refuse a guest id as a stage target (G73 R3, task 1081). A guest carries no executor
@@ -61,6 +74,94 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
 }
 
 /**
+ * The fleet-member rung of `--agent` resolution (1333 R1/R3, ADR-148 §3.2).
+ *
+ * A declared member id resolves BEFORE the role / executor / binary rungs (the config schema
+ * rejects a colliding id, so the order is unobservable on a valid config). Returns null when
+ * the selector is not a member — every other selector keeps today's path untouched.
+ *
+ * - live member   → one keyed inbox request, resolved on its receipt; never re-run after it
+ * - cold member   → the caller runs the subprocess with the member's executor (default-on)
+ * - unavailable   → an exit-2 refusal naming the member and the fix
+ */
+async function dispatchToMemberSelector(
+    prompt: string | undefined,
+    context: CliContext,
+    flags: Record<string, string | boolean>,
+): Promise<{ exitCode: number } | { agent: string; delivery: string } | null> {
+    const raw = typeof flags.agent === 'string' ? flags.agent : undefined;
+    if (raw === undefined || raw === '' || raw === 'auto' || raw === 'inline') return null;
+    // `--spec` owns occupant addressing (0542); the drain path rewrites `--agent` itself.
+    if (flags.drain === true || (typeof flags.spec === 'string' && flags.spec !== '')) return null;
+    if (prompt === undefined || prompt.trim() === '') return null;
+
+    // The wait is BOUNDED and abortable: a live-but-stuck member must end as
+    // `outcome-unknown` (reported, never re-run) instead of hanging the command. A
+    // first Ctrl-C aborts the wait and reports; the once-listener leaves a second
+    // Ctrl-C on the default hard exit.
+    const abort = new AbortController();
+    const onSigint = () => abort.abort();
+    process.once('SIGINT', onSigint);
+    let result: Awaited<ReturnType<typeof dispatchToNamedMember>>;
+    try {
+        result = await dispatchToNamedMember(raw, prompt, await memberDispatchDeps(context), {
+            timeoutMs: DEFAULT_TRACE_FOLLOW_TIMEOUT_MS,
+            signal: abort.signal,
+        });
+    } finally {
+        process.off('SIGINT', onSigint);
+    }
+    if (result.delivery === 'unavailable') {
+        // Not a member at all: every other selector keeps today's path (role, executor, binary).
+        if (!result.addressMatched) return null;
+        // 1333 R1/R3: a member that RESOLVED but cannot take the work is a refusal naming
+        // it and the fix — never a silent fall-through to the role/executor rungs, which
+        // would re-target the prompt at a different executor.
+        writeJsonError(
+            context.output,
+            jsonFlags(flags),
+            `--agent '${raw}' cannot be dispatched: ${result.reason}`,
+            'VALIDATION_FAILED',
+        );
+        return { exitCode: 2 };
+    }
+    if (isAgentName(raw) && !(context.agentConfig?.executors ?? []).some((executor) => executor.name === raw)) {
+        // 1333 R1: a member id claiming a coding-agent binary name shadows it — name both.
+        writeJsonError(
+            context.output,
+            jsonFlags(flags),
+            `--agent '${raw}' names both the fleet member '${result.member.instanceId}' and a coding-agent binary; rename the member id — the binary selector keeps its meaning`,
+            'VALIDATION_FAILED',
+        );
+        return { exitCode: 2 };
+    }
+    if (result.delivery === 'cold') {
+        // The cold rung, recorded where the run's durable record is written (ADR-057).
+        const delivery = `cold subprocess executor '${result.member.executor}' — ${result.reason}`;
+        context.output.error(`dispatch: member "${raw}" → ${delivery}`);
+        return { agent: result.member.executor, delivery };
+    }
+    if (result.status === 'not-started') {
+        // 1333 R3/R5: the ladder steps DOWN on a definite `not-started` — the member never
+        // started the work, so the subprocess runs the member's executor, exactly as the
+        // workflow path does (review r2 finding 1). `outcome-unknown` is NOT this case: it
+        // is reported and never re-run on another delivery.
+        const delivery = `cold subprocess executor '${result.member.executor}' — warm dispatch did not start: ${result.reason}`;
+        context.output.error(`dispatch: member "${raw}" → ${delivery}`);
+        return { agent: result.member.executor, delivery };
+    }
+    const line = `dispatch: member "${raw}" → warm inbox turn (message ${result.messageId}): ${result.status}`;
+    // stderr, never stdout: under `--json`/`--json-envelope` stdout carries the envelope
+    // only (the cold rung already does this).
+    context.output.error(
+        result.status === 'outcome-unknown'
+            ? `${line} — the member may still be working; the request is never re-run on another delivery (resume by reading that message)`
+            : `${line}`,
+    );
+    return { exitCode: result.status === 'completed' ? 0 : 1 };
+}
+
+/**
  * The `--json` / `--json-envelope` pair, read out of the kebab-cased flags record the
  * agent verbs pass around (0699 R1). `runAgentRun` never sees the raw commander
  * `options`, so its failure paths need this to reach `writeJsonError`.
@@ -107,6 +208,13 @@ export async function runAgentRun(
     });
     let claimed: InboxClaim[] = [];
     try {
+        // 1333 R1: the fleet-member rung of `--agent` resolution, before every other rung.
+        const memberRung = await dispatchToMemberSelector(prompt, context, flags);
+        if (memberRung !== null) {
+            if ('exitCode' in memberRung) return memberRung.exitCode;
+            flags.agent = memberRung.agent;
+            flags.dispatchDelivery = memberRung.delivery;
+        }
         // `--spec <id>` (canonical, 0542 R1) or the legacy `--agent <spec-id>`
         // names the occupant address; `--drain` is DB-backed, so it is resolved in
         // the command layer (where getDb lives) rather than in the app service.
@@ -170,7 +278,7 @@ export function registerAgentRunCommand(agent: Command, context: CliContext): vo
         .description('Execute a prompt or slash command via a coding agent.')
         .option(
             '--agent <name>',
-            'Role, executor, agent binary, auto, or inline (host-session; on headless surfaces a role/tier fallback resolves with one warning)',
+            'Role, fleet member id, executor, agent binary, auto, or inline (host-session; on headless surfaces a role/tier fallback resolves with one warning)',
         )
         .option('--spec <id>', 'Agent spec id (occupant addressing; pairs with --drain)')
         .option('--continue', 'Resume the previous agent session')

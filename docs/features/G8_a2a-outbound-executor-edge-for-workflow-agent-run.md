@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G8"
 name: Named-agent dispatch with A2A as a hidden transport
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-15T03:24:20.264Z"
-updated_at: "2026-11-15T04:06:26.772Z"
+updated_at: "2026-11-15T05:38:15.900Z"
 ---
 
 # G8: A2A outbound executor edge for workflow agent.run
@@ -137,10 +137,13 @@ Feature: Named-agent dispatch with A2A as a hidden transport
 | 1331 | Publish a real-agent fleet latency baseline by phase | todo |
 | 1335 | Hide fleet plumbing verbs from default spur agent help | todo |
 | 1332 | Add the a2a executor surface to workflow agent.run | cancelled |
-| 1333 | Dispatch to a named fleet member with no daemon running | todo |
+| 1333 | Dispatch to a named fleet member with no daemon running | wip |
 | 1334 | Deliver work to A2A-declared fleet members | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-11-15T05:38:15.900Z backlog → active (system)
+

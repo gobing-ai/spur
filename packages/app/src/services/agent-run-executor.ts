@@ -500,6 +500,11 @@ export class AgentRunExecutor {
         agentLog.writeHeader(
             `spur agent run ${coordinationRunId} — ${currentAgent} — started ${new Date().toISOString()}`,
         );
+        // 1333 R4 / ADR-148 invariant 6: a named-member dispatch records the delivery it took
+        // and why in the run's durable record — the cold rung is never invisible.
+        const dispatchDelivery =
+            stringFlag(flags, 'dispatchDelivery', '') || stringFlag(flags, 'dispatch-delivery', '');
+        if (dispatchDelivery !== '') agentLog.writeHeader(`delivery: ${dispatchDelivery}`);
         let occupantRef: OccupantRef | undefined;
         if (this.ctx.getDb !== undefined) {
             receiptRunId = coordinationRunId;
