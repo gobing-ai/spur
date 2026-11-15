@@ -1,0 +1,91 @@
+{
+    "artifact": "a2a-serve-e2e",
+    "generatedAt": "2026-11-15T04:36:02.497Z",
+    "a2aCliVersion": "a2a version 0.4.0",
+    "scratch": "(removed)",
+    "port": 52824,
+    "steps": [
+        {
+            "step": "serve-ready",
+            "requirement": "R1",
+            "command": "spur serve --port 52824",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "health ok"
+        },
+        {
+            "step": "card-get",
+            "requirement": "R2 / AC1",
+            "command": "a2a -a http://127.0.0.1:52824/a2a/members/spur-a2a-e2e-l7lFFx-coder/.well-known/agent-card.json card get",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "{\n  \"supportedInterfaces\": [\n    {\n      \"url\": \"http://127.0.0.1:52824/a2a/members/spur-a2a-e2e-l7lFFx-coder\",\n      \"protocolBinding\": \"HTTP+JSON\",\n      \"protocolVersion\": \"1.0\"\n    }\n  ],\n  \"capabilities\": {\n    \"pushNotifications\": false,\n    \"streaming\": false\n  },\n  \"defaultInputModes\": [\n    \"text/plain\"\n  ],\n  \"defaultOutputModes\": [\n    \"text/plain\"\n  ],\n  \"description\": \"Spur fleet member spur-a2a-e2e-l7lFFx-coder (claude)\",\n  \"name\": \"spur-a2a-e2e-l7lFFx-coder\",\n  \"skills\": [],\n  \"version\": \"1.0.0\"\n}"
+        },
+        {
+            "step": "send-async",
+            "requirement": "R3 / AC2",
+            "command": "a2a send --async",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "{\n  \"task\": {\n    \"id\": \"msg_0efdc1c6-f909-4ad4-8784-1cf17e89f4d3\",\n    \"contextId\": \"msg_0efdc1c6-f909-4ad4-8784-1cf17e89f4d3\",\n    \"history\": [\n      {\n        \"messageId\": \"a2a:spur-a2a-e2e-l7lFFx-coder:01a1dd7d-a6d4-7645-b7a6-c1daa651f069\",\n        \"parts\": [\n          {\n            \"text\": \"summarize the readme\"\n          }\n        ],\n        \"role\": \"ROLE_USER\"\n      }\n    ],\n    \"status\": {\n      \"state\": \"TASK_STATE_SUBMITTED\"\n    }\n  }\n}"
+        },
+        {
+            "step": "send-second-task",
+            "requirement": "R3",
+            "command": "a2a send --async",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "second task msg_8bea4017-d7b7-4bdb-8485-ef63f4455bed"
+        },
+        {
+            "step": "task-get-completed",
+            "requirement": "R4 / AC3",
+            "command": "a2a task get msg_0efdc1c6-f909-4ad4-8784-1cf17e89f4d3",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "run e2e-msg_0efdc1c6-f909-4ad4-8784-1cf17e89f4d3 → TASK_STATE_COMPLETED artifact=the readme documents the CLI surface"
+        },
+        {
+            "step": "task-get-failed",
+            "requirement": "R4 / AC3",
+            "command": "a2a task get msg_0c4e511f-0909-4add-acd6-eedc910ca0bf",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "e2e-fail-msg_0c4e511f-0909-4add-acd6-eedc910ca0bf → TASK_STATE_FAILED"
+        },
+        {
+            "step": "task-cancel",
+            "requirement": "R5 / AC4",
+            "command": "a2a task cancel msg_8bea4017-d7b7-4bdb-8485-ef63f4455bed",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "cancel→TASK_STATE_CANCELED get→TASK_STATE_CANCELED"
+        },
+        {
+            "step": "unauthenticated-refused",
+            "requirement": "R6 / AC5",
+            "command": "GET http://127.0.0.1:52824/a2a/members/spur-a2a-e2e-l7lFFx-coder/.well-known/agent-card.json (no Authorization)",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "HTTP 401"
+        },
+        {
+            "step": "endpoint-off",
+            "requirement": "R1 / AC5",
+            "command": "spur serve (SPUR_A2A_ENABLED=0) :52931",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "HTTP 404"
+        },
+        {
+            "step": "token-not-echoed",
+            "requirement": "R6",
+            "command": "receipt scan",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "no token in any captured output"
+        }
+    ],
+    "passed": 10,
+    "failed": 0
+}

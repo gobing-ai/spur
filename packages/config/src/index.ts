@@ -16,6 +16,8 @@ export const SPUR_ENV_VARS = {
     host: 'HOST',
     publicApiUrl: 'PUBLIC_API_URL',
     databaseUrl: 'DATABASE_URL',
+    a2aEnabled: 'SPUR_A2A_ENABLED',
+    a2aAuthEnv: 'SPUR_A2A_AUTH_ENV',
 } as const;
 
 /** Logging levels accepted by Spur app configuration. */
@@ -1299,8 +1301,36 @@ export const configSchema = z.object({
             host: z.string().default('localhost'),
             openBrowser: z.boolean().default(true),
             webDistPath: z.string().nullable().default(null),
+            /**
+             * A2A listener (feature G9, ADR-148): off by default, and bearer-only when on.
+             * `authEnv` names the ENVIRONMENT VARIABLE holding the token — the value itself
+             * never enters configuration, a receipt or a log (no secret at rest).
+             */
+            a2a: z
+                .object({
+                    enabled: z.boolean().default(false),
+                    authEnv: z.string().min(1).optional(),
+                })
+                .default({ enabled: false }),
         })
-        .default({ port: 3000, host: 'localhost', openBrowser: true, webDistPath: null }),
+        .default({
+            port: 3000,
+            host: 'localhost',
+            openBrowser: true,
+            webDistPath: null,
+            a2a: { enabled: false },
+        })
+        .superRefine((server, ctx) => {
+            // Fail the load, not the first request: an enabled endpoint with no token variable can
+            // only ever reject every caller.
+            if (server.a2a.enabled && server.a2a.authEnv === undefined) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['a2a', 'authEnv'],
+                    message: 'is required when server.a2a.enabled is true — name the variable holding the bearer token',
+                });
+            }
+        }),
     telemetry: z
         .object({
             enabled: z.boolean().default(false),
@@ -1337,6 +1367,10 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = get
         server: {
             port: env[SPUR_ENV_VARS.port],
             host: env[SPUR_ENV_VARS.host],
+            a2a: {
+                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.a2aEnabled]),
+                authEnv: env[SPUR_ENV_VARS.a2aAuthEnv],
+            },
         },
         telemetry: {
             enabled: parseEnvBoolean(env.SPUR_TELEMETRY_ENABLED),

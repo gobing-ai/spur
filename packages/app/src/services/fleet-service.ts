@@ -415,6 +415,27 @@ export class FleetService {
     }
 
     /**
+     * Member ADDRESSES only, without executor resolution (feature G9 task 1336).
+     *
+     * The A2A listener publishes a card for each declared member and queues work to its inbox
+     * address; it never runs the member, so it must not fail on a config problem that belongs to
+     * the member's own launch (`resolve` throws when a pinned executor is globally disabled).
+     * Same slug and same `memberLocalId` allocator as `resolve`, so the address a caller sees is
+     * the address the member loop claims.
+     */
+    async memberAddresses(projectPath: string): Promise<{ instanceId: string; executor: string; enabled: boolean }[]> {
+        const normalized = normalizeProjectPath(projectPath);
+        const declaration = await this.load(normalized);
+        if (declaration === null) return [];
+        const slug = await this.projectSlug(normalized);
+        return declaration.members.map((member, index) => ({
+            instanceId: `${slug}-${memberLocalId(member, declaration.members, index)}`,
+            executor: member.executor ?? '',
+            enabled: member.enabled !== false,
+        }));
+    }
+
+    /**
      * Resolve the declaration against config: stable instance ids (R3, via the
      * shared `memberLocalId` allocator), executor resolution through the same
      * pinned-or-tier-ladder funnel teams use, the resolved model that funnel

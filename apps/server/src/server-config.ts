@@ -14,6 +14,12 @@ export interface ServerBootConfig {
     };
     jobqueue: { enabled: boolean };
     scheduler: { enabled: boolean };
+    /**
+     * A2A listener switch (feature G9, task 1336): off unless `SPUR_A2A_ENABLED` is set, and the
+     * token variable's NAME (`SPUR_A2A_AUTH_ENV`) rather than its value — the module resolves the
+     * value through the env funnel at mount and never stores it.
+     */
+    a2a?: { enabled: boolean; authEnv: string | null };
 }
 
 /**
@@ -35,9 +41,10 @@ export function serverBootstrapConfig(
     const isTest = env.NODE_ENV === 'test';
     const retentionDefault = readNonNegativeIntOption(spurConfig, 'eventRetentionDefault');
     const retentionPrefixes = readRetentionPrefixes(spurConfig);
+    const appConfig = buildConfigFromEnv(env);
 
     return {
-        logging: { enabled: !isTest, level: buildConfigFromEnv(env).logging.level, console: false },
+        logging: { enabled: !isTest, level: appConfig.logging.level, console: false },
         telemetry: { enabled: false },
         events: {
             enabled: true,
@@ -49,6 +56,10 @@ export function serverBootstrapConfig(
         },
         jobqueue: { enabled: !isTest },
         scheduler: { enabled: !isTest },
+        a2a: {
+            enabled: appConfig.server.a2a.enabled,
+            authEnv: appConfig.server.a2a.authEnv ?? null,
+        },
     };
 }
 

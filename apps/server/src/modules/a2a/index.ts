@@ -1,0 +1,337 @@
+import { join } from 'node:path';
+import { FleetService, type InboxMessage, type InboxService, RequestKeyConflictError } from '@gobing-ai/spur-app';
+import { getEnvVars } from '@gobing-ai/spur-config';
+import { CoordinationRunDao, type CoordinationRunRow } from '@gobing-ai/spur-domain';
+import type { Hono } from 'hono';
+import type { ServerContext } from '../../context';
+import type { ServerModule } from '../types';
+import { type A2ATask, a2aError, agentCard, projectState, textParts } from './projection';
+
+/**
+ * `spur serve` speaks A2A (feature G9, task 1336; ADR-148, design `a2a-member-transport` §3.5).
+ *
+ * A thin facade over the existing services — no new table and no second inbox writer (ADR-143):
+ * each enabled fleet member is published as an Agent Card, `SendMessage` becomes ONE keyed inbox
+ * request (`messageId` → request key), `GetTask` reads the `coordination_runs` receipt, and
+ * `CancelTask` stops the member's run through the supervisor's existing stop path. The inbox and
+ * the run rows are the task store, which is what makes a task survive a `spur serve` restart.
+ *
+ * Off by default (R1): with `server.a2a.enabled` false no route is mounted at all, so the four
+ * paths below answer 404 like any other unknown path.
+ */
+
+/** The sender identity an A2A-originated request carries; callers read state, never replies. */
+const A2A_SENDER = 'a2a';
+
+/** Paths, as the HTTP+JSON binding defines them (`google.api.http` annotations of a2a.proto). */
+const CARD_SUFFIX = '.well-known/agent-card.json';
+const SEND_PATH = 'message:send';
+const CANCEL_SUFFIX = ':cancel';
+
+/** The fleet seam the inbox module uses: an injected `fleetService()` wins, else resolve locally. */
+interface FleetSeams {
+    memberAddresses(projectPath: string): Promise<{ instanceId: string; executor: string; enabled: boolean }[]>;
+}
+
+function fleetOver(ctx: ServerContext): FleetSeams {
+    const injected = (ctx as unknown as { fleetService?: () => FleetSeams }).fleetService;
+    if (typeof injected === 'function') return injected.call(ctx);
+    return new FleetService({
+        fs: ctx.fs,
+        reloadAgentConfig: () => ctx.reloadAgentConfig(),
+        openDb: () => ctx.getDb(),
+    });
+}
+
+/** The listener switch and the NAME of the variable holding its token (never the value). */
+function a2aSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null } {
+    const a2a = ctx.bootConfig()?.a2a;
+    return { enabled: a2a?.enabled === true, authEnv: a2a?.authEnv ?? null };
+}
+
+/** The bearer token this surface accepts, from the variable `server.a2a.authEnv` names (R6). */
+function requiredToken(authEnv: string | null, env: Record<string, string | undefined>): string | null {
+    if (authEnv === null) return null;
+    // The token value reaches this process only through the configured variable; it is never
+    // written to the corpus, a receipt or a log (R6). @gobing-ai/spur-app already redacts any
+    // env value whose name matches /token|secret|credential/.
+    const value = env[authEnv];
+    return value === undefined || value === '' ? null : value;
+}
+
+/** Constant-time-ish comparison: never short-circuit on the first differing byte. */
+function sameToken(provided: string | undefined, expected: string): boolean {
+    if (provided === undefined) return false;
+    const a = new TextEncoder().encode(provided);
+    const b = new TextEncoder().encode(expected);
+    let diff = a.length ^ b.length;
+    for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+    return diff === 0;
+}
+
+/** The live member a path segment addresses — by inbox address, or by its local id suffix. */
+async function resolveMember(ctx: ServerContext, segment: string | undefined) {
+    if (segment === undefined || segment === '') return null;
+    const members = await fleetOver(ctx).memberAddresses(ctx.cwd);
+    const decode = (value: string) => {
+        try {
+            return decodeURIComponent(value);
+        } catch {
+            return value;
+        }
+    };
+    const wanted = decode(segment);
+    return (
+        members.find((member) => member.enabled && member.instanceId === wanted) ??
+        members.find((member) => member.enabled && member.instanceId.endsWith(`-${wanted}`)) ??
+        null
+    );
+}
+
+/** Newest run row for one message id: the receipt the A2A task state is read from (R4). */
+async function latestRun(ctx: ServerContext, messageId: string): Promise<CoordinationRunRow | null> {
+    const rows = await new CoordinationRunDao(await ctx.getDb()).listByMessageId(messageId);
+    const sorted = [...rows].sort((a, b) =>
+        a.started_at === b.started_at ? b.generation - a.generation : a.started_at < b.started_at ? 1 : -1,
+    );
+    return sorted[0] ?? null;
+}
+
+/** The member's answer: its newest reply on this thread (cancellation is a separate marker). */
+async function answerText(inbox: InboxService, messageId: string): Promise<string | null> {
+    const thread = await inbox.thread(messageId);
+    const reply = thread.filter((row) => row.inReplyTo === messageId && row.fromId !== A2A_SENDER).at(-1);
+    return reply === undefined ? null : reply.body;
+}
+
+/** A cancel intent, written before the stop so a restart still reads `canceled` (R4/R5). */
+function cancelMarkerPath(ctx: ServerContext, messageId: string): string {
+    return join(ctx.runDir, `a2a-canceled-${messageId}`);
+}
+
+async function readCanceled(ctx: ServerContext, messageId: string): Promise<boolean> {
+    try {
+        return (await ctx.fs.exists(cancelMarkerPath(ctx, messageId))) === true;
+    } catch {
+        return false;
+    }
+}
+
+/** Project one inbox request onto the A2A `Task` object. */
+async function projectTask(ctx: ServerContext, inbox: InboxService, message: InboxMessage): Promise<A2ATask> {
+    const run = await latestRun(ctx, message.id);
+    const state = projectState({
+        canceled: await readCanceled(ctx, message.id),
+        runStatus: (run?.status as 'running' | 'exited' | 'errored' | undefined) ?? null,
+        messageStatus: message.status,
+    });
+    const history = [
+        { messageId: message.requestKey ?? message.id, role: 'ROLE_USER' as const, parts: [{ text: message.body }] },
+    ];
+    const status: A2ATask['status'] = { state };
+    if (state === 'TASK_STATE_FAILED') {
+        const reason =
+            message.error ?? (run?.status === 'errored' ? 'the member run failed' : 'the member run did not complete');
+        status.message = { messageId: message.id, role: 'ROLE_AGENT', parts: [{ text: reason }] };
+    }
+    if (state === 'TASK_STATE_COMPLETED' || state === 'TASK_STATE_CANCELED') {
+        const timestamp = run?.completed_at;
+        if (typeof timestamp === 'string') status.timestamp = timestamp;
+    }
+    const answer = state === 'TASK_STATE_COMPLETED' ? await answerText(inbox, message.id) : null;
+    return {
+        id: message.id,
+        contextId: message.threadId,
+        status,
+        ...(answer === null ? {} : { artifacts: [{ artifactId: `${message.id}-answer`, parts: [{ text: answer }] }] }),
+        history,
+    };
+}
+
+/** Read the JSON body, mapping a malformed one to `null` (the caller answers INVALID_ARGUMENT). */
+async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<Record<string, unknown> | null> {
+    try {
+        const body = await c.req.json();
+        return typeof body === 'object' && body !== null && !Array.isArray(body)
+            ? (body as Record<string, unknown>)
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+/** The A2A listener module: mounts nothing unless `server.a2a.enabled` is on (R1). */
+export const a2aModule: ServerModule = {
+    name: 'a2a',
+
+    mount(app: Hono, ctx: ServerContext | undefined): void {
+        if (!ctx) return;
+        const settings = a2aSettings(ctx);
+        // R1: off by default. No route, no handler, no path — the surface does not exist.
+        if (!settings.enabled) return;
+        const token = requiredToken(settings.authEnv, envOver(ctx));
+        // Enabled with an unreadable token variable is a misconfiguration, and mounting a surface
+        // that refuses everyone is still better than a 404 the operator cannot tell from "off".
+        if (token === null) {
+            ctx.logger.warn('a2a listener enabled but its token variable is unset; every request will be refused', {
+                variable: settings.authEnv ?? '(server.a2a.authEnv is not configured)',
+            });
+        }
+        const inbox = ctx.inbox();
+
+        /** R6: everything below the card is bearer-only, and the check precedes any write. */
+        const authorize = (c: { req: { header: (name: string) => string | undefined } }): Response | null => {
+            if (token === null) {
+                return Response.json(
+                    a2aError(
+                        500,
+                        'INTERNAL',
+                        'the A2A listener has no token configured; set the variable named by server.a2a.authEnv',
+                    ),
+                    { status: 500 },
+                );
+            }
+            const header = c.req.header('Authorization') ?? '';
+            const provided = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : undefined;
+            if (sameToken(provided, token)) return null;
+            return Response.json(a2aError(401, 'UNAUTHENTICATED', 'a bearer token is required'), {
+                status: 401,
+                headers: { 'WWW-Authenticate': 'Bearer realm="spur-a2a"' },
+            });
+        };
+
+        app.get(`/a2a/members/:member/${CARD_SUFFIX}`, async (c) => {
+            const denied = authorize(c);
+            if (denied !== null) return denied;
+            const member = await resolveMember(ctx, c.req.param('member'));
+            if (member === null) return notFoundMember(c.req.param('member'));
+            return c.json(
+                agentCard({
+                    instanceId: member.instanceId,
+                    executor: member.executor ?? '',
+                    origin: new URL(c.req.url).origin,
+                }),
+            );
+        });
+
+        app.post(`/a2a/members/:member/${SEND_PATH}`, async (c) => {
+            const denied = authorize(c);
+            if (denied !== null) return denied;
+            const member = await resolveMember(ctx, c.req.param('member'));
+            if (member === null) return notFoundMember(c.req.param('member'));
+            const body = await readJson(c);
+            const message = body?.message as Record<string, unknown> | undefined;
+            const messageId = typeof message?.messageId === 'string' ? message.messageId.trim() : '';
+            const text = textParts(message?.parts);
+            if (messageId === '' || text === '') {
+                return c.json(
+                    a2aError(400, 'INVALID_ARGUMENT', 'message.messageId and at least one text part are required'),
+                    400,
+                );
+            }
+            try {
+                const sent = await inbox.send({
+                    from: A2A_SENDER,
+                    to: member.instanceId,
+                    body: text,
+                    kind: 'request',
+                    requestKey: `a2a:${member.instanceId}:${messageId}`,
+                });
+                return c.json({ task: await projectTask(ctx, inbox, sent.message) });
+            } catch (error) {
+                if (error instanceof RequestKeyConflictError) {
+                    return c.json(
+                        a2aError(409, 'ALREADY_EXISTS', error.message, {
+                            reason: 'REQUEST_KEY_CONFLICT',
+                            metadata: { messageId },
+                        }),
+                        409,
+                    );
+                }
+                throw error;
+            }
+        });
+
+        app.get('/a2a/members/:member/tasks/:id', async (c) => {
+            const denied = authorize(c);
+            if (denied !== null) return denied;
+            const member = await resolveMember(ctx, c.req.param('member'));
+            if (member === null) return notFoundMember(c.req.param('member'));
+            const message = await inbox.get(c.req.param('id'));
+            if (message === null || message.toId !== member.instanceId) return notFoundTask(c.req.param('id'));
+            return c.json(await projectTask(ctx, inbox, message));
+        });
+
+        // `POST /tasks/{id}:cancel` — the trailing `:cancel` is a literal of the A2A binding, so
+        // the whole `{id}:cancel` token arrives as one segment.
+        app.post('/a2a/members/:member/tasks/:target', async (c) => {
+            const denied = authorize(c);
+            if (denied !== null) return denied;
+            const member = await resolveMember(ctx, c.req.param('member'));
+            if (member === null) return notFoundMember(c.req.param('member'));
+            const target = c.req.param('target');
+            if (!target.endsWith(CANCEL_SUFFIX)) return notFoundTask(target);
+            const taskId = target.slice(0, -CANCEL_SUFFIX.length);
+            const message = await inbox.get(taskId);
+            if (message === null || message.toId !== member.instanceId) return notFoundTask(taskId);
+            const before = await projectTask(ctx, inbox, message);
+            // Only a RUN can be stopped (AC4). A queued request has no process to signal, and the
+            // member loop owns claiming it — recording a cancel intent would promise a stop we
+            // cannot deliver, so it is refused instead of faked.
+            if (before.status.state !== 'TASK_STATE_WORKING') {
+                return c.json(
+                    a2aError(
+                        400,
+                        'FAILED_PRECONDITION',
+                        `task ${taskId} has no run in progress (${before.status.state})`,
+                        {
+                            reason: 'TASK_NOT_CANCELABLE',
+                            metadata: { taskId, state: before.status.state },
+                        },
+                    ),
+                    400,
+                );
+            }
+            // Intent first (durable, survives a restart), then the existing stop path (R5).
+            const marker = cancelMarkerPath(ctx, taskId);
+            try {
+                await ctx.fs.ensureDir(ctx.runDir);
+                await ctx.fs.writeFile(marker, `${new Date().toISOString()} ${member.instanceId}\n`);
+            } catch (error) {
+                return c.json(a2aError(500, 'INTERNAL', `cannot record the cancel: ${String(error)}`), 500);
+            }
+            try {
+                await ctx.supervisor().stop(member.instanceId);
+            } catch (error) {
+                // Not supervised (a queued request, or a member with no live process): the intent
+                // is recorded and the state reads canceled; there is no process to signal.
+                ctx.logger.warn('a2a cancel: no supervised run stopped', {
+                    member: member.instanceId,
+                    taskId,
+                    error: String(error),
+                });
+            }
+            return c.json(await projectTask(ctx, inbox, (await inbox.get(taskId)) ?? message));
+        });
+    },
+};
+
+function notFoundMember(segment: string | undefined): Response {
+    return Response.json(
+        a2aError(404, 'NOT_FOUND', `unknown fleet member ${segment ?? ''}`, { reason: 'MEMBER_NOT_FOUND' }),
+        { status: 404 },
+    );
+}
+
+function notFoundTask(taskId: string): Response {
+    return Response.json(
+        a2aError(404, 'NOT_FOUND', `unknown task ${taskId}`, { reason: 'TASK_NOT_FOUND', metadata: { taskId } }),
+        { status: 404 },
+    );
+}
+
+/** The environment the token variable is read from: an injected map, else the sanctioned funnel. */
+function envOver(ctx: ServerContext): Record<string, string | undefined> {
+    const injected = (ctx as unknown as { env?: Record<string, string | undefined> }).env;
+    return injected ?? getEnvVars();
+}

@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { builtins, registerModules } from '../../src/modules/registry';
 
 describe('module registry', () => {
-    test('builtins includes health, task, feature, events, jobs, and processes modules', () => {
+    test('builtins includes health, task, feature, events, jobs, processes and a2a modules', () => {
         const names = builtins.map((m) => m.name);
         expect(names).toEqual([
             'health',
@@ -18,6 +18,8 @@ describe('module registry', () => {
             'history',
             'commands',
             'database',
+            // A2A listener (feature G9): mounted last and inert unless enabled.
+            'a2a',
         ]);
     });
 

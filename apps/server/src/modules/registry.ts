@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { ServerContext } from '../context';
+import { a2aModule } from './a2a';
 import { boardModule } from './board';
 import { commandsModule } from './commands';
 import { databaseModule } from './database';
@@ -39,6 +40,8 @@ const builtins: ServerModule[] = [
     historyModule,
     commandsModule,
     databaseModule,
+    // A2A listener (feature G9): mounts nothing unless `server.a2a.enabled` is on (R1).
+    a2aModule,
 ];
 
 /**

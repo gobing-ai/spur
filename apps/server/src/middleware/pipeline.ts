@@ -65,7 +65,17 @@ export function mountMiddleware(app: Hono, appRt?: ApplicationRuntime): void {
     // Mirror the CORS allowlist: same-origin is always trusted, and any origin the
     // operator explicitly opted into via SPUR_CORS_ORIGINS is trusted too. With the
     // allowlist empty (the default) this reduces to csrf()'s stock same-origin rule.
-    app.use('*', csrf({ origin: (origin, c) => origin === new URL(c.req.url).origin || corsOrigins.includes(origin) }));
+    const csrfGuard = csrf({
+        origin: (origin, c) => origin === new URL(c.req.url).origin || corsOrigins.includes(origin),
+    });
+    app.use('*', async (c, next) => {
+        // `/a2a/*` is exempt (feature G9, task 1336): every A2A route is bearer-authenticated, and a
+        // header token is exactly what a cross-site simple request cannot set, so the CSRF rule
+        // protects nothing there. It also BREAKS the client — the unmodified `a2a` CLI sends no
+        // Content-Type on `task cancel`, which is the shape csrf() rejects with a 403.
+        if (c.req.path.startsWith('/a2a/')) return next();
+        return csrfGuard(c, next);
+    });
     app.use('*', requestId());
     app.use('*', bodyLimit({ maxSize: 1_048_576 })); // 1 MiB
     if (appRt) {

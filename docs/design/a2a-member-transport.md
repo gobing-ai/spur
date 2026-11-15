@@ -3,7 +3,7 @@ kind: design
 title: Named-agent dispatch with A2A as a hidden member transport
 status: proposed
 created_at: 2026-11-14
-updated_at: 2026-11-14
+updated_at: 2026-11-15
 related:
   - docs/features/G8_a2a-outbound-executor-edge-for-workflow-agent-run.md
   - docs/features/G9_cross-machine-fleet-spur-serve-speaks-a2a.md
@@ -26,7 +26,8 @@ Two problems, in the operator's order of importance:
 2. **Spur cannot reach an agent it does not run itself** — another machine, another project, or an
    agent without a native driver.
 
-This design is **proposed** (decisions accepted, not yet built), for features G8 and G9 under ADR-148. The user learns one thing: *give a task to
+This design is **accepted** for features G8 and G9 under ADR-148; the G9 listener (§3.5) is built,
+the G8 sender (§3.3) is not. The user learns one thing: *give a task to
 an agent by name*, manually or automatically. How the work travels — warm inbox turn, Agent2Agent
 (A2A) v1.0, or a cold subprocess — is Spur's choice and is never selected by the user.
 
@@ -123,14 +124,45 @@ function runs in-process when no `spur serve` is up.
 No new table, verb, executor surface or contract DTO. `ExecutorDispatchSurface` keeps its three
 values.
 
-### 3.5 Phase 2 (feature G9): `spur serve` speaks A2A
+### 3.5 Phase 2 (feature G9): `spur serve` speaks A2A — contract (task 1336, built)
 
-Each live member gets an Agent Card served by `spur serve`; `SendMessage` becomes a keyed inbox
-request (`messageId` → `request_key`) and `GetTask` reads `coordination_runs`. Two Spur installs then
-form a cross-machine fleet with A2A as the only wire and the inbox as the ledger at both ends, and
-any A2A client can hand work to a Spur member. The endpoint is opt-in (`server.a2a.enabled`, default
-off) and requires a bearer token named by `server.a2a.authEnv`. A card extension lets a Spur member
-declare that it fences its own tree, which lifts invariant 3 for that member.
+Each declared, enabled member gets an Agent Card served by `spur serve`; `SendMessage` becomes a
+keyed inbox request (`messageId` → `request_key`) and `GetTask` reads `coordination_runs`. Two Spur
+installs then form a cross-machine fleet with A2A as the only wire and the inbox as the ledger at
+both ends, and any A2A client can hand work to a Spur member. A card extension lets a Spur member
+declare that it fences its own tree, which lifts invariant 3 for that member (G8 side, not built).
+
+The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a facade over
+`InboxService` and `coordination_runs`, no new table and no second inbox writer (ADR-143).
+
+| Surface | Contract |
+| --- | --- |
+| Switch | `server.a2a.enabled` (`SPUR_A2A_ENABLED`, default `false`); **off mounts no route at all**, so every path below answers 404 like any unknown path |
+| Credential | `server.a2a.authEnv` (`SPUR_A2A_AUTH_ENV`) names the environment variable holding the bearer token. `enabled` without `authEnv` fails the config load (an enabled endpoint with no token can only reject everyone). Only the NAME is configuration; the value is read at mount and never persisted, echoed, or logged |
+| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false` |
+| Send | `POST /a2a/members/<member>/message:send` — `{message:{messageId, role, parts:[{text}]}}` → `{task}`. One inbox request, `kind: 'request'`, request key `a2a:<member>:<messageId>`; a repeated `messageId` with the same work replays the same task id, a different body is `409 ALREADY_EXISTS` |
+| Get | `GET /a2a/members/<member>/tasks/<id>` — the task id IS the inbox message id; state comes from the run receipt |
+| Cancel | `POST /a2a/members/<member>/tasks/<id>:cancel` — stops the member's run through the supervisor's existing stop path and records the intent first, so the state survives a restart. A task with no run in progress, or a terminal one, is `400 FAILED_PRECONDITION` (`TASK_NOT_CANCELABLE`) — a queued request is never reported canceled |
+| Errors | A2A envelope `{error:{code,status,message,details:[{@type:"type.googleapis.com/google.rpc.ErrorInfo",domain:"a2a-protocol.org",reason,metadata}]}}`; missing/wrong token is `401` with `WWW-Authenticate: Bearer` and **writes nothing** |
+| member id | the member's inbox address `<projectSlug>-<memberLocalId>`; `FleetService.memberAddresses` resolves it from the declaration alone, so a member whose executor is globally disabled still has an address (its launch is a separate failure) |
+
+Receiver-side state mapping (the inverse of §4.2, `projectState`): a cancel intent outranks the
+receipt (a stopped run exits `errored`, and the caller must still read `canceled`); then run row
+`exited` → `COMPLETED`, `errored` → `FAILED` (with the reason as the status message), `running` →
+`WORKING`; with no run row, inbox `claimed` → `WORKING`, `failed` → `FAILED`, else `SUBMITTED`.
+`COMPLETED` carries the member's newest inbox reply on the thread as one text artifact.
+
+**CSRF exemption.** `/a2a/*` is exempt from the server's CSRF guard
+(`apps/server/src/middleware/pipeline.ts`). Every A2A route is bearer-authenticated — a header a
+cross-site simple request cannot set — so the rule protects nothing there, and it actively breaks
+the client: the unmodified `a2a` CLI sends no `Content-Type` on `task cancel`, which is exactly the
+shape `csrf()` rejects.
+
+**Proof.** `bun run a2a-serve-e2e` drives a real `spur serve` with the real `a2a` CLI
+(`card get`, `send --async`, `task get`, `task cancel`) and writes
+`docs/reports/a2a-serve-e2e-receipt.json`. The member loop itself is not run there — the
+`completed`/`failed` arms seed the run rows a member writes; the two-install dispatch is G9 task
+1337.
 
 ## 4. Contract and compatibility
 
