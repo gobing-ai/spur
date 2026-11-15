@@ -45,7 +45,8 @@ function fleetOver(ctx: ServerContext): FleetSeams {
 
 /** The listener switch and the NAME of the variable holding its token (never the value). */
 function a2aSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null } {
-    const a2a = ctx.bootConfig()?.a2a;
+    // Embedded/test contexts may omit bootConfig; that is the default-off case, never a crash.
+    const a2a = typeof ctx.bootConfig === 'function' ? ctx.bootConfig()?.a2a : undefined;
     return { enabled: a2a?.enabled === true, authEnv: a2a?.authEnv ?? null };
 }
 
