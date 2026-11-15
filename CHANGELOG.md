@@ -154,8 +154,8 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 ### Fixed
 - fire the stalled label by reading `runs.updated_at` as INTEGER epoch ms — `Date.parse` on it was NaN and suppressed every label (1319) (c02bfa31e)
   <!-- src: packages/domain/src/dao/run-dao.ts:111, packages/app/src/workflow/host-pause.ts:109 · confidence: HIGH -->
-- replay the project's own test binding and skip coverage-threshold workspaces — verdict replay renders the cited tests from the project action binding, and a workspace whose bunfig declares `coverageThreshold` is skipped visibly instead of failing the suite run (1319) (60620ecfd)
-  <!-- src: packages/app/src/services/verdict-replay.ts:57, packages/app/src/services/verdict-replay.ts:146 · confidence: HIGH -->
+- replay the project's own test binding and skip coverage-threshold workspaces — verdict replay renders the cited tests from the project action binding, and a workspace whose bunfig declares `coverageThreshold` is skipped visibly instead of failing the suite run (1319) (60620ecfd) — retired 2026-11-14: `spur task verdict --replay`, `verdict-replay.ts` and its anchor parser were removed (013d4f447)
+  <!-- src: docs/design/gate-bounds-and-pause-attribution.md:45, docs/design/gate-bounds-and-pause-attribution.md:47 · confidence: HIGH -->
 
 ### Other
 - require `--no-edit` on the worktree landing merge and a `proto trust` step — an agent host refuses a bare `git merge` even for a fast-forward, and `proto` records trust per absolute path so a fresh worktree needs `proto trust .prototools` before its first commit (1320) (f9b8ad6df)
