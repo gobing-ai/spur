@@ -39,7 +39,7 @@ function install(extraEnv: Record<string, string> = {}) {
             ...extraEnv,
         },
     });
-    return { code: res.exitCode, stderr: res.stderr.toString() };
+    return { code: res.exitCode, stdout: res.stdout.toString(), stderr: res.stderr.toString() };
 }
 
 beforeEach(() => {
@@ -123,5 +123,133 @@ describe('scripts/install.sh checksum verification (task 0971)', () => {
         expect(stderr).toContain(`no SHA256SUMS entry for ${ASSET}`);
         expect(existsSync(target)).toBe(false);
         expect(leftovers()).toEqual([]);
+    });
+});
+
+function shim(dir: string, name: string, body: string): void {
+    writeFileSync(join(dir, name), body, { mode: 0o755 });
+}
+
+describe('scripts/install.sh optional zg and a2a dependencies (1340)', () => {
+    test('existing zg and a2a are never reinstalled', () => {
+        const fake = join(root, 'fake');
+        mkdirSync(fake);
+        shim(fake, 'zg', '#!/bin/sh\nexit 0\n');
+        shim(fake, 'a2a', '#!/bin/sh\nexit 0\n');
+        shim(fake, 'brew', '#!/bin/sh\necho brew >> "$HOME/package-calls"\nexit 1\n');
+        shim(fake, 'npm', '#!/bin/sh\necho npm >> "$HOME/package-calls"\nexit 1\n');
+        shim(fake, 'curl', '#!/bin/sh\nexec /usr/bin/curl "$@"\n');
+        writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        expect(code, stderr).toBe(0);
+        expect(existsSync(join(root, 'package-calls'))).toBe(false);
+    });
+
+    test('missing CLIs use Homebrew for both dependencies', () => {
+        const fake = join(root, 'fake');
+        mkdirSync(fake);
+        shim(
+            fake,
+            'brew',
+            `#!/bin/sh
+printf '%s\n' "$*" >> "$HOME/brew-calls"
+if [ "$1" = tap ]; then exit 0; fi
+if [ "$1" != install ]; then exit 1; fi
+shift
+for name do
+  case "$name" in
+    zvec-grep) printf '#!/bin/sh\nexit 0\n' > "$SPUR_INSTALL/zg" ;;
+    a2a) printf '#!/bin/sh\nexit 0\n' > "$SPUR_INSTALL/a2a" ;;
+    *) exit 1 ;;
+  esac
+  chmod +x "$SPUR_INSTALL/$name"
+done
+`,
+        );
+        shim(fake, 'npm', '#!/bin/sh\necho npm >> "$HOME/package-calls"\nexit 1\n');
+        shim(fake, 'curl', '#!/bin/sh\nexec /usr/bin/curl "$@"\n');
+        writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        expect(code, stderr).toBe(0);
+        expect(readFileSync(join(root, 'brew-calls'), 'utf8')).toContain('install a2a');
+        expect(readFileSync(join(root, 'brew-calls'), 'utf8')).toContain('install zvec-grep');
+        expect(readFileSync(join(root, 'brew-calls'), 'utf8')).toContain('tap a2aproject/a2a-cli');
+        expect(existsSync(join(root, 'package-calls'))).toBe(false);
+    });
+
+    test('npm installs zg and the official a2a installer handles a2a when brew is absent', () => {
+        const fake = join(root, 'fake');
+        mkdirSync(fake);
+        shim(
+            fake,
+            'npm',
+            `#!/bin/sh
+printf '%s\n' "$*" > "$HOME/npm-calls"
+printf '#!/bin/sh\nexit 0\n' > "$SPUR_INSTALL/zg"
+chmod +x "$SPUR_INSTALL/zg"
+`,
+        );
+        shim(
+            fake,
+            'curl',
+            `#!/bin/sh
+if [ "$1" = 'https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh' ]; then
+  cat > "$2" <<'EOF'
+#!/bin/sh
+printf '#!/bin/sh\nexit 0\n' > "$A2A_INSTALL_DIR/a2a"
+chmod +x "$A2A_INSTALL_DIR/a2a"
+EOF
+  exit 0
+fi
+exec /usr/bin/curl "$@"
+`,
+        );
+        writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        expect(code, stderr).toBe(0);
+        expect(readFileSync(join(root, 'npm-calls'), 'utf8')).toContain('--allow-scripts=@zvec/zvec-grep');
+        expect(existsSync(join(bin, 'zg'))).toBe(true);
+        expect(existsSync(join(bin, 'a2a'))).toBe(true);
+    });
+
+    test('dependency failures warn with manual remedies and never abort Spur', () => {
+        const fake = join(root, 'fake');
+        mkdirSync(fake);
+        shim(
+            fake,
+            'curl',
+            `#!/bin/sh
+case "$*" in
+  *a2a-cli/main/install.sh*) exit 1 ;;
+esac
+exec /usr/bin/curl "$@"
+`,
+        );
+        writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        expect(code, stderr).toBe(0);
+        expect(stderr).toContain('brew install zvec-grep');
+        expect(stderr).toContain('npm install -g @zvec/zvec-grep --allow-scripts=@zvec/zvec-grep');
+        expect(stderr).toContain(
+            'curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | bash',
+        );
+    });
+
+    test('each dependency has an independent opt-out', () => {
+        const fake = join(root, 'fake');
+        mkdirSync(fake);
+        shim(fake, 'brew', '#!/bin/sh\necho brew >> "$HOME/package-calls"\nexit 1\n');
+        shim(fake, 'npm', '#!/bin/sh\necho npm >> "$HOME/package-calls"\nexit 1\n');
+        shim(fake, 'curl', '#!/bin/sh\nexec /usr/bin/curl "$@"\n');
+        writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
+        const { code, stdout, stderr } = install({
+            PATH: `${fake}:/usr/bin:/bin`,
+            SPUR_INSTALL_ZG: '0',
+            SPUR_INSTALL_A2A: '0',
+        });
+        expect(code, stderr).toBe(0);
+        expect(stdout).toContain('SPUR_INSTALL_ZG=0');
+        expect(stdout).toContain('SPUR_INSTALL_A2A=0');
+        expect(existsSync(join(root, 'package-calls'))).toBe(false);
     });
 });

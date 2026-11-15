@@ -70,6 +70,13 @@ is a release you cannot safely install. `SPUR_SKIP_VERIFY=1` is the single expli
 prints a warning — keep it for local or air-gapped installs, and pipe the script into `sh` only from
 a source you trust.
 
+**Optional external CLIs.** After the verified install, `scripts/install.sh` independently detects
+`zg` (used by hybrid search) and `a2a` (used by fleet transport). If either is missing, it uses
+Homebrew when available, npm for zg otherwise, and the official a2a installer otherwise. Dependency
+failures are warnings with the exact manual remedy and never undo the verified Spur install.
+Disable either optional step with `SPUR_INSTALL_ZG=0` or `SPUR_INSTALL_A2A=0`; re-running the
+installer is idempotent.
+
 **Releasing standalone binaries.** Run `bun run build:binaries` in `apps/cli`, then upload **all**
 of `dist/cli/spur-*` **and** `dist/cli/SHA256SUMS` to the GitHub Release for the tag. A release
 without `SHA256SUMS` makes the installer fail by default.

@@ -2810,6 +2810,11 @@ re-import pressure this entry already records).
 - **Retains:** ADR-021 thin transports; ADR-051 consent for the one new verb; no stored API keys.
 - **Consequence:** zg upgrades are validated by golden parser fixtures; an MCP- or JSON-based
   transport can replace the parser without a DTO change.
+- **Amendment (task 1340):** the standalone installer may optionally install missing zg and a2a
+  without bundling them into Spur. Detection is independent and idempotent: Homebrew is preferred,
+  npm is the zg fallback, and the official a2a installer is the a2a fallback. Missing managers or
+  failed installs warn with the manual command and never abort the verified Spur installation;
+  `SPUR_INSTALL_ZG=0` and `SPUR_INSTALL_A2A=0` disable each optional step.
 - **Detail:** [hybrid search](design/hybrid-search.md).
 
 ## ADR-148: A2A Is a Hidden Member Transport Under the Inbox

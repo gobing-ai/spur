@@ -27,6 +27,8 @@ index formats, index creation, bundling zg, remote embedding providers, the Clou
 
 - `rg` and `sg` are external binaries Spur already relies on (through the `ts-rule-engine`
   evaluators). They are resolved on PATH and never bundled. zg joins that class as **optional**.
+  The standalone installer may offer to install a missing zg CLI, but runtime remains an external
+  dependency, never a bundled Spur capability.
 - **zg 0.3.0 CLI, observed against this repo** (these facts bind the adapter; 0.2.x is unsupported):
   - 0.3.0 dropped subcommands. Management verbs are flags (`--index`, `--status`, `--version`),
     and bare words, including `query`, `status`, `index` and `version`, are literal search text.
