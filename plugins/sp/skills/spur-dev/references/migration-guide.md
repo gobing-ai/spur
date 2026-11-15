@@ -116,9 +116,9 @@ For 0.4.34 specifically:
 - Feature verification is owned by `feature-lifecycle`: entering `verifying` runs
   `spur feature verify`. The separate `feature-verification.yaml` workflow is removed, and
   `wrapup-pipeline` no longer changes feature status.
-- Planning uses `idea-pipeline`. `planning-pipeline.yaml`, `docs-pipeline.yaml`,
-  `feature-dev.yaml`, `task-pipeline2.yaml`, `pr-review.yaml`, and `wayfinder-resolution.yaml`
-  are removed. Route former callers to `idea-pipeline`, `task-pipeline`, `feature-lifecycle`,
+- Planning uses `idea-pipeline`. The legacy planning, docs, feature-development, duplicate task,
+  PR-review, and wayfinder workflow definitions are removed. Route former callers to `idea-pipeline`,
+  `task-pipeline`, `feature-lifecycle`,
   `spur builder pr-check|pr-open|pr-review|pr-status`, or the wayfinder skill as appropriate.
 - Project-layer `task-lifecycle.yaml` and `feature-lifecycle.yaml` overrides must be re-synced for
   current guards and the non-terminal `deprecated` state. The status addition itself needs no
