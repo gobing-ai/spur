@@ -27,6 +27,7 @@ import type { FleetDispatchDeps } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import { loadRunCorrelation } from '../workflow/run-correlation';
 import type { WorkflowSteeringController } from '../workflow/steering';
+import { A2aMemberTransport } from './a2a-member-transport';
 import { AgentCoordinationService, type CoordinationEventBus } from './agent-coordination-service';
 import { withWorkflowIdentity } from './event-bridge';
 import { FleetDispatcher } from './fleet-dispatcher';
@@ -203,6 +204,11 @@ export class WorkflowEngineFactory {
                     listByMessageId: async (messageId: string) =>
                         new CoordinationRunDao(await this.ctx.getDb()).listByMessageId(messageId),
                 },
+            }),
+            a2a: new A2aMemberTransport({
+                cwd: this.ctx.cwd,
+                getDb: () => this.ctx.getDb(),
+                env: getEnvVars(),
             }),
             now: () => Date.now(),
         };

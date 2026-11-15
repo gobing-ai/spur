@@ -12,6 +12,7 @@ import type { WorkflowAgentService } from '../workflow/actions/agent-run';
 import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
 import type { FleetPhaseEmit } from '../workflow/fleet-work-item';
 import { runFleetWorkItem } from '../workflow/fleet-work-item';
+import type { A2aTurnResult, A2aWorkShape } from './a2a-member-transport';
 import type { AgentRunDeps, AgentService } from './agent-service';
 import type { DeliveryReconciler } from './delivery-reconciler';
 import type { FleetService } from './fleet-service';
@@ -131,6 +132,8 @@ export interface AgentLoopDeps {
      * Optional — a host without a supervisor simply keeps untagged frames.
      */
     setSupervisorRun?(agentId: string, runId: string | undefined): void;
+    /** A2A member turn driver; used only for a spec materialized with type `a2a`. */
+    a2aTurn?(claimed: InboxClaim[], options: { timeoutMs?: number; work?: A2aWorkShape }): Promise<A2aTurnResult[]>;
     memberSession: MemberSessionDeps;
 }
 
@@ -471,7 +474,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
         let memberSpec: AgentSpec | undefined;
         if (binding?.instanceId !== recipient) {
             memberSpec = (await deps.listAgentSpecs()).find((entry) => entry.id === recipient);
-            if (memberSpec !== undefined) {
+            if (memberSpec !== undefined && memberSpec.type !== 'a2a') {
                 await memberSession.start(memberSpec);
             }
         }
@@ -513,7 +516,34 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             let drainFailed: boolean;
             let stopHeartbeat: (() => void) | undefined;
             try {
-                if (!keyed && memberSession.mode === 'persistent' && memberSpec !== undefined) {
+                if (memberSpec?.type === 'a2a') {
+                    if (deps.a2aTurn === undefined) {
+                        deps.error(`member ${recipient}: A2A turn service is not wired`);
+                        drainFailed = true;
+                    } else {
+                        const results = await deps.a2aTurn(claimed, {
+                            work: {
+                                ...(typeof rewritten.expectFile === 'string'
+                                    ? { expectFile: rewritten.expectFile }
+                                    : {}),
+                                ...(typeof rewritten.expectFiles === 'string'
+                                    ? { expectFiles: [rewritten.expectFiles] }
+                                    : {}),
+                                ...(rewritten.requireDiff === true ? { requireDiff: true } : {}),
+                                ...(typeof rewritten.ownedSections === 'string'
+                                    ? { ownedSections: [rewritten.ownedSections] }
+                                    : {}),
+                            },
+                        });
+                        invocationStarted = results.some((result) => result.status !== 'not-started');
+                        drainFailed = results.some(
+                            (result) => result.status === 'failed' || result.status === 'not-started',
+                        );
+                        for (const result of results) {
+                            if (result.output !== undefined && result.output !== '') deps.write(result.output);
+                        }
+                    }
+                } else if (!keyed && memberSession.mode === 'persistent' && memberSpec !== undefined) {
                     // G66 R2: one long-lived member process for the loop's
                     // lifetime — each drained prompt is injected through its
                     // stdin. A successful send IS the delivery acceptance

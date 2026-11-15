@@ -135,6 +135,32 @@ async function dispatchToMemberSelector(
         );
         return { exitCode: 2 };
     }
+    if (result.delivery === 'a2a') {
+        if (jsonFlags(flags).json === true) {
+            context.output.write(
+                toEnvelopeJson(
+                    {
+                        member: result.member.instanceId,
+                        delivery: 'a2a',
+                        status: result.status,
+                        messageId: result.messageId,
+                        ...(result.output !== undefined ? { output: result.output } : {}),
+                        reason: result.reason,
+                    },
+                    { enveloped: jsonFlags(flags).jsonEnvelope },
+                ),
+            );
+        } else if (result.output !== undefined && result.output !== '') {
+            context.output.write(result.output);
+        }
+        const line = `dispatch: member "${raw}" → A2A turn (message ${result.messageId}): ${result.status} — ${result.reason}`;
+        context.output.error(
+            result.status === 'outcome-unknown'
+                ? `${line}; the remote task is never re-sent — resume by reading the recorded request`
+                : line,
+        );
+        return { exitCode: result.status === 'completed' ? 0 : 1 };
+    }
     if (result.delivery === 'cold') {
         // The cold rung, recorded where the run's durable record is written (ADR-057).
         const delivery = `cold subprocess executor '${result.member.executor}' — ${result.reason}`;

@@ -82,7 +82,12 @@ export interface ResolvedFleetMember {
      * so a reader names the model this member will actually run. Omitted when
      * the profile declares none, and for a disabled member (never resolved).
      */
+    /** Resolved executor profile's model. Empty/absent for an A2A-driven member. */
     model?: string;
+    /** Agent Card host, URL or local path (ADR-148); presence selects the A2A turn driver. */
+    a2a?: string;
+    /** NAME of the environment variable holding the A2A credential. */
+    authEnv?: string;
     enabled: boolean;
     /** True iff the resolved executor's `fsWrite` attestation is `enforced`/`available` (R4). */
     writeCapable: boolean;
@@ -161,6 +166,9 @@ export interface OrchestratorBinding {
  */
 export interface RosterMember extends MemberIdentity {
     purpose?: string;
+    /** A2A member card and credential variable name; mutually exclusive with `executor`. */
+    a2a?: string;
+    authEnv?: string;
     /** Fleet-only (0835): `false` keeps the derived id but leaves the member out of the derived specs. */
     enabled?: boolean;
 }
@@ -305,6 +313,23 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
         // (G72 R2: nothing is pruned any more — `FleetService.specs` filters the
         // projection to the enabled subset, so the id simply stays undeclared.)
         if (member.enabled === false) continue;
+
+        if (member.a2a !== undefined) {
+            toUpsert.push({
+                id: composedId,
+                name: member.purpose ?? composedId,
+                type: 'a2a',
+                workspace: defaultWorkspace,
+                purpose: member.purpose && member.purpose.length > 0 ? member.purpose : 'A2A remote agent',
+                tags: [`fleet:${slug}`, 'spur:generated'],
+                config: {
+                    a2a: member.a2a,
+                    ...(member.authEnv !== undefined ? { authEnv: member.authEnv } : {}),
+                    ...(member.role !== undefined ? { role: member.role } : {}),
+                },
+            });
+            continue;
+        }
 
         const { resolved, executorName } = resolveMemberExecutor({
             member,
@@ -501,9 +526,25 @@ export class FleetService {
                     localId: memberLocalId(member, members, index),
                     ...(member.role !== undefined ? { role: member.role } : {}),
                     executor: member.executor ?? '',
+                    ...(member.a2a !== undefined ? { a2a: member.a2a } : {}),
+                    ...(member.authEnv !== undefined ? { authEnv: member.authEnv } : {}),
                     enabled: false,
                     writeCapable: false,
                     capabilityState: 'unknown',
+                });
+                continue;
+            }
+            if (member.a2a !== undefined) {
+                resolvedMembers.push({
+                    instanceId,
+                    localId: memberLocalId(member, members, index),
+                    ...(member.role !== undefined ? { role: member.role } : {}),
+                    executor: '',
+                    a2a: member.a2a,
+                    ...(member.authEnv !== undefined ? { authEnv: member.authEnv } : {}),
+                    enabled: true,
+                    writeCapable: false,
+                    capabilityState: 'unavailable',
                 });
                 continue;
             }

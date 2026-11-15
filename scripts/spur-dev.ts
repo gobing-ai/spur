@@ -40,6 +40,7 @@
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   a2a-serve-e2e                               prove `spur serve` speaks A2A through the real `a2a` CLI, write the receipt
+ *   a2a-member-e2e                              prove A2A member delivery cold, live and on restart, write the receipt
  *   fleet-e2e --guest-join-fixture              exercise the R4 pre-1081 guest-join skip arm, write its receipt
  *   fleet-e2e --perf [--trials <n>]             task 1273 KPI arm: paired stub trials per target agent, receipts in docs/reports/
  *   skill-eval [--fixtures|--json]             run the skill scenarios and render the report
@@ -54,6 +55,7 @@
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
@@ -90,7 +92,7 @@ const DELEGATED: Record<string, string> = {
 
 function usage(message?: string): never {
     console.error(
-        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, emit-migration-sql, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, a2a-serve-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
+        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, emit-migration-sql, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, a2a-serve-e2e, a2a-member-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
     );
     process.exit(message ? 1 : 0);
 }
@@ -168,6 +170,9 @@ try {
             break;
         case 'a2a-serve-e2e':
             process.exit(await runA2aServeE2e(args));
+            break;
+        case 'a2a-member-e2e':
+            process.exit(await runA2aMemberE2e(args));
             break;
         case 'link-check':
             process.exit(await linkCheck());

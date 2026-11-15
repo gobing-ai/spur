@@ -391,7 +391,7 @@ export class AgentRunActionRunner implements ActionRunner {
         invocation: NormalizedAgentInvocation,
         role: string,
     ): Promise<{ result?: ActionResult; fallbackReason?: string; fallbackExecutor?: string }> {
-        const { input, cwd, expectFile, timeoutMs } = invocation;
+        const { input, cwd, expectFile, expectFiles, requireDiff, ownedSections, timeoutMs } = invocation;
         if (this.fleetDeps === undefined) {
             return {
                 result: {
@@ -462,13 +462,20 @@ export class AgentRunActionRunner implements ActionRunner {
                 prompt: input as string,
                 projectPath: cwd,
                 ...(expectFile !== undefined ? { expectFile } : {}),
+                ...(expectFiles.length > 0 ? { expectFiles } : {}),
+                ...(requireDiff !== undefined ? { requireDiff } : {}),
+                ...(ownedSections.length > 0 ? { ownedSections } : {}),
                 ...(timeoutMs !== undefined ? { timeoutMs } : {}),
                 runId: context.runId,
                 state: context.stateOrNodeId,
             },
             this.fleetDeps,
         );
-        if (delegated.length > 0 && (dispatch.status === 'completed' || dispatch.status === 'failed')) {
+        if (
+            delegated.length > 0 &&
+            (dispatch.status === 'completed' || dispatch.status === 'failed') &&
+            dispatch.member?.a2a === undefined
+        ) {
             const result = await readFleetWorkItemResult(cwd, context.runId, context.stateOrNodeId);
             return {
                 result:
@@ -510,9 +517,11 @@ export class AgentRunActionRunner implements ActionRunner {
             // today's hard failure, so it is forced onto the `fail` rung.
             const stoppedReason = `member ${dispatch.memberId} did not start the request (definite not-started receipt)`;
             const stopped =
-                context.vars.executorFallback === undefined
-                    ? ({ mode: 'fallback', fallbackReason: stoppedReason } as const)
-                    : fleetUnavailableOutcome(stoppedReason, 'fail', true);
+                dispatch.member.a2a !== undefined
+                    ? fleetUnavailableOutcome(stoppedReason, 'fail', false)
+                    : context.vars.executorFallback === undefined
+                      ? ({ mode: 'fallback', fallbackReason: stoppedReason } as const)
+                      : fleetUnavailableOutcome(stoppedReason, 'fail', true);
             if (stopped.mode === 'fallback') {
                 // The cold subprocess runs the MEMBER's executor, never the step's selector
                 // or the role pin — same target the CLI path takes (review P2-2).
@@ -553,7 +562,7 @@ export class AgentRunActionRunner implements ActionRunner {
         const outcome = fleetUnavailableOutcome(
             dispatch.reason,
             context.vars.executorFallback,
-            dispatch.member !== undefined,
+            dispatch.member !== undefined && dispatch.member.a2a === undefined,
         );
         if (outcome.mode === 'fallback') {
             // The member resolved but the fleet could not take the work: the cold subprocess

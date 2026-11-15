@@ -59,7 +59,7 @@ through a coding agent as an external process, producing a persisted run record 
 
 | Flag | Purpose |
 | ------ | --------- |
-| `--agent <name>` | Fleet member id, role, executor, agent binary, `auto`, or `inline`. A **fleet member** (a declared `agent.fleet.members[].id`, its `<slug>-<id>` instance id, or a full instance id) is resolved FIRST and its delivery is chosen automatically (ADR-148 §3.2): live under `spur serve` → one keyed inbox turn; not live → a cold subprocess on the member's own executor; declared but unusable (disabled, no resolved executor, ambiguous address) → an exit-2 refusal naming the member and the fix, never a silent fall-through to a role. The member's delivery line goes to stderr, so `--json` stays parseable. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. `inline` is the default selector (0687 / ADR-087): on a host session the work runs in-session; on a headless subprocess surface like `agent run` it substitutes tier resolution and warns once naming the resolved executor — no rejection, no `agent.default` normalization. |
+| `--agent <name>` | Fleet member id, role, executor, agent binary, `auto`, or `inline`. A **fleet member** (a declared `agent.fleet.members[].id`, its `<slug>-<id>` instance id, or a full instance id) is resolved FIRST and its delivery is chosen automatically (ADR-148 §3.2): live under `spur serve` → one keyed inbox turn; a member declared with `a2a` → a keyed inbox request completed by the A2A turn driver (in-process when no serve runs, read-only work only); a local member that is not live → a cold subprocess on the member's own executor; declared but unusable (disabled, no resolved executor, ambiguous address) → an exit-2 refusal naming the member and the fix, never a silent fall-through to a role. The member's delivery line goes to stderr, so `--json` stays parseable. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. `inline` is the default selector (0687 / ADR-087): on a host session the work runs in-session; on a headless subprocess surface like `agent run` it substitutes tier resolution and warns once naming the resolved executor — no rejection, no `agent.default` normalization. |
 | `--model <name>` | Agent model argument (e.g. `o3`, `sonnet`). Passed through to the agent's model flag. |
 | `--mode <mode>` | Agent output mode: `text` or `json`. |
 | `--continue` | Resume the previous agent session instead of starting fresh. |
@@ -269,6 +269,9 @@ spur agent doctor claude     # one agent (executor/agent name → detail block)
 spur agent doctor coder      # pipeline role id → eligible ladder with ELECTED marker
 spur agent doctor --json     # machine-readable (role selector: elected-first ordering)
 ```
+
+The text output's **fleet members** block names each member's delivery. An A2A-declared member also
+reports the `a2a` binary version, card reachability and negotiated protocol version.
 
 Checks whether each agent is installed and ready to run. Text mode renders a capability table —
 `STATUS EXECUTOR AGENT MODEL TIER VERSION CAPS ROLES OWNER SINCE REASON` where TIER is the executor's *capability* tier

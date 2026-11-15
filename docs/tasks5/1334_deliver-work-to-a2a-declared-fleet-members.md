@@ -4,7 +4,7 @@ name: Deliver work to A2A-declared fleet members
 status: todo
 template: feature-impl
 created_at: 2026-11-15T04:02:03.794Z
-updated_at: "2026-11-15T08:09:19.283Z"
+updated_at: "2026-11-15T09:17:40.412Z"
 feature_id: G8
 priority: P2
 tags:
@@ -77,16 +77,38 @@ Key signatures (shape, not code): `send(member, text, messageId) -> {taskId, con
 
 ### Plan
 
-- [ ] Write the failure list first (each row of design section 4.2 plus the invariants) as E2E cases against a local `a2a server --exec` fixture and a stub returning each non-completed state.
-- [ ] Member schema keys and validation.
-- [ ] A2A turn service with golden fixtures of `a2a` JSON output.
-- [ ] Wire it as the turn driver in the member loop and as the in-process path; task-id persistence and re-attach.
-- [ ] Read-only admission refusal; doctor line.
-- [ ] Update `docs/design/a2a-member-transport.md` status and the fleet config satellite; rebuild the CLI bundle.
+- [x] Write the failure list first (each row of design section 4.2 plus the invariants) as E2E cases against a local `a2a server --exec` fixture and a stub returning each non-completed state.
+- [x] Member schema keys and validation.
+- [x] A2A turn service with golden fixtures of `a2a` JSON output.
+- [x] Wire it as the turn driver in the member loop and as the in-process path; task-id persistence and re-attach.
+- [x] Read-only admission refusal; doctor line.
+- [x] Update `docs/design/a2a-member-transport.md` status and the fleet config satellite; rebuild the CLI bundle.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Approach: A2A is a member turn driver under the keyed inbox, not a fourth executor surface. `A2aMemberTransport` owns every `a2a` CLI call and is used by the live member loop, the no-serve CLI dispatch and the workflow fleet path. Remote task identity rides the existing `coordination_runs` row before the first poll, so a restart re-attaches instead of re-sending.
+
+| File:line | Change |
+| --- | --- |
+| `packages/config/src/index.ts:582` | `FleetMemberSchema.a2a` / `authEnv` (variable-name regex); entry validation rejects `a2a + executor` and accepts role/executor/a2a as the third declaration arm |
+| `apps/cli/schemas/spur-config.schema.json:225` | the same contract on the CLI's JSON-Schema config loader |
+| `packages/app/src/services/a2a-member-transport.ts:101` | `A2aCliService`: card/send/get/cancel/version only; async send is one payload with caller `messageId` + `configuration.returnImmediately` (a2a 0.4.0 rejects `--async --request-payload`) |
+| `packages/app/src/services/a2a-member-transport.ts:266` | `A2aMemberTransport`: claim → send → persist remote identity → poll → receipt; read-only admission, redaction, doctor and warm-output readback |
+| `packages/app/src/services/a2a-member-transport.ts:131` | credential helper contains only the env var name; the value reaches the child env and is redacted from errors/receipts/logs |
+| `packages/app/src/services/fleet-service.ts:317` | A2A members materialize as `type: 'a2a'` specs without a local executor; resolution carries `a2a`/`authEnv` and no fsWrite capability |
+| `packages/app/src/services/member-dispatch.ts:182` | no-serve A2A rung; A2A never falls back to a local executor; warm output uses the result artifact |
+| `packages/app/src/services/agent-loop-service.ts:519` | a live A2A member completes claimed inbox messages through the same transport, skipping local session startup |
+| `packages/app/src/workflow/fleet-dispatch.ts:208` | mutating work is refused before prompt write/enqueue/send; the in-process A2A path returns the existing fleet receipt variants |
+| `packages/app/src/workflow/actions/agent-run.ts:472` | A2A rows skip the local work-item-result reader; A2A `not-started`/unavailable never takes the cold subprocess rung |
+| `apps/cli/src/commands/agent/run.ts:138` | `spur agent run --agent <a2a-member>` output, JSON envelope and nonzero failure/outcome-unknown exits |
+| `apps/cli/src/commands/agent/shared.ts:634` | doctor reports binary version, card reachability and protocol version; CLI loop/dispatch composition |
+| `packages/domain/src/migrations.ts:1646` | migrations 0055/0056 add `remote_task_id` / `remote_context_id`; DAO carries them and local orphan reaping skips remote A2A rows |
+| `packages/app/src/services/inbox-service.ts:282` | `claimById` lets an in-process dispatch claim exactly its own message, not an older sibling |
+| `scripts/commands/a2a-member-e2e.ts:1` | repeatable real `a2a server --exec` lane and `docs/reports/a2a-member-e2e-receipt.json` |
+
+Docs: `docs/design/a2a-member-transport.md` §3.3 is now the built contract (including the actual a2a 0.4.0 payload grammar); `docs/design/fleet-config-declaration.md` and `docs/design/data-output-contracts.md` own the config/schema deltas; `plugins/sp/skills/spur-cli/references/agent.md` and `docs/help/cmd_agent.md` describe the member rung and doctor line. `ExecutorDispatchSurface` remains `host | fleet | subprocess`.
+
+E2E: `bun run a2a-member-e2e` — 9/9 steps against `a2a 0.4.0`: cold in-process, live member loop, real workflow stage, timeout → orphan sweep → fresh-transport re-attach with one send, missing auth, unreachable card, doctor, read-only refusal.
 
 ### Testing
 

@@ -254,6 +254,25 @@ export class InboxDao extends BaseDao {
         });
     }
 
+    /** Claim one queued message by id, with the same lease/event semantics as {@link claim}. */
+    async claimById(id: string, now: number, toEvent: InboxEventFactory): Promise<InboxMessage | null> {
+        return this.withTransaction((tx) => {
+            const rows = tx.queryAll<InboxRow>(
+                `UPDATE inbox_messages
+                 SET status = 'claimed', claimed_at = ?2, attempts = attempts + 1, updated_at = ?2
+                 WHERE id = ?1 AND status = 'queued'
+                 RETURNING ${COLUMNS}`,
+                id,
+                now,
+            );
+            const claimed = rows[0];
+            if (claimed === undefined) return null;
+            const message = toMessage(claimed);
+            this.writeEvents(tx, toEvent, [message]);
+            return message;
+        });
+    }
+
     /**
      * Settle claimed messages as `delivered` or `failed`, matching status and claim generation:
      * a late settle after requeue or replacement changes nothing and emits nothing.

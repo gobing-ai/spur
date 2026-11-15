@@ -1,3 +1,4 @@
+import type { A2aTurnResult, A2aWorkShape } from './a2a-member-transport';
 import type { FleetDispatcher, FleetReceiptStatus } from './fleet-dispatcher';
 import type { ResolvedFleetMember } from './fleet-service';
 import { OPERATOR_INBOX_ID } from './inbox-service';
@@ -18,6 +19,14 @@ import { OPERATOR_INBOX_ID } from './inbox-service';
  */
 export type MemberDispatchResult =
     | { delivery: 'cold'; member: ResolvedFleetMember; reason: string }
+    | {
+          delivery: 'a2a';
+          member: ResolvedFleetMember;
+          status: FleetReceiptStatus;
+          messageId: string;
+          reason: string;
+          output?: string;
+      }
     | {
           delivery: 'warm';
           member: ResolvedFleetMember;
@@ -48,7 +57,20 @@ export interface MemberDispatchDeps {
     /** Is this instance live under `spur serve` right now? */
     live(instanceId: string): Promise<boolean>;
     /** The single fleet dispatch primitive; absent → the warm rung is not wired here. */
-    dispatcher?: Pick<FleetDispatcher, 'dispatch'>;
+    dispatcher?: Pick<FleetDispatcher, 'dispatch'> & Partial<Pick<FleetDispatcher, 'enqueue'>>;
+    /** In-process A2A turn driver (no serve); the live path still uses the keyed warm request. */
+    a2a?: (
+        member: ResolvedFleetMember,
+        prompt: string,
+        opts: {
+            dispatcher: Pick<FleetDispatcher, 'enqueue'>;
+            fromId: string;
+            timeoutMs?: number;
+            work?: A2aWorkShape;
+        },
+    ) => Promise<A2aTurnResult>;
+    /** Artifact text for a completed warm A2A run. */
+    a2aOutput?: (runId: string) => Promise<string | undefined>;
 }
 
 /**
@@ -98,11 +120,19 @@ export function resolveMemberAddress(
 export function memberDelivery(
     member: ResolvedFleetMember,
     live: boolean,
-): { delivery: 'warm' | 'cold'; reason: string } | { delivery: 'unavailable'; reason: string } {
+): { delivery: 'warm' | 'cold' | 'a2a'; reason: string } | { delivery: 'unavailable'; reason: string } {
     if (!member.enabled) {
         return {
             delivery: 'unavailable',
             reason: 'member is disabled (agent.fleet.members[].enabled: false) — enable it or address another member',
+        };
+    }
+    if (member.a2a !== undefined) {
+        return {
+            delivery: 'a2a',
+            reason: live
+                ? 'A2A member — live member loop drives the remote turn'
+                : 'A2A member — remote turn runs in-process (no local executor)',
         };
     }
     if (member.executor === '') {
@@ -129,7 +159,7 @@ export async function dispatchToNamedMember(
     address: string,
     prompt: string,
     deps: MemberDispatchDeps,
-    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+    opts: { timeoutMs?: number; signal?: AbortSignal; work?: A2aWorkShape } = {},
 ): Promise<MemberDispatchResult> {
     const resolution = resolveMemberAddress(await deps.members(), address);
     if ('unavailable' in resolution) {
@@ -146,8 +176,38 @@ export async function dispatchToNamedMember(
             addressMatched: true,
         };
     }
-    if (chosen.delivery === 'cold' || dispatcher === undefined) {
+    if (chosen.delivery === 'cold') {
         return { delivery: 'cold', member, reason: chosen.reason };
+    }
+    if (chosen.delivery === 'a2a' && !live) {
+        if (deps.a2a === undefined || dispatcher?.enqueue === undefined) {
+            return {
+                delivery: 'unavailable',
+                reason: `member "${member.instanceId}" declares a2a but no A2A turn service is wired`,
+                addressMatched: true,
+            };
+        }
+        const result = await deps.a2a(member, prompt, {
+            dispatcher: { enqueue: dispatcher.enqueue.bind(dispatcher) },
+            fromId: OPERATOR_INBOX_ID,
+            ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+            ...(opts.work !== undefined ? { work: opts.work } : {}),
+        });
+        return {
+            delivery: 'a2a',
+            member,
+            status: result.status,
+            messageId: result.messageId,
+            reason: result.reason ?? chosen.reason,
+            ...(result.output !== undefined ? { output: result.output } : {}),
+        };
+    }
+    if (dispatcher === undefined) {
+        return {
+            delivery: 'unavailable',
+            reason: `member "${member.instanceId}" has no wired fleet dispatcher`,
+            addressMatched: true,
+        };
     }
     // Warm rung: from here the receipt is the answer. No status re-runs the cold path.
     // `timeoutMs` is always finite (the caller derives it from the CLI wait budget): an
@@ -163,11 +223,16 @@ export async function dispatchToNamedMember(
             ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
         },
     );
+    const output =
+        member.a2a !== undefined && receipt.status === 'completed' && receipt.runId !== undefined
+            ? await deps.a2aOutput?.(receipt.runId)
+            : undefined;
     return {
-        delivery: 'warm',
+        delivery: member.a2a !== undefined ? 'a2a' : 'warm',
         member,
         status: receipt.status,
         messageId: receipt.messageId,
         reason: chosen.reason,
+        ...(output !== undefined ? { output } : {}),
     };
 }

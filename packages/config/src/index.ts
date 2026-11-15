@@ -578,6 +578,16 @@ export const FleetMemberSchema = z.object({
         })
         .optional(),
     executor: z.string().min(1).optional(),
+    /** Agent Card host, URL or local path. Presence makes this an A2A-driven member (ADR-148). */
+    a2a: z.string().min(1).optional(),
+    /** NAME of the environment variable holding the A2A credential — never the credential itself. */
+    authEnv: z
+        .string()
+        .regex(
+            /^[A-Za-z_][A-Za-z0-9_]*$/,
+            'authEnv must be an environment variable name (for example REMOTE_A2A_TOKEN)',
+        )
+        .optional(),
     purpose: z.string().optional(),
     /** Default true. `false` preserves the member's derived id index. */
     enabled: z.boolean().optional(),
@@ -609,10 +619,18 @@ export type FleetStrategy = (typeof FLEET_STRATEGIES)[number];
  * `agent.fleet.members.<n>` paths.
  */
 const FleetMemberEntrySchema = FleetMemberSchema.superRefine((member, ctx) => {
-    if (member.role === undefined && member.executor === undefined) {
+    if (member.a2a !== undefined && member.executor !== undefined) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'must declare a role or an executor — at least one is required',
+            path: ['a2a'],
+            message:
+                'a2a and executor are mutually exclusive — an A2A member is driven by its Agent Card, not a local executor',
+        });
+    }
+    if (member.role === undefined && member.executor === undefined && member.a2a === undefined) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'must declare a role or an executor (or an a2a card) — at least one is required',
         });
     }
 });

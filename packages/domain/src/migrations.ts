@@ -206,7 +206,9 @@ CREATE TABLE IF NOT EXISTS coordination_runs (
     message_ids_json TEXT NOT NULL DEFAULT '[]',
     task_id TEXT,
     outcome TEXT NOT NULL DEFAULT 'run-exit-only',
-    parent_run_id TEXT
+    parent_run_id TEXT,
+    remote_task_id TEXT,
+    remote_context_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_spec ON coordination_runs (spec_id, generation DESC);
@@ -244,6 +246,16 @@ CREATE INDEX IF NOT EXISTS idx_coordination_runs_task ON coordination_runs (task
 export const COORDINATION_RUNS_PARENT_SCHEMA_SQL = `
 ALTER TABLE coordination_runs ADD COLUMN parent_run_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_parent ON coordination_runs (parent_run_id);
+`;
+
+/** A2A remote task id (1334 R4), stored before the first remote task poll. */
+export const COORDINATION_RUNS_A2A_REMOTE_TASK_SCHEMA_SQL = `
+ALTER TABLE coordination_runs ADD COLUMN remote_task_id TEXT;
+`;
+
+/** A2A remote context id, kept beside the task id on the same coordination run. */
+export const COORDINATION_RUNS_A2A_REMOTE_CONTEXT_SCHEMA_SQL = `
+ALTER TABLE coordination_runs ADD COLUMN remote_context_id TEXT;
 `;
 
 /**
@@ -1630,6 +1642,17 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // §13 columns; old rows are intentionally discarded (operator decision A6).
         id: '0054_spur_cli_inbox_messages_rebuild',
         sql: INBOX_MESSAGES_REBUILD_SQL,
+    },
+    {
+        // 1334 R4: A2A task/context ids live on the existing coordination run, never a new table.
+        id: '0055_spur_cli_coordination_runs_a2a_remote_task',
+        sql: COORDINATION_RUNS_A2A_REMOTE_TASK_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'coordination_runs', column: 'remote_task_id' },
+    },
+    {
+        id: '0056_spur_cli_coordination_runs_a2a_remote_context',
+        sql: COORDINATION_RUNS_A2A_REMOTE_CONTEXT_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'coordination_runs', column: 'remote_context_id' },
     },
 ];
 

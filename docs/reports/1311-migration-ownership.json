@@ -1,12 +1,12 @@
 {
     "schemaVersion": 1,
     "candidate": "0037-dimension-marts",
-    "status": "go",
-    "reason": "0037 tracked SQL matches the embedded constant after comment and whitespace normalization, and the applied schema matches. Released SQL bytes were not rewritten. Fresh, previous-release, already-applied, interrupted, duplicate-column, and absent-column fixtures kept the current guards. The bundled CLI migrated a directory with no drizzle folder and no repository source. Audit SHA-256 values are evidence only; the runtime journal stores id and applied_at, not checksums. Other SQL mirrors are inventoried and not proposed. No package dependency changed. 1312 may consume this artifact; this task does not generate SQL.",
+    "status": "inconclusive",
+    "reason": "A required source, digest, or source-free bundle measurement is missing, so consolidation is not decided. Leave 1312 blocked.",
     "ids": {
-        "count": 55,
+        "count": 57,
         "first": "0000_spur_cli_foundation",
-        "last": "0054_spur_cli_inbox_messages_rebuild",
+        "last": "0056_spur_cli_coordination_runs_a2a_remote_context",
         "contiguousFrom0000": true,
         "order": [
             "0000_spur_cli_foundation",
@@ -63,7 +63,9 @@
             "0051_spur_cli_coordination_runs_parent",
             "0052_spur_cli_decision_logs",
             "0053_spur_cli_inbox_messages_read_at",
-            "0054_spur_cli_inbox_messages_rebuild"
+            "0054_spur_cli_inbox_messages_rebuild",
+            "0055_spur_cli_coordination_runs_a2a_remote_task",
+            "0056_spur_cli_coordination_runs_a2a_remote_context"
         ],
         "guards": [
             {
@@ -150,13 +152,23 @@
                 "id": "0053_spur_cli_inbox_messages_read_at",
                 "table": "inbox_messages",
                 "column": "read_at"
+            },
+            {
+                "id": "0055_spur_cli_coordination_runs_a2a_remote_task",
+                "table": "coordination_runs",
+                "column": "remote_task_id"
+            },
+            {
+                "id": "0056_spur_cli_coordination_runs_a2a_remote_context",
+                "table": "coordination_runs",
+                "column": "remote_context_id"
             }
         ]
     },
     "hashes": {
         "auditOnly": true,
         "journalColumns": ["id", "applied_at"],
-        "embedded0037": "34d7b3fb231cb9064be0bff18efccbebadfbe98e8e74895fb92ccb6c97db689f",
+        "embedded0037": "bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4",
         "tracked0037": "bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4",
         "normalizedEmbedded0037": "2498116d0c0b09175ce4090e0ef0bb4c7fb93c82e49a2e28da9236d6aa541ab9",
         "normalizedTracked0037": "2498116d0c0b09175ce4090e0ef0bb4c7fb93c82e49a2e28da9236d6aa541ab9"
@@ -172,7 +184,7 @@
             {
                 "id": "fresh",
                 "pass": true,
-                "detail": "applied 55; journal columns id,applied_at; nullable measures true"
+                "detail": "applied 57; journal columns id,applied_at; nullable measures true"
             },
             {
                 "id": "already-applied",
@@ -182,12 +194,12 @@
             {
                 "id": "previous-release",
                 "pass": true,
-                "detail": "upgrade from 0036 applied 18"
+                "detail": "upgrade from 0036 applied 20"
             },
             {
                 "id": "interrupted",
                 "pass": true,
-                "detail": "0037 SQL applied before its journal row; resume applied 18"
+                "detail": "0037 SQL applied before its journal row; resume applied 20"
             },
             {
                 "id": "duplicate-column",
@@ -202,19 +214,19 @@
         ]
     },
     "offlineProof": {
-        "pass": true,
+        "pass": false,
         "bundlePath": "apps/cli/spur.js",
-        "bundleDigest": "639301ece63693159f835d4fd91497964d24bbd0b8214988cf6b24c45fa75239",
-        "exitCode": 0,
-        "reportedApplied": 0,
+        "bundleDigest": "",
+        "exitCode": null,
+        "reportedApplied": null,
         "cwdHadDrizzle": false,
         "cwdHadRepositorySource": false,
-        "journalColumns": ["id", "applied_at"],
-        "embeddedIdsPresent": 55,
-        "importerLedgerPresent": true
+        "journalColumns": [],
+        "embeddedIdsPresent": 0,
+        "importerLedgerPresent": false
     },
     "mirrors": {
-        "trackedCount": 43,
+        "trackedCount": 45,
         "embeddedOnly": [
             "0004_spur_cli_queue_jobs",
             "0010_spur_cli_coordination_runs",
@@ -505,7 +517,7 @@
             {
                 "id": "0037_spur_cli_history_dimension_marts",
                 "tracked": true,
-                "exactEqual": false,
+                "exactEqual": true,
                 "normalizedEqual": true,
                 "disposition": "candidate"
             },
@@ -627,14 +639,28 @@
                 "exactEqual": false,
                 "normalizedEqual": true,
                 "disposition": "inventory-only"
+            },
+            {
+                "id": "0055_spur_cli_coordination_runs_a2a_remote_task",
+                "tracked": true,
+                "exactEqual": false,
+                "normalizedEqual": true,
+                "disposition": "inventory-only"
+            },
+            {
+                "id": "0056_spur_cli_coordination_runs_a2a_remote_context",
+                "tracked": true,
+                "exactEqual": false,
+                "normalizedEqual": true,
+                "disposition": "inventory-only"
             }
         ]
     },
     "provenance": {
         "bun": "1.4.3",
         "sqlite": "3.54.0",
-        "domainPackage": "0.4.25",
-        "cliPackage": "0.4.25",
+        "domainPackage": "0.4.35",
+        "cliPackage": "0.4.35",
         "dependencyPaths": [
             "package.json",
             "bun.lock",
@@ -644,16 +670,15 @@
         ],
         "releasedSqlPaths": ["drizzle", "packages/domain/src/migrations.ts"]
     },
-    "sourceRevision": "da6484006e41fbe7ed02d16792733acf223f8c65",
+    "sourceRevision": "a4ba9691a96dc41123ba1f57a485818db66f800c",
     "sourceDigests": {
-        "packages/domain/src/migrations.ts": "e5e4353227193ba3cc084a5ab0f944998df305dac33197f0e585ab72302c153b",
+        "packages/domain/src/migrations.ts": "73f886ad42004913ccb11c037bffbd4376104031b973dd1c2fc0bd1606b3cfcf",
         "drizzle/0037_spur_cli_history_dimension_marts.sql": "bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4",
-        "apps/cli/spur.js": "639301ece63693159f835d4fd91497964d24bbd0b8214988cf6b24c45fa75239",
-        "package.json": "b2b8b1b5f82c8bcd651ea7227951e396692262eb04dab7fb8d4b5b7f7dfe7f7d",
-        "bun.lock": "0f3535d802331666993432e41b1729c7cbe68c6d749cb42468464cc7335fa56b",
-        "packages/domain/package.json": "6c358c14b50ec76ef927f5a75e49a589c696ba0372f035938cfed9c77e18471a",
-        "packages/app/package.json": "ab7bf0c6f7e2129922f1333460159a6a54a35b99e80668d6a1ee7bf2cc41e3d4",
-        "apps/cli/package.json": "1147ed718f56e3d42d570a937120cebc212e94d1a1b7925f19f4d7bef42997f2",
+        "package.json": "0bf3094863aae926580dc800a5343f280b0646a2bb8172fd1de4833c29162ce6",
+        "bun.lock": "291be9487d558bc21907e91e1d51500ac7a4ed758fc6bea590cd0ac132ed6154",
+        "packages/domain/package.json": "5bd760350136d3b265a2dc66ee1361186f25c51ef260a0cce1153bdf44386065",
+        "packages/app/package.json": "168a131c8392f0f91dcb993df52a262764947ebfe381f200bbf7bc5e7169a3be",
+        "apps/cli/package.json": "4fb6849701c8a8144d63e54796ce7a78fc04907a6b733eec0bf1b54e0b60fd14",
         "drizzle/0000_spur_cli_foundation.sql": "a6428671b1929f29f43fe9a1a2e0dd7914c1dfa6a68a1eaa71ad1a8b75981410",
         "drizzle/0001_spur_cli_team_inbox.sql": "95f5d1a7a674a8793db8bab6a87fc1ce999f43b7772e791af2d0a4555d2debba",
         "drizzle/0002_spur_cli_rule_history.sql": "aaa5e4dee72a3a320e5464030ca6912729b89b50fdac1581d429f7cbce136e03",
@@ -695,13 +720,15 @@
         "drizzle/0051_spur_cli_coordination_runs_parent.sql": "534bcec1f602dd829f62eab12414e5936c1966800ab64b13b7788cf4feb86ffd",
         "drizzle/0052_spur_cli_decision_logs.sql": "9ddaff97af8c3e3e865f024f2beea4934888711a42c94c4a8cfd022cbf8b8bc1",
         "drizzle/0053_spur_cli_inbox_messages_read_at.sql": "cba657e28c77f6c2de25df3b35b1db55a2869f5e0424b8aae3dadb5e97aeb681",
-        "drizzle/0054_spur_cli_inbox_messages_rebuild.sql": "371f8a9cc77b17d74087d4a61859ca537f16c68ad338204e357fa20ede8d3932"
+        "drizzle/0054_spur_cli_inbox_messages_rebuild.sql": "371f8a9cc77b17d74087d4a61859ca537f16c68ad338204e357fa20ede8d3932",
+        "drizzle/0055_spur_cli_coordination_runs_a2a_remote_task.sql": "f5fccce820c76daa422353b8b213d948c37ebb07e55ebfbfac01807f1c7f9683",
+        "drizzle/0056_spur_cli_coordination_runs_a2a_remote_context.sql": "6cc5516e4ba027cd340cf9ce7d5ff84d8f9a168ff81f771fe1b7249eaf28bb01"
     },
     "fixtureSeed": {
         "id": "1311-offline-upgrade-v1",
         "candidateId": "0037_spur_cli_history_dimension_marts",
-        "expectedCount": 55,
-        "expectedRange": "0000..0054",
+        "expectedCount": 57,
+        "expectedRange": "0000..0056",
         "previousReleaseThrough": "0036_spur_cli_history_rollup_watermark",
         "duplicateColumn": "0007_spur_cli_runs_external_key",
         "absentColumn": "0007_spur_cli_runs_external_key",
@@ -715,5 +742,5 @@
         ]
     },
     "command": "rm -f docs/reports/1311-migration-ownership.json docs/reports/1311-migration-ownership.md && cd packages/domain && bun test tests/dao/migration-ownership.test.ts",
-    "measuredAt": "2026-11-06T08:19:21.436Z"
+    "measuredAt": "2026-11-15T09:20:42.227Z"
 }

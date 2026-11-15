@@ -34,9 +34,9 @@ const AgentFleetSchema = z
         enabled: z.boolean().default(false),
         strategy: z.enum(FLEET_STRATEGIES).default('rest'),
         orchestrator: z.string().min(1).optional(), // memberLocalId of the planner member with purpose 'orchestrator'
-        members: z.array(FleetMemberSchema).default([]), // FleetMemberSchema unchanged (id/role/executor/purpose/enabled)
+        members: z.array(FleetMemberSchema).default([]), // id/role/executor/a2a/authEnv/purpose/enabled
     })
-    .superRefine(/* members[i] declares role or executor — moved from FleetDeclarationSchema */);
+    .superRefine(/* members[i] declares role, executor or a2a; a2a + executor is rejected */);
 ```
 
 ```yaml
@@ -50,7 +50,12 @@ agent:
       - { role: planner, purpose: orchestrator }
       - { role: coder, executor: claude }
       - { role: reviewer, enabled: false }
+      - { id: remote-reviewer, a2a: http://mac-mini.local:3008, authEnv: REMOTE_A2A_TOKEN }
 ```
+
+- An `a2a` member declares an Agent Card host/URL/path and takes read-only work through the hidden
+  A2A turn driver (ADR-148). `a2a` and `executor` are mutually exclusive. `authEnv` is an environment
+  variable NAME only (`[A-Za-z_][A-Za-z0-9_]*`); the credential value is never configuration.
 
 - `version` is dropped (the config file has its own); `FleetDeclarationSchema` / `FleetDeclaration` are deleted.
 - Zod issues keep their `agent.fleet.<path>` so an invalid section names every issue (R8).

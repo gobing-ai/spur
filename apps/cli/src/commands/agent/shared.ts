@@ -1,5 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import {
+    A2aMemberTransport,
     AgentCoordinationService,
     type AgentLoopDeps,
     type AgentLoopRuntime,
@@ -530,6 +531,7 @@ export async function drainIntoPrompt(
  * field also fails before spawn, naming the field to add.
  */
 export function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
+    if (spec.type === 'a2a') return 'a2a';
     if (spec.executor === undefined) {
         // The spec-without-executor-field fallback to `spec.type` was removed: drain needs an
         // explicit executor binding so the operator's model + tier survive.
@@ -581,6 +583,7 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
  */
 export async function memberDispatchDeps(context: CliContext): Promise<MemberDispatchDeps> {
     const coordination = new AgentCoordinationService(context);
+    const a2aTransport = new A2aMemberTransport({ cwd: context.cwd, getDb: () => context.getDb(), env: context.env });
     // One probe per deps instance: `spur agent doctor` classifies N members off ONE server
     // resolution and ONE /processes read (a per-member probe repeats both, and its warning,
     // N times for a single command).
@@ -602,6 +605,14 @@ export async function memberDispatchDeps(context: CliContext): Promise<MemberDis
                     new CoordinationRunDao(await context.getDb()).listByMessageId(messageId),
             },
         }),
+        a2a: async (member, prompt, opts) =>
+            a2aTransport.dispatch(member, prompt, {
+                dispatcher: opts.dispatcher,
+                fromId: opts.fromId,
+                ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+                ...(opts.work !== undefined ? { work: opts.work } : {}),
+            }),
+        a2aOutput: (runId) => a2aTransport.outputForRun(runId),
     };
 }
 
@@ -616,9 +627,22 @@ export interface MemberDeliveryRow {
 export async function memberDeliveryRows(context: CliContext): Promise<MemberDeliveryRow[]> {
     const deps = await memberDispatchDeps(context);
     const members = await deps.members();
+    const a2aTransport = new A2aMemberTransport({ cwd: context.cwd, getDb: () => context.getDb(), env: context.env });
     const rows: MemberDeliveryRow[] = [];
     for (const member of members) {
         const chosen = memberDelivery(member, await deps.live(member.instanceId));
+        if (member.a2a !== undefined) {
+            const readiness = await a2aTransport.doctor(member);
+            const card = readiness.cardReachable
+                ? `card reachable; protocol ${readiness.protocolVersion}`
+                : `card unreachable (${readiness.reason ?? 'unknown'})`;
+            rows.push({
+                instanceId: member.instanceId,
+                delivery: chosen.delivery,
+                reason: `${chosen.reason}; ${readiness.binaryVersion}; ${card}`,
+            });
+            continue;
+        }
         rows.push({ instanceId: member.instanceId, delivery: chosen.delivery, reason: chosen.reason });
     }
     return rows;
@@ -726,6 +750,23 @@ export async function runAgentLoop(
         drain: (drainFlags) => drainIntoPrompt(undefined, context, { ...drainFlags, drain: true }),
         settle: (claimed, outcome) => settleClaimedMessages(context, claimed, outcome),
         attachLedger: (bus) => attachSystemEventLedger(bus, context),
+        a2aTurn: async (claimed, options) => {
+            const member = (await new AgentCoordinationService(context).listFleetMembers()).find(
+                (candidate) => candidate.instanceId === recipient,
+            );
+            if (member?.a2a === undefined) {
+                return claimed.map((claim) => ({
+                    status: 'failed' as const,
+                    messageId: claim.id,
+                    reason: `member "${recipient}" has no A2A declaration`,
+                }));
+            }
+            return new A2aMemberTransport({
+                cwd: context.cwd,
+                getDb: () => context.getDb(),
+                env: context.env,
+            }).runClaimed(member, claimed, options);
+        },
         memberSession: {
             executors: context.agentConfig?.executors ?? [],
             env: context.env,

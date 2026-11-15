@@ -27,9 +27,9 @@ Two problems, in the operator's order of importance:
    agent without a native driver.
 
 This design is **accepted** for features G8 and G9 under ADR-148. The G9 listener (§3.5) is built;
-task 1333 landed the named-member rung and the default cold fallback (§3.1, §3.2, §4.3) and 1335
-hid the fleet plumbing verbs, so the sender half of G8 is in; the A2A turn itself (§3.3, task 1334)
-is not. The user learns one thing: *give a task to an agent by name*, manually or automatically.
+task 1333 landed the named-member rung and the default cold fallback (§3.1, §3.2, §4.3), 1334 built
+the A2A turn itself (§3.3), and 1335 hid the fleet plumbing verbs, so the sender half of G8 is in.
+The user learns one thing: *give a task to an agent by name*, manually or automatically.
 How the work travels — warm inbox turn, Agent2Agent
 (A2A) v1.0, or a cold subprocess — is Spur's choice and is never selected by the user.
 
@@ -102,12 +102,35 @@ A member with `a2a` is an ordinary fleet member whose turn driver is A2A instead
 
 ```text
 claimed inbox message (request_key K)
-  │  a2a send --async -o json --request-payload {messageId: K, parts:[text]}
+  │  a2a send -o json --request-payload
+  │    {message:{messageId: K, role:'user', parts:[{text}]},
+  │     configuration:{returnImmediately:true}}
   │  → taskId, contextId   ── stored on the coordination run BEFORE any wait
   │  a2a task get <taskId> -o json   every pollMs until terminal or deadline
   ▼
 task state → run receipt (§4.2)
 ```
+
+`returnImmediately` is the v1 async send: a2a-cli 0.4.0 rejects the literal combination
+`send --async --request-payload`, so the service carries the async policy in the payload instead of
+letting the CLI synthesize a different message id. The keyed inbox id and the A2A message id therefore
+stay identical.
+
+`A2aMemberTransport` (`packages/app/src/services/a2a-member-transport.ts`) is the only module that
+owns `card get`, `send`, `task get` and `task cancel`. With no `spur serve`, the dispatch command
+claims the just-enqueued message by id and runs that function in-process; a live member runs the same
+function for its claimed messages. A stored `remote_task_id`/`remote_context_id` on the existing
+`coordination_runs` row (migrations 0055/0056) suppresses `send` on every restart, and the loop's local
+orphan reaper deliberately skips rows carrying a remote task id.
+
+The credential variable's VALUE reaches only the spawned environment. A generated helper file contains
+only `SPUR_A2A_AUTH_VALUE`'s name and answers the a2a credential-helper protocol over its private pipe;
+errors are redacted before they reach receipts or logs. Artifact text lands at
+`.spur/run/<runId>/a2a-result.md`, and both warm and in-process commands read it back as the turn output.
+
+**Proof.** `bun run a2a-member-e2e` drives a real `a2a server --exec`: cold, live loop, real workflow
+`agent.run`, timeout → orphan sweep → fresh-transport re-attach, missing auth, unreachable card, doctor,
+and read-only refusal. Receipt: `docs/reports/a2a-member-e2e-receipt.json` (9/9).
 
 A restarted loop that finds a stored `taskId` reads that task; it never sends again. The same
 function runs in-process when no `spur serve` is up.
@@ -119,9 +142,9 @@ function runs in-process when no `spur serve` is up.
 | Member declaration | `FleetMemberSchema` in `packages/config` | gains `a2a` and `authEnv`; `a2a` and `executor` are mutually exclusive |
 | Name resolution | existing `--agent` resolution | a member id resolves before role/executor/binary |
 | Ladder | `FleetDispatcher` callers' unavailable-fleet branch | fallback to subprocess becomes the default for local members |
-| A2A turn (`a2a` calls + JSON parsing) | one service in `packages/app/src/services/` | the only module that knows the CLI grammar |
-| Remote task identity | existing `coordination_runs` row | `taskId`, `contextId` |
-| Readiness | `spur agent doctor` | per member: which rung it will take and why |
+| A2A turn (`a2a` calls + JSON parsing) | `A2aMemberTransport` in `packages/app/src/services/a2a-member-transport.ts` | the only module that knows the CLI grammar |
+| Remote task identity | existing `coordination_runs` row | `remote_task_id`, `remote_context_id` (0055/0056) |
+| Readiness | `spur agent doctor` | per member: which rung it will take and why; for A2A also binary version, card reachability and protocol version |
 
 No new table, verb, executor surface or contract DTO. `ExecutorDispatchSurface` keeps its three
 values.
@@ -173,7 +196,10 @@ shape `csrf()` rejects.
 | Key | Meaning |
 | --- | --- |
 | `members[].a2a` | Agent Card host, URL or local card path; presence makes the member an A2A member |
-| `members[].authEnv` | optional; the NAME of an environment variable holding the credential |
+| `members[].authEnv` | optional; the NAME of an environment variable holding the credential. Must match `[A-Za-z_][A-Za-z0-9_]*`; inline values and assignments are invalid |
+
+`a2a` and `executor` on one member are a config validation error; `authEnv` is only a variable name,
+never a credential.
 
 Existing configs are unchanged. `strategy`, `orchestrator`, `role` and `purpose` keep their
 defaults and are not needed for manual dispatch.

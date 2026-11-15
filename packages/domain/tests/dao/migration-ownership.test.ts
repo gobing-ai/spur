@@ -34,8 +34,8 @@ const CANDIDATE_FILE = 'drizzle/0037_spur_cli_history_dimension_marts.sql';
 const FIXTURE_SEED = {
     id: '1311-offline-upgrade-v1',
     candidateId: CANDIDATE_ID,
-    expectedCount: 55,
-    expectedRange: '0000..0054',
+    expectedCount: 57,
+    expectedRange: '0000..0056',
     previousReleaseThrough: '0036_spur_cli_history_rollup_watermark',
     duplicateColumn: '0007_spur_cli_runs_external_key',
     absentColumn: '0007_spur_cli_runs_external_key',

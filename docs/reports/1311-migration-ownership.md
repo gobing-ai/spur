@@ -2,28 +2,27 @@
 
 schemaVersion: 1
 candidate: 0037-dimension-marts
-status: go
-sourceRevision: da6484006e41fbe7ed02d16792733acf223f8c65
+status: inconclusive
+sourceRevision: a4ba9691a96dc41123ba1f57a485818db66f800c
 command: `rm -f docs/reports/1311-migration-ownership.json docs/reports/1311-migration-ownership.md && cd packages/domain && bun test tests/dao/migration-ownership.test.ts`
 fixtureSeed: 1311-offline-upgrade-v1
-measuredAt: 2026-11-06T08:19:21.436Z
+measuredAt: 2026-11-15T09:20:42.227Z
 
 ## Reason
 
-0037 tracked SQL matches the embedded constant after comment and whitespace normalization, and the applied schema matches. Released SQL bytes were not rewritten. Fresh, previous-release, already-applied, interrupted, duplicate-column, and absent-column fixtures kept the current guards. The bundled CLI migrated a directory with no drizzle folder and no repository source. Audit SHA-256 values are evidence only; the runtime journal stores id and applied_at, not checksums. Other SQL mirrors are inventoried and not proposed. No package dependency changed. 1312 may consume this artifact; this task does not generate SQL.
+A required source, digest, or source-free bundle measurement is missing, so consolidation is not decided. Leave 1312 blocked.
 
 Audit hashes are not runtime journal fields. `__spur_cli_migrations` stores `id` and `applied_at` only.
 
 ## Source digests
 
-- `packages/domain/src/migrations.ts`: `e5e4353227193ba3cc084a5ab0f944998df305dac33197f0e585ab72302c153b`
+- `packages/domain/src/migrations.ts`: `73f886ad42004913ccb11c037bffbd4376104031b973dd1c2fc0bd1606b3cfcf`
 - `drizzle/0037_spur_cli_history_dimension_marts.sql`: `bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4`
-- `apps/cli/spur.js`: `639301ece63693159f835d4fd91497964d24bbd0b8214988cf6b24c45fa75239`
-- `package.json`: `b2b8b1b5f82c8bcd651ea7227951e396692262eb04dab7fb8d4b5b7f7dfe7f7d`
-- `bun.lock`: `0f3535d802331666993432e41b1729c7cbe68c6d749cb42468464cc7335fa56b`
-- `packages/domain/package.json`: `6c358c14b50ec76ef927f5a75e49a589c696ba0372f035938cfed9c77e18471a`
-- `packages/app/package.json`: `ab7bf0c6f7e2129922f1333460159a6a54a35b99e80668d6a1ee7bf2cc41e3d4`
-- `apps/cli/package.json`: `1147ed718f56e3d42d570a937120cebc212e94d1a1b7925f19f4d7bef42997f2`
+- `package.json`: `0bf3094863aae926580dc800a5343f280b0646a2bb8172fd1de4833c29162ce6`
+- `bun.lock`: `291be9487d558bc21907e91e1d51500ac7a4ed758fc6bea590cd0ac132ed6154`
+- `packages/domain/package.json`: `5bd760350136d3b265a2dc66ee1361186f25c51ef260a0cce1153bdf44386065`
+- `packages/app/package.json`: `168a131c8392f0f91dcb993df52a262764947ebfe381f200bbf7bc5e7169a3be`
+- `apps/cli/package.json`: `4fb6849701c8a8144d63e54796ce7a78fc04907a6b733eec0bf1b54e0b60fd14`
 - `drizzle/0000_spur_cli_foundation.sql`: `a6428671b1929f29f43fe9a1a2e0dd7914c1dfa6a68a1eaa71ad1a8b75981410`
 - `drizzle/0001_spur_cli_team_inbox.sql`: `95f5d1a7a674a8793db8bab6a87fc1ce999f43b7772e791af2d0a4555d2debba`
 - `drizzle/0002_spur_cli_rule_history.sql`: `aaa5e4dee72a3a320e5464030ca6912729b89b50fdac1581d429f7cbce136e03`
@@ -66,10 +65,12 @@ Audit hashes are not runtime journal fields. `__spur_cli_migrations` stores `id`
 - `drizzle/0052_spur_cli_decision_logs.sql`: `9ddaff97af8c3e3e865f024f2beea4934888711a42c94c4a8cfd022cbf8b8bc1`
 - `drizzle/0053_spur_cli_inbox_messages_read_at.sql`: `cba657e28c77f6c2de25df3b35b1db55a2869f5e0424b8aae3dadb5e97aeb681`
 - `drizzle/0054_spur_cli_inbox_messages_rebuild.sql`: `371f8a9cc77b17d74087d4a61859ca537f16c68ad338204e357fa20ede8d3932`
+- `drizzle/0055_spur_cli_coordination_runs_a2a_remote_task.sql`: `f5fccce820c76daa422353b8b213d948c37ebb07e55ebfbfac01807f1c7f9683`
+- `drizzle/0056_spur_cli_coordination_runs_a2a_remote_context.sql`: `6cc5516e4ba027cd340cf9ce7d5ff84d8f9a168ff81f771fe1b7249eaf28bb01`
 
 ## Identifiers
 
-Count: 55. First: 0000_spur_cli_foundation. Last: 0054_spur_cli_inbox_messages_rebuild. Contiguous 0000..0054: true.
+Count: 57. First: 0000_spur_cli_foundation. Last: 0056_spur_cli_coordination_runs_a2a_remote_context. Contiguous 0000..0054: true.
 
 | guard id | table | column |
 | --- | --- | --- |
@@ -90,10 +91,12 @@ Count: 55. First: 0000_spur_cli_foundation. Last: 0054_spur_cli_inbox_messages_r
 | 0049_spur_cli_runs_terminal_reason | runs | terminal_reason |
 | 0051_spur_cli_coordination_runs_parent | coordination_runs | parent_run_id |
 | 0053_spur_cli_inbox_messages_read_at | inbox_messages | read_at |
+| 0055_spur_cli_coordination_runs_a2a_remote_task | coordination_runs | remote_task_id |
+| 0056_spur_cli_coordination_runs_a2a_remote_context | coordination_runs | remote_context_id |
 
 ## 0037 hashes
 
-- embedded: `34d7b3fb231cb9064be0bff18efccbebadfbe98e8e74895fb92ccb6c97db689f`
+- embedded: `bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4`
 - tracked file: `bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4`
 - normalized embedded: `2498116d0c0b09175ce4090e0ef0bb4c7fb93c82e49a2e28da9236d6aa541ab9`
 - normalized tracked: `2498116d0c0b09175ce4090e0ef0bb4c7fb93c82e49a2e28da9236d6aa541ab9`
@@ -104,31 +107,31 @@ Normalized equal: true. Schema equal: true. Method: sql-comment-and-whitespace.
 
 | id | pass | detail |
 | --- | --- | --- |
-| fresh | true | applied 55; journal columns id,applied_at; nullable measures true |
+| fresh | true | applied 57; journal columns id,applied_at; nullable measures true |
 | already-applied | true | second apply returned 0 |
-| previous-release | true | upgrade from 0036 applied 18 |
-| interrupted | true | 0037 SQL applied before its journal row; resume applied 18 |
+| previous-release | true | upgrade from 0036 applied 20 |
+| interrupted | true | 0037 SQL applied before its journal row; resume applied 20 |
 | duplicate-column | true | 0007 journals when external_key is already present |
 | absent-column | true | 0007 adds external_key when the column is absent |
 
 ## Offline proof
 
-Bundle `apps/cli/spur.js` digest `639301ece63693159f835d4fd91497964d24bbd0b8214988cf6b24c45fa75239`.
-Exit 0. Reported applied 0.
+Bundle `apps/cli/spur.js` digest ``.
+Exit null. Reported applied null.
 Temporary directory had drizzle: false. Had repository source: false.
-Journal columns: id, applied_at.
-Embedded ids present: 55. Importer ledger present: true.
+Journal columns: .
+Embedded ids present: 0. Importer ledger present: false.
 
 ## Other mirrors
 
-Tracked files: 43. Disposition: inventory-only; no other mirror is proposed in this slice.
+Tracked files: 45. Disposition: inventory-only; no other mirror is proposed in this slice.
 Embedded ids with no tracked file: 0004_spur_cli_queue_jobs, 0010_spur_cli_coordination_runs, 0012_spur_cli_history_tool_call_args_raw, 0013_spur_cli_history_run_session, 0015_spur_cli_history_tool_call_call_id, 0016_spur_cli_history_message_ts_nullable, 0017_spur_cli_runs_status_completed_to_done, 0018_spur_cli_history_message_request_id, 0019_spur_cli_history_etl_tables_drop, 0023_spur_cli_history_message_request_id_idx, 0032_spur_cli_history_board_skill_5m, 0050_spur_cli_history_board_skill_5m_capability_grain.
 Normalized mismatches: 0000_spur_cli_foundation, 0003_spur_cli_planning, 0006_spur_cli_system_events, 0021_spur_cli_history_board_rollups, 0024_spur_cli_history_checkpoint_identity, 0025_spur_cli_history_checkpoint_identity_mtime, 0026_spur_cli_history_message_duration_source, 0028_spur_cli_history_task_session, 0033_spur_cli_importer_schema_version, 0040_spur_cli_agent_executor_updates.
 
 ## Provenance
 
-bun 1.4.3; sqlite 3.54.0; domain 0.4.25; cli 0.4.25.
+bun 1.4.3; sqlite 3.54.0; domain 0.4.35; cli 0.4.35.
 
 ## Decision
 
-1312 may consume this artifact after review.
+1312 stays blocked.

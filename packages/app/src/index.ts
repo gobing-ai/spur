@@ -149,6 +149,19 @@ export {
     toEnvelopeJson,
     writeJsonError,
 } from './output/envelope';
+export {
+    type A2aCli,
+    A2aCliService,
+    type A2aDispatchOptions,
+    type A2aMemberRef,
+    A2aMemberTransport,
+    type A2aMemberTransportDeps,
+    type A2aTask,
+    type A2aTurnResult,
+    type A2aWorkShape,
+    a2aMutationReason,
+    a2aTaskToReceipt,
+} from './services/a2a-member-transport';
 export type {
     AgentCoordinationServiceContext,
     AgentCoordinationServiceOutput,

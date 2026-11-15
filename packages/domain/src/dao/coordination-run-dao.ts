@@ -49,6 +49,9 @@ export interface CoordinationRunRow {
     outcome: string;
     /** ADR-132 lineage edge: the run that dispatched this one (null for a root). */
     parent_run_id: string | null;
+    /** A2A remote identity (1334): present only for A2A-driven runs; null for local runs. */
+    remote_task_id?: string | null;
+    remote_context_id?: string | null;
 }
 
 /**
@@ -84,6 +87,9 @@ export interface StartCoordinationRunInput {
      * key `<runId>/<state>`, and a nested agent run inherits `SPUR_RUN_ID`. Absent = root.
      */
     parentRunId?: string;
+    /** Remote A2A task identity, persisted before the first task poll (1334 R4). */
+    remoteTaskId?: string;
+    remoteContextId?: string;
 }
 
 // ── DAO ──
@@ -100,8 +106,8 @@ export class CoordinationRunDao {
     async insertStart(input: StartCoordinationRunInput): Promise<void> {
         await this.db.run(
             `INSERT INTO coordination_runs
-                (spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, parent_run_id)
-             VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, '[]', ?, ?, ?)`,
+                (spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, parent_run_id, remote_task_id, remote_context_id)
+             VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, '[]', ?, ?, ?, ?, ?)`,
             input.specId,
             input.agentKind,
             input.processId,
@@ -111,6 +117,8 @@ export class CoordinationRunDao {
             JSON.stringify(input.messageIds ?? []),
             input.taskId ?? null,
             input.parentRunId ?? null,
+            input.remoteTaskId ?? null,
+            input.remoteContextId ?? null,
         );
     }
 
@@ -148,7 +156,7 @@ export class CoordinationRunDao {
     async listByMessageId(messageId: string): Promise<CoordinationRunRow[]> {
         return (
             (await this.db.queryAll<CoordinationRunRow>(
-                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id, remote_task_id, remote_context_id
                  FROM coordination_runs r, json_each(r.message_ids_json)
                  WHERE json_each.value = ?
                  ORDER BY r.started_at DESC`,
@@ -161,7 +169,7 @@ export class CoordinationRunDao {
     async listByTaskId(taskId: string): Promise<CoordinationRunRow[]> {
         return (
             (await this.db.queryAll<CoordinationRunRow>(
-                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id, remote_task_id, remote_context_id
                  FROM coordination_runs
                  WHERE task_id = ?
                  ORDER BY started_at DESC`,
@@ -178,7 +186,7 @@ export class CoordinationRunDao {
         try {
             return (
                 (await this.db.queryAll<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id, remote_task_id, remote_context_id
                      FROM coordination_runs
                      WHERE parent_run_id = ?
                      ORDER BY started_at ASC`,
@@ -198,7 +206,7 @@ export class CoordinationRunDao {
         try {
             return (
                 (await this.db.queryFirst<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id, remote_task_id, remote_context_id
                      FROM coordination_runs WHERE run_id = ?`,
                     runId,
                 )) ?? null
@@ -238,9 +246,9 @@ export class CoordinationRunDao {
         try {
             const rows =
                 (await this.db.queryAll<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id, remote_task_id, remote_context_id
                      FROM coordination_runs
-                     WHERE spec_id = ? AND status = 'running'`,
+                     WHERE spec_id = ? AND status = 'running' AND remote_task_id IS NULL`,
                     specId,
                 )) ?? [];
             if (rows.length === 0) return [];
@@ -269,7 +277,7 @@ export class CoordinationRunDao {
         try {
             return (
                 (await this.db.queryFirst<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome, parent_run_id, remote_task_id, remote_context_id
                      FROM coordination_runs
                      WHERE spec_id = ?
                      ORDER BY generation DESC, started_at DESC

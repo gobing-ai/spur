@@ -1,5 +1,7 @@
 import type { AgentFleet } from '@gobing-ai/spur-config';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import type { A2aMemberTransport } from '../services/a2a-member-transport';
+import { a2aMutationReason } from '../services/a2a-member-transport';
 import type { FleetDispatcher, FleetReceipt } from '../services/fleet-dispatcher';
 import type { FleetService, ResolvedFleet, ResolvedFleetMember } from '../services/fleet-service';
 import { resolveMemberAddress } from '../services/member-dispatch';
@@ -29,6 +31,10 @@ export interface FleetDispatchInput {
     projectPath: string;
     /** Optional completion ARTIFACT — a post-condition checked after a `completed` receipt, never the wait itself. */
     expectFile?: string;
+    /** D65 work-item declarations, refused for an A2A member before anything is sent (1334 R7). */
+    expectFiles?: string[];
+    requireDiff?: boolean;
+    ownedSections?: string[];
     /** Wait budget for the receipt; absent = wait unbounded, mirroring subprocess timeout semantics. */
     timeoutMs?: number;
     runId: string;
@@ -44,6 +50,8 @@ export interface FleetDispatchDeps {
      * while a failed WAIT after a successful send must not (the member holds the work).
      */
     dispatcher: Pick<FleetDispatcher, 'enqueue' | 'awaitReceipt'>;
+    /** A2A turn driver; absence is a pre-enqueue refusal for an A2A member, never a local fallback. */
+    a2a?: A2aMemberTransport;
     now(): number;
 }
 
@@ -64,8 +72,17 @@ export type FleetDispatchResult =
           durationMs: number;
           promptPath: string;
           runId?: string;
+          /** Present when the turn was A2A-driven; local work-item post-processing is then skipped. */
+          member?: ResolvedFleetMember;
       }
-    | { status: 'failed'; memberId: string; messageId: string; reason: string; runId?: string }
+    | {
+          status: 'failed';
+          memberId: string;
+          messageId: string;
+          reason: string;
+          runId?: string;
+          member?: ResolvedFleetMember;
+      }
     /**
      * The member never claimed the request, so no work happened — the one definite
      * receipt the cold subprocess may take by default (1333 R3). `member` is what
@@ -188,6 +205,13 @@ export async function dispatchToFleet(
         return { status: 'unavailable', reason: resolution.unavailable };
     }
     const member = resolution.member;
+    if (member.a2a !== undefined) {
+        const mutation = a2aMutationReason(input);
+        if (mutation !== null) return { status: 'unavailable', reason: mutation, member };
+        if (deps.a2a === undefined) {
+            return { status: 'unavailable', reason: 'A2A turn service is not wired', member };
+        }
+    }
 
     const fs = createNodeFileSystem(input.projectPath);
     const promptPath = fs.resolve('.spur', 'run', input.runId, 'prompts', `${input.state}.md`);
@@ -245,6 +269,45 @@ export async function dispatchToFleet(
         };
     }
     const durationMs = deps.now() - startedAt;
+    if (member.a2a !== undefined) {
+        // With no serve this completes the claimed request in-process; a live member uses the
+        // same transport in its loop. A stored remote task id makes a replay re-attach, not resend.
+        const turn = await deps.a2a?.runMessage(member, messageId, {
+            ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+            work: input,
+        });
+        if (turn === undefined) return { status: 'outcome-unknown', memberId: member.instanceId, messageId };
+        if (turn.status === 'completed') {
+            return {
+                status: 'completed',
+                memberId: member.instanceId,
+                messageId,
+                durationMs,
+                promptPath,
+                member,
+                ...(turn.runId !== undefined ? { runId: turn.runId } : {}),
+            };
+        }
+        if (turn.status === 'failed') {
+            return {
+                status: 'failed',
+                memberId: member.instanceId,
+                messageId,
+                reason: turn.reason ?? 'a2a-failed',
+                member,
+                ...(turn.runId !== undefined ? { runId: turn.runId } : {}),
+            };
+        }
+        if (turn.status === 'not-started') {
+            return {
+                status: 'not-started',
+                memberId: member.instanceId,
+                messageId,
+                member,
+            };
+        }
+        return { status: 'outcome-unknown', memberId: member.instanceId, messageId };
+    }
     let receipt: FleetReceipt;
     try {
         receipt = await deps.dispatcher.awaitReceipt(messageId, member.instanceId, {

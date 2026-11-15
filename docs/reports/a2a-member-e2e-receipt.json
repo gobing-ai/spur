@@ -1,0 +1,82 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-11-15T09:06:52.895Z",
+    "command": "bun run a2a-member-e2e",
+    "a2aVersion": "a2a 0.4.0",
+    "scratch": "/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/a2a-member-e2e-cxe3nyc6",
+    "steps": [
+        {
+            "step": "cold-in-process",
+            "requirement": "R1/R2/R3/R4/R8/AC1/AC6",
+            "command": "spur agent run \"cold read-only turn\" --agent remote --json",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=0; status=completed; output=exec-answer: cold read-only turn\n; reason=A2A member — remote turn runs in-process (no local executor); remoteTask=01a1de75-8157-7196-a21d-aae3b3ed0ebb; context=01a1de75-8157-71cc-ba6d-584d6eb63ba2"
+        },
+        {
+            "step": "credential-not-persisted",
+            "requirement": "R8/AC6",
+            "command": "inspect argv, CLI output and .spur/run/a2a-credential-helper",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "the token appears only in the spawned environment; helper stores its variable name"
+        },
+        {
+            "step": "doctor",
+            "requirement": "R10",
+            "command": "spur agent doctor",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "  a2a-member-e2e-cxe3nyc6-remote\ta2a\tA2A member — remote turn runs in-process (no local executor); a2a 0.4.0; card reachable; protocol 1.0"
+        },
+        {
+            "step": "missing-auth",
+            "requirement": "R6/AC6",
+            "command": "spur agent run \"must not start\" --agent missing --json",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=1; dispatch: member \"missing\" → A2A turn (message msg_f2263afe-513c-4448-afc8-b3edba8e4bfe): not-started — member \"a2a-member-e2e-cxe3nyc6-missing\" A2A turn: member \"a2a-member-e2e-cxe3nyc6-missing\" auth environment variable \"A2A_MEMBER_UNSET_TOKEN\" is unset"
+        },
+        {
+            "step": "unreachable-card",
+            "requirement": "R6",
+            "command": "spur agent run \"must not start\" --agent broken --json",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=1; dispatch: member \"broken\" → A2A turn (message msg_0360da39-60e5-45a7-b23c-1d030f909361): not-started — member \"a2a-member-e2e-cxe3nyc6-broken\" A2A turn: a2a card failed (exit 3): {\n  \"error\": {\n    \"code\": \"A2ACLI_ERR_IO\",\n    \"message\": \"failed to resolve agent card: card request failed: Get \\\"http://127.0.0.1:1/.well-known/agent-card.json\\\": dial tcp 127.0.0.1:1: connect: connection refused\",\n    \"hint\": \"check the agent is running and the --agent-card reference is correct\"\n  }\n}"
+        },
+        {
+            "step": "live-member-loop",
+            "requirement": "R3/AC1",
+            "command": "spur serve + spur agent run \"live read-only turn\" --agent remote --json",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "ready=true; exit=0; status=completed; output=exec-answer: live read-only turn\n; reason=A2A member — live member loop drives the remote turn"
+        },
+        {
+            "step": "workflow-agent-run",
+            "requirement": "R3/R9/AC1",
+            "command": "spur workflow run a2a-member-workflow.yaml --vars {\"executor\":\"fleet\"}",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=0; status=done; reason="
+        },
+        {
+            "step": "timeout-reattach",
+            "requirement": "R4/R5/AC3/AC4",
+            "command": "A2aMemberTransport.dispatch(timeout=50ms) → runMessage after the remote turn",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "first=outcome-unknown (); resumed=completed (); sends=1; gets=3; runId=96ea6333-e7fa-49ae-9d35-6f5be3fc6db3"
+        },
+        {
+            "step": "read-only-admission",
+            "requirement": "R7/R9/AC5",
+            "command": "spur workflow run a2a-member-workflow.yaml (requireDiff=true)",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=1; reason=agent.run: fleet executor unavailable — A2A members accept read-only work only: expectFile(s), requireDiff and owned sections are refused before any send (terminal reason: failed-agent); remote turns before/after=10/10; ExecutorDispatchSurface=host|fleet|subprocess"
+        }
+    ],
+    "passed": true
+}

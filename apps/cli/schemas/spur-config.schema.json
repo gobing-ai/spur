@@ -230,7 +230,17 @@
                                     "executor": {
                                         "type": "string",
                                         "minLength": 1,
-                                        "description": "Executor profile name or a raw canonical agent type."
+                                        "description": "Executor profile name or a raw canonical agent type. Mutually exclusive with a2a."
+                                    },
+                                    "a2a": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Agent Card host, URL or local path. Presence selects the hidden A2A member turn driver (ADR-148); no local executor is declared."
+                                    },
+                                    "authEnv": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                                        "description": "NAME of the environment variable holding the A2A credential. The value is never configuration."
                                     },
                                     "purpose": {
                                         "type": "string",
@@ -241,7 +251,12 @@
                                         "description": "Default true. False preserves the member's derived id index without materializing it."
                                     }
                                 },
-                                "anyOf": [{ "required": ["role"] }, { "required": ["executor"] }]
+                                "anyOf": [
+                                    { "required": ["role"] },
+                                    { "required": ["executor"] },
+                                    { "required": ["a2a"] }
+                                ],
+                                "not": { "required": ["a2a", "executor"] }
                             }
                         }
                     }

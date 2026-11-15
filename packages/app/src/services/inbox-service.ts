@@ -278,6 +278,14 @@ export class InboxService {
         return claimed;
     }
 
+    /** Claim one queued message by id — an in-process A2A dispatch must not claim an older sibling. */
+    async claimById(id: string): Promise<InboxClaim | null> {
+        const db = await this.deps.getDb();
+        const claimed = await new InboxDao(db).claimById(id, this.clock(), this.eventFactory('message.claimed'));
+        await this.pruneEvents(db);
+        return claimed === null ? null : { id: claimed.id, attempts: claimed.attempts };
+    }
+
     /** Settle claimed messages: `accepted` → delivered, `not-started` → failed. */
     async settle(claims: readonly InboxClaim[], outcome: InboxSettleOutcome, error?: string): Promise<InboxMessage[]> {
         if (claims.length === 0) return [];
