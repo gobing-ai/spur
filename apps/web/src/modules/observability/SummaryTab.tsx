@@ -11,7 +11,6 @@ import {
     StackedColumnsChart,
 } from '../history/charts';
 import { timeRangeSince } from './ObservabilityFilters';
-import { SummaryOutcomes } from './SummaryOutcomes';
 import type { ObservabilityTabProps } from './tabs';
 
 // ─── Color Palettes ──────────────────────────────────────────────────────────
@@ -449,8 +448,6 @@ export default function SummaryTab(props: ObservabilityTabProps) {
                     testId="kpi-card-errors-warnings"
                 />
             </div>
-
-            {data?.outcomes ? <SummaryOutcomes outcomes={data.outcomes} /> : null}
 
             {/* Event Volume Trend Stacked Column Chart */}
             <div className="bg-base-200 rounded-xl border border-base-content/10 p-4 flex flex-col gap-3">

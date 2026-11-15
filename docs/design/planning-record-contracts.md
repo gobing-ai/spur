@@ -43,10 +43,7 @@ cross-folder dependencies retain their meaning. The checker reads its corpus byt
 while evidence files remain on the existing filesystem seam. No snapshot is retained after the read.
 The snapshot also supplies a parent-to-children index to the checker, avoiding a sibling parse scan
 for each displayed task while preserving the checker's existing child-status and alias policy.
-Native disclosure panels in TasksShell and FeatureDetail use the shared planning subscription,
-coalesce in-flight invalidations, abort on unmount/folder change, discard old responses and remove
-previous ready actions while refreshing. FeatureDetail limits rows to its existing linked-task set.
-No foreground model call, new command verb, or automatic action is involved.
+No foreground model call, new command verb, or automatic action is involved. (The Board `Daily readiness` disclosure panel in `TasksShell` and `FeatureDetail` was removed from the UI; the `GET /api/tasks/readiness` API remains available.)
 
 <a id="71-spur-task-commands"></a>
 

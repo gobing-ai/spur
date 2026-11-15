@@ -180,7 +180,7 @@ export interface ObservabilitySummaryResponse {
 }
 ```
 
-**Outcomes (task 1308).** The Summary tab reads optional `outcomes` from this same response. `measuredUsd` is the sum of persisted exact-mapped USD only; null means unmeasured, and `unknownUsdRows` is `historyRows - usdRows`. Token totals are separate and are not priced. `correctionCount` and `retryExhaustedCount` are task counts. Gate duration sums retained `command.gate` timestamps on state `gate` for the selected runs, and is null with zero samples when those timestamps are absent. Evidence links use the existing task and trace routes, capped at 100; totals cover the whole selected window.
+**Outcomes (task 1308).** The summary endpoint exposes optional `outcomes` on this same response (the Summary tab UI block was removed, while the API field remains available). `measuredUsd` is the sum of persisted exact-mapped USD only; null means unmeasured, and `unknownUsdRows` is `historyRows - usdRows`. Token totals are separate and are not priced. `correctionCount` and `retryExhaustedCount` are task counts. Gate duration sums retained `command.gate` timestamps on state `gate` for the selected runs, and is null with zero samples when those timestamps are absent. Evidence links use the existing task and trace routes, capped at 100; totals cover the whole selected window.
 
 **Top event types KPIs.** `avgDurationMs` is the mean of v2 `$.data.durationMs` else legacy `$.durationMs` (numeric values only; untimed rows are excluded, never treated as 0). `failureCount` is the count of that type with `presentation.severity = 'error'`. The Summary tab **Top Event Types** card renders `avgDurationMs / 1000` as `Avg(Duration - s)` (em dash when null) and `failureCount` as `Failures`.
 
