@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Deliver work to A2A-declared fleet members
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-15T04:02:03.794Z
-updated_at: "2026-11-15T09:17:40.412Z"
+updated_at: "2026-11-15T09:21:52.066Z"
 feature_id: G8
 priority: P2
 tags:
@@ -123,3 +123,6 @@ E2E: `bun run a2a-member-e2e` — 9/9 steps against `a2a 0.4.0`: cold in-process
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-15T09:21:52.066Z todo → wip (system)
+

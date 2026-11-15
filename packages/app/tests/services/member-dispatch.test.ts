@@ -225,3 +225,93 @@ describe('named-member delivery ladder (1333, ADR-148 §3.2)', () => {
         expect(result.delivery).toBe('unavailable');
     });
 });
+
+describe('1334: A2A member delivery rung', () => {
+    const remote = () => member({ instanceId: 'proj-remote', localId: 'remote', executor: '', a2a: './card.json' });
+
+    test('memberDelivery names the A2A driver, never an empty local executor', () => {
+        expect(memberDelivery(remote(), false)).toMatchObject({
+            delivery: 'a2a',
+            reason: 'A2A member — remote turn runs in-process (no local executor)',
+        });
+        expect(memberDelivery(remote(), true)).toMatchObject({
+            delivery: 'a2a',
+            reason: 'A2A member — live member loop drives the remote turn',
+        });
+    });
+
+    test('no serve takes the in-process transport and returns artifact text without a warm dispatch', async () => {
+        const calls: unknown[][] = [];
+        const result = await dispatchToNamedMember('remote', 'read only', {
+            members: async () => [remote()],
+            live: async () => false,
+            dispatcher: {
+                enqueue: async () => ({ messageId: 'a2a-1', replayed: false }),
+                dispatch: async () => {
+                    throw new Error('the warm dispatcher must not run');
+                },
+            },
+            a2a: async (member, prompt, opts) => {
+                calls.push([member.instanceId, prompt, opts.fromId]);
+                return { status: 'completed', messageId: 'a2a-1', output: 'remote answer' };
+            },
+        });
+        expect(result).toMatchObject({
+            delivery: 'a2a',
+            status: 'completed',
+            messageId: 'a2a-1',
+            output: 'remote answer',
+        });
+        expect(calls).toEqual([['proj-remote', 'read only', 'operator']]);
+    });
+
+    test('an A2A not-started is terminal for the rung, never a cold fallback', async () => {
+        const result = await dispatchToNamedMember('remote', 'read only', {
+            members: async () => [remote()],
+            live: async () => false,
+            dispatcher: {
+                enqueue: async () => ({ messageId: 'a2a-2', replayed: false }),
+                dispatch: async () => {
+                    throw new Error('unused');
+                },
+            },
+            a2a: async () => ({ status: 'not-started', messageId: 'a2a-2', reason: 'card unreachable' }),
+        });
+        expect(result).toMatchObject({ delivery: 'a2a', status: 'not-started', reason: 'card unreachable' });
+    });
+
+    test('a live A2A member takes one keyed request and reads its result artifact', async () => {
+        const sent: FleetDispatchRequest[] = [];
+        const result = await dispatchToNamedMember('remote', 'read only', {
+            members: async () => [remote()],
+            live: async () => true,
+            dispatcher: {
+                dispatch: async (req: FleetDispatchRequest) => {
+                    sent.push(req);
+                    return { status: 'completed', messageId: 'a2a-live', runId: 'run-a2a' };
+                },
+            },
+            a2a: async () => {
+                throw new Error('the in-process shortcut must not run when live');
+            },
+            a2aOutput: async (runId) => (runId === 'run-a2a' ? 'warm remote answer' : undefined),
+        });
+        expect(result).toMatchObject({ delivery: 'a2a', status: 'completed', output: 'warm remote answer' });
+        expect(sent).toHaveLength(1);
+    });
+
+    test('an unwired A2A turn service is an explicit unavailable, not a cold subprocess', async () => {
+        const result = await dispatchToNamedMember('remote', 'read only', {
+            members: async () => [remote()],
+            live: async () => false,
+            dispatcher: {
+                enqueue: async () => ({ messageId: 'a2a-3', replayed: false }),
+                dispatch: async () => {
+                    throw new Error('unused');
+                },
+            },
+        });
+        expect(result).toMatchObject({ delivery: 'unavailable', addressMatched: true });
+        expect(result.delivery === 'unavailable' && result.reason).toContain('no A2A turn service');
+    });
+});

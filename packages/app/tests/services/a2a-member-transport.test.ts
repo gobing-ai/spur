@@ -130,6 +130,8 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
         expect(h.cli.sendCount).toBe(1);
         const rows = await new CoordinationRunDao(await h.getDb()).listByMessageId(result.messageId);
         expect(rows[0]).toMatchObject({ status: 'exited', remote_task_id: 'task-1', remote_context_id: 'ctx-1' });
+        expect(await h.transport.outputForRun(rows[0]?.run_id ?? '')).toBe('answer');
+        expect(await h.transport.outputForRun('missing-run')).toBeUndefined();
         const message = await h.inbox.get(result.messageId);
         expect(message?.status).toBe('delivered');
     });
@@ -238,5 +240,80 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
         });
         h.cli.cardError = new Error('connection refused');
         expect(await h.transport.doctor(MEMBER)).toMatchObject({ cardReachable: false });
+    });
+
+    test('existing terminal receipts and enqueue failures return without another remote call', async () => {
+        const h = await harness();
+        const completed = await h.transport.dispatch(MEMBER, 'read only', {
+            dispatcher: h.dispatcher,
+            fromId: 'operator',
+            requestKey: 'terminal/one',
+        });
+        const calls = [...h.cli.calls];
+        expect(await h.transport.runMessage(MEMBER, completed.messageId)).toMatchObject({
+            status: 'completed',
+            runId: completed.runId,
+        });
+        expect(h.cli.calls).toEqual(calls);
+        const failed = await h.transport.dispatch(MEMBER, 'read only', {
+            dispatcher: {
+                enqueue: async () => {
+                    throw new Error('inbox offline');
+                },
+            },
+            fromId: 'operator',
+        });
+        expect(failed).toMatchObject({ status: 'not-started', messageId: '' });
+        expect(failed.reason).toContain('inbox offline');
+        expect(await h.transport.runMessage(MEMBER, 'missing-message')).toMatchObject({
+            status: 'failed',
+            reason: 'inbox request not found',
+        });
+        expect(await h.transport.runMessage({ ...MEMBER, a2a: undefined }, 'x')).toMatchObject({
+            status: 'failed',
+            reason: 'member "proj-remote" has no a2a declaration',
+        });
+    });
+
+    test('a claimed batch and a failed/delivered request with no run keep their distinct outcomes', async () => {
+        const h = await harness();
+        const first = await h.inbox.send({ from: 'operator', to: MEMBER.instanceId, body: 'one', kind: 'request' });
+        const second = await h.inbox.send({ from: 'operator', to: MEMBER.instanceId, body: 'two', kind: 'request' });
+        const claims = [first.message.id, second.message.id].map((id) => ({ id, attempts: 1 }));
+        const results = await h.transport.runClaimed(MEMBER, claims);
+        expect(results.map((result) => result.status)).toEqual(['completed', 'completed']);
+        expect(h.cli.sendCount).toBe(2);
+        const failed = await h.inbox.send({ from: 'operator', to: MEMBER.instanceId, body: 'failed', kind: 'request' });
+        const failedClaim = await h.inbox.claimById(failed.message.id);
+        expect(failedClaim).not.toBeNull();
+        if (failedClaim !== null) await h.inbox.settle([failedClaim], 'not-started', 'definite refusal');
+        expect(await h.transport.runMessage(MEMBER, failed.message.id)).toMatchObject({
+            status: 'not-started',
+            reason: 'definite refusal',
+        });
+        const delivered = await h.inbox.send({
+            from: 'operator',
+            to: MEMBER.instanceId,
+            body: 'delivered',
+            kind: 'request',
+        });
+        const deliveredClaim = await h.inbox.claimById(delivered.message.id);
+        expect(deliveredClaim).not.toBeNull();
+        if (deliveredClaim !== null) await h.inbox.settle([deliveredClaim], 'accepted');
+        expect((await h.transport.runMessage(MEMBER, delivered.message.id)).status).toBe('outcome-unknown');
+    });
+
+    test('doctor names an unavailable binary and redacts a card failure', async () => {
+        const cli = new FakeCli();
+        cli.version = async () => {
+            throw new Error('missing binary');
+        };
+        cli.cardError = new Error('secret-value rejected');
+        const h = await harness({ cli });
+        expect(await h.transport.doctor(MEMBER)).toMatchObject({
+            binaryVersion: 'unavailable (missing binary)',
+            cardReachable: false,
+            reason: '[redacted] rejected',
+        });
     });
 });

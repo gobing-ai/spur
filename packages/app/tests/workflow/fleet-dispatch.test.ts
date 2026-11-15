@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentFleet } from '@gobing-ai/spur-config';
 import { validateAgentId } from '@gobing-ai/ts-ai-runner';
+import type { A2aMemberTransport } from '../../src/services/a2a-member-transport';
 import type { FleetDispatcher, FleetDispatchRequest, FleetReceipt } from '../../src/services/fleet-dispatcher';
 import type { FleetService, ResolvedFleet, ResolvedFleetMember } from '../../src/services/fleet-service';
 import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../../src/workflow/fleet-dispatch';
@@ -313,5 +314,129 @@ describe('fleetUnavailableOutcome', () => {
         if (outcome.mode !== 'fail') return;
         expect(outcome.error).toContain('failed-agent');
         expect(outcome.error).toContain('fleet is disabled');
+    });
+});
+
+describe('1334: A2A member dispatch under the fleet surface', () => {
+    const remote = () => member({ instanceId: 'proj-remote', localId: 'remote', executor: '', a2a: './card.json' });
+    const a2aDeps = (
+        project: string,
+        turn: { status: 'completed' | 'failed' | 'not-started' | 'outcome-unknown'; reason?: string },
+        withService = true,
+    ): FleetDispatchDeps => ({
+        ...deps(fleetSvc(declaration(), [remote()], [], project), dispatcher(completed).dispatcher),
+        ...(withService
+            ? {
+                  a2a: {
+                      runMessage: async (_member: unknown, messageId: string) => ({
+                          ...turn,
+                          messageId,
+                          runId: 'run-a2a',
+                          remoteTaskId: 'remote-task-1',
+                      }),
+                  } as unknown as A2aMemberTransport,
+              }
+            : {}),
+    });
+
+    test('an A2A turn ends in the existing completed fleet receipt, without a receipt poll', async () => {
+        const project = tempProject();
+        const result = await dispatchToFleet(
+            {
+                role: 'coder',
+                member: 'remote',
+                prompt: 'read only',
+                projectPath: project,
+                runId: 'run-1',
+                state: 'review',
+            },
+            a2aDeps(project, { status: 'completed' }),
+        );
+        expect(result).toMatchObject({
+            status: 'completed',
+            memberId: 'proj-remote',
+            messageId: 'msg-1',
+            runId: 'run-a2a',
+            member: { a2a: './card.json' },
+        });
+        if (result.status === 'completed') expect(readFileSync(result.promptPath, 'utf8')).toBe('read only');
+    });
+
+    test('mutating work is refused before prompt write, enqueue or send', async () => {
+        const project = tempProject();
+        const result = await dispatchToFleet(
+            {
+                role: 'coder',
+                member: 'remote',
+                prompt: 'mutate',
+                projectPath: project,
+                requireDiff: true,
+                runId: 'run-2',
+                state: 'implement',
+            },
+            a2aDeps(project, { status: 'completed' }, false),
+        );
+        expect(result).toMatchObject({ status: 'unavailable', member: { a2a: './card.json' } });
+        expect(result.status === 'unavailable' && result.reason).toContain('read-only');
+    });
+
+    test('an unwired service and not-started/outcome-unknown stay distinct receipt variants', async () => {
+        const project = tempProject();
+        expect(
+            await dispatchToFleet(
+                {
+                    role: 'coder',
+                    member: 'remote',
+                    prompt: 'read only',
+                    projectPath: project,
+                    runId: 'run-3',
+                    state: 'review',
+                },
+                a2aDeps(project, { status: 'completed' }, false),
+            ),
+        ).toMatchObject({ status: 'unavailable', reason: 'A2A turn service is not wired' });
+        expect(
+            await dispatchToFleet(
+                {
+                    role: 'coder',
+                    member: 'remote',
+                    prompt: 'read only',
+                    projectPath: project,
+                    runId: 'run-4',
+                    state: 'review',
+                },
+                a2aDeps(project, { status: 'not-started', reason: 'card unreachable' }),
+            ),
+        ).toMatchObject({ status: 'not-started', member: { a2a: './card.json' } });
+        expect(
+            await dispatchToFleet(
+                {
+                    role: 'coder',
+                    member: 'remote',
+                    prompt: 'read only',
+                    projectPath: project,
+                    runId: 'run-5',
+                    state: 'review',
+                },
+                a2aDeps(project, { status: 'outcome-unknown' }),
+            ),
+        ).toMatchObject({ status: 'outcome-unknown', memberId: 'proj-remote' });
+    });
+
+    test('a definite remote failure carries its reason and run id', async () => {
+        const project = tempProject();
+        expect(
+            await dispatchToFleet(
+                {
+                    role: 'coder',
+                    member: 'remote',
+                    prompt: 'read only',
+                    projectPath: project,
+                    runId: 'run-6',
+                    state: 'review',
+                },
+                a2aDeps(project, { status: 'failed', reason: 'needs-input' }),
+            ),
+        ).toMatchObject({ status: 'failed', reason: 'needs-input', runId: 'run-a2a', member: { a2a: './card.json' } });
     });
 });

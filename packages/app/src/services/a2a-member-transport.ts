@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { chmodSync } from 'node:fs';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type DbAdapter, type InboxClaim } from '@gobing-ai/spur-domain';
 import {
     createNodeFileSystem,
@@ -102,16 +102,30 @@ export class A2aCliService implements A2aCli {
     private readonly process: ProcessExecutor;
     private readonly fs: FileSystem;
     private readonly env: Record<string, string | undefined>;
+    private readonly chmod: (path: string) => Promise<void>;
 
     constructor(options: {
         cwd: string;
         env?: Record<string, string | undefined>;
         process?: ProcessExecutor;
         fs?: FileSystem;
+        chmod?: (path: string) => Promise<void>;
     }) {
         this.process = options.process ?? new NodeProcessExecutor();
         this.fs = options.fs ?? createNodeFileSystem(options.cwd);
-        this.env = options.env ?? process.env;
+        this.env = options.env ?? getEnvVars();
+        this.chmod =
+            options.chmod ??
+            (async (path) => {
+                const result = await this.process.run({
+                    command: 'chmod',
+                    args: ['700', path],
+                    cwd: this.fs.getProjectRoot(),
+                    timeout: 5_000,
+                    rejectOnError: false,
+                });
+                if (result.exitCode !== 0) throw new Error(`chmod 700 ${path} failed (exit ${result.exitCode})`);
+            });
     }
 
     private cardRef(member: A2aMemberRef): string {
@@ -132,11 +146,9 @@ export class A2aCliService implements A2aCli {
         const helper = this.fs.resolve('.spur/run/a2a-credential-helper');
         await this.fs.writeFile(
             helper,
-            `#!/usr/bin/env bun
-console.log(JSON.stringify({headers:{Authorization:[\`Bearer \${process.env.SPUR_A2A_AUTH_VALUE}\`]}}));
-`,
+            '#!/bin/sh\njq -n --arg value "$SPUR_A2A_AUTH_VALUE" \'{headers:{Authorization:[("Bearer " + $value)]}}\'\n',
         );
-        chmodSync(helper, 0o700);
+        await this.chmod(helper);
         return { args: ['--credential-helper', helper], env: { SPUR_A2A_AUTH_VALUE: secret } };
     }
 
@@ -275,7 +287,7 @@ export class A2aMemberTransport {
         this.cli =
             deps.cli ?? new A2aCliService({ cwd: deps.cwd, ...(deps.env !== undefined ? { env: deps.env } : {}) });
         this.fs = deps.fs ?? createNodeFileSystem(deps.cwd);
-        this.env = deps.env ?? process.env;
+        this.env = deps.env ?? getEnvVars();
         this.now = deps.now ?? (() => Date.now());
         this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
         this.pollIntervalMs = deps.pollIntervalMs ?? 2_000;

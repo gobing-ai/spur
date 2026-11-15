@@ -163,6 +163,84 @@ describe('0968 runAgentLoopCore', () => {
         expect(settled).toEqual([{ outcome: 'not-started' }]);
     });
 
+    test('1334: an a2a spec drains through the remote turn driver, not a local agent process', async () => {
+        const db = await memDb();
+        const written: string[] = [];
+        const calls: unknown[][] = [];
+        const deps = memberDeps(db, {
+            write: (text) => {
+                written.push(text);
+            },
+            agentService: () =>
+                ({
+                    run: async () => {
+                        throw new Error('a local agent must not run for an a2a spec');
+                    },
+                }) as unknown as ReturnType<AgentLoopDeps['agentService']>,
+            listAgentSpecs: async () => [
+                {
+                    id: 'member-1',
+                    type: 'a2a',
+                    name: 'member-1',
+                    workspace: '/tmp',
+                    purpose: 'a2a',
+                    tags: [],
+                    config: {},
+                },
+            ],
+            a2aTurn: async (claimed, options) => {
+                calls.push([claimed, options]);
+                return [{ status: 'completed', messageId: 'm1', output: 'remote answer' }];
+            },
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(calls).toHaveLength(1);
+        expect(written).toContain('remote answer');
+    });
+
+    test('1334: a mutating declaration reaches the A2A read-only admission seam', async () => {
+        const db = await memDb();
+        let seen: { requireDiff?: boolean } | undefined;
+        const deps = memberDeps(db, {
+            listAgentSpecs: async () => [
+                {
+                    id: 'member-1',
+                    type: 'a2a',
+                    name: 'member-1',
+                    workspace: '/tmp',
+                    purpose: 'a2a',
+                    tags: [],
+                    config: {},
+                },
+            ],
+            drain: async () => ({
+                prompt: 'mutate',
+                flags: { requireDiff: true },
+                claimed: [{ id: 'm1', attempts: 1 }],
+            }),
+            a2aTurn: async (_claimed, options) => {
+                seen = options.work;
+                return [{ status: 'not-started', messageId: 'm1', reason: 'read-only' }];
+            },
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(seen?.requireDiff).toBe(true);
+        const settled = (deps as unknown as { __settled: Array<{ outcome: string }> }).__settled;
+        expect(settled).toEqual([{ outcome: 'not-started' }]);
+    });
+
     test('a refused orchestrator claim exits 2 and never starts the loop', async () => {
         const db = await memDb();
         const cwd = mkdtempSync(join(tmpdir(), 'loop-claim-'));

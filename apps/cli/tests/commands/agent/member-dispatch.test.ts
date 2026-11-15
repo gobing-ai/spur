@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { _resetAgentServiceShimsForTest, FleetDispatcher } from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, A2aMemberTransport, FleetDispatcher } from '@gobing-ai/spur-app';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { runAgentRun } from '../../../src/commands/agent';
@@ -309,6 +309,129 @@ describe('agent run --agent <member> (1333 R1/R3)', () => {
             expect(code).toBe(2);
             expect(output.stderr.join('\n')).toContain('names both the fleet member');
         } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('agent run --agent <a2a member> (1334)', () => {
+    const a2aConfig = () =>
+        ({
+            agent: {
+                fleet: { enabled: false, strategy: 'rest', members: [{ id: 'remote', a2a: 'http://127.0.0.1:1' }] },
+            },
+        }) as unknown as SpurConfig;
+
+    test('the no-serve A2A path emits one JSON result with artifact text and spawns nothing', async () => {
+        const output = captureOutput();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-a2a-cold-'));
+        setAgentServerFetchForTesting(stubFetch(async () => new Response('{}', { status: 500 })));
+        const original = A2aMemberTransport.prototype.dispatch;
+        A2aMemberTransport.prototype.dispatch = async () => ({
+            status: 'completed',
+            messageId: 'a2a-1',
+            runId: 'run-a2a',
+            output: 'remote answer',
+        });
+        try {
+            const ctx = createCliContext({ cwd, output, db, spurConfig: a2aConfig() });
+            const run = async () => {
+                throw new Error('the local subprocess must not run');
+            };
+            const code = await runAgentRun('read only', { ...ctx, agentService: () => ({ run }) } as never, {
+                agent: 'remote',
+                json: true,
+            });
+            expect(code).toBe(0);
+            const body = JSON.parse(output.stdout.join('\n')) as Record<string, unknown>;
+            expect(body).toMatchObject({
+                delivery: 'a2a',
+                status: 'completed',
+                messageId: 'a2a-1',
+                output: 'remote answer',
+            });
+        } finally {
+            A2aMemberTransport.prototype.dispatch = original;
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('an A2A not-started is nonzero and never re-targets a local executor', async () => {
+        const output = captureOutput();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-a2a-fail-'));
+        setAgentServerFetchForTesting(stubFetch(async () => new Response('{}', { status: 500 })));
+        const original = A2aMemberTransport.prototype.dispatch;
+        A2aMemberTransport.prototype.dispatch = async () => ({
+            status: 'not-started',
+            messageId: 'a2a-2',
+            reason: 'card unreachable',
+        });
+        try {
+            const ctx = createCliContext({ cwd, output, db, spurConfig: a2aConfig() });
+            const run = async () => {
+                throw new Error('the cold fallback must not run');
+            };
+            const code = await runAgentRun('read only', { ...ctx, agentService: () => ({ run }) } as never, {
+                agent: 'remote',
+                json: true,
+            });
+            expect(code).toBe(1);
+            expect(JSON.parse(output.stdout.join('\n'))).toMatchObject({
+                status: 'not-started',
+                reason: 'card unreachable',
+            });
+            expect(output.stderr.join('\n')).toContain('card unreachable');
+        } finally {
+            A2aMemberTransport.prototype.dispatch = original;
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('the live A2A path reads back the run artifact instead of re-running in-process', async () => {
+        const output = captureOutput();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-a2a-live-'));
+        const liveId = `${basename(cwd)}-remote`;
+        setAgentServerFetchForTesting(
+            stubFetch(
+                async () =>
+                    new Response(JSON.stringify({ processes: [{ agentId: liveId, pid: 42, status: 'idle' }] }), {
+                        status: 200,
+                    }),
+            ),
+        );
+        const dispatch = FleetDispatcher.prototype.dispatch;
+        FleetDispatcher.prototype.dispatch = async () => ({
+            status: 'completed',
+            messageId: 'a2a-live',
+            runId: 'run-live',
+        });
+        const turn = A2aMemberTransport.prototype.dispatch;
+        A2aMemberTransport.prototype.dispatch = async () => {
+            throw new Error('the in-process shortcut must not run when live');
+        };
+        const outputRead = A2aMemberTransport.prototype.outputForRun;
+        A2aMemberTransport.prototype.outputForRun = async () => 'warm remote answer';
+        try {
+            const ctx = createCliContext({ cwd, output, db, spurConfig: a2aConfig() });
+            const run = async () => {
+                throw new Error('the subprocess must not run');
+            };
+            const code = await runAgentRun('read only', { ...ctx, agentService: () => ({ run }) } as never, {
+                agent: 'remote',
+                json: true,
+            });
+            expect(code).toBe(0);
+            expect(JSON.parse(output.stdout.join('\n'))).toMatchObject({
+                status: 'completed',
+                output: 'warm remote answer',
+            });
+        } finally {
+            FleetDispatcher.prototype.dispatch = dispatch;
+            A2aMemberTransport.prototype.dispatch = turn;
+            A2aMemberTransport.prototype.outputForRun = outputRead;
             rmSync(cwd, { recursive: true, force: true });
         }
     });

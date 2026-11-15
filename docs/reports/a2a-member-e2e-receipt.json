@@ -1,9 +1,9 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-11-15T09:06:52.895Z",
+    "generatedAt": "2026-11-15T09:41:50.462Z",
     "command": "bun run a2a-member-e2e",
     "a2aVersion": "a2a 0.4.0",
-    "scratch": "/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/a2a-member-e2e-cxe3nyc6",
+    "scratch": "/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/a2a-member-e2e-zbyqe6ej",
     "steps": [
         {
             "step": "cold-in-process",
@@ -11,7 +11,7 @@
             "command": "spur agent run \"cold read-only turn\" --agent remote --json",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "exit=0; status=completed; output=exec-answer: cold read-only turn\n; reason=A2A member — remote turn runs in-process (no local executor); remoteTask=01a1de75-8157-7196-a21d-aae3b3ed0ebb; context=01a1de75-8157-71cc-ba6d-584d6eb63ba2"
+            "evidence": "exit=0; status=completed; output=exec-answer: cold read-only turn\n; reason=A2A member — remote turn runs in-process (no local executor); remoteTask=01a1de95-8290-76fd-bce1-6f2bd043b20e; context=01a1de95-8290-7756-85ff-a947afb59fff"
         },
         {
             "step": "credential-not-persisted",
@@ -27,7 +27,7 @@
             "command": "spur agent doctor",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "  a2a-member-e2e-cxe3nyc6-remote\ta2a\tA2A member — remote turn runs in-process (no local executor); a2a 0.4.0; card reachable; protocol 1.0"
+            "evidence": "  a2a-member-e2e-zbyqe6ej-remote\ta2a\tA2A member — remote turn runs in-process (no local executor); a2a 0.4.0; card reachable; protocol 1.0"
         },
         {
             "step": "missing-auth",
@@ -35,7 +35,7 @@
             "command": "spur agent run \"must not start\" --agent missing --json",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "exit=1; dispatch: member \"missing\" → A2A turn (message msg_f2263afe-513c-4448-afc8-b3edba8e4bfe): not-started — member \"a2a-member-e2e-cxe3nyc6-missing\" A2A turn: member \"a2a-member-e2e-cxe3nyc6-missing\" auth environment variable \"A2A_MEMBER_UNSET_TOKEN\" is unset"
+            "evidence": "exit=1; dispatch: member \"missing\" → A2A turn (message msg_ea17cd90-44df-433c-aecc-0e9086e9b304): not-started — member \"a2a-member-e2e-zbyqe6ej-missing\" A2A turn: member \"a2a-member-e2e-zbyqe6ej-missing\" auth environment variable \"A2A_MEMBER_UNSET_TOKEN\" is unset"
         },
         {
             "step": "unreachable-card",
@@ -43,7 +43,7 @@
             "command": "spur agent run \"must not start\" --agent broken --json",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "exit=1; dispatch: member \"broken\" → A2A turn (message msg_0360da39-60e5-45a7-b23c-1d030f909361): not-started — member \"a2a-member-e2e-cxe3nyc6-broken\" A2A turn: a2a card failed (exit 3): {\n  \"error\": {\n    \"code\": \"A2ACLI_ERR_IO\",\n    \"message\": \"failed to resolve agent card: card request failed: Get \\\"http://127.0.0.1:1/.well-known/agent-card.json\\\": dial tcp 127.0.0.1:1: connect: connection refused\",\n    \"hint\": \"check the agent is running and the --agent-card reference is correct\"\n  }\n}"
+            "evidence": "exit=1; dispatch: member \"broken\" → A2A turn (message msg_17e16773-77df-4b08-938b-f46506211bf9): not-started — member \"a2a-member-e2e-zbyqe6ej-broken\" A2A turn: a2a card failed (exit 3): {\n  \"error\": {\n    \"code\": \"A2ACLI_ERR_IO\",\n    \"message\": \"failed to resolve agent card: card request failed: Get \\\"http://127.0.0.1:1/.well-known/agent-card.json\\\": dial tcp 127.0.0.1:1: connect: connection refused\",\n    \"hint\": \"check the agent is running and the --agent-card reference is correct\"\n  }\n}"
         },
         {
             "step": "live-member-loop",
@@ -64,10 +64,10 @@
         {
             "step": "timeout-reattach",
             "requirement": "R4/R5/AC3/AC4",
-            "command": "A2aMemberTransport.dispatch(timeout=50ms) → runMessage after the remote turn",
+            "command": "A2aMemberTransport.dispatch(timeout=50ms) → orphan sweep + fresh transport runMessage",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "first=outcome-unknown (); resumed=completed (); sends=1; gets=3; runId=96ea6333-e7fa-49ae-9d35-6f5be3fc6db3"
+            "evidence": "first=outcome-unknown (); resumed=completed (); sends=1; gets=3; runId=fea9a262-0c1b-448c-bd52-32983ca1441f"
         },
         {
             "step": "read-only-admission",
