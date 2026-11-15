@@ -2,15 +2,15 @@
 
 schemaVersion: 1
 candidate: 0037-dimension-marts
-status: inconclusive
-sourceRevision: a4ba9691a96dc41123ba1f57a485818db66f800c
+status: go
+sourceRevision: c3a8068961755caa1d2adde2719a111f728d01fa
 command: `rm -f docs/reports/1311-migration-ownership.json docs/reports/1311-migration-ownership.md && cd packages/domain && bun test tests/dao/migration-ownership.test.ts`
 fixtureSeed: 1311-offline-upgrade-v1
-measuredAt: 2026-11-15T09:20:42.227Z
+measuredAt: 2026-11-15T09:45:32.313Z
 
 ## Reason
 
-A required source, digest, or source-free bundle measurement is missing, so consolidation is not decided. Leave 1312 blocked.
+0037 tracked SQL matches the embedded constant after comment and whitespace normalization, and the applied schema matches. Released SQL bytes were not rewritten. Fresh, previous-release, already-applied, interrupted, duplicate-column, and absent-column fixtures kept the current guards. The bundled CLI migrated a directory with no drizzle folder and no repository source. Audit SHA-256 values are evidence only; the runtime journal stores id and applied_at, not checksums. Other SQL mirrors are inventoried and not proposed. No package dependency changed. 1312 may consume this artifact; this task does not generate SQL.
 
 Audit hashes are not runtime journal fields. `__spur_cli_migrations` stores `id` and `applied_at` only.
 
@@ -70,7 +70,7 @@ Audit hashes are not runtime journal fields. `__spur_cli_migrations` stores `id`
 
 ## Identifiers
 
-Count: 57. First: 0000_spur_cli_foundation. Last: 0056_spur_cli_coordination_runs_a2a_remote_context. Contiguous 0000..0054: true.
+Count: 57. First: 0000_spur_cli_foundation. Last: 0056_spur_cli_coordination_runs_a2a_remote_context. Contiguous 0000..0056: true.
 
 | guard id | table | column |
 | --- | --- | --- |
@@ -116,11 +116,11 @@ Normalized equal: true. Schema equal: true. Method: sql-comment-and-whitespace.
 
 ## Offline proof
 
-Bundle `apps/cli/spur.js` digest ``.
-Exit null. Reported applied null.
+Bundle `apps/cli/spur.js` digest `9b8a8df4eeda38a829276f8c509ffe8e989206ca446dc5cbb92c198874eae73f`.
+Exit 0. Reported applied 0.
 Temporary directory had drizzle: false. Had repository source: false.
-Journal columns: .
-Embedded ids present: 0. Importer ledger present: false.
+Journal columns: id, applied_at.
+Embedded ids present: 57. Importer ledger present: true.
 
 ## Other mirrors
 
@@ -134,4 +134,4 @@ bun 1.4.3; sqlite 3.54.0; domain 0.4.35; cli 0.4.35.
 
 ## Decision
 
-1312 stays blocked.
+1312 may consume this artifact after review.

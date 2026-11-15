@@ -218,7 +218,7 @@ export function decideMigrationOwnership(input: OwnershipDecisionInput): { statu
     if (!input.idsMatchReleased) {
         return {
             status: 'no-go',
-            reason: 'Embedded migration ids are not the contiguous released set 0000..0054. Leave 1312 blocked.',
+            reason: 'Embedded migration ids are not the contiguous released set 0000..0056. Leave 1312 blocked.',
         };
     }
     if (!input.semanticEqual || !input.schemaEqual) {
@@ -484,7 +484,7 @@ ${digests}
 
 ## Identifiers
 
-Count: ${report.ids.count}. First: ${report.ids.first}. Last: ${report.ids.last}. Contiguous 0000..0054: ${report.ids.contiguousFrom0000}.
+Count: ${report.ids.count}. First: ${report.ids.first}. Last: ${report.ids.last}. Contiguous 0000..0056: ${report.ids.contiguousFrom0000}.
 
 | guard id | table | column |
 | --- | --- | --- |
@@ -802,7 +802,7 @@ describe('1311 migration ownership evidence', () => {
             idsMatchReleased:
                 contiguous &&
                 embeddedIds[0] === '0000_spur_cli_foundation' &&
-                embeddedIds.at(-1)?.startsWith('0054_') === true,
+                embeddedIds.at(-1)?.startsWith('0056_') === true,
             semanticEqual: normalizedEqual && candidateEntry?.sql === embeddedSql,
             schemaEqual,
             releasedSqlUnchanged: releasedClean,

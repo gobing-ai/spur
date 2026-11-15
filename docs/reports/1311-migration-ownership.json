@@ -1,8 +1,8 @@
 {
     "schemaVersion": 1,
     "candidate": "0037-dimension-marts",
-    "status": "inconclusive",
-    "reason": "A required source, digest, or source-free bundle measurement is missing, so consolidation is not decided. Leave 1312 blocked.",
+    "status": "go",
+    "reason": "0037 tracked SQL matches the embedded constant after comment and whitespace normalization, and the applied schema matches. Released SQL bytes were not rewritten. Fresh, previous-release, already-applied, interrupted, duplicate-column, and absent-column fixtures kept the current guards. The bundled CLI migrated a directory with no drizzle folder and no repository source. Audit SHA-256 values are evidence only; the runtime journal stores id and applied_at, not checksums. Other SQL mirrors are inventoried and not proposed. No package dependency changed. 1312 may consume this artifact; this task does not generate SQL.",
     "ids": {
         "count": 57,
         "first": "0000_spur_cli_foundation",
@@ -214,16 +214,16 @@
         ]
     },
     "offlineProof": {
-        "pass": false,
+        "pass": true,
         "bundlePath": "apps/cli/spur.js",
-        "bundleDigest": "",
-        "exitCode": null,
-        "reportedApplied": null,
+        "bundleDigest": "9b8a8df4eeda38a829276f8c509ffe8e989206ca446dc5cbb92c198874eae73f",
+        "exitCode": 0,
+        "reportedApplied": 0,
         "cwdHadDrizzle": false,
         "cwdHadRepositorySource": false,
-        "journalColumns": [],
-        "embeddedIdsPresent": 0,
-        "importerLedgerPresent": false
+        "journalColumns": ["id", "applied_at"],
+        "embeddedIdsPresent": 57,
+        "importerLedgerPresent": true
     },
     "mirrors": {
         "trackedCount": 45,
@@ -670,7 +670,7 @@
         ],
         "releasedSqlPaths": ["drizzle", "packages/domain/src/migrations.ts"]
     },
-    "sourceRevision": "a4ba9691a96dc41123ba1f57a485818db66f800c",
+    "sourceRevision": "c3a8068961755caa1d2adde2719a111f728d01fa",
     "sourceDigests": {
         "packages/domain/src/migrations.ts": "73f886ad42004913ccb11c037bffbd4376104031b973dd1c2fc0bd1606b3cfcf",
         "drizzle/0037_spur_cli_history_dimension_marts.sql": "bbbd92640d24a8f3f5ee1f19d22ed1846eaa6da750f86d676d76e8e61fcee0c4",
@@ -742,5 +742,5 @@
         ]
     },
     "command": "rm -f docs/reports/1311-migration-ownership.json docs/reports/1311-migration-ownership.md && cd packages/domain && bun test tests/dao/migration-ownership.test.ts",
-    "measuredAt": "2026-11-15T09:20:42.227Z"
+    "measuredAt": "2026-11-15T09:45:32.313Z"
 }
