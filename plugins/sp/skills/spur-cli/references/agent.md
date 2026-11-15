@@ -19,15 +19,20 @@ that before using `run` for fan-out dispatch.
 
 ## Verb map
 
+Fleet **plumbing** verbs — `join`, `leave`, `wait`, `report` (and the supervisor-internal `loop`) — are
+**hidden from default `spur agent --help`** (1335 / ADR-148): hooks, skills and guests call them, a
+user dispatching work does not. They are registered and documented unchanged; `spur agent <verb>
+--help` still prints each one's help.
+
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
-| `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--inbox <id>` `--json` |
+| `wait [<specId>]` | *Plumbing (hidden).* Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--inbox <id>` `--json` |
 | `trace <runId>` | Print one execution record's lineage — the run, its dispatch parents, agent session ids and streams (1076 R4, ADR-132) | `--follow` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur self serve`) | `--specs` `--server <url>` `--json` |
-| `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook (G73 R1/R2, task 1080) | `--state <state>` `--seq <ns>` `--spec <id>` `--json` |
-| `join` | Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081); `--member` binds a declared member instead (G75 R3, task 1281) | `--role <name>` `--id <id>` `--member <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
-| `leave` | Leave the fleet: release the guest lease, retire the occupant, return claimed messages to `queued` | `[id]` `--session-id <sid>` `--json` |
+| `report` | *Plumbing (hidden).* Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook (G73 R1/R2, task 1080) | `--state <state>` `--seq <ns>` `--spec <id>` `--json` |
+| `join` | *Plumbing (hidden).* Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081); `--member` binds a declared member instead (G75 R3, task 1281) | `--role <name>` `--id <id>` `--member <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
+| `leave` | *Plumbing (hidden).* Leave the fleet: release the guest lease, retire the occupant, return claimed messages to `queued` | `[id]` `--session-id <sid>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `dogfood-gate` | `sp:dogfood-testing` gate: pipeline-driving refusal (exit 2) | `--testee` `--max-retry-present` `--steps` `--json` |
@@ -39,7 +44,6 @@ that before using `run` for fan-out dispatch.
 Every verb except `trace` accepts `--json` plus `--json-envelope`; `trace` is `--json` only. The hidden
 `loop` is a supervisor-internal process surface. **Exit codes:** `0` success, `1` failure, and `2`
 invalid usage; `run` can also propagate the invoked agent's non-zero result.
-
 ## `run` - execute a prompt via a coding agent
 
 ```bash
@@ -55,7 +59,7 @@ through a coding agent as an external process, producing a persisted run record 
 
 | Flag | Purpose |
 | ------ | --------- |
-| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. `inline` is the default selector (0687 / ADR-087): on a host session the work runs in-session; on a headless subprocess surface like `agent run` it substitutes tier resolution and warns once naming the resolved executor — no rejection, no `agent.default` normalization. |
+| `--agent <name>` | Fleet member id, role, executor, agent binary, `auto`, or `inline`. A **fleet member** (a declared `agent.fleet.members[].id`, its `<slug>-<id>` instance id, or a full instance id) is resolved FIRST and its delivery is chosen automatically (ADR-148 §3.2): live under `spur serve` → one keyed inbox turn; not live → a cold subprocess on the member's own executor; declared but unusable (disabled, no resolved executor, ambiguous address) → an exit-2 refusal naming the member and the fix, never a silent fall-through to a role. The member's delivery line goes to stderr, so `--json` stays parseable. A **role** (`scribe`/`coder`/`reviewer`/`planner`, from `plugins/sp/references/roles.md`) selects the starting tier; an **executor** (an `agent.executors` entry) is a permanent pin; a **bare binary name** works with a one-time warning (transition shim); `auto` uses the declared/default role. `inline` is the default selector (0687 / ADR-087): on a host session the work runs in-session; on a headless subprocess surface like `agent run` it substitutes tier resolution and warns once naming the resolved executor — no rejection, no `agent.default` normalization. |
 | `--model <name>` | Agent model argument (e.g. `o3`, `sonnet`). Passed through to the agent's model flag. |
 | `--mode <mode>` | Agent output mode: `text` or `json`. |
 | `--continue` | Resume the previous agent session instead of starting fresh. |

@@ -38,6 +38,12 @@ const REFERENCES_DIR = join(SKILLS_DIR, 'spur-cli', 'references');
 const SPINE_SKILL = join(SKILLS_DIR, 'spur-dev', 'SKILL.md');
 const AGENTS_MD = join(REPO_ROOT, 'AGENTS.md');
 
+/**
+ * Purpose-cell prefix a reference uses to declare a verb as plumbing (1335): hidden from
+ * `<noun> --help` but registered, documented and still runnable.
+ */
+const PLUMBING_MARKER = '*Plumbing (hidden).*';
+
 const facadeMd = readFileSync(FACADE_SKILL, 'utf8');
 const spineMd = readFileSync(SPINE_SKILL, 'utf8');
 const agentsMd = readFileSync(AGENTS_MD, 'utf8');
@@ -163,6 +169,13 @@ function facadeRoutingNouns(): { tier: string; noun: string }[] {
 interface VerbRow {
     verb: string;
     flags: string[];
+    /**
+     * The reference marks this row as fleet/agent plumbing (hidden from `<noun> --help`, 1335).
+     * Declared by the row's purpose cell prefix `*Plumbing (hidden).*` — the table stays the
+     * single inventory, and the parity check can tell "documented but deliberately unlisted"
+     * from "documented and missing".
+     */
+    hidden: boolean;
 }
 
 /** Which reference owns each Tier A/B noun, and the inventory format that file uses. */
@@ -192,7 +205,8 @@ function verbTable(markdown: string, heading: string): VerbRow[] {
     for (const cells of firstTableUnderHeading(markdown, heading)) {
         const verb = (cells[0] ?? '').replace(/`/g, '').split(/\s+/)[0]?.trim() ?? '';
         if (verb.length === 0) continue;
-        out.push({ verb, flags: flagTokens(cells[2] ?? '') });
+        const purpose = cells[1] ?? '';
+        out.push({ verb, flags: flagTokens(cells[2] ?? ''), hidden: purpose.startsWith(PLUMBING_MARKER) });
     }
     return out;
 }
@@ -216,7 +230,7 @@ function commandSurfaceVerbs(markdown: string, heading: string): VerbRow[] {
         if (line.startsWith('#')) break;
         if (inFence) {
             const m = line.match(/^spur\s+(\S+)\s+(\S+)/);
-            if (m) out.push({ verb: m[2] ?? '', flags: flagTokens(line) });
+            if (m) out.push({ verb: m[2] ?? '', flags: flagTokens(line), hidden: false });
         }
     }
     return out;
@@ -308,7 +322,6 @@ describe('cli-surface-parity — R1: per-noun verb/flag inventories vs live', ()
             `${tier}: ${noun} reference verbs/flags match live surface`,
             () => {
                 const rows = documentedVerbs(noun);
-                const documented = rows.map((r) => r.verb);
                 const nounCapture = liveCapture([noun]);
 
                 if (nounCapture.commands.length === 0) {
@@ -346,15 +359,53 @@ describe('cli-surface-parity — R1: per-noun verb/flag inventories vs live', ()
 
                 // Non-leaf noun: bidirectional verb comparison. Commander's generated `help`
                 // subcommand is excluded via its parsed Tier C reason (0516).
+                // 1335: a row the reference marks as plumbing is DELIBERATELY hidden from
+                // `<noun> --help`, so it must satisfy the opposite contract — absent from the
+                // help listing, and still registered (its own `--help` exits 0). Dropping it from
+                // either set silently would turn hiding into removal.
+                const visibleRows = rows.filter((r) => !r.hidden);
+                const plumbingRows = rows.filter((r) => r.hidden);
                 const liveVerbs = nounCapture.commands.filter((v) => v !== helpNoun);
-                expectParity(documented, liveVerbs, `facade ${noun} verbs vs <noun> --help`);
+                expectParity(
+                    visibleRows.map((r) => r.verb),
+                    liveVerbs,
+                    `facade ${noun} verbs vs <noun> --help`,
+                );
+                for (const row of plumbingRows) {
+                    expect({
+                        noun,
+                        verb: row.verb,
+                        label: 'plumbing-listed-in-help',
+                        listed: liveVerbs.includes(row.verb),
+                    }).toEqual({
+                        noun,
+                        verb: row.verb,
+                        label: 'plumbing-listed-in-help',
+                        listed: false,
+                    });
+                    // Hiding is not removal: the verb still resolves and prints its own help.
+                    const verbCapture = liveCapture([noun, row.verb]);
+                    expect({
+                        noun,
+                        verb: row.verb,
+                        label: 'plumbing-verb-not-registered',
+                        usageLines: verbCapture.flags.length > 0 || verbCapture.commands.length > 0,
+                    }).toEqual({
+                        noun,
+                        verb: row.verb,
+                        label: 'plumbing-verb-not-registered',
+                        usageLines: true,
+                    });
+                }
 
                 // Key flags documented for each documented/live verb must exist on the live verb.
                 // Live-only flags are the documented "unlisted long-tail" (Execute-First Contract) —
                 // not drift, so only the documented-not-on-CLI side is asserted.
                 for (const row of rows) {
                     if (row.flags.length === 0) continue;
-                    if (!liveVerbs.includes(row.verb)) continue; // already a verb-level finding
+                    // A hidden (plumbing) row is verified above as registered, so its documented
+                    // flags are checked against the live verb exactly like a listed one.
+                    if (!row.hidden && !liveVerbs.includes(row.verb)) continue; // already a verb-level finding
                     const liveFlags = liveCapture([noun, row.verb]).flags;
                     const { documentedNotOnCli: missing } = diffSets(row.flags, liveFlags);
                     expect({
@@ -481,8 +532,9 @@ describe('task 0909 (feature I32) — CLI-only route reads the corrected inline 
             if (/^ {2}--/.test(line)) break;
             parts.push(line);
         }
-        const block = parts.join(' ');
-        // Semantic tokens only — the wrapped layout varies with terminal width and Commander.
+        const block = parts.join(' ').replace(/\s+/g, ' ');
+        // Semantic tokens only — the wrapped layout varies with terminal width and Commander, so
+        // the reconstruction is whitespace-normalized before the phrase assertions.
         expect(block).toContain('host-session');
         expect(block).toContain('role/tier fallback');
         expect(block).toContain('warning');

@@ -52,7 +52,8 @@ function reply(messageId: string, body: string): InboxMessage {
 
 interface Rig {
     diagnostics: Array<{ event: string; reason: string; turn: AttachedTurnReceipt }>;
-    enqueued: Array<{ member: string; requestKey: string; body: string }>;
+    // 1333: a manual named-member dispatch carries no request key.
+    enqueued: Array<{ member: string; requestKey: string | undefined; body: string }>;
     dispatch(context: WarmTurnContext): Promise<WarmTurnDispatch>;
     /** Queue one reply row for the next (or a later) poll. */
     queue(message: InboxMessage): void;

@@ -78,6 +78,15 @@ Add `id: writer` to keep the old address, or `id: coder-1` to adopt the new one.
 A project with no recorded occupancy adopts the new ids silently. Role-only and role-less members are
 byte-identical to before, so only the `role` + `executor` + no-`id` shape is affected.
 
+### Selector namespaces (1333 R1, ADR-148)
+
+`spur agent run --agent <id>` resolves a declared member id first, so an `id` claims a slot in that
+namespace. `AgentConfigSchema` rejects an id that equals a configured **executor name it does not run**
+(`{ id: writer, executor: writer }` is the same target either way and is allowed) or a reserved
+`--agent` value (`auto`, `inline`), naming both sides — never a selector whose meaning changed
+silently. A member id MAY equal a role name (the design's own `{ id: coder }` example): the member rung
+wins, and a binary-name claim is refused at the CLI boundary where the canonical agent list lives.
+
 ### Retired sources — hard errors (R2)
 
 One loader guard (`packages/config/src/loader.ts`) runs before schema parse, so nothing is stripped silently and

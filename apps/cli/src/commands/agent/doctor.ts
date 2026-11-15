@@ -2,6 +2,7 @@ import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../../context';
 import { defaultAgentUsageSnapshotPath } from '../../services/agent-usage-source';
 import { SHARED_OPTIONS } from '../shared-options';
+import { memberDeliveryRows } from './shared';
 
 /** Register `spur agent doctor`. */
 export function registerAgentDoctorCommand(agent: Command, context: CliContext): void {
@@ -27,6 +28,20 @@ export function registerAgentDoctorCommand(agent: Command, context: CliContext):
                 },
                 undefined,
             );
+            // 1333 R6/AC4: every declared member, the delivery it would take now and why.
+            // Text surface only — the `--json` envelope keeps its existing shape.
+            if (options.json !== true) {
+                const rows = await memberDeliveryRows(context);
+                if (rows.length > 0) {
+                    context.output.write(
+                        [
+                            '',
+                            'fleet members (delivery each takes now):',
+                            ...rows.map((row) => `  ${row.instanceId}\t${row.delivery}\t${row.reason}`),
+                        ].join('\n'),
+                    );
+                }
+            }
             context.setExitCode(code);
         });
 }

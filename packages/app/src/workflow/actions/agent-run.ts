@@ -327,6 +327,10 @@ export class AgentRunActionRunner implements ActionRunner {
     // sub-outcomes that bypass the success-path stamp. Reset per invocation so a
     // non-fleet row never carries a stale reason.
     private fleetFallbackReason: string | undefined;
+    // 1333 R3: the resolved member's executor when a definite `not-started` receipt dropped
+    // the stage to the cold subprocess — the workflow counterpart of the CLI's
+    // `flags.agent = member.executor` rewrite (review P2-2). Reset per invocation.
+    private fleetFallbackExecutor: string | undefined;
 
     constructor(
         agentService: WorkflowAgentService,
@@ -386,7 +390,7 @@ export class AgentRunActionRunner implements ActionRunner {
         context: ActionRunContext,
         invocation: NormalizedAgentInvocation,
         role: string,
-    ): Promise<{ result?: ActionResult; fallbackReason?: string }> {
+    ): Promise<{ result?: ActionResult; fallbackReason?: string; fallbackExecutor?: string }> {
         const { input, cwd, expectFile, timeoutMs } = invocation;
         if (this.fleetDeps === undefined) {
             return {
@@ -396,19 +400,16 @@ export class AgentRunActionRunner implements ActionRunner {
                 },
             };
         }
-        if (
+        // 1333 R5 / ADR-148 §3.1: a step may name the MEMBER it dispatches to. Any other
+        // selector is still refused — the fleet uses the declared member executor, never a
+        // locally resolved one.
+        const addressed =
             typeof options.agent === 'string' &&
             options.agent !== '' &&
             options.agent !== 'auto' &&
             options.agent !== role
-        ) {
-            return {
-                result: {
-                    ok: false,
-                    error: 'agent.run: fleet uses the declared member executor; agent must be auto, its role or omitted',
-                },
-            };
-        }
+                ? options.agent
+                : undefined;
         const delegated = [
             'agent',
             'model',
@@ -457,6 +458,7 @@ export class AgentRunActionRunner implements ActionRunner {
         const dispatch = await dispatchToFleet(
             {
                 role,
+                ...(addressed !== undefined ? { member: addressed } : {}),
                 prompt: input as string,
                 projectPath: cwd,
                 ...(expectFile !== undefined ? { expectFile } : {}),
@@ -501,16 +503,37 @@ export class AgentRunActionRunner implements ActionRunner {
                 },
             };
         }
-        if (dispatch.status === 'failed' || dispatch.status === 'not-started') {
-            // A definite receipt ran short of completion: the work did not happen
-            // (not-started) or the run errored. Both are safe to report as a failed
-            // stage — never silently retried by a fallback that would double-execute.
-            const detail = dispatch.status === 'failed' ? `: ${dispatch.reason}` : '';
+        if (dispatch.status === 'not-started') {
+            // 1333 R3 / ADR-148 §3.2: the member never claimed the request, so no work
+            // happened — the one definite rung the cold subprocess may take by default.
+            // R7: only the DEFAULT changes — an EXPLICIT `executorFallback` declaration keeps
+            // today's hard failure, so it is forced onto the `fail` rung.
+            const stoppedReason = `member ${dispatch.memberId} did not start the request (definite not-started receipt)`;
+            const stopped =
+                context.vars.executorFallback === undefined
+                    ? ({ mode: 'fallback', fallbackReason: stoppedReason } as const)
+                    : fleetUnavailableOutcome(stoppedReason, 'fail', true);
+            if (stopped.mode === 'fallback') {
+                // The cold subprocess runs the MEMBER's executor, never the step's selector
+                // or the role pin — same target the CLI path takes (review P2-2).
+                return { fallbackReason: stopped.fallbackReason, fallbackExecutor: dispatch.member.executor };
+            }
             return {
                 result: {
                     ok: false,
                     data: fleetDispatchRow(dispatch, 'failed-agent', expectFile),
-                    error: `agent.run (${dispatch.memberId}) fleet dispatch ${dispatch.status}${detail}`,
+                    error: stopped.error,
+                },
+            };
+        }
+        if (dispatch.status === 'failed') {
+            // A definite receipt ran short of completion: the run errored, so the work
+            // may have touched the tree — never re-dispatched on the cold rung.
+            return {
+                result: {
+                    ok: false,
+                    data: fleetDispatchRow(dispatch, 'failed-agent', expectFile),
+                    error: `agent.run (${dispatch.memberId}) fleet dispatch failed: ${dispatch.reason}`,
                 },
             };
         }
@@ -527,14 +550,26 @@ export class AgentRunActionRunner implements ActionRunner {
                 },
             };
         }
-        const outcome = fleetUnavailableOutcome(dispatch.reason, context.vars.executorFallback);
-        if (outcome.mode === 'fallback') return { fallbackReason: outcome.fallbackReason };
+        const outcome = fleetUnavailableOutcome(
+            dispatch.reason,
+            context.vars.executorFallback,
+            dispatch.member !== undefined,
+        );
+        if (outcome.mode === 'fallback') {
+            // The member resolved but the fleet could not take the work: the cold subprocess
+            // runs the MEMBER's executor, like every other cold rung (review r2 finding 2).
+            return {
+                fallbackReason: outcome.fallbackReason,
+                ...(dispatch.member !== undefined ? { fallbackExecutor: dispatch.member.executor } : {}),
+            };
+        }
         return {
             result: {
                 ok: false,
                 data: {
-                    agent: role,
-                    // Nothing was dispatched, so there is no member identity to record.
+                    // Nothing was dispatched; the row names the member when one resolved.
+                    agent: dispatch.member?.instanceId ?? role,
+                    ...(dispatch.member !== undefined ? { memberId: dispatch.member.instanceId } : {}),
                     usage: unavailableAgentUsage('fleet unavailable before dispatch'),
                     reason: 'failed-agent',
                     surface: 'fleet',
@@ -723,6 +758,7 @@ export class AgentRunActionRunner implements ActionRunner {
         // Per-invocation reset: a prior execute()'s fallback reason must never leak
         // onto a default-path row.
         this.fleetFallbackReason = undefined;
+        this.fleetFallbackExecutor = undefined;
         const invocation = normalizeAgentInvocation(options, context, execution?.flags);
         const { input, agent, role, sessionOption, mode, cwd } = invocation;
         // 0687 R3: explicit `inline` is no longer rejected on dispatch surfaces;
@@ -809,7 +845,7 @@ export class AgentRunActionRunner implements ActionRunner {
         const sessionPolicy = sessionOption ?? (role === 'coder' ? 'reuse' : 'fresh');
         // R1 (0451): config is injected at composition root, not read from a fake cast.
         // Affinity config via this.agentConfig below.
-        const dispatchAgent = pin !== undefined ? pin.name : agent;
+        let dispatchAgent = pin !== undefined ? pin.name : agent;
         const model = invocation.model ?? pin?.model;
 
         const sessionAffinityVar = context.vars.sessionAffinity;
@@ -974,6 +1010,10 @@ export class AgentRunActionRunner implements ActionRunner {
             const fleet = await this.executeFleetSurface(options, context, invocation, validatedRole);
             if (fleet.result !== undefined) return fleet.result;
             this.fleetFallbackReason = fleet.fallbackReason;
+            this.fleetFallbackExecutor = fleet.fallbackExecutor;
+            // 1333 R3: the cold subprocess runs the MEMBER's executor, outranking the step
+            // selector and the role pin — the member was the declared target (review P2-2).
+            if (this.fleetFallbackExecutor !== undefined) dispatchAgent = this.fleetFallbackExecutor;
         }
 
         // D65 1232: the host executor surface, beside the fleet branch and selected the

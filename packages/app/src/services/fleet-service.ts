@@ -67,6 +67,12 @@ export interface FleetServiceContext {
 export interface ResolvedFleetMember {
     /** `<projectSlug>-<memberLocalId>` — the spec id / mailbox identity (R3). */
     instanceId: string;
+    /**
+     * The roster-local id (`coder`), the same value `instanceId` is suffixed with.
+     * `--agent` compares against it EXACTLY — a raw suffix test would let `--agent der`
+     * pick `proj-coder` (1333 review P3). Absent only on hand-built members.
+     */
+    localId?: string;
     role?: AgentRoleName;
     /** Declared executor, or the tier-ladder winner for a role-only member. `''` = not resolved (disabled member). */
     executor: string;
@@ -492,6 +498,7 @@ export class FleetService {
             if (!enabledIndexes.has(index)) {
                 resolvedMembers.push({
                     instanceId,
+                    localId: memberLocalId(member, members, index),
                     ...(member.role !== undefined ? { role: member.role } : {}),
                     executor: member.executor ?? '',
                     enabled: false,
@@ -518,6 +525,7 @@ export class FleetService {
             const capabilityState: ExecutionCapabilityState = state ?? 'unknown';
             resolvedMembers.push({
                 instanceId,
+                localId: memberLocalId(member, members, index),
                 ...(member.role !== undefined ? { role: member.role } : {}),
                 executor: executorName,
                 ...(resolvedExecutor.model !== undefined ? { model: resolvedExecutor.model } : {}),

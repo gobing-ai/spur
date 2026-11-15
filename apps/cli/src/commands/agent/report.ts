@@ -135,8 +135,10 @@ function agentReportUsageError(
 
 /** Register `spur agent report`. */
 export function registerAgentReportCommand(agent: Command, context: CliContext): void {
+    // Fleet plumbing (1335 / ADR-148): a host hook reports member lifecycle here — hidden from
+    // default help, verb unchanged.
     agent
-        .command('report')
+        .command('report', { hidden: true })
         .description('Report a fleet member lifecycle state (working|idle|blocked) from a host hook.')
         .requiredOption('--state <state>', 'Lifecycle state: working, idle, or blocked')
         .requiredOption('--seq <ns>', 'Monotonic report sequence (wall-clock nanoseconds); must increase')

@@ -497,6 +497,14 @@ export {
 } from './services/job-exclusion-guard';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
+// 1333 (ADR-148): the named-member delivery ladder — one definition for the run path and doctor.
+export {
+    dispatchToNamedMember,
+    type MemberDispatchDeps,
+    type MemberDispatchResult,
+    memberDelivery,
+    resolveMemberAddress,
+} from './services/member-dispatch';
 export type {
     MemberAgentProcess,
     MemberSessionDeps,

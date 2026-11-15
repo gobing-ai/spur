@@ -254,13 +254,36 @@ describe('agent.run durable receipts (D65 1232)', () => {
         expect(Object.keys(fleetReceipt ?? {}).sort()).toEqual(Object.keys(subprocessReceipt ?? {}).sort());
     });
 
-    test('fleet: a definite not-started receipt is recorded as not-started', async () => {
+    // 1333 R3 / ADR-148 §3.2: a definite `not-started` is the ONE rung the cold subprocess may
+    // take by default — the member never claimed the request, so no work happened. The stage's
+    // receipt is then the subprocess one and `fallbackReason` records which rung ran and why.
+    test('fleet: a definite not-started receipt takes the cold subprocess and records why', async () => {
         const dir = workdir();
         const deps = fleetDeps(dir, { status: 'not-started', messageId: 'msg-1', runId: 'run-1' });
-        const runner = new AgentRunActionRunner(svcWithRunTraced({}).svc, undefined, undefined, {}, deps);
+        const subprocess = svcWithRunTraced({});
+        const runner = new AgentRunActionRunner(subprocess.svc, undefined, undefined, {}, deps);
 
-        await runner.execute({ role: 'coder', input: 'go' }, makeCtx(dir, { executor: 'fleet' }));
+        const result = await runner.execute({ role: 'coder', input: 'go' }, makeCtx(dir, { executor: 'fleet' }));
 
+        expect(result.ok).toBe(true);
+        expect(subprocess.calls()).toBe(1);
+        expect(String((result.data as Record<string, unknown>).fallbackReason)).toContain('did not start');
+        const receipt = await readReceipt(createNodeFileSystem(dir), dir, receiptPath(dir, 'run-1', 'implement'));
+        expect(receipt?.outcome).toBe('done');
+    });
+
+    test('fleet: an explicit executorFallback keeps the definite not-started outcome', async () => {
+        const dir = workdir();
+        const deps = fleetDeps(dir, { status: 'not-started', messageId: 'msg-1', runId: 'run-1' });
+        const subprocess = svcWithRunTraced({});
+        const runner = new AgentRunActionRunner(subprocess.svc, undefined, undefined, {}, deps);
+
+        await runner.execute(
+            { role: 'coder', input: 'go' },
+            makeCtx(dir, { executor: 'fleet', executorFallback: 'fail' }),
+        );
+
+        expect(subprocess.calls()).toBe(0);
         const receipt = await readReceipt(createNodeFileSystem(dir), dir, receiptPath(dir, 'run-1', 'implement'));
         expect(receipt?.outcome).toBe('not-started');
     });

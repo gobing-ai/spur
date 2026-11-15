@@ -7072,3 +7072,52 @@ during wrap-up; evidence lives in the task record and `.spur/run/1326-*` artifac
   sections; under `profile=auto` the approve gate can still pause, and `--answer yes` is the
   operator's approval.
 
+## 2026-11-14 — G8 batch (1333, 1335)
+
+### Conventions that held up
+
+- **One dispatch ladder, two callers.** `1333` reuses the existing `FleetDispatcher` and the
+  existing `fallbackReason` receipt field instead of adding a second dispatch path; the CLI and the
+  workflow path share one `memberDelivery` decision (`packages/app/src/services/member-dispatch.ts:67`).
+  A second implementation of the same ladder is the failure mode this avoided.
+- **A `not-started` receipt is the only re-dispatch licence.** `failed` may have touched the tree and
+  `outcome-unknown` may still be running, so only a definite `not-started` steps the ladder down
+  (`packages/app/src/workflow/actions/agent-run.ts:507`). Both callers now agree on that.
+- **Hiding a verb is a presentation change with two machine consumers.** `hidden: true` is not
+  "delete": the reference table and the help matrix still document the verb, so both parity checks
+  needed an explicit hidden-registration contract rather than silently dropping the row
+  (`plugins/sp/tests/cli-surface-parity.test.ts:352`).
+
+### Errors fixed, and what they cost
+
+- **A silent re-target is worse than a refusal.** A member that resolved but could not take work fell
+  through to a *role* of the same name and ran a different executor with no message. Refusing with
+  the member named (`exit 2`) is the only honest behaviour — a docstring claiming it did so was not
+  evidence that it did.
+- **"The workflow does it" is not "the CLI does it".** The cold rung carried the member's executor in
+  the CLI but not in `agent-run.ts`, so the same command meant two different targets depending on the
+  surface. Copy the *substitution*, not just the branch.
+- **An unbounded warm wait is a hang, not a slow path.** A live-but-stuck member blocked
+  `spur agent run` past SIGINT; the bound (`DEFAULT_MEMBER_WAIT_MS`) is what makes
+  `outcome-unknown` reachable at all.
+- **Two "baselines" enumerate the visible CLI verb list.** `plugins/sp/tests/cli-surface-parity.test.ts`
+  parses `<noun> --help`; `plugins/sp/tests/help-docs-parity.test.ts` diffs
+  `docs/help/spur-cli-matrix.md` (cells, per-noun Verb count, Summary totals). Claiming "nothing to
+  regenerate" without running the repo-wide suite cost a full feature gate twice.
+
+### Gotchas
+
+- **`spur task migrate-anchors` and `spur workflow inline *` do not exist** in 0.4.35 — ADR-140 deleted
+  the inline driver and its eleven bookkeeping verbs. Drive `workflow run … {"executor":"host"}` →
+  work item → `workflow continue --answer-text <receipt>` instead.
+- **A `review → remediate` hop dead-ends under the incremental gate policy:** `remediate` hard-reads
+  `.spur/run/<wbs>-test-gate.findings`, which only a *red full* gate writes; a `DEFERRED` token leaves
+  no such file and the run terminates `failed`. Recover as a fresh run over the same tree.
+- **A paused run leases the worktree** — a second certification run refuses to start until the first is
+  continued or cancelled.
+- **The light gate misses warnings the full gate rejects:** `bun run lint` runs
+  `biome check . --error-on-warnings`, so an unused local left by a refactor passes `task gate light`
+  and fails `spur-check`.
+- **`changelog-confidence` (ADR-144) already fails on `main`** — a pre-existing red, not a batch
+  regression; check the base tree before attributing a repo-wide failure to your change.
+

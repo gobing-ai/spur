@@ -1,7 +1,7 @@
 ---
 kind: design
 title: Named-agent dispatch with A2A as a hidden member transport
-status: proposed
+status: accepted
 created_at: 2026-11-14
 updated_at: 2026-11-15
 related:
@@ -26,9 +26,11 @@ Two problems, in the operator's order of importance:
 2. **Spur cannot reach an agent it does not run itself** — another machine, another project, or an
    agent without a native driver.
 
-This design is **accepted** for features G8 and G9 under ADR-148; the G9 listener (§3.5) is built,
-the G8 sender (§3.3) is not. The user learns one thing: *give a task to
-an agent by name*, manually or automatically. How the work travels — warm inbox turn, Agent2Agent
+This design is **accepted** for features G8 and G9 under ADR-148. The G9 listener (§3.5) is built;
+task 1333 landed the named-member rung and the default cold fallback (§3.1, §3.2, §4.3) and 1335
+hid the fleet plumbing verbs, so the sender half of G8 is in; the A2A turn itself (§3.3, task 1334)
+is not. The user learns one thing: *give a task to an agent by name*, manually or automatically.
+How the work travels — warm inbox turn, Agent2Agent
 (A2A) v1.0, or a cold subprocess — is Spur's choice and is never selected by the user.
 
 Out of scope: replacing the inbox or the fleet dispatcher; routing same-machine members over A2A;

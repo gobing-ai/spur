@@ -30,8 +30,12 @@ export interface FleetDispatchRequest {
     fromId: string;
     /** Work prompt body (strategy: `/sp:dev-run <wbs> --auto`). */
     body: string;
-    /** `fleet:task:<wbs>:<n>` for strategy dispatches, `<runId>/<state>` for workflow ones. */
-    requestKey: string;
+    /**
+     * `fleet:task:<wbs>:<n>` for strategy dispatches, `<runId>/<state>` for workflow ones.
+     * Absent for a manual one-shot dispatch (ADR-148), where each command IS a new request
+     * and there is no attempt identity to replay.
+     */
+    requestKey?: string;
     /** The task this dispatch delivers (G11 R9) — a request-key parse never happens now. */
     taskId?: string;
     /** The dispatching run, for workflow-originated requests (ADR-132 lineage). */
