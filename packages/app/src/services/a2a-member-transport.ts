@@ -341,7 +341,18 @@ export class A2aMemberTransport {
         };
         try {
             const { messageId } = await options.dispatcher.enqueue(request);
-            return await this.runMessage(member, messageId, options);
+            try {
+                return await this.runMessage(member, messageId, options);
+            } catch (error) {
+                // The request is durable already; an unexpected post-enqueue error is never proof
+                // that no remote work started, so it cannot become a not-started retry (AC3).
+                const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
+                return {
+                    status: 'outcome-unknown',
+                    messageId,
+                    reason: `member "${member.instanceId}" A2A turn could not be read after enqueue: ${errorText(error, secret)}`,
+                };
+            }
         } catch (error) {
             const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
             return {
@@ -359,7 +370,8 @@ export class A2aMemberTransport {
         options: { timeoutMs?: number; work?: A2aWorkShape } = {},
     ): Promise<A2aTurnResult[]> {
         const results: A2aTurnResult[] = [];
-        for (const claim of claimed) results.push(await this.runMessage(member, claim.id, options));
+        for (const claim of claimed)
+            results.push(await this.runMessage(member, claim.id, { ...options, claimed: true }));
         return results;
     }
 
@@ -367,7 +379,7 @@ export class A2aMemberTransport {
     async runMessage(
         member: ResolvedFleetMember,
         messageId: string,
-        options: { timeoutMs?: number; work?: A2aWorkShape } = {},
+        options: { timeoutMs?: number; work?: A2aWorkShape; claimed?: boolean } = {},
     ): Promise<A2aTurnResult> {
         if (member.a2a === undefined) {
             return { status: 'failed', messageId, reason: `member "${member.instanceId}" has no a2a declaration` };
@@ -382,7 +394,7 @@ export class A2aMemberTransport {
         const message = await inbox.get(messageId);
         if (message === null) return { status: 'failed', messageId, reason: 'inbox request not found' };
         const claim: InboxClaim | null =
-            message.status === 'claimed'
+            options.claimed === true && message.status === 'claimed'
                 ? { id: message.id, attempts: message.attempts }
                 : message.status === 'queued'
                   ? await inbox.claimById(message.id)

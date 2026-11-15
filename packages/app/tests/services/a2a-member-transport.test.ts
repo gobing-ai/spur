@@ -303,6 +303,40 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
         expect((await h.transport.runMessage(MEMBER, delivered.message.id)).status).toBe('outcome-unknown');
     });
 
+    test("another worker's claimed row is never sent twice; only its owner may drive it", async () => {
+        const h = await harness();
+        const sent = await h.inbox.send({
+            from: 'operator',
+            to: MEMBER.instanceId,
+            body: 'claimed elsewhere',
+            kind: 'request',
+        });
+        const ownerClaim = await h.inbox.claimById(sent.message.id);
+        expect(ownerClaim).not.toBeNull();
+        const direct = await h.transport.runMessage(MEMBER, sent.message.id);
+        expect(direct.status).toBe('outcome-unknown');
+        expect(h.cli.sendCount).toBe(0);
+        if (ownerClaim !== null) {
+            const [driven] = await h.transport.runClaimed(MEMBER, [ownerClaim]);
+            expect(driven?.status).toBe('completed');
+            expect(h.cli.sendCount).toBe(1);
+        }
+    });
+
+    test('an unexpected post-enqueue error is outcome-unknown, never a not-started retry', async () => {
+        const h = await harness();
+        h.transport.runMessage = async () => {
+            throw new Error('database disappeared after send');
+        };
+        const result = await h.transport.dispatch(MEMBER, 'read only', {
+            dispatcher: h.dispatcher,
+            fromId: 'operator',
+            requestKey: 'post-enqueue/error',
+        });
+        expect(result.status).toBe('outcome-unknown');
+        expect(result.messageId).not.toBe('');
+    });
+
     test('doctor names an unavailable binary and redacts a card failure', async () => {
         const cli = new FakeCli();
         cli.version = async () => {
