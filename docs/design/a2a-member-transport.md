@@ -1,0 +1,196 @@
+---
+kind: design
+title: Named-agent dispatch with A2A as a hidden member transport
+status: proposed
+created_at: 2026-11-14
+updated_at: 2026-11-14
+related:
+  - docs/features/G8_a2a-outbound-executor-edge-for-workflow-agent-run.md
+  - docs/features/G9_cross-machine-fleet-spur-serve-speaks-a2a.md
+  - docs/plans/2026-11-14-a2a-agent-orchestration-brainstorm.md
+  - docs/design/inter-agent-control-plane.md
+  - docs/design/fleet-task-turn-execution.md
+  - docs/design/fleet-config-declaration.md
+tags: [a2a, agent, fleet, dispatch]
+---
+
+# Named-agent dispatch with A2A as a hidden member transport
+
+## 1. Issue and scope
+
+Two problems, in the operator's order of importance:
+
+1. **Fleet is too heavy for daily use.** A dispatch needs `spur serve` running, a started member
+   (`spur agent start <spec-id>`), and a model of spec ids, occupants, roles, executors, strategy and
+   guests. This repository's own `.spur/config.yaml` ships `agent.fleet.enabled: false`.
+2. **Spur cannot reach an agent it does not run itself** — another machine, another project, or an
+   agent without a native driver.
+
+This design is **proposed** (decisions accepted, not yet built), for features G8 and G9 under ADR-148. The user learns one thing: *give a task to
+an agent by name*, manually or automatically. How the work travels — warm inbox turn, Agent2Agent
+(A2A) v1.0, or a cold subprocess — is Spur's choice and is never selected by the user.
+
+Out of scope: replacing the inbox or the fleet dispatcher; routing same-machine members over A2A;
+push notifications, gRPC/JSON-RPC bindings; multi-turn input round trips; new `spur` nouns or verbs
+(four plumbing verbs are hidden from default help, none removed);
+pipeline performance work (done in 0.4.34–0.4.35; the real-agent baseline is task 1331, P3, and
+blocks nothing here).
+
+## 2. Context and constraints
+
+- **One dispatch primitive, one receipt.** `FleetDispatcher` enqueues one keyed inbox request and
+  resolves on the `coordination_runs` receipt (`packages/app/src/services/fleet-dispatcher.ts`).
+  Outcomes are `completed | failed | not-started | outcome-unknown`; a timeout is `outcome-unknown`
+  and only a definite `failed`/`not-started` allows a retry or fallback (ADR-126 A4).
+- **The inbox is the ledger, not just a pipe.** It gives idempotent delivery (`request_key`), claim
+  leases and a durable receipt (ADR-143). A2A defines none of these, so A2A sits *under* the inbox as
+  a delivery hop, not beside it.
+- **A member turn is already pluggable.** The member loop drains the inbox and runs one turn through
+  `ts-ai-runner` (`packages/app/src/services/agent-loop-service.ts`, ADR-145).
+- **A fallback already exists but is opt-in.** An unavailable fleet drops to the subprocess surface
+  only when the run declares `executorFallback: traditional`
+  (`packages/app/src/workflow/actions/agent-run.ts`).
+- **`a2a server --exec` cannot front a local agent well.** It spawns `sh -c` per request with the
+  message on stdin, keeps tasks in memory, has no session reuse and listens on TCP only
+  (`vendors/a2a-cli/internal/localsrv/serve_exec.go`). For same-machine members it is strictly worse
+  than the warm inbox turn, so local members stay on the inbox.
+- **Prerequisite, not dependency.** The operator-installed `a2a` binary (a2a-cli ≥ 0.4.0) is
+  resolved on PATH and needed only when a member declares `a2a`.
+
+## 3. Solution
+
+### 3.1 What the user sees
+
+```yaml
+agent:
+  fleet:
+    members:
+      - { id: coder,    executor: codex }                  # a local agent
+      - { id: reviewer, a2a: http://mac-mini.local:3008 }  # any A2A v1.0 agent
+```
+
+```bash
+spur agent run --agent coder "/sp:dev-run 1332 --auto"   # manual
+spur agent status                                         # who is busy, who is idle
+```
+
+Automatic dispatch keeps its existing entry points: a workflow step or `/sp:dev-runall` naming a
+member, and the `gtd` strategy for tasks tagged `fleet:auto`. Nothing in these commands names a
+transport, a surface or a daemon.
+
+### 3.2 Delivery ladder (Spur's choice, per dispatch)
+
+```text
+dispatch to <member>
+  ├─ member is live under spur serve      → keyed inbox request → warm turn          (today's fleet)
+  ├─ member declares `a2a`                → keyed inbox request → A2A turn           (new)
+  │                                         or, with no serve, the A2A turn in-process
+  └─ member is local and not live         → cold subprocess with the member's executor (default-on)
+every rung ends in the same receipt, gates and trace
+```
+
+The third rung is the daily-use fix: a dispatch with no daemon running works, slower, instead of
+failing. `spur serve` becomes an accelerator, not a prerequisite. The ladder falls through only on a
+definite `not-started`; it never re-dispatches after `outcome-unknown`.
+
+### 3.3 The A2A turn
+
+A member with `a2a` is an ordinary fleet member whose turn driver is A2A instead of a local CLI:
+
+```text
+claimed inbox message (request_key K)
+  │  a2a send --async -o json --request-payload {messageId: K, parts:[text]}
+  │  → taskId, contextId   ── stored on the coordination run BEFORE any wait
+  │  a2a task get <taskId> -o json   every pollMs until terminal or deadline
+  ▼
+task state → run receipt (§4.2)
+```
+
+A restarted loop that finds a stored `taskId` reads that task; it never sends again. The same
+function runs in-process when no `spur serve` is up.
+
+### 3.4 Ownership
+
+| Piece | Owner | Note |
+| --- | --- | --- |
+| Member declaration | `FleetMemberSchema` in `packages/config` | gains `a2a` and `authEnv`; `a2a` and `executor` are mutually exclusive |
+| Name resolution | existing `--agent` resolution | a member id resolves before role/executor/binary |
+| Ladder | `FleetDispatcher` callers' unavailable-fleet branch | fallback to subprocess becomes the default for local members |
+| A2A turn (`a2a` calls + JSON parsing) | one service in `packages/app/src/services/` | the only module that knows the CLI grammar |
+| Remote task identity | existing `coordination_runs` row | `taskId`, `contextId` |
+| Readiness | `spur agent doctor` | per member: which rung it will take and why |
+
+No new table, verb, executor surface or contract DTO. `ExecutorDispatchSurface` keeps its three
+values.
+
+### 3.5 Phase 2 (feature G9): `spur serve` speaks A2A
+
+Each live member gets an Agent Card served by `spur serve`; `SendMessage` becomes a keyed inbox
+request (`messageId` → `request_key`) and `GetTask` reads `coordination_runs`. Two Spur installs then
+form a cross-machine fleet with A2A as the only wire and the inbox as the ledger at both ends, and
+any A2A client can hand work to a Spur member. The endpoint is opt-in (`server.a2a.enabled`, default
+off) and requires a bearer token named by `server.a2a.authEnv`. A card extension lets a Spur member
+declare that it fences its own tree, which lifts invariant 3 for that member.
+
+## 4. Contract and compatibility
+
+### 4.1 Config
+
+| Key | Meaning |
+| --- | --- |
+| `members[].a2a` | Agent Card host, URL or local card path; presence makes the member an A2A member |
+| `members[].authEnv` | optional; the NAME of an environment variable holding the credential |
+
+Existing configs are unchanged. `strategy`, `orchestrator`, `role` and `purpose` keep their
+defaults and are not needed for manual dispatch.
+
+### 4.2 State mapping (A2A members)
+
+| A2A task state | Receipt | Reason |
+| --- | --- | --- |
+| `TASK_STATE_COMPLETED` | `completed` | artifact text parts, joined, are the turn output |
+| `TASK_STATE_FAILED`, `TASK_STATE_REJECTED` | `failed` | remote state + status message |
+| `TASK_STATE_CANCELED` | `failed` | `canceled` |
+| `TASK_STATE_INPUT_REQUIRED`, `TASK_STATE_AUTH_REQUIRED` | `failed` | `needs-input` / `needs-auth`; the remote task is then canceled |
+| deadline or transport error after a task id exists | `outcome-unknown` | carries the task id |
+| no task id obtained (card unreachable, binary missing, auth variable unset) | `not-started` | actionable message |
+
+### 4.3 Invariants
+
+1. **Transport is never user-selected.** No flag, step option or run variable names A2A.
+2. **Never auto-resend.** After a task id exists the only way forward is reading that task.
+3. **A2A members take read-only work (v1).** Work that declares `expectFile(s)`, `requireDiff` or
+   owned sections is refused before anything is sent: the remote working tree is outside Spur's
+   one-writer fencing.
+4. **No secret at rest.** Only the variable name is stored; the value reaches the child process
+   environment and is redacted from receipts, traces and logs.
+5. **Warm turns are untouched.** A live local member behaves exactly as today.
+6. **The cold rung is visible.** The receipt records which rung ran and why (`fallbackReason`).
+
+### 4.4 Errors
+
+Failed operations exit nonzero and name the member, the rung attempted, the remote task id when one
+exists and the next action.
+
+## 5. Tradeoffs and open questions
+
+- **Local members stay off A2A.** A2A is the wire wherever Spur crosses a process tree it does not
+  own; inside one machine the inbox is faster, warm and durable. Uniform A2A for local members would
+  mean running one cold `a2a server --exec` per agent and losing ADR-145.
+- **Default cold fallback.** Zero-setup dispatch costs a cold start per turn. The alternative
+  (auto-starting `spur serve` from a CLI command) hides a daemon behind a one-shot command.
+- **Shelling to `a2a` vs. an SDK.** No new dependency; cost is a process per call and a parser pinned
+  by golden fixtures that fails loudly on an unknown shape.
+- **Read-only restriction.** Removes most coding work from A2A members in v1. Phase 2 lifts it for
+  Spur↔Spur, where the remote Spur fences its own tree.
+
+Operator decisions (2026-11-14, ADR-051 consent):
+
+1. **Accepted** — `--agent <member-id>` resolves to a fleet member; cold fallback is on by default
+   (task 1333).
+2. **Accepted** — `a2a` / `authEnv` on fleet members; the Homebrew `a2a` binary is an optional
+   prerequisite (task 1334).
+3. **Accepted, in G8** — `join`, `leave`, `wait` and `report` are hidden from default
+   `spur agent --help` and keep working (task 1335).
+4. **Planned as feature G9** — `spur serve` as an A2A server (tasks 1336, 1337; P3 until a caller
+   exists).

@@ -2811,3 +2811,37 @@ re-import pressure this entry already records).
 - **Consequence:** zg upgrades are validated by golden parser fixtures; an MCP- or JSON-based
   transport can replace the parser without a DTO change.
 - **Detail:** [hybrid search](design/hybrid-search.md).
+
+## ADR-148: A2A Is a Hidden Member Transport Under the Inbox
+
+- **Status:** Accepted · **Date:** 2026-11-14 · **Feature:** G8, G9 · **Amends:** ADR-057, ADR-126 · **Extends:** ADR-143, ADR-051
+- **Decision:**
+  - Users dispatch work to a fleet member **by name**, manually (`spur agent run --agent <member>`)
+    or automatically (workflow step, `gtd` strategy). No command, step option or run variable names
+    a transport or a dispatch surface.
+  - Spur picks the delivery per dispatch: a live local member takes a warm inbox turn; a member
+    declared with an Agent2Agent v1.0 card takes an A2A turn; a local member that is not live runs
+    cold on the subprocess surface. All three end in the same receipt.
+  - A2A sits **under** the inbox, not beside fleet: the keyed inbox request stays the durable,
+    idempotent record and A2A is the member's turn driver. `agent.run` gains no fourth surface.
+  - ADR-057 is narrowed: A2A is permitted where Spur crosses a process tree it does not own.
+    Same-machine members keep inbox delivery and do not address each other over A2A.
+  - ADR-126 is amended: for a local member, cold fallback on a definite `not-started` is the default
+    rather than opt-in, and the receipt records it. `outcome-unknown` still never re-dispatches.
+  - The client is the operator-installed `a2a` CLI on PATH, known to exactly one `packages/app`
+    service. The remote task id is stored before any wait and is never re-sent. v1 gives A2A members
+    read-only, artifact-returning work only.
+  - The fleet plumbing verbs `join`, `leave`, `wait` and `report` are hidden from default
+    `spur agent --help`; none is removed or changed.
+  - `spur serve` may serve A2A (feature G9): opt-in, off by default, bearer-token authenticated, a
+    facade over `InboxService` and `coordination_runs` with no second inbox writer.
+- **Why:** the operator's complaint about fleet is daily-use weight (daemon, start step, occupant
+  vocabulary), not wire speed; and Spur cannot reach agents it does not run. A2A fixes the second
+  without the user learning it; the name-plus-ladder model fixes the first. A2A as a replacement for
+  inbox/fleet stays rejected: it has no idempotent delivery, durable receipt or write fencing, and
+  `a2a server --exec` is a cold, in-memory, per-request spawn.
+- **Retains:** ADR-143 one inbox writer; ADR-145 warm turns; ADR-126 A4 outcome meanings; ADR-051
+  consent for the member-id address and the new member keys; no stored credentials.
+- **Consequence:** `spur serve` becomes an accelerator rather than a prerequisite. Worktree-mutating A2A work
+  is admitted only for a member whose card declares its own write fencing (G9). The real-agent latency baseline is decoupled and low priority.
+- **Detail:** [A2A member transport](design/a2a-member-transport.md).
