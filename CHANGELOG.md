@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.35] - 2026-11-14
+
+### Added
+- add downstream migration guide (9b4e55b68)
+  <!-- src: plugins/sp/skills/spur-dev/references/migration-guide.md:11 · confidence: HIGH -->
+- add terminal coding agent A2A integration guide (49f517422)
+  <!-- src: docs/get_all_of_these_terminal_coding_agents_speaking_A2A_v1.md:3 · confidence: HIGH -->
+
+### Fixed
+- repair F821 acceptance criteria as Gherkin (b40504b96)
+  <!-- src: docs/features/F821_feature-status-sync-derivation-engine-refresh-command-hook-wiring.md:23 · confidence: HIGH -->
+
+### Changed
+- reconcile workflow contracts with current evidence model (df3777358)
+  <!-- src: docs/00_ADR.md:222 · confidence: HIGH -->
+
+### Removed
+- remove verdict replay and the verifier line-anchor rule (013d4f447)
+  <!-- src: docs/design/gate-bounds-and-pause-attribution.md:47 · confidence: HIGH -->
+- sweep slim-harness leftovers found in post-release review (b8eb5118d)
+  <!-- src: packages/config/src/finding-codes.ts:158 · confidence: HIGH -->
+
+BREAKING CHANGE: `spur task verdict --replay` and the verifier line-anchor rule are removed; `spur task verdict` only derives. Downstream projects should follow the new migration guide.
+
+### Other
+- merge branch `chore/slim-harness-review` into main (854b54b74)
+
 ## [0.4.34] - 2026-11-14
 
 ### Added
