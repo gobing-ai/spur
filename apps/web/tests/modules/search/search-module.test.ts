@@ -123,10 +123,10 @@ describe('Search Board Web Module', () => {
         expect(container.querySelectorAll('.badge')).toHaveLength(1);
     });
 
-    test('SearchShell renders status badges and degraded results without an error state', async () => {
+    test('SearchShell renders degraded results without an error state', async () => {
         mockSearchApi();
         const { container } = render(createElement(searchModule.component));
-        await waitFor(() => expect(container.textContent).toContain('rg 15.2.0'));
+        await waitFor(() => expect(container.querySelector('#search-query')).toBeTruthy());
 
         type(container.querySelector('#search-query') as HTMLInputElement, 'hybrid search');
         fireEvent.submit(container.querySelector('form') as HTMLFormElement);
@@ -137,14 +137,15 @@ describe('Search Board Web Module', () => {
         expect(container.querySelectorAll('.text-error')).toHaveLength(0);
     });
 
-    test('mode switch sends the selected mode in the query request', async () => {
+    test('mode dropdown sends the selected mode in the query request', async () => {
         const { calls } = mockSearchApi();
         const { container } = render(createElement(searchModule.component));
-        await waitFor(() => expect(container.textContent).toContain('rg 15.2.0'));
+        await waitFor(() => expect(container.querySelector('#search-mode')).toBeTruthy());
 
         type(container.querySelector('#search-query') as HTMLInputElement, 'zg index');
-        const buttons = [...container.querySelectorAll('button')];
-        fireEvent.click(buttons.find((b) => b.textContent === 'fuzzy') as HTMLButtonElement);
+        fireEvent.change(container.querySelector('#search-mode') as HTMLSelectElement, {
+            target: { value: 'fuzzy' },
+        });
         fireEvent.submit(container.querySelector('form') as HTMLFormElement);
         await waitFor(() => expect(calls.length).toBeGreaterThan(0));
 

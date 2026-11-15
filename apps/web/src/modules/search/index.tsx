@@ -1,6 +1,7 @@
 import type { SearchHit, SearchResponse, SearchStatus } from '@gobing-ai/spur-contracts';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Badge, Button, Input, Loading, Select } from '@/ui';
+import ModuleIcon from '../../components/ModuleIcon';
 import { api } from '../../lib/rpc-client';
 import type { WebModule } from '../types';
 
@@ -12,84 +13,132 @@ import type { WebModule } from '../types';
  * degraded backend renders inline as the skipped reason + hint, never an error state.
  */
 
+const MODES = ['auto', 'exact', 'fuzzy'] as const;
+const SCOPES = ['all', 'docs', 'code'] as const;
+
+const MODE_LABELS: Record<(typeof MODES)[number], string> = {
+    auto: 'Auto',
+    exact: 'Exact',
+    fuzzy: 'Fuzzy',
+};
+
+const SCOPE_LABELS: Record<(typeof SCOPES)[number], string> = {
+    all: 'All',
+    docs: 'Docs',
+    code: 'Code',
+};
+
+/** Resolve a Board deep link when a hit points to a task or feature markdown file. */
+function resolveBoardHref(filePath: string): { href: string; label: string } | null {
+    const taskMatch = filePath.match(/(?:^|\/)docs\/tasks[^/]*\/(\d{4})_[^/]+\.md$/);
+    if (taskMatch?.[1]) return { href: `/board/tasks/${taskMatch[1]}`, label: `Task ${taskMatch[1]}` };
+    const featureMatch = filePath.match(/(?:^|\/)docs\/features\/(F\d+)_[^/]+\.md$/i);
+    if (featureMatch?.[1]) return { href: `/board/features/${featureMatch[1]}`, label: featureMatch[1] };
+    return null;
+}
+
+/** Highlight case-insensitive query tokens inside a snippet without HTML injection. */
+function highlightSnippet(snippet: string, query: string): ReactNode {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return snippet;
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = snippet.split(regex);
+    if (parts.length <= 1) return snippet;
+    const exactMatcher = new RegExp(`^${escaped}$`, 'i');
+    let offset = 0;
+    return parts.map((part) => {
+        const start = offset;
+        offset += part.length;
+        return exactMatcher.test(part) ? (
+            <mark key={`m-${start}`} className="bg-primary/20 text-base-content rounded px-0.5 font-semibold">
+                {part}
+            </mark>
+        ) : (
+            part
+        );
+    });
+}
+
 /** One backend group header + its hits. Exported for module-test rendering. */
 export function HitGroup(props: {
     label: string;
     hits: readonly SearchHit[] | null;
     skip: { reason: string; hint?: string } | null;
+    query?: string;
 }) {
-    const { label, hits, skip } = props;
+    const { label, hits, skip, query = '' } = props;
     if (hits === null) {
         if (skip === null) return null;
         return (
-            <section aria-label={`${label} group`} className="mb-4 text-sm opacity-70">
-                <h3 className="font-medium mb-1">{label}</h3>
-                <p>
+            <section
+                aria-label={`${label} group`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-base-content/10 bg-base-200/50 px-4 py-2.5 text-xs text-base-content/60"
+            >
+                <span className="font-medium text-base-content/70">{label}</span>
+                <span>
                     skipped: {skip.reason}
                     {skip.hint !== undefined ? ` — ${skip.hint}` : ''}
-                </p>
+                </span>
             </section>
         );
     }
     return (
-        <section aria-label={`${label} group`} className="mb-4">
-            <h3 className="font-medium mb-1">
-                {label} ({hits.length})
-            </h3>
-            {hits.length === 0 ? <p className="text-sm opacity-70">no matches</p> : null}
-            <ol className="flex flex-col gap-2">
-                {hits.map((hit) => (
-                    <HitRow key={`${hit.path}:${hit.startLine}`} hit={hit} />
-                ))}
-            </ol>
+        <section
+            aria-label={`${label} group`}
+            className="bg-base-200 rounded-xl border border-base-content/10 p-4 flex flex-col gap-3"
+        >
+            <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/70">
+                    {label} ({hits.length})
+                </h3>
+            </div>
+            {hits.length === 0 ? <p className="text-xs text-base-content/60">no matches</p> : null}
+            {hits.length > 0 ? (
+                <ol className="flex flex-col gap-2">
+                    {hits.map((hit) => (
+                        <HitRow key={`${hit.path}:${hit.startLine}`} hit={hit} query={query} />
+                    ))}
+                </ol>
+            ) : null}
         </section>
     );
 }
 
-/** `path:start-end` heading, snippet in monospace, `matchedBy` badge when both routes agree. */
-function HitRow(props: { hit: SearchHit }) {
-    const { hit } = props;
+/** `path:start-end` heading with split dir/filename, Board link when applicable, and highlighted snippet. */
+function HitRow(props: { hit: SearchHit; query: string }) {
+    const { hit, query } = props;
     const range = hit.startLine === hit.endLine ? `${hit.startLine}` : `${hit.startLine}-${hit.endLine}`;
+    const lastSlash = hit.path.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? hit.path.slice(0, lastSlash + 1) : '';
+    const file = lastSlash >= 0 ? hit.path.slice(lastSlash + 1) : hit.path;
+    const boardLink = resolveBoardHref(hit.path);
+
     return (
-        <li className="text-sm">
-            <div className="flex items-center gap-2">
-                <span className="font-mono">
-                    {hit.path}:{range}
-                </span>
-                {hit.matchedBy.length > 1 ? <Badge variant="info">{hit.matchedBy.join('+')}</Badge> : null}
+        <li className="bg-base-100 rounded-lg border border-base-content/10 p-3 text-sm transition-colors hover:border-base-content/25">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div className="font-mono text-xs break-all">
+                    {dir ? <span className="text-base-content/50">{dir}</span> : null}
+                    <span className="font-semibold text-base-content">{file}</span>
+                    <span className="text-base-content/50">:{range}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    {hit.matchedBy.length > 1 ? <Badge variant="info">{hit.matchedBy.join('+')}</Badge> : null}
+                    {boardLink ? (
+                        <a href={boardLink.href} className="text-xs font-medium text-primary hover:underline">
+                            Open {boardLink.label} →
+                        </a>
+                    ) : null}
+                </div>
             </div>
-            <pre className="font-mono text-xs whitespace-pre-wrap mt-0.5">{hit.snippet}</pre>
+            <pre className="font-mono text-xs leading-relaxed bg-base-200/60 border border-base-content/5 rounded-md px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words text-base-content/90">
+                {highlightSnippet(hit.snippet, query)}
+            </pre>
         </li>
     );
 }
 
-/** rg/zg readiness strip using the exact hint strings from the service. */
-function StatusStrip(props: { status: SearchStatus | null }) {
-    const { status } = props;
-    if (status === null) return null;
-    return (
-        <div
-            role="status"
-            aria-label="search backend status"
-            className="flex flex-wrap items-center gap-2 text-xs mb-3"
-        >
-            <Badge variant={status.rg.available ? 'success' : 'warning'}>
-                rg {status.rg.available ? (status.rg.version ?? 'available') : 'not installed'}
-            </Badge>
-            <Badge variant={status.zg.available && status.zg.index === 'ready' ? 'success' : 'warning'}>
-                zg {status.zg.available ? (status.zg.version ?? 'available') : 'not installed'} · index{' '}
-                {status.zg.index}
-            </Badge>
-            {status.zg.hint !== undefined ? <span className="opacity-70">{status.zg.hint}</span> : null}
-        </div>
-    );
-}
-
-/** Modes and scopes offered by the segmented control / select. */
-const MODES = ['auto', 'exact', 'fuzzy'] as const;
-const SCOPES = ['all', 'docs', 'code'] as const;
-
-/** Search shell: query input, mode/scope controls, grouped results, status strip. */
+/** Search shell: clean header, spacious query bar with mode/scope dropdowns, and scannable result cards. */
 function SearchShell() {
     const [query, setQuery] = useState('');
     const [mode, setMode] = useState<(typeof MODES)[number]>('auto');
@@ -133,42 +182,94 @@ function SearchShell() {
     const exactSkip = response?.skipped.find((s) => s.route === 'exact') ?? null;
     const fuzzySkip = response?.skipped.find((s) => s.route === 'fuzzy') ?? null;
 
+    const statusSummary = status
+        ? !status.rg.available
+            ? 'Exact search (rg) unavailable'
+            : !status.zg.available || status.zg.index !== 'ready'
+              ? `Semantic index: ${status.zg.index}`
+              : null
+        : null;
+
     return (
-        <div className="p-4 max-w-4xl">
-            <h2 className="text-lg font-medium mb-2">Search</h2>
-            <p className="text-sm opacity-70 mb-3">Exact and semantic search over docs and code</p>
-            <StatusStrip status={status} />
+        <div className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full" data-search-shell>
+            {/* Header Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0">
+                <div className="flex items-center gap-3">
+                    <ModuleIcon id="search" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
+                    <div>
+                        <h1 className="text-xl font-bold tracking-tight">Search</h1>
+                        <p className="text-xs text-base-content/60">Exact and semantic search over docs and code</p>
+                    </div>
+                </div>
+                {statusSummary ? (
+                    <span role="status" className="text-xs text-base-content/50 font-mono">
+                        {statusSummary}
+                    </span>
+                ) : null}
+            </div>
+
+            {/* Query & Filter Bar */}
             <form
-                className="flex items-center gap-2 mb-4"
+                className="bg-base-200 rounded-xl border border-base-content/10 p-3 flex flex-wrap items-center gap-2"
                 onSubmit={(e) => {
                     e.preventDefault();
                     runSearch();
                 }}
             >
-                <label className="sr-only" htmlFor="search-query">
-                    Search query
-                </label>
-                <Input
-                    id="search-query"
-                    type="text"
-                    placeholder="Search docs and code…"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    className="flex-1"
-                />
-                <div role="radiogroup" aria-label="Search mode" className="flex items-center gap-1">
-                    {MODES.map((m) => (
-                        <Button
-                            key={m}
+                <div className="relative flex-1 min-w-[260px] flex items-center">
+                    <svg
+                        className="w-4 h-4 text-base-content/40 absolute left-3 pointer-events-none"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                    >
+                        <path
+                            fillRule="evenodd"
+                            d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+                            clipRule="evenodd"
+                        />
+                    </svg>
+                    <label className="sr-only" htmlFor="search-query">
+                        Search query
+                    </label>
+                    <Input
+                        id="search-query"
+                        type="text"
+                        placeholder="Search docs, tasks, features, and code…"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        className="w-full pl-9 pr-8"
+                    />
+                    {query.length > 0 ? (
+                        <button
                             type="button"
-                            aria-pressed={mode === m}
-                            variant={mode === m ? 'primary' : 'outline'}
-                            onClick={() => setMode(m)}
+                            aria-label="Clear search"
+                            onClick={() => {
+                                setQuery('');
+                                setResponse(null);
+                                setError(null);
+                            }}
+                            className="absolute right-2.5 text-xs text-base-content/40 hover:text-base-content"
                         >
-                            {m}
-                        </Button>
-                    ))}
+                            ✕
+                        </button>
+                    ) : null}
                 </div>
+                <label className="sr-only" htmlFor="search-mode">
+                    Search mode
+                </label>
+                <Select
+                    id="search-mode"
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value as (typeof MODES)[number])}
+                    className="w-auto"
+                >
+                    {MODES.map((m) => (
+                        <option key={m} value={m}>
+                            {MODE_LABELS[m]}
+                        </option>
+                    ))}
+                </Select>
                 <label className="sr-only" htmlFor="search-scope">
                     Search scope
                 </label>
@@ -176,10 +277,11 @@ function SearchShell() {
                     id="search-scope"
                     value={scope}
                     onChange={(e) => setScope(e.target.value as (typeof SCOPES)[number])}
+                    className="w-auto"
                 >
                     {SCOPES.map((s) => (
                         <option key={s} value={s}>
-                            {s}
+                            {SCOPE_LABELS[s]}
                         </option>
                     ))}
                 </Select>
@@ -187,19 +289,43 @@ function SearchShell() {
                     {pending ? 'Searching…' : 'Search'}
                 </Button>
             </form>
-            {error !== null ? <p className="text-sm text-error mb-3">{error}</p> : null}
-            {pending && response === null ? <Loading /> : null}
+
+            {error !== null ? (
+                <div className="bg-base-200 rounded-xl border border-base-content/10 p-4 text-sm text-error">
+                    {error}
+                </div>
+            ) : null}
+
+            {pending && response === null ? (
+                <div className="bg-base-200 rounded-xl border border-base-content/10 p-10 flex justify-center">
+                    <Loading />
+                </div>
+            ) : null}
+
+            {!pending && response === null && error === null ? (
+                <div className="bg-base-200 rounded-xl border border-base-content/10 p-10 flex flex-col items-center justify-center gap-2 text-center">
+                    <p className="text-sm font-medium text-base-content/80">Search repository docs and code</p>
+                    <p className="text-xs text-base-content/55 max-w-md">
+                        Use <span className="font-mono">Exact</span> for literal strings or regex,{' '}
+                        <span className="font-mono">Fuzzy</span> for semantic matches, or{' '}
+                        <span className="font-mono">Auto</span> to combine both.
+                    </p>
+                </div>
+            ) : null}
+
             {response !== null ? (
-                <>
-                    <HitGroup label="Exact" hits={response.groups.exact} skip={exactSkip} />
-                    <HitGroup label="Fuzzy" hits={response.groups.fuzzy} skip={fuzzySkip} />
+                <div className="flex flex-col gap-3">
+                    <HitGroup label="Exact" hits={response.groups.exact} skip={exactSkip} query={response.query} />
+                    <HitGroup label="Fuzzy" hits={response.groups.fuzzy} skip={fuzzySkip} query={response.query} />
                     {response.groups.exact !== null &&
                     response.groups.fuzzy !== null &&
                     response.groups.exact.length === 0 &&
                     response.groups.fuzzy.length === 0 ? (
-                        <p className="text-sm opacity-70">no matches</p>
+                        <div className="bg-base-200 rounded-xl border border-base-content/10 p-6 text-center text-xs text-base-content/60">
+                            no matches
+                        </div>
                     ) : null}
-                </>
+                </div>
             ) : null}
         </div>
     );
