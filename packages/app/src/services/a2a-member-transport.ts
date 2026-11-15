@@ -26,15 +26,30 @@ export interface A2aTask {
     state: string;
     statusMessage?: string;
     artifactText?: string;
+    remoteBranch?: string;
+}
+
+/** Every `a2a` process invocation is behind this seam (R2). */
+export interface A2aCard {
+    protocolVersion: string;
+    capabilities?: { extensions?: Array<{ uri: string; description?: string }> };
 }
 
 /** Every `a2a` process invocation is behind this seam (R2). */
 export interface A2aCli {
     version(): Promise<string>;
-    card(member: A2aMemberRef): Promise<{ protocolVersion: string }>;
+    card(member: A2aMemberRef): Promise<A2aCard>;
     send(member: A2aMemberRef, text: string, messageId: string): Promise<{ taskId: string; contextId: string }>;
     get(member: A2aMemberRef, taskId: string): Promise<A2aTask>;
     cancel(member: A2aMemberRef, taskId: string): Promise<void>;
+}
+
+/** A Spur member that fences its own working tree may accept write-shaped work (1337 R3). */
+export const A2A_WRITE_FENCING_EXTENSION = 'urn:spur:write-fencing:v1';
+
+/** Return whether the card declares Spur's write-fencing extension. */
+export function a2aWriteFencingSupported(card: A2aCard | undefined): boolean {
+    return card?.capabilities?.extensions?.some((extension) => extension.uri === A2A_WRITE_FENCING_EXTENSION) ?? false;
 }
 
 /** Work declarations that would require a write-fenced tree and are therefore refused for A2A (R7). */
@@ -46,8 +61,8 @@ export interface A2aWorkShape {
 }
 
 /** Return the read-only admission failure, or null for work an A2A member may take. */
-export function a2aMutationReason(work: A2aWorkShape | undefined): string | null {
-    if (work === undefined) return null;
+export function a2aMutationReason(work: A2aWorkShape | undefined, writeFenced = false): string | null {
+    if (work === undefined || writeFenced) return null;
     const mutating =
         (work.expectFile !== undefined && work.expectFile !== '') ||
         (work.expectFiles?.length ?? 0) > 0 ||
@@ -66,14 +81,15 @@ export interface A2aTurnResult {
     runId?: string;
     remoteTaskId?: string;
     output?: string;
+    remoteBranch?: string;
 }
 
 /** Terminal-state mapping shared by polling and tests (design §4.2). */
 export function a2aTaskToReceipt(
     task: A2aTask,
-): { status: 'completed' | 'failed'; output?: string; reason?: string; cancel: boolean } | null {
+): { status: 'completed' | 'failed'; output?: string; reason?: string; cancel: boolean; remoteBranch?: string } | null {
     if (task.state === 'TASK_STATE_COMPLETED')
-        return { status: 'completed', output: task.artifactText ?? '', cancel: false };
+        return { status: 'completed', output: task.artifactText ?? '', cancel: false, remoteBranch: task.remoteBranch };
     if (task.state === 'TASK_STATE_FAILED' || task.state === 'TASK_STATE_REJECTED') {
         return { status: 'failed', reason: task.statusMessage ?? task.state, cancel: false };
     }
@@ -189,15 +205,26 @@ export class A2aCliService implements A2aCli {
         return line;
     }
 
-    async card(member: A2aMemberRef): Promise<{ protocolVersion: string }> {
+    async card(member: A2aMemberRef): Promise<A2aCard> {
         const raw = JSON.parse(await this.run(member, ['card', 'get', '-o', 'json'])) as {
             supportedInterfaces?: Array<{ protocolVersion?: unknown }>;
+            capabilities?: { extensions?: Array<{ uri?: unknown; description?: unknown }> };
         };
         const protocolVersion = raw.supportedInterfaces?.find(
             (entry) => typeof entry.protocolVersion === 'string',
         )?.protocolVersion;
         if (typeof protocolVersion !== 'string') throw new Error('a2a card returned no supported protocol version');
-        return { protocolVersion };
+        const extensions = (raw.capabilities?.extensions ?? []).flatMap((extension) =>
+            typeof extension.uri === 'string'
+                ? [
+                      {
+                          uri: extension.uri,
+                          ...(typeof extension.description === 'string' ? { description: extension.description } : {}),
+                      },
+                  ]
+                : [],
+        );
+        return { protocolVersion, capabilities: { extensions } };
     }
 
     async send(member: A2aMemberRef, text: string, messageId: string): Promise<{ taskId: string; contextId: string }> {
@@ -221,6 +248,7 @@ export class A2aCliService implements A2aCli {
                 contextId?: unknown;
                 status?: { state?: unknown; message?: { parts?: unknown } };
                 artifacts?: Array<{ parts?: unknown }>;
+                metadata?: { remoteBranch?: unknown };
             };
         };
         const task = raw.task;
@@ -240,6 +268,7 @@ export class A2aCliService implements A2aCli {
                 ? { statusMessage: textParts(task.status.message.parts).join('\n') }
                 : {}),
             artifactText: (task.artifacts ?? []).flatMap((artifact) => textParts(artifact.parts)).join('\n'),
+            ...(typeof task.metadata?.remoteBranch === 'string' ? { remoteBranch: task.metadata.remoteBranch } : {}),
         };
     }
 
@@ -305,6 +334,11 @@ export class A2aMemberTransport {
         } catch {
             return undefined;
         }
+    }
+
+    /** Doctor readiness: binary, card and protocol are observed independently (R10). */
+    async supportsWriteFencing(member: ResolvedFleetMember): Promise<boolean> {
+        return a2aWriteFencingSupported(await this.cli.card(member));
     }
 
     /** Doctor readiness: binary, card and protocol are observed independently (R10). */
@@ -387,7 +421,23 @@ export class A2aMemberTransport {
         const inbox = new InboxService({ getDb: this.deps.getDb });
         const runs = new CoordinationRunDao(await this.deps.getDb());
         const existing = (await runs.listByMessageId(messageId)).find((row) => row.spec_id === member.instanceId);
-        if (existing?.status === 'exited') return { status: 'completed', messageId, runId: existing.run_id };
+        if (existing?.status === 'exited') {
+            let remoteBranch: string | undefined;
+            try {
+                const refs = JSON.parse(existing.artifact_refs_json) as Array<{ remoteBranch?: unknown }>;
+                remoteBranch = refs.find((ref) => typeof ref.remoteBranch === 'string')?.remoteBranch as
+                    | string
+                    | undefined;
+            } catch {
+                remoteBranch = undefined;
+            }
+            return {
+                status: 'completed',
+                messageId,
+                runId: existing.run_id,
+                ...(remoteBranch !== undefined ? { remoteBranch } : {}),
+            };
+        }
         if (existing?.status === 'errored') {
             return { status: 'failed', messageId, runId: existing.run_id, reason: existing.outcome };
         }
@@ -399,17 +449,17 @@ export class A2aMemberTransport {
                 : message.status === 'queued'
                   ? await inbox.claimById(message.id)
                   : null;
-        const mutation = a2aMutationReason(options.work);
-        if (mutation !== null) {
-            if (claim !== null) await inbox.settle([claim], 'not-started', mutation);
-            return { status: 'not-started', messageId, reason: `member "${member.instanceId}": ${mutation}` };
-        }
-
         let runId = existing?.run_id;
         let remoteTaskId = existing?.remote_task_id ?? undefined;
         let remoteContextId = existing?.remote_context_id ?? undefined;
         const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
         try {
+            const card = await this.cli.card(member);
+            const mutation = a2aMutationReason(options.work, a2aWriteFencingSupported(card));
+            if (mutation !== null) {
+                if (claim !== null) await inbox.settle([claim], 'not-started', mutation);
+                return { status: 'not-started', messageId, reason: `member "${member.instanceId}": ${mutation}` };
+            }
             if (remoteTaskId === undefined || runId === undefined) {
                 if (claim === null) {
                     return {
@@ -418,7 +468,6 @@ export class A2aMemberTransport {
                         ...(message.error !== null ? { reason: message.error } : {}),
                     };
                 }
-                await this.cli.card(member);
                 const sent = await this.cli.send(member, message.body, message.requestKey ?? message.id);
                 remoteTaskId = sent.taskId;
                 remoteContextId = sent.contextId;
@@ -458,7 +507,12 @@ export class A2aMemberTransport {
                         const outputPath = this.fs.resolve('.spur/run', runId, 'a2a-result.md');
                         await this.fs.writeFile(outputPath, mapped.output ?? '');
                         artifactRefs = JSON.stringify([
-                            { kind: 'result', path: outputPath, mediaType: 'text/markdown' },
+                            {
+                                kind: 'result',
+                                path: outputPath,
+                                mediaType: 'text/markdown',
+                                ...(mapped.remoteBranch !== undefined ? { remoteBranch: mapped.remoteBranch } : {}),
+                            },
                         ]);
                     }
                     await runs.updateExit(
@@ -473,12 +527,15 @@ export class A2aMemberTransport {
                         },
                     );
                     if (claim !== null) await inbox.settle([claim], 'accepted');
+                    if (mapped.status === 'completed')
+                        await inbox.reply(messageId, member.instanceId, mapped.output ?? '');
                     return {
                         status: mapped.status,
                         messageId,
                         runId,
                         remoteTaskId,
                         ...(mapped.output !== undefined ? { output: mapped.output } : {}),
+                        ...(mapped.remoteBranch !== undefined ? { remoteBranch: mapped.remoteBranch } : {}),
                         ...(reason !== undefined ? { reason } : {}),
                     };
                 }

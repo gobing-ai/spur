@@ -150,6 +150,8 @@ export {
     writeJsonError,
 } from './output/envelope';
 export {
+    A2A_WRITE_FENCING_EXTENSION,
+    type A2aCard,
     type A2aCli,
     A2aCliService,
     type A2aDispatchOptions,
@@ -161,6 +163,7 @@ export {
     type A2aWorkShape,
     a2aMutationReason,
     a2aTaskToReceipt,
+    a2aWriteFencingSupported,
 } from './services/a2a-member-transport';
 export type {
     AgentCoordinationServiceContext,

@@ -216,7 +216,7 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 - link failed and paused runs to their retained evidence — the trace view resolves `record`/`incomplete`/`legacy`/`oversized`/`missing`/`unread` evidence states and offers the matching recovery action (1307) (808f306df)
   <!-- src: apps/web/src/modules/observability/run-recovery.ts:41, apps/web/src/modules/observability/run-recovery.ts:44 · confidence: HIGH -->
 - show outcome breakdowns in the observability summary — a dedicated outcomes panel renders the aggregated run outcomes the summary endpoint already returned (1308) (2f63548bb)
-  <!-- src: apps/web/src/modules/observability/SummaryOutcomes.tsx:20, apps/web/src/modules/observability/SummaryTab.tsx:14 · confidence: HIGH -->
+  <!-- src: apps/web/src/modules/observability/SummaryTab.tsx:14 · confidence: HIGH -->
 
 ### Fixed
 - default feature sync to `pull` and disable the `push` option, so the board stops offering a direction it cannot complete (eb4cb7e9e)

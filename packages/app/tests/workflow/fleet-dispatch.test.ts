@@ -321,13 +321,19 @@ describe('1334: A2A member dispatch under the fleet surface', () => {
     const remote = () => member({ instanceId: 'proj-remote', localId: 'remote', executor: '', a2a: './card.json' });
     const a2aDeps = (
         project: string,
-        turn: { status: 'completed' | 'failed' | 'not-started' | 'outcome-unknown'; reason?: string },
+        turn: {
+            status: 'completed' | 'failed' | 'not-started' | 'outcome-unknown';
+            reason?: string;
+            remoteBranch?: string;
+        },
         withService = true,
+        writeFenced = false,
     ): FleetDispatchDeps => ({
         ...deps(fleetSvc(declaration(), [remote()], [], project), dispatcher(completed).dispatcher),
         ...(withService
             ? {
                   a2a: {
+                      supportsWriteFencing: async () => writeFenced,
                       runMessage: async (_member: unknown, messageId: string) => ({
                           ...turn,
                           messageId,
@@ -360,6 +366,45 @@ describe('1334: A2A member dispatch under the fleet surface', () => {
             member: { a2a: './card.json' },
         });
         if (result.status === 'completed') expect(readFileSync(result.promptPath, 'utf8')).toBe('read only');
+    });
+
+    test('1337 R4: an A2A completed dispatch carries the remote branch into the fleet receipt', async () => {
+        const project = tempProject();
+        const result = await dispatchToFleet(
+            {
+                role: 'coder',
+                member: 'remote',
+                prompt: 'mutate the tree',
+                projectPath: project,
+                requireDiff: true,
+                runId: 'run-remote-branch',
+                state: 'implement',
+            },
+            a2aDeps(project, { status: 'completed', remoteBranch: 'sp/remote-e2e' }, true, true),
+        );
+        expect(result).toMatchObject({ status: 'completed', remoteBranch: 'sp/remote-e2e' });
+    });
+
+    test('1337: a pre-enqueue card failure is an unavailable result, not an exception', async () => {
+        const project = tempProject();
+        const deps = a2aDeps(project, { status: 'completed' });
+        if (deps.a2a === undefined) throw new Error('test requires an A2A transport');
+        deps.a2a.supportsWriteFencing = async () => {
+            throw new Error('card unavailable');
+        };
+        const result = await dispatchToFleet(
+            {
+                role: 'coder',
+                member: 'remote',
+                prompt: 'mutate',
+                projectPath: project,
+                requireDiff: true,
+                runId: 'run-card-down',
+                state: 'implement',
+            },
+            deps,
+        );
+        expect(result).toMatchObject({ status: 'unavailable', reason: expect.stringContaining('card unavailable') });
     });
 
     test('mutating work is refused before prompt write, enqueue or send', async () => {

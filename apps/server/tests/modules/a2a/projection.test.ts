@@ -20,7 +20,11 @@ describe('A2A card', () => {
         const card = agentCard({ instanceId: 'proj-coder', executor: 'claude', origin: 'http://localhost:3000' }) as {
             name: string;
             supportedInterfaces: { url: string; protocolBinding: string; protocolVersion: string }[];
-            capabilities: { streaming: boolean; pushNotifications: boolean };
+            capabilities: {
+                streaming: boolean;
+                pushNotifications: boolean;
+                extensions: Array<{ uri: string; description?: string }>;
+            };
         };
         expect(A2A_PROTOCOL_VERSION).toBe('1.0');
         expect(A2A_PROTOCOL_BINDING).toBe('HTTP+JSON');
@@ -32,7 +36,11 @@ describe('A2A card', () => {
                 protocolVersion: '1.0',
             },
         ]);
-        expect(card.capabilities).toEqual({ streaming: false, pushNotifications: false });
+        expect(card.capabilities).toEqual({
+            streaming: false,
+            pushNotifications: false,
+            extensions: [{ uri: 'urn:spur:write-fencing:v1', description: 'The member fences its own working tree' }],
+        });
     });
 
     test('a member with no resolved executor still describes itself', () => {

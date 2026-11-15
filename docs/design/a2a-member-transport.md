@@ -29,6 +29,7 @@ Two problems, in the operator's order of importance:
 This design is **accepted** for features G8 and G9 under ADR-148. The G9 listener (§3.5) is built;
 task 1333 landed the named-member rung and the default cold fallback (§3.1, §3.2, §4.3), 1334 built
 the A2A turn itself (§3.3), and 1335 hid the fleet plumbing verbs, so the sender half of G8 is in.
+Task 1337 added the two-install proof and conditional write fencing (§3.5, §4.3).
 The user learns one thing: *give a task to an agent by name*, manually or automatically.
 How the work travels — warm inbox turn, Agent2Agent
 (A2A) v1.0, or a cold subprocess — is Spur's choice and is never selected by the user.
@@ -143,6 +144,7 @@ function runs in-process when no `spur serve` is up.
 | Name resolution | existing `--agent` resolution | a member id resolves before role/executor/binary |
 | Ladder | `FleetDispatcher` callers' unavailable-fleet branch | fallback to subprocess becomes the default for local members |
 | A2A turn (`a2a` calls + JSON parsing) | `A2aMemberTransport` in `packages/app/src/services/a2a-member-transport.ts` | the only module that knows the CLI grammar |
+| Write admission | the same transport (card extension) + `packages/app/src/workflow/fleet-dispatch.ts` (pre-enqueue gate) | mutating work is admitted only for a card declaring `urn:spur:write-fencing:v1`; an unreachable card is `unavailable`, never an exception |
 | Remote task identity | existing `coordination_runs` row | `remote_task_id`, `remote_context_id` (0055/0056) |
 | Readiness | `spur agent doctor` | per member: which rung it will take and why; for A2A also binary version, card reachability and protocol version |
 
@@ -155,7 +157,7 @@ Each declared, enabled member gets an Agent Card served by `spur serve`; `SendMe
 keyed inbox request (`messageId` → `request_key`) and `GetTask` reads `coordination_runs`. Two Spur
 installs then form a cross-machine fleet with A2A as the only wire and the inbox as the ledger at
 both ends, and any A2A client can hand work to a Spur member. A card extension lets a Spur member
-declare that it fences its own tree, which lifts invariant 3 for that member (G8 side, not built).
+declare that it fences its own tree, which lifts invariant 3 for that member (G8 side, built by 1337).
 
 The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a facade over
 `InboxService` and `coordination_runs`, no new table and no second inbox writer (ADR-143).
@@ -164,7 +166,7 @@ The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a 
 | --- | --- |
 | Switch | `server.a2a.enabled` (`SPUR_A2A_ENABLED`, default `false`); **off mounts no route at all**, so every path below answers 404 like any unknown path |
 | Credential | `server.a2a.authEnv` (`SPUR_A2A_AUTH_ENV`) names the environment variable holding the bearer token. `enabled` without `authEnv` fails the config load (an enabled endpoint with no token can only reject everyone). Only the NAME is configuration; the value is read at mount and never persisted, echoed, or logged |
-| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false` |
+| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false`, and `capabilities.extensions` carrying `urn:spur:write-fencing:v1` (the member fences its own tree) |
 | Send | `POST /a2a/members/<member>/message:send` — `{message:{messageId, role, parts:[{text}]}}` → `{task}`. One inbox request, `kind: 'request'`, request key `a2a:<member>:<messageId>`; a repeated `messageId` with the same work replays the same task id, a different body is `409 ALREADY_EXISTS` |
 | Get | `GET /a2a/members/<member>/tasks/<id>` — the task id IS the inbox message id; state comes from the run receipt |
 | Cancel | `POST /a2a/members/<member>/tasks/<id>:cancel` — stops the member's run through the supervisor's existing stop path and records the intent first, so the state survives a restart. A task with no run in progress, or a terminal one, is `400 FAILED_PRECONDITION` (`TASK_NOT_CANCELABLE`) — a queued request is never reported canceled |
@@ -175,7 +177,8 @@ Receiver-side state mapping (the inverse of §4.2, `projectState`): a cancel int
 receipt (a stopped run exits `errored`, and the caller must still read `canceled`); then run row
 `exited` → `COMPLETED`, `errored` → `FAILED` (with the reason as the status message), `running` →
 `WORKING`; with no run row, inbox `claimed` → `WORKING`, `failed` → `FAILED`, else `SUBMITTED`.
-`COMPLETED` carries the member's newest inbox reply on the thread as one text artifact.
+`COMPLETED` carries the member's newest inbox reply on the thread as one text artifact and, when the
+member works in a Git tree, `metadata.remoteBranch` naming that branch.
 
 **CSRF exemption.** `/a2a/*` is exempt from the server's CSRF guard
 (`apps/server/src/middleware/pipeline.ts`). Every A2A route is bearer-authenticated — a header a
@@ -188,6 +191,12 @@ shape `csrf()` rejects.
 `docs/reports/a2a-serve-e2e-receipt.json`. The member loop itself is not run there — the
 `completed`/`failed` arms seed the run rows a member writes; the two-install dispatch is G9 task
 1337.
+
+**Proof.** `bun run a2a-two-install-e2e` drives two real Spur homes plus a deterministic exec worker:
+read-only dispatch with durable A/B records, the fencing card, an extension-free refusal, a wrong-token
+refusal, fenced mutation with `metadata.remoteBranch`, a real workflow `requireDiff` stage, B down,
+and B restart → re-attach with one send, plus a no-fetch/no-merge assertion. Receipt:
+`docs/reports/a2a-two-install-e2e-receipt.json` (9/9).
 
 ## 4. Contract and compatibility
 
@@ -219,13 +228,19 @@ defaults and are not needed for manual dispatch.
 
 1. **Transport is never user-selected.** No flag, step option or run variable names A2A.
 2. **Never auto-resend.** After a task id exists the only way forward is reading that task.
-3. **A2A members take read-only work (v1).** Work that declares `expectFile(s)`, `requireDiff` or
-   owned sections is refused before anything is sent: the remote working tree is outside Spur's
-   one-writer fencing.
+3. **A2A work is read-only unless the card declares write fencing.** Work that declares
+   `expectFile(s)`, `requireDiff` or owned sections is refused before anything is sent unless the
+   card's `capabilities.extensions` contains `urn:spur:write-fencing:v1`. Without the extension,
+   behavior is exactly G8's. The sender consults the card both before enqueue and before send.
 4. **No secret at rest.** Only the variable name is stored; the value reaches the child process
    environment and is redacted from receipts, traces and logs.
-5. **Warm turns are untouched.** A live local member behaves exactly as today.
-6. **The cold rung is visible.** The receipt records which rung ran and why (`fallbackReason`).
+5. **Completed tasks return artifact text and the remote branch.** The member writes its answer as
+   an inbox reply, so `GetTask` returns it as an artifact. On completion, `Task.metadata.remoteBranch`
+   names the member's current working branch; the sender records it but never fetches or merges it.
+   The same field reaches the named-member result, the workflow receipt and the `spur agent run --json`
+   envelope.
+6. **Warm turns are untouched.** A live local member behaves exactly as today.
+7. **The cold rung is visible.** The receipt records which rung ran and why (`fallbackReason`).
 
 ### 4.4 Errors
 
@@ -241,8 +256,9 @@ exists and the next action.
   (auto-starting `spur serve` from a CLI command) hides a daemon behind a one-shot command.
 - **Shelling to `a2a` vs. an SDK.** No new dependency; cost is a process per call and a parser pinned
   by golden fixtures that fails loudly on an unknown shape.
-- **Read-only restriction.** Removes most coding work from A2A members in v1. Phase 2 lifts it for
-  Spur↔Spur, where the remote Spur fences its own tree.
+- **Read-only default.** A card without the write-fencing extension takes no coding work at all. The
+  restriction lifts only for Spur↔Spur members that declare that they fence their own tree, so the
+  sender never reasons about a remote tree it cannot fence.
 
 Operator decisions (2026-11-14, ADR-051 consent):
 

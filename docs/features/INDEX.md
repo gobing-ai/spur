@@ -131,7 +131,7 @@
         ├── [done] **G74**: Faster fleet task execution with correlated warm turns ([G74_faster-fleet-task-execution-with-correlated-warm-turns.md](./G74_faster-fleet-task-execution-with-correlated-warm-turns.md))
         └── [verifying] **G75**: Verified live-session fleet participation ([G75_verified-live-session-fleet-participation.md](./G75_verified-live-session-fleet-participation.md))
     ├── [active] **G8**: Named-agent dispatch with A2A as a hidden transport ([G8_a2a-outbound-executor-edge-for-workflow-agent-run.md](./G8_a2a-outbound-executor-edge-for-workflow-agent-run.md))
-    └── [active] **G9**: Cross-machine fleet: spur serve speaks A2A ([G9_cross-machine-fleet-spur-serve-speaks-a2a.md](./G9_cross-machine-fleet-spur-serve-speaks-a2a.md))
+    └── [done] **G9**: Cross-machine fleet: spur serve speaks A2A ([G9_cross-machine-fleet-spur-serve-speaks-a2a.md](./G9_cross-machine-fleet-spur-serve-speaks-a2a.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
     ├── [done] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))

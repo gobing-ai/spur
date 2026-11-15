@@ -3,7 +3,7 @@ kind: design
 title: "Fleet declaration in spur config — system design (feature G65)"
 status: accepted
 created_at: 2026-09-14
-updated_at: 2026-09-18
+updated_at: 2026-11-15
 related: [G65, "0856", "0857", "0858", "0859", "0860", "0861"]
 tags: [contract, G65, config, agent]
 ---
@@ -54,8 +54,10 @@ agent:
 ```
 
 - An `a2a` member declares an Agent Card host/URL/path and takes read-only work through the hidden
-  A2A turn driver (ADR-148). `a2a` and `executor` are mutually exclusive. `authEnv` is an environment
-  variable NAME only (`[A-Za-z_][A-Za-z0-9_]*`); the credential value is never configuration.
+  A2A turn driver (ADR-148); write-shaped work is admitted only when the member's card declares
+  `urn:spur:write-fencing:v1` (it fences its own tree). `a2a` and `executor` are mutually exclusive.
+  `authEnv` is an environment variable NAME only (`[A-Za-z_][A-Za-z0-9_]*`); the credential value is
+  never configuration.
 
 - `version` is dropped (the config file has its own); `FleetDeclarationSchema` / `FleetDeclaration` are deleted.
 - Zod issues keep their `agent.fleet.<path>` so an invalid section names every issue (R8).

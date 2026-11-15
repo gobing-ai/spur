@@ -328,6 +328,20 @@ describe('a2a module — GetTask reads the receipt (R4)', () => {
         expect(task.artifacts?.[0]?.parts[0]?.text).toBe('docs site deployed');
     });
 
+    test('a completed task carries the remote working branch in metadata (1337 R4)', async () => {
+        const init = Bun.spawnSync({ cmd: ['git', 'init', '-b', 'sp/remote-e2e'], cwd: tempDir });
+        expect(init.exitCode).toBe(0);
+        const sent = (await (await sendMessage('m-branch')).json()) as { task: { id: string } };
+        await seedRun(sent.task.id, 'exited');
+        await harness.inbox.reply(sent.task.id, MEMBER, 'mutating work completed');
+        const task = (await (await harness.app.request(memberUrl(`tasks/${sent.task.id}`), authed())).json()) as {
+            status: { state: string };
+            metadata?: { remoteBranch?: string };
+        };
+        expect(task.status.state).toBe('TASK_STATE_COMPLETED');
+        expect(task.metadata?.remoteBranch).toBe('sp/remote-e2e');
+    });
+
     test('an errored receipt is failed with the reason', async () => {
         const sent = (await (await sendMessage('m-f')).json()) as { task: { id: string } };
         await seedRun(sent.task.id, 'errored');

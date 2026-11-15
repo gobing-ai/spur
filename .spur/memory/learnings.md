@@ -7121,3 +7121,178 @@ during wrap-up; evidence lives in the task record and `.spur/run/1326-*` artifac
 - **`changelog-confidence` (ADR-144) already fails on `main`** — a pre-existing red, not a batch
   regression; check the base tree before attributing a repo-wide failure to your change.
 
+**Doc drift repaired — 6 files, all inside `docs/`.** Learnings artifact written to `.spur/run/516180e1-aecf-4473-973c-bd00330e8ca7-wrapup-learnings.md`.
+
+**Repairs (constitution §7.2, projections only — the authority was already correct):**
+
+| File | Drift | Repair |
+|---|---|---|
+| `docs/design/fleet-config-declaration.md:56` | "takes read-only work" — stale after the fencing amendment | conditional on the card's `urn:spur:write-fencing:v1` |
+| `docs/design/a2a-member-transport.md` §3.4/§3.5/§5 | card contract, ownership and the read-only tradeoff missed the extension + `metadata.remoteBranch` | added the write-admission row, the card extension, the completion metadata, and the conditional tradeoff |
+| `docs/design/data-output-contracts.md:35` | `coordination_runs` artifact refs do not mention `remoteBranch` | one clause added |
+| `docs/03_ARCHITECTURE.md` §17/§17.2 | A2A (ADR-148, which narrows ADR-057) absent from the control-plane section | cross-process-tree hop paragraph + enforceable invariant #10 |
+| `docs/00_ADR.md` ADR-148 | amendment undated (§6.1) and stated what but not why | dated `2026-11-15`, why added |
+| frontmatter of `00`/`03`/`04`/two satellites | `version`/`updated_at` stale (§4.3) | bumped |
+
+**Not touched, deliberately:** the absent `spur-team-mode-design.md` row in `04_DESIGN.md` (delinked by 1079 R4, `status: superseded` — re-adding it fails the supersession tripwire by design), and `docs/tasks5/1337*`.
+
+**Verification:** `repo-wide-tests/adr-supersession.test.ts` 10/10 PASS; `apps/cli/tests/consistency.test.ts` 3/3; `scripts/commands/{command-contract,flag-contract-parity}.test.ts` 106/106; E2E receipt 9/9. **Pre-existing failure, not from this change:** `repo-wide-tests/changelog-confidence.test.ts` (CHANGELOG anchors `SummaryOutcomes.tsx`, deleted in `056e106be`) — already recorded as red on the base tree. Write scope: newly dirtied paths are only `docs/03_ARCHITECTURE.md`, `docs/design/data-output-contracts.md`, `docs/design/fleet-config-declaration.md`; learnings shape PASS.
+
+## 2026-11-15 — 1337 (two-install A2A dispatch and conditional write fencing)
+
+### Conventions that held up
+
+- **One URI, one parser, both ends.** The write-fencing capability is a single constant,
+  `A2A_WRITE_FENCING_EXTENSION = 'urn:spur:write-fencing:v1'`, exported from `packages/app`
+  (`packages/app/src/index.ts:153-166`) and re-exported by the card builder
+  (`apps/server/src/modules/a2a/projection.ts:10-19`). The receiver declares it in
+  `capabilities.extensions`; the sender parses it with `a2aWriteFencingSupported`. No endpoint
+  hard-codes the string, so the two installs cannot drift apart on the spelling.
+- **The admission check sits at both ends of the send, not one.** `fleet-dispatch.ts` reads the
+  card before it writes the prompt artifact and enqueues the request
+  (`packages/app/src/workflow/fleet-dispatch.ts:208-222`); `A2aMemberTransport` reads it again
+  before the actual `send` (`packages/app/src/services/a2a-member-transport.ts:449-460`). One check
+  would let a direct transport call walk around the fence.
+- **A refused member leaves no trace.** The card gate runs before the prompt file is written, so a
+  refused mutating dispatch produces no prompt artifact and no inbox row — only an
+  `unavailable` reason naming the member.
+- **An unreadable card is `unavailable`, never an exception.** `dispatchToFleet` wraps the card read
+  in try/catch and returns `{status:'unavailable', reason: 'member "…" A2A card: …'}`, so the
+  workflow boundary keeps the receipt vocabulary instead of throwing across it.
+- **Extension-free cards keep G8 behavior exactly.** `a2aMutationReason(work, writeFenced = false)`
+  defaults to the old refusal, so a card without the extension is refused exactly as before the
+  feature — no config key, no migration, no second behavior to remember.
+- **The remote branch is recorded, never merged.** `git branch --show-current` runs on the receiver
+  (`apps/server/src/modules/a2a/index.ts:122-134`); the sender stores the name in the existing run's
+  artifact refs and surfaces it in the receipts. No fetch, no merge — merging stays a human
+  decision, and the E2E asserts it (`no-fetch-or-merge`).
+- **The answer travels on the ledger both installs already share.** A completed member writes an
+  inbox reply (`inbox.reply(messageId, member.instanceId, output)`), so `GetTask` returns the
+  answer as one text artifact instead of opening a second result channel.
+
+### Errors fixed, and what they cost
+
+- **The card was read too late to gate the work.** The refusal was computed from the work shape
+  alone and the card was fetched afterwards only as a reachability probe, so a member that *did*
+  fence its tree was still refused mutating work. The card is now read first and passed into
+  `a2aMutationReason` (`a2a-member-transport.ts:449-460`).
+- **A completed remote task had no answer.** The read-only dispatch finished with an empty output
+  because a completed A2A task carried no artifact. The member now replies through the inbox, and
+  the artifact text is mapped into the turn output.
+- **The branch was lost on re-attach.** After a restart the transport re-read the stored run row,
+  but the branch had only ever been in the in-memory result, so the re-attach path returned none.
+  It is now persisted in the run's artifact refs and read back
+  (`a2a-member-transport.ts:410-438`).
+- **Direct inbox SQL in the new E2E harness** (review, P4). The harness reached past the owning DAO
+  to read the inbox; it now uses `InboxDao.findByRequestKey`
+  (`scripts/commands/a2a-two-install-e2e.ts:285-290`) and was re-verified (ownership test 3/3, E2E
+  9/9). A harness that bypasses the owner hides ownership bugs from the test that is supposed to
+  catch them.
+
+### Patterns
+
+- **Prove the cross-machine path with two real homes on one machine.** `bun run a2a-two-install-e2e`
+  starts two isolated Spur homes (A declares B's card) plus a deterministic exec worker and writes
+  `docs/reports/a2a-two-install-e2e-receipt.json` — 9/9 passed: `read-only-two-install`,
+  `write-fencing-card`, `extension-free-refusal`, `token-mismatch`, `fenced-mutation-and-branch`,
+  `fenced-workflow-stage`, `b-down`, `restart-reattach`, `no-fetch-or-merge`. Failure legs first
+  (B down, B restarted, card without the extension, token mismatch) — the happy path was the last
+  thing proven.
+- **Failures land in the receipt vocabulary, not in exceptions.** Card unreachable → `unavailable`;
+  wrong token → 401 before B writes anything; extension-free card → `not-started` with the refusal
+  reason. A wrong token must be rejected before the receiver writes, or the ledger diverges.
+- **One field, four surfaces.** `remoteBranch` was added to the transport result, the named-member
+  result (`packages/app/src/services/member-dispatch.ts:29,204`), the workflow receipt
+  (`packages/app/src/workflow/fleet-dispatch.ts:294` → `workflow/actions/agent-run.ts:507`) and the
+  CLI JSON output (`apps/cli/src/commands/agent/run.ts:148`). Same field name everywhere, so a
+  caller never learns two spellings for one fact.
+- **No schema migration.** The branch rides the existing `coordination_runs.artifact_refs_json`, and
+  the remote identity stays on the existing nullable `remote_task_id` / `remote_context_id` columns.
+  A cross-install feature that needs no migration is a design win, not an accident.
+
+### Gotchas
+
+- **The wrapup `doc-sync` step must not re-add a deliberately delinked `04_DESIGN.md` row.**
+  `docs/design/spur-team-mode-design.md` is `status: superseded` (ADR-116) and is intentionally
+  absent from the index (delinked by task 1079 R4, pinned by
+  `repo-wide-tests/adr-supersession.test.ts`). Re-adding the row fails the ADR-supersession
+  tripwire by design — the same trap task 1136 walked into.
+- **The A2A card extension is an array of objects, not a string list.** The `a2a` CLI returns
+  `capabilities.extensions[].uri`; the parser matches `extension.uri === A2A_WRITE_FENCING_EXTENSION`.
+  A card that "has the extension" in any other shape reads as unsupported.
+- **A card capability is a promise, not a proof.** `urn:spur:write-fencing:v1` asserts that the
+  remote member fences its own tree; the sender does not and cannot verify it. Keep the claim on
+  the card, and keep the human in charge of merging the result.
+
+Skipped: the pre-existing `changelog-confidence` red (already recorded for the G8 batch) and the repo-wide 1337 code diff itself — the wrap step owns doc scope only.
+**Doc drift: repaired (1 residual gap this pass; 6 files already repaired by the earlier wrap run `516180e1`).** Learnings artifact written to `/Users/robin/xprojects/spur-new-run-1337-d7c0/.spur/run/7c659bf9-5d9e-4679-a461-83bf540366b0-wrapup-learnings.md`.
+
+**This pass's edit** — `docs/design/a2a-member-transport.md` §4.3 invariant 5: the enumeration named only the named-member and workflow receipts, omitting the third public surface `spur agent run --json` → `remoteBranch` (`apps/cli/src/commands/agent/run.ts:148`). One clause added; nothing outside `docs/` touched.
+
+**Detection** (`rg` for `server.a2a` / `read-only` / `a2a` / `remoteBranch` across `docs/`, frontmatter vs §4.1/§4.3, `spur feature show G9 --json`) found no other stale projection: `configuration-contracts.md` already carries `server.a2a.*`, the only other "read-only work" claim (`fleet-config-declaration.md:56`) was already fixed, and `04_DESIGN.md` needs no row for the superseded satellite.
+
+**Verification:** `repo-wide-tests/adr-supersession.test.ts` 10/10 PASS (delinked `spur-team-mode-design.md` row left absent by design); `apps/cli/tests/consistency.test.ts` 3/3; `scripts/commands/{command-contract,flag-contract-parity}.test.ts` 106/106; E2E receipt 9/9. Write-scope guard: porcelain listing identical to the doc-sync entry snapshot — no newly dirtied path. Learnings shape gate: PASS.
+
+**Not repaired (out of scope):** G9's feature record still lists 1336 `wip` / 1337 `todo` — that projection belongs to `spur feature refresh`, and `docs/features/` is outside this step's scope. Pre-existing `changelog-confidence` red untouched.
+
+# Wrap-up capture — 2026-11-15 — task 1337
+
+- Task list read from the normalized capture `.spur/run/7c659bf9-5d9e-4679-a461-83bf540366b0-wrapup-tasks.json` → `["1337"]` (one task: *Prove a two-install fleet dispatch over A2A*, feature G9).
+- The same task was wrapped by the earlier run `516180e1-aecf-4473-973c-bd00330e8ca7`; the lessons below are re-verified against the source rather than copied, and this capture adds the doc-drift delta of the current pass.
+- Scope of the doc pass: the A2A owner set (`docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/a2a-member-transport.md`, `docs/design/fleet-config-declaration.md`, `docs/design/data-output-contracts.md`, `docs/design/configuration-contracts.md`) — a focused audit, not a repository-wide sweep.
+
+## 2026-11-15 — 1337 — Doc drift repair (constitution §7.2)
+
+| File | Drift | Repair |
+|---|---|---|
+| `docs/design/a2a-member-transport.md` §4.3 invariant 5 | "The same field reaches the named-member and workflow receipts" — the third public surface (`spur agent run --json` → `remoteBranch`, `apps/cli/src/commands/agent/run.ts:148`) was unnamed | invariant now names the named-member result, the workflow receipt and the `spur agent run --json` envelope |
+| `docs/design/a2a-member-transport.md` §1/§3.4/§3.5/§4.3/§5 | card contract, ownership row, completion metadata and the read-only tradeoff missed the fencing extension and `metadata.remoteBranch` | write-admission ownership row, the `urn:spur:write-fencing:v1` card extension, the completion metadata, and a conditional (not absolute) read-only tradeoff — carried over from the earlier wrap run |
+| `docs/design/fleet-config-declaration.md:56` | "takes read-only work" — stale once fencing was conditional | admission is now conditional on the card's extension |
+| `docs/design/data-output-contracts.md:35` | `coordination_runs` artifact refs did not mention `remoteBranch` | one clause added to the table row |
+| `docs/03_ARCHITECTURE.md` §17/§17.2 | A2A (ADR-148) was absent from the control-plane section | cross-process-tree delivery paragraph + enforceable invariant #10 |
+| `docs/00_ADR.md` ADR-148 | the amendment was undated (§6.1) and stated what but not why | dated `2026-11-15`, rationale added |
+| frontmatter of `00`/`03`/`04` and two satellites | `version`/`updated_at` stale (§4.3) | bumped |
+
+**Not touched, deliberately:** the absent `spur-team-mode-design.md` row in `04_DESIGN.md` (delinked by task 1079 R4, `status: superseded` — re-adding it fails the ADR-supersession tripwire by design), and `docs/tasks5/1337*` (task corpus is CLI-gated and outside the wrap write scope).
+
+**Detection commands run (deterministic half of §7.1):** `rg` for `server.a2a` / `read-only` / `a2a` across `docs/` to find stale projections; `rg` for `remoteBranch` across the repo to map every surface that carries the new field; frontmatter read of the six touched files against §4.1/§4.3; `spur feature show G9 --json` for the feature's real lifecycle state.
+
+**Verification:** `repo-wide-tests/adr-supersession.test.ts` 10/10 PASS (the pin that must stay green); `apps/cli/tests/consistency.test.ts` 3/3; `scripts/commands/{command-contract,flag-contract-parity}.test.ts` 106/106; E2E receipt `docs/reports/a2a-two-install-e2e-receipt.json` 9/9 PASS.
+
+**Reported, not repaired (outside the write scope):** the G9 feature record's generated task table still shows 1336 `wip` and 1337 `todo` while both are `done`; that projection belongs to the feature tool (`spur feature refresh`), and `docs/features/` is outside this step's declared scope.
+
+## 2026-11-15 — 1337 (two-install A2A dispatch and conditional write fencing)
+
+### Conventions that held up
+
+- **One URI, one parser, both ends.** The write-fencing capability is a single constant, `A2A_WRITE_FENCING_EXTENSION = 'urn:spur:write-fencing:v1'` (`packages/app/src/services/a2a-member-transport.ts:48`), exported from `packages/app` (`packages/app/src/index.ts:152-166`) and re-exported by the card builder (`apps/server/src/modules/a2a/projection.ts:19`). The receiver declares it in `capabilities.extensions`; the sender parses it with `a2aWriteFencingSupported` (`a2a-member-transport.ts:51-53`). No endpoint hard-codes the string, so the two installs cannot drift apart on the spelling.
+- **The admission check sits at both ends of the send, not one.** `fleet-dispatch.ts` reads the card before it writes the prompt artifact and enqueues the request (`packages/app/src/workflow/fleet-dispatch.ts:211-222`); `A2aMemberTransport` reads the card again before the actual `send` (`a2a-member-transport.ts:457-458`). One check alone would let a direct transport call walk around the fence.
+- **A refused member leaves no trace.** The card gate runs before the prompt file is written (`fleet-dispatch.ts:228` onward), so a refused mutating dispatch produces no prompt artifact and no inbox row — only an `unavailable` reason naming the member.
+- **An unreadable card is `unavailable`, never an exception.** `dispatchToFleet` wraps the card read in try/catch and returns `{status:'unavailable', reason:'member "…" A2A card: …'}` (`fleet-dispatch.ts:214-220`), so the workflow boundary keeps the receipt vocabulary instead of throwing across it.
+- **Extension-free cards keep G8 behavior exactly.** `a2aMutationReason(work, writeFenced = false)` defaults to the old refusal (`a2a-member-transport.ts:64-65`), so a card without the extension is refused exactly as before the feature — no config key, no migration, no second behavior to remember.
+- **The remote branch is recorded, never merged.** `git branch --show-current` runs on the receiver with a 5s timeout and `rejectOnError: false`, and only on a completed task (`apps/server/src/modules/a2a/index.ts:122-136,162-168`); the sender stores the name in the existing run's artifact refs and surfaces it in the receipts. No fetch, no merge — merging stays a human decision, and the E2E asserts it (`no-fetch-or-merge`: `FETCH_HEAD=false`).
+- **The answer travels on the ledger both installs already share.** A completed member writes an inbox reply (`a2a-member-transport.ts:531`), so `GetTask` returns the answer as one text artifact instead of opening a second result channel.
+
+### Errors fixed, and what they cost
+
+- **The card was read too late to gate the work.** The refusal was computed from the work shape alone (`a2aMutationReason(work)`), and the card was fetched afterwards only as a reachability probe, so a member that *did* fence its tree was still refused mutating work. The card is now read first and passed into `a2aMutationReason(work, writeFenced)`.
+- **A completed remote task had no answer.** The read-only dispatch finished with an empty output because a completed A2A task carried no artifact text. The member now replies through the inbox, and the artifact text is mapped into the turn output (`a2a-member-transport.ts:270,531`).
+- **The branch was lost on re-attach.** After a restart the transport re-read the stored run row, but the branch had only ever been in the in-memory result, so the re-attach path returned none. It is now persisted in the run's artifact refs and read back (`a2a-member-transport.ts:425-438`); the E2E leg `restart-reattach` shows `remoteBranch=sp/remote-e2e` with `sends=1`.
+- **Direct inbox SQL in the new E2E harness** (review, P4). The harness reached past the owning DAO to read the inbox; it now uses `InboxDao.findByRequestKey` (`scripts/commands/a2a-two-install-e2e.ts:325`) and was re-verified (E2E 9/9 PASS). A harness that bypasses the owner hides ownership bugs from the test that is supposed to catch them.
+
+### Patterns
+
+- **Prove the cross-machine path with two real homes on one machine.** `bun run a2a-two-install-e2e` starts two isolated Spur homes (A declares B's card) plus a deterministic exec worker and writes `docs/reports/a2a-two-install-e2e-receipt.json` — 9/9 passed: `read-only-two-install`, `write-fencing-card`, `extension-free-refusal`, `token-mismatch`, `fenced-mutation-and-branch`, `fenced-workflow-stage`, `b-down`, `restart-reattach`, `no-fetch-or-merge`. Failure legs first (B down, B restarted, card without the extension, token mismatch) — the happy path was the last thing proven.
+- **Failures land in the receipt vocabulary, not in exceptions.** Card unreachable → `unavailable`; wrong token → 401 before B writes anything (`token-mismatch` shows `B request present=false`); extension-free card → `not-started` with the refusal reason. A wrong token must be rejected before the receiver writes, or the two ledgers diverge.
+- **One field, four surfaces.** `remoteBranch` was added to the transport result, the named-member result (`packages/app/src/services/member-dispatch.ts:29,204`), the workflow receipt (`packages/app/src/workflow/fleet-dispatch.ts:301` → `packages/app/src/workflow/actions/agent-run.ts:507`) and the CLI JSON output (`apps/cli/src/commands/agent/run.ts:148`). Same field name everywhere, so a caller never learns two spellings for one fact.
+- **No schema migration.** The branch rides the existing `coordination_runs.artifact_refs_json`, and the remote identity stays on the existing nullable `remote_task_id` / `remote_context_id` columns. A cross-install feature that needs no migration is a design win, not an accident.
+- **Derive the branch, never transfer the diff.** The sender learns the member's branch name and stops there; moving tree contents back would make Spur the merger of a tree it cannot fence.
+
+### Gotchas
+
+- **The wrapup `doc-sync` step must not re-add a deliberately delinked `04_DESIGN.md` row.** `docs/design/spur-team-mode-design.md` is `status: superseded` (ADR-116) and is intentionally absent from the index (delinked by task 1079 R4, pinned by `repo-wide-tests/adr-supersession.test.ts`). Re-adding the row fails the ADR-supersession tripwire by design — the same trap task 1136 walked into.
+- **The A2A card extension is an array of objects, not a string list.** The `a2a` CLI returns `capabilities.extensions[].uri`; the parser matches `extension.uri === A2A_WRITE_FENCING_EXTENSION` (`a2a-member-transport.ts:52`). A card that "has the extension" in any other shape reads as unsupported.
+- **A card capability is a promise, not a proof.** `urn:spur:write-fencing:v1` asserts that the remote member fences its own tree; the sender does not and cannot verify it. Keep the claim on the card, and keep the human in charge of merging the result.
+- **The feature record's generated task table is not a status source to trust by eye.** G9's record still lists 1336 `wip` and 1337 `todo` while both tasks are `done`; the projection is refreshed by the feature tool, not by the wrap step.
+
+Skipped: the pre-existing `changelog-confidence` red (already recorded for the G8 batch, not caused by this pass) and a repository-wide doc sweep — this pass audited the A2A owner set only. The 1337 code diff itself is out of wrap scope (the doc-sync step owns doc scope only).

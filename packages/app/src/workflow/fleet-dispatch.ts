@@ -72,6 +72,8 @@ export type FleetDispatchResult =
           durationMs: number;
           promptPath: string;
           runId?: string;
+          /** Present when the completed remote task advertised its working branch. */
+          remoteBranch?: string;
           /** Present when the turn was A2A-driven; local work-item post-processing is then skipped. */
           member?: ResolvedFleetMember;
       }
@@ -206,7 +208,17 @@ export async function dispatchToFleet(
     }
     const member = resolution.member;
     if (member.a2a !== undefined) {
-        const mutation = a2aMutationReason(input);
+        let writeFenced = false;
+        try {
+            writeFenced = deps.a2a !== undefined && (await deps.a2a.supportsWriteFencing(member));
+        } catch (error) {
+            return {
+                status: 'unavailable',
+                reason: `member "${member.instanceId}" A2A card: ${error instanceof Error ? error.message : String(error)}`,
+                member,
+            };
+        }
+        const mutation = a2aMutationReason(input, writeFenced);
         if (mutation !== null) return { status: 'unavailable', reason: mutation, member };
         if (deps.a2a === undefined) {
             return { status: 'unavailable', reason: 'A2A turn service is not wired', member };
@@ -286,6 +298,7 @@ export async function dispatchToFleet(
                 promptPath,
                 member,
                 ...(turn.runId !== undefined ? { runId: turn.runId } : {}),
+                ...(turn.remoteBranch !== undefined ? { remoteBranch: turn.remoteBranch } : {}),
             };
         }
         if (turn.status === 'failed') {

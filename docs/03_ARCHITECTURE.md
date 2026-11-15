@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.79.0
+version: 1.80.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-14
+updated_at: 2026-11-15
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -836,6 +836,17 @@ SIGKILLed or crashed serve sends its children no signal at all, so the loop re-r
 (reparented to init), running the normal shutdown (claim release, member-session reset). No daemon,
 marker file, or extra transport. Surfaces: [CLI contracts](design/cli-contracts.md#spur-agent-status---server-url---json).
 
+**Cross-process-tree delivery (ADR-148).** A2A is the turn driver where Spur crosses a process
+tree it does not own — another install, another machine — and not a third channel: the durable
+record stays the inbox at both ends, with `coordination_runs` as the receipt. `spur serve` answers
+the A2A card/send/task endpoints on demand (`server.a2a.enabled`, off by default) as a facade over
+`InboxService` and `coordination_runs` — one inbox writer, no new table. A remote card declares
+whether it fences its own tree through the `urn:spur:write-fencing:v1` extension, and the sender
+consults the card before it enqueues and before it sends: write-shaped work is admitted only for a
+member that fences itself and refused for every other card. A completed task returns its answer and
+the remote branch; the sender records the branch and never fetches or merges it. Contract:
+[A2A member transport](design/a2a-member-transport.md).
+
 ### 17.1 Target topology
 
 ```text
@@ -873,6 +884,9 @@ The process pipe stays the operator attach path. It is not the agent-to-agent co
    timeline rows) never satisfy a wait.
 9. Coordination-run rows store artifact **paths**, not stdout/stderr bodies. Redaction runs
    before persist.
+10. A2A crosses a process tree Spur does not own, so write-shaped work is admitted only when the
+    remote card declares the `urn:spur:write-fencing:v1` extension; the remote branch is recorded,
+    never fetched or merged.
 
 Shapes: `docs/design/inter-agent-control-plane.md`.
 

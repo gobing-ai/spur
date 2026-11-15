@@ -7,11 +7,16 @@
  * changes nothing because no state is held in this process.
  */
 
+import { A2A_WRITE_FENCING_EXTENSION } from '@gobing-ai/spur-app';
+
 /** The one protocol version this surface speaks (R2). */
 export const A2A_PROTOCOL_VERSION = '1.0';
 
 /** The only binding this surface speaks — streaming, push and gRPC are declared absent (R2). */
 export const A2A_PROTOCOL_BINDING = 'HTTP+JSON';
+
+/** A Spur member that fences its own working tree may accept write-shaped work (1337 R3). */
+export { A2A_WRITE_FENCING_EXTENSION };
 
 /** A2A task states (`TaskState` enum) this surface can report. */
 export type A2ATaskState =
@@ -40,6 +45,8 @@ export interface A2ATask {
     status: { state: A2ATaskState; message?: A2AMessage; timestamp?: string };
     artifacts?: { artifactId: string; parts: A2APart[] }[];
     history?: A2AMessage[];
+    /** Spur-specific completion metadata; A2A permits custom key/value metadata. */
+    metadata?: { remoteBranch?: string };
 }
 
 /** One Agent Card for one live member (R2). */
@@ -65,7 +72,11 @@ export function agentCard(input: AgentCardInput): Record<string, unknown> {
                 protocolVersion: A2A_PROTOCOL_VERSION,
             },
         ],
-        capabilities: { streaming: false, pushNotifications: false },
+        capabilities: {
+            streaming: false,
+            pushNotifications: false,
+            extensions: [{ uri: A2A_WRITE_FENCING_EXTENSION, description: 'The member fences its own working tree' }],
+        },
         defaultInputModes: ['text/plain'],
         defaultOutputModes: ['text/plain'],
         skills: [],

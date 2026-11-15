@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { CoordinationRunDao, createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import {
+    type A2aCard,
     type A2aCli,
     A2aMemberTransport,
     type A2aTask,
@@ -35,15 +36,20 @@ class FakeCli implements A2aCli {
     readonly calls: string[] = [];
     sendCount = 0;
     cardError: Error | undefined;
+    extensions: string[] = [];
+    remoteBranch: string | undefined;
     states: A2aTask[] = [task('TASK_STATE_COMPLETED')];
 
     async version(): Promise<string> {
         return 'a2a 0.4.0';
     }
-    async card(): Promise<{ protocolVersion: string }> {
+    async card(): Promise<A2aCard> {
         this.calls.push('card');
         if (this.cardError !== undefined) throw this.cardError;
-        return { protocolVersion: '1.0' };
+        return {
+            protocolVersion: '1.0',
+            capabilities: { extensions: this.extensions.map((uri) => ({ uri })) },
+        };
     }
     async send(
         _member: ResolvedFleetMember,
@@ -58,7 +64,7 @@ class FakeCli implements A2aCli {
         this.calls.push('get');
         const next = this.states.length > 1 ? this.states.shift() : this.states[0];
         if (next === undefined) throw new Error('no fake task state');
-        return next;
+        return { ...next, ...(this.remoteBranch === undefined ? {} : { remoteBranch: this.remoteBranch }) } as A2aTask;
     }
     async cancel(): Promise<void> {
         this.calls.push('cancel');
@@ -134,6 +140,8 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
         expect(await h.transport.outputForRun('missing-run')).toBeUndefined();
         const message = await h.inbox.get(result.messageId);
         expect(message?.status).toBe('delivered');
+        const thread = await h.inbox.thread(result.messageId);
+        expect(thread.some((row) => row.inReplyTo === result.messageId && row.body === 'answer')).toBe(true);
     });
 
     test('AC3: a wait deadline is outcome-unknown and a restart re-attaches without a second send', async () => {
@@ -227,8 +235,23 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
         });
         expect(result.status).toBe('not-started');
         expect(result.reason).toContain('read-only');
-        expect(h.cli.calls).toEqual([]);
+        expect(h.cli.calls).toEqual(['card']);
         expect(h.cli.sendCount).toBe(0);
+    });
+
+    test('R7/R4: a write-fenced member accepts mutating work and returns the remote branch', async () => {
+        const cli = new FakeCli();
+        cli.extensions = ['urn:spur:write-fencing:v1'];
+        cli.remoteBranch = 'sp/remote-e2e';
+        const h = await harness({ cli });
+        const result = await h.transport.dispatch(MEMBER, 'mutate the remote tree', {
+            dispatcher: h.dispatcher,
+            fromId: 'operator',
+            work: { requireDiff: true, expectFiles: ['answer.txt'] },
+        });
+        expect(result.status).toBe('completed');
+        expect((result as unknown as { remoteBranch?: string }).remoteBranch).toBe('sp/remote-e2e');
+        expect(cli.sendCount).toBe(1);
     });
 
     test('R10: doctor reports binary version, card reachability and protocol version', async () => {
@@ -273,6 +296,22 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
             status: 'failed',
             reason: 'member "proj-remote" has no a2a declaration',
         });
+    });
+
+    test('a completed re-attach preserves the remote branch without another remote call', async () => {
+        const cli = new FakeCli();
+        cli.remoteBranch = 'sp/remote-e2e';
+        const h = await harness({ cli });
+        const completed = await h.transport.dispatch(MEMBER, 'mutate and finish', {
+            dispatcher: h.dispatcher,
+            fromId: 'operator',
+        });
+        const calls = [...cli.calls];
+        expect(await h.transport.runMessage(MEMBER, completed.messageId)).toMatchObject({
+            status: 'completed',
+            remoteBranch: 'sp/remote-e2e',
+        });
+        expect(h.cli.calls).toEqual(calls);
     });
 
     test('a claimed batch and a failed/delivered request with no run keep their distinct outcomes', async () => {

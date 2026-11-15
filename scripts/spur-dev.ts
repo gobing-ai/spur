@@ -41,6 +41,7 @@
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   a2a-serve-e2e                               prove `spur serve` speaks A2A through the real `a2a` CLI, write the receipt
  *   a2a-member-e2e                              prove A2A member delivery cold, live and on restart, write the receipt
+ *   a2a-two-install-e2e                         prove two Spur installs dispatch over A2A with write fencing, write the receipt
  *   fleet-e2e --guest-join-fixture              exercise the R4 pre-1081 guest-join skip arm, write its receipt
  *   fleet-e2e --perf [--trials <n>]             task 1273 KPI arm: paired stub trials per target agent, receipts in docs/reports/
  *   skill-eval [--fixtures|--json]             run the skill scenarios and render the report
@@ -57,6 +58,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
+import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
 import { buildServer } from './commands/build-server';
@@ -173,6 +175,9 @@ try {
             break;
         case 'a2a-member-e2e':
             process.exit(await runA2aMemberE2e(args));
+            break;
+        case 'a2a-two-install-e2e':
+            process.exit(await runA2aTwoInstallE2e(args));
             break;
         case 'link-check':
             process.exit(await linkCheck());

@@ -145,6 +145,7 @@ async function dispatchToMemberSelector(
                         status: result.status,
                         messageId: result.messageId,
                         ...(result.output !== undefined ? { output: result.output } : {}),
+                        ...(result.remoteBranch !== undefined ? { remoteBranch: result.remoteBranch } : {}),
                         reason: result.reason,
                     },
                     { enveloped: jsonFlags(flags).jsonEnvelope },

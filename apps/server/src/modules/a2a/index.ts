@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { FleetService, type InboxMessage, type InboxService, RequestKeyConflictError } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type CoordinationRunRow } from '@gobing-ai/spur-domain';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -118,6 +119,24 @@ async function readCanceled(ctx: ServerContext, messageId: string): Promise<bool
     }
 }
 
+/** The member's current working branch, exposed only on completed tasks (1337 R4). */
+async function remoteBranch(ctx: ServerContext): Promise<string | null> {
+    try {
+        const result = await new NodeProcessExecutor().run({
+            command: 'git',
+            args: ['branch', '--show-current'],
+            cwd: ctx.cwd,
+            timeout: 5_000,
+            rejectOnError: false,
+        });
+        if (result.exitCode !== 0) return null;
+        const branch = result.stdout.trim();
+        return branch === '' ? null : branch;
+    } catch {
+        return null;
+    }
+}
+
 /** Project one inbox request onto the A2A `Task` object. */
 async function projectTask(ctx: ServerContext, inbox: InboxService, message: InboxMessage): Promise<A2ATask> {
     const run = await latestRun(ctx, message.id);
@@ -140,11 +159,13 @@ async function projectTask(ctx: ServerContext, inbox: InboxService, message: Inb
         if (typeof timestamp === 'string') status.timestamp = timestamp;
     }
     const answer = state === 'TASK_STATE_COMPLETED' ? await answerText(inbox, message.id) : null;
+    const branch = state === 'TASK_STATE_COMPLETED' ? await remoteBranch(ctx) : null;
     return {
         id: message.id,
         contextId: message.threadId,
         status,
         ...(answer === null ? {} : { artifacts: [{ artifactId: `${message.id}-answer`, parts: [{ text: answer }] }] }),
+        ...(branch === null ? {} : { metadata: { remoteBranch: branch } }),
         history,
     };
 }

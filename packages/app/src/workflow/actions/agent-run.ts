@@ -504,6 +504,7 @@ export class AgentRunActionRunner implements ActionRunner {
                         // trace parity test (agent-run-fleet.test.ts) pins the key set
                         // against the subprocess row shape.
                         ...fleetDispatchRow(dispatch, 'done', expectFile),
+                        ...(dispatch.remoteBranch !== undefined ? { remoteBranch: dispatch.remoteBranch } : {}),
                         durationMs: dispatch.durationMs,
                         promptPath: dispatch.promptPath,
                     },

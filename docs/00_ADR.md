@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.73.0
+version: 1.74.0
 owner: Robin Min
-updated_at: 2026-11-14
+updated_at: 2026-11-15
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2829,8 +2829,8 @@ re-import pressure this entry already records).
   - ADR-126 is amended: for a local member, cold fallback on a definite `not-started` is the default
     rather than opt-in, and the receipt records it. `outcome-unknown` still never re-dispatches.
   - The client is the operator-installed `a2a` CLI on PATH, known to exactly one `packages/app`
-    service. The remote task id is stored before any wait and is never re-sent. v1 gives A2A members
-    read-only, artifact-returning work only.
+    service. The remote task id is stored before any wait and is never re-sent. A2A work is read-only
+    by default; write-shaped work requires the card's write-fencing extension.
   - The fleet plumbing verbs `join`, `leave`, `wait` and `report` are hidden from default
     `spur agent --help`; none is removed or changed.
   - `spur serve` may serve A2A (feature G9): opt-in, off by default, bearer-token authenticated, a
@@ -2844,4 +2844,9 @@ re-import pressure this entry already records).
   consent for the member-id address and the new member keys; no stored credentials.
 - **Consequence:** `spur serve` becomes an accelerator rather than a prerequisite. Worktree-mutating A2A work
   is admitted only for a member whose card declares its own write fencing (G9). The real-agent latency baseline is decoupled and low priority.
+- **Amendment (2026-11-15 · task 1337):** the extension URI is `urn:spur:write-fencing:v1`. A card
+  that declares it has fenced its own tree, so write-shaped work is admitted; the sender checks the
+  card before enqueue and before send, preserving the read-only refusal for every card without it. A
+  completed task returns its answer through the inbox and carries `metadata.remoteBranch`; the
+  sender records the branch but never fetches or merges it.
 - **Detail:** [A2A member transport](design/a2a-member-transport.md).

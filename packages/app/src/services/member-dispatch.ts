@@ -26,6 +26,7 @@ export type MemberDispatchResult =
           messageId: string;
           reason: string;
           output?: string;
+          remoteBranch?: string;
       }
     | {
           delivery: 'warm';
@@ -200,6 +201,7 @@ export async function dispatchToNamedMember(
             messageId: result.messageId,
             reason: result.reason ?? chosen.reason,
             ...(result.output !== undefined ? { output: result.output } : {}),
+            ...(result.remoteBranch !== undefined ? { remoteBranch: result.remoteBranch } : {}),
         };
     }
     if (dispatcher === undefined) {
