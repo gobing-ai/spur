@@ -164,8 +164,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run;
-            $spurBin history report .spur/run/$__runId-history-anatomy-current.json --mode forensics > .spur/run/$__runId-history-anatomy-current.md;
-            $spurBin history report .spur/run/$__runId-history-anatomy-baseline.json --mode forensics > .spur/run/$__runId-history-anatomy-baseline.md || true
+            $spurBin history report .spur/run/$__runId-history-anatomy-current.json --mode forensics;
+            $spurBin history report .spur/run/$__runId-history-anatomy-baseline.json --mode forensics || true
 
   - id: enrich
     description: >

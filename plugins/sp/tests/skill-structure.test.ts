@@ -1044,6 +1044,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(text).toContain('--out .spur/run');
     });
 
+    test('history-anatomy render leaves sidecar writing to history report alone (1338)', () => {
+        const text = readFileSync(join(WORKFLOWS_DIR, 'history-anatomy.yaml'), 'utf8');
+        const commands = text.match(/\$spurBin history report [^\n]+/g) ?? [];
+        expect(commands).toHaveLength(2);
+        for (const command of commands) {
+            expect(command).not.toMatch(/\s>\s*\.spur\/run\/\$__runId-history-anatomy-(?:current|baseline)\.md/);
+        }
+    });
+
     // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases. Task 1005 moved the logic
     // to packages/app; script-absorption PR-6 moved the op pins next to it (`spur history
     // anatomy`) — the union of the two fixture files must carry every case.

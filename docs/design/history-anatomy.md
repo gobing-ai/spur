@@ -154,6 +154,10 @@ never launch another workflow, which keeps the rubric single-sourced and prevent
 reads the mutable `latest.json` pointer — every analyze writes, and every render names, an explicit
 run-scoped path.
 
+**Render sidecars have one writer.** `spur history report` creates the `<artifact>.md` sidecar.
+The workflow never redirects that command's stdout into the same path; stdout is run-log output only.
+This prevents the raw report and fenced sidecar from racing into duplicated titles and unbalanced fences.
+
 Correction is capped at two total passes (0690): the counter is shared by the structure-gate and
 validation FAIL edges, allowing a structure repair followed by one validation-driven repair. Each
 `correct` pass re-authors the candidate in place from the gate

@@ -167,6 +167,19 @@ describe('history command', () => {
         expect(md).toContain('Total:');
     });
 
+    test('report --mode forensics writes one title and balanced sidecar fences (1338)', async () => {
+        const cwd = makeTmpCwd();
+        const artifactPath = writeArtifactFile(cwd, 'a.json', makeArtifact());
+        const { output } = capturingOutput();
+
+        const exitCode = await main(['history', 'report', artifactPath, '--mode', 'forensics'], { output, cwd });
+
+        expect(exitCode).toBe(0);
+        const md = readFileSync(artifactPath.replace(/\.json$/, '.md'), 'utf8');
+        expect(md.match(/^# History forensics report — generated /gm)).toHaveLength(1);
+        expect(md.match(/^```$/gm)).toHaveLength(2);
+    });
+
     test('report resolves via latest.json pointer when no path given (R6)', async () => {
         const cwd = makeTmpCwd();
         const artifact = makeArtifact();
