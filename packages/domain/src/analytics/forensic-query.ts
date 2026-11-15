@@ -1182,6 +1182,8 @@ export async function topStepsByDuration(
  * Q13a - cache re-send waste aggregate for the whole selection (single row, R2-safe).
  * `m.cache_read_tokens < m.input_tokens * ?` is raw-column: a NULL cache read does not
  * compare true, so only measured low-reuse steps count (matches the AC4 baseline query).
+ * The first low-reuse step after a known model change is an expected cold start, not re-send
+ * waste; both Q13 queries exclude it through the immediately preceding assistant row.
  */
 export async function cacheWasteAggregate(
     db: DbAdapter,
@@ -1199,6 +1201,19 @@ export async function cacheWasteAggregate(
         `SELECT COUNT(*) AS steps, SUM(m.input_tokens) AS inputTokens
          FROM history_message m
          ${wastePredicate}
+        AND NOT EXISTS (
+            SELECT 1 FROM history_message previous
+            WHERE previous.source = m.source AND previous.session_id = m.session_id
+              AND previous.role = 'assistant'
+              AND previous.seq = (
+                  SELECT MAX(earlier.seq) FROM history_message earlier
+                  WHERE earlier.source = m.source AND earlier.session_id = m.session_id
+                    AND earlier.role = 'assistant' AND earlier.seq < m.seq
+              )
+              AND previous.model IS NOT NULL AND previous.model != '' AND previous.model != 'unknown'
+              AND m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown'
+              AND previous.model != m.model
+        )
          LIMIT ?`,
         ...params,
         CACHE_WASTE_MIN_INPUT_TOKENS,
@@ -1238,6 +1253,19 @@ export async function topCacheWasteSteps(
                 m.output_tokens AS outputTokens, m.cost_usd AS costUsd, m.duration_ms AS durationMs
          FROM history_message m
          ${wastePredicate2}
+         AND NOT EXISTS (
+             SELECT 1 FROM history_message previous
+             WHERE previous.source = m.source AND previous.session_id = m.session_id
+               AND previous.role = 'assistant'
+               AND previous.seq = (
+                   SELECT MAX(earlier.seq) FROM history_message earlier
+                   WHERE earlier.source = m.source AND earlier.session_id = m.session_id
+                     AND earlier.role = 'assistant' AND earlier.seq < m.seq
+               )
+               AND previous.model IS NOT NULL AND previous.model != '' AND previous.model != 'unknown'
+               AND m.model IS NOT NULL AND m.model != '' AND m.model != 'unknown'
+               AND previous.model != m.model
+         )
          ORDER BY ${inputOrder} DESC
          LIMIT ?`,
         ...params,

@@ -835,6 +835,54 @@ describe('task 0581 — per-step rankings and cache waste (R2-bounded)', () => {
         db.close();
     });
 
+    test('cache waste excludes only the first low-reuse step after a model change (1339)', async () => {
+        const db = await setup();
+        await insertMessage(db, {
+            record_hash: 'model-old',
+            session_id: 'model-switch',
+            seq: 1,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:00:00Z',
+            model: 'deepseek-v4-flash',
+            input: 1000,
+            cache_read: 1000,
+        });
+        await insertMessage(db, {
+            record_hash: 'model-cold',
+            session_id: 'model-switch',
+            seq: 2,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:01:00Z',
+            model: 'k3.1-pro',
+            input: 184_355,
+            cache_read: 512,
+        });
+        await insertMessage(db, {
+            record_hash: 'model-repeat',
+            session_id: 'model-switch',
+            seq: 3,
+            role: 'assistant',
+            record_type: 'message',
+            disposition: 'conversation',
+            ts: '2026-06-01T00:02:00Z',
+            model: 'k3.1-pro',
+            input: 200_000,
+            cache_read: 0,
+        });
+
+        const aggregate = await cacheWasteAggregate(db, ALL);
+        const offenders = await topCacheWasteSteps(db, ALL, 10);
+
+        expect(aggregate?.steps).toBe(1);
+        expect(aggregate?.inputTokens).toBe(200_000);
+        expect(offenders.map((row) => row.inputTokens)).toEqual([200_000]);
+        db.close();
+    });
+
     test('stepSupport reports per-source assistant counts and section support (Q14)', async () => {
         const db = await setup();
         // w1/w2/w4 (claude) + a second source so the grouping is meaningful.

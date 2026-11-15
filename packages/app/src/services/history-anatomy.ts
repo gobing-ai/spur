@@ -443,6 +443,24 @@ function escapeRe(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Reject findings whose evidence plane cannot support a proposed owner or source observation. */
+function auditProjectedCandidates(reportMarkdown: string, findingKeys: ReadonlySet<string>, problems: string[]): void {
+    const improvementsIdx = reportMarkdown.search(/^##\s+Workflow and process improvements\s*$/im);
+    if (improvementsIdx === -1) return;
+    const tail = reportMarkdown.slice(improvementsIdx);
+    const nextSection = tail.slice(1).search(/^##\s+/im);
+    const body = nextSection === -1 ? tail : tail.slice(0, nextSection + 1);
+    const blocks = body
+        .split(/(?=^-\s+`[^`]+`\s+—\s+(?:\*\*source finding:\*\*[^\n]*\s+)?\*\*owner surface:\*\*)/m)
+        .slice(1);
+    for (const block of blocks) {
+        const key = block.match(/^-\s+`([^`]+)`/)?.[1];
+        if (key === undefined) continue;
+        const cited = [...findingKeys].some((sourceKey) => sourceKey !== '' && block.includes(`\`${sourceKey}\``));
+        if (!cited) problems.push(`projected-candidate-without-source-finding:${key}`);
+    }
+}
+
 /** Closed finding categories (0686/I9). Kept next to FINDING_FIELDS — the gate parses them. */
 const FINDING_CATEGORIES = [
     'reliability',
@@ -460,6 +478,7 @@ const FINDING_CATEGORIES = [
  */
 export function checkReportStructure(reportMarkdown: string): { ok: boolean; problems: string[] } {
     const problems: string[] = [];
+    const findingKeys = new Set<string>();
 
     if (/TODO|PLACEHOLDER|FIXME|^\|\s*\|/im.test(reportMarkdown)) problems.push('placeholder-or-todo-present');
 
@@ -491,6 +510,11 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
         const knownRows = findingsBody.match(new RegExp(`^\\|\\s*(?:${catAlt}):[^|]+`, 'gm')) ?? [];
         const invalidRows = findingsBody.match(/^\|\s*([^|:\s][^|:]*):[^|]+/gm) ?? [];
         for (const row of [...new Set([...knownRows, ...invalidRows])]) {
+            const rowKey = row.match(/^\|\s*([a-z]+:[^|\s]+)/)?.[1];
+            if (rowKey !== undefined) findingKeys.add(rowKey);
+            if (rowKey === 'coverage:spur-task-check:verified-outcome-absent') {
+                problems.push(`finding-retired-key:${rowKey}`);
+            }
             // 0686/I9: a pipe row outside the closed first-segment set fails by name instead of
             // being skipped silently by the legacy regex.
             const seg = row.match(/^\|\s*([^:|]+):/)?.[1];
@@ -521,6 +545,10 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
                 problems.push(`finding-invalid-category:${catValue.trim()}`);
             }
             const keyValue = block.match(/`key`\s*[:=]\s*`?([^`\n]+?)`?\s*(?:\n|$)/)?.[1] ?? '';
+            if (keyValue !== '') findingKeys.add(keyValue);
+            if (keyValue === 'coverage:spur-task-check:verified-outcome-absent') {
+                problems.push(`finding-retired-key:${keyValue}`);
+            }
             const firstSegment = keyValue.split(':')[0]?.trim() ?? '';
             if (keyValue !== '' && !(FINDING_CATEGORIES as readonly string[]).includes(firstSegment)) {
                 problems.push(`finding-invalid-key-category:${firstSegment}`);
@@ -530,6 +558,8 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
         // 1326 R7: arithmetic evidence, checked before independent validation can be fooled.
         auditArithmetic(findingsBody, problems);
     }
+
+    auditProjectedCandidates(reportMarkdown, findingKeys, problems);
 
     const ledgerIdx = reportMarkdown.search(/^#{2,3}\s+Evidence\s+ledger/im);
     if (ledgerIdx !== -1) {

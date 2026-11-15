@@ -51,6 +51,12 @@ Given the current and baseline artifacts, author the model half of the report. A
 7. **Report-only advisories** — repeated identical tool-and-argument signatures surfaced with
    repetition counts; proposes no automatic interruption (report-only, 0680 R5).
 8. **Positive patterns** — same evidence standard as problems.
+9. **False-positive guards** — exclude the first low-reuse step after a known model change/switch
+   from cache-waste findings while retaining later same-model offenders. A zero denominator in
+   `verifiedOutcome` is `not available`, never a defect or remediation; reject the retired key
+   `coverage:spur-task-check:verified-outcome-absent` and do not revive ADR-140's retired
+   proof-digest chain. Every projected candidate carries **source finding:** naming a section-4
+   finding key; if no observed finding supports one, omit the candidate.
 
 Run-cost note (0680 R6): Performance analysis reports what this run's chained `agent.run`
 stages cost using the pairing analytics fold (totalCostUsd / meanDurationMs per pairing); a
@@ -85,6 +91,11 @@ Given a candidate report and the artifacts, independently verify:
 - **Arithmetic** — every `calc:` assertion recomputes; a claim whose assertion does not hold, or a
   derived claim with no assertion, is a finding against the report. Independent validation still
   owns whether the operands belong to the cited artifact; the deterministic gate owns the math.
+- **False-positive guards** — FAIL a cache-waste finding for the first low-reuse step after a
+  known model change/switch; FAIL the retired key
+  `coverage:spur-task-check:verified-outcome-absent` or any remediation that treats a zero denominator
+  as a defect instead of `not available`; FAIL a projected candidate whose
+  **source finding:** does not name a section-4 finding key.
 
 Emit `PASS` only when every rule holds. On FAIL, name the section, the finding key, and the rule
 violated. Never launch a workflow.

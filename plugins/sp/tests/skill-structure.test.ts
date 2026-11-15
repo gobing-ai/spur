@@ -2273,6 +2273,20 @@ describe('environment-lens single source of truth (task 0686 / R44-adjacent)', (
         }
         expect(text).toContain('no applied change, no diff, and no command the report claims to have run');
     });
+
+    test('history-anatomy rubrics pin the recurring false-positive guards (1339)', () => {
+        const contract = readFileSync(join(SKILLS_DIR, 'history-anatomy', 'references', 'report-contract.md'), 'utf8');
+        const operations = readFileSync(join(SKILLS_DIR, 'history-anatomy', 'references', 'operations.md'), 'utf8');
+        for (const text of [contract, operations]) {
+            expect(text).toContain('coverage:spur-task-check:verified-outcome-absent');
+            expect(text).toMatch(/zero denominator/i);
+            expect(text).toMatch(/model (?:change|switch)/i);
+            expect(text).toContain('source finding:');
+        }
+        const design = readFileSync(join(REPO_ROOT, 'docs', 'design', 'history-anatomy.md'), 'utf8');
+        expect(design).toContain('finding-retired-key:');
+        expect(design).toContain('projected-candidate-without-source-finding:');
+    });
 });
 
 /**

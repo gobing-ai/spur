@@ -113,6 +113,15 @@ Enforcement rail for every claim:
    observations fails validation.
 6. **Every finding has an evidence anchor.** No anchor, no finding — no row may be dropped because
    it "lacks evidence" while still appearing in a summary.
+7. **A model-switch cold start is not re-send waste.** The first low-reuse assistant step after a
+   known model change is expected cold-cache behavior and is excluded from `cacheWaste`. Do not
+   reintroduce it as a finding from a duration/token ranking. A later low-reuse step in the same
+   model remains eligible.
+8. **Verified-outcome absence is not a current-completion defect.** `verifiedOutcome` is legacy
+   under ADR-140; a zero denominator means `not available`, not a finding. The retired key
+   `coverage:spur-task-check:verified-outcome-absent` fails the structure gate
+   (`finding-retired-key:<key>`). Current completion evidence is the tree-hash gate receipt plus
+   the review verdict, never a proposed revival of the proof-digest chain.
 
 ## Comparison semantics
 
@@ -185,17 +194,20 @@ Section 9 (Workflow and process improvements) stays additive report grammar: unp
 prose remains valid and gains no required fields. A candidate **projected** through the
 [environment-improvement lens](../../../references/environment-lens.md) is a bullet beginning with
 a backticked stable key (retro name in `<signal>` or owner surface, closed category first — e.g.
-`workflow:agents-md:navigation`) and carries four bold fields, the same names remediation options
-use:
+`workflow:agents-md:navigation`) and carries a **source finding** plus the four bold remediation
+fields. The source finding is mandatory and must name a key declared in section 4; an illustrative
+example is never an observation to copy into a report:
 
 ```text
-- `workflow:agents-md:navigation` — **owner surface:** `AGENTS.md` see_also. **expected impact:**
-  shorter file hunt. **verification method:** subsequent daily report key `resolved` or absent.
+- `workflow:agents-md:navigation` — **source finding:** `workflow:history-anatomy:observed-navigation`.
+  **owner surface:** `AGENTS.md` see_also. **expected impact:** shorter file hunt.
+  **verification method:** subsequent daily report key `resolved` or absent.
   **reversibility:** revert the pointer.
 ```
 
-A projected candidate cites its section-4 finding `key` when one exists. Reports remain
-proposal-only: no applied change, no diff, and no command the report claims to have run.
+A projected candidate with no cited section-4 finding fails the structure gate
+(`projected-candidate-without-source-finding:<key>`).
+Reports remain proposal-only: no applied change, no diff, and no command the report claims to have run.
 
 ## Evidence ledger
 

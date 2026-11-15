@@ -158,6 +158,14 @@ run-scoped path.
 The workflow never redirects that command's stdout into the same path; stdout is run-log output only.
 This prevents the raw report and fenced sidecar from racing into duplicated titles and unbalanced fences.
 
+**False-positive guards (task 1339).** Cache-waste SQL excludes only the first low-reuse assistant
+step after a known model change, preserving subsequent same-model offenders. The structure gate
+rejects `coverage:spur-task-check:verified-outcome-absent` as `finding-retired-key:<key>` — a zero
+legacy denominator is `not available`, and ADR-140's tree-hash receipt plus review verdict is not
+reconnected to the retired proof chain. A section-9 projected candidate must cite a section-4
+finding through `source finding:`; otherwise it fails as
+`projected-candidate-without-source-finding:<key>`.
+
 Correction is capped at two total passes (0690): the counter is shared by the structure-gate and
 validation FAIL edges, allowing a structure repair followed by one validation-driven repair. Each
 `correct` pass re-authors the candidate in place from the gate

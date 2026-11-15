@@ -394,8 +394,10 @@ by Duration`, `### Cache Re-Send Waste`. Tokens only (R3): `StepStat.costUsd` is
 waste counts assistant steps with fresh input > 100,000 tokens and < 10 % cache reuse
 (`CACHE_WASTE_MIN_INPUT_TOKENS` / `CACHE_WASTE_MAX_REUSE_FRACTION` in
 `packages/domain/src/analytics/forensic-query.ts`); NULL cache reads never compare true, so
-only measured low-reuse steps count. Pre-0581 artifacts state `not available` for all four
-sections (R5), never zeros.
+only measured low-reuse steps count. The first low-reuse assistant step after a known model
+change is excluded as expected cold-cache behavior; the immediately preceding assistant row in
+the same source/session determines the transition, and later same-model offenders still count.
+Pre-0581 artifacts state `not available` for all four sections (R5), never zeros.
 
 **True population + coverage rendering (HA-S1, ADR-080):** `analyze` records an additive
 optional `population` block on `HistoryArtifact` (`SelectionPopulation` — sessions, tools,
@@ -431,6 +433,13 @@ default report mode renders a `Verified outcome` section with `n/a` for unmeasur
 (R5); duplicate wbs rows dedupe (R8); `history analyze --json` carries the block unchanged.
 `HistoryServiceContext.taskLocator` (wired in `apps/cli/src/commands/history/shared.ts` (`makeHistoryService`) from
 `TaskLocator.forDirs`) gates derivation; derivation failure never fails the analyze batch.
+
+**Current completion reading (ADR-140, task 1339):** the proof-digest chain and `verifiedOutcome`
+are retired for new completions; historical analytics may still read legacy rows. A zero
+denominator therefore renders `not available`, never a history-anatomy defect or a proposal to
+reconnect new completions. The structure gate rejects the retired finding key
+`coverage:spur-task-check:verified-outcome-absent`; current completion evidence is the tree-hash
+gate receipt plus the review verdict.
 
 **Pairings renderer (task 0574, feature J8 R2/R3):** `renderPairings`
 (`packages/domain/src/analytics/render-pairings.ts`) — a pure `HistoryArtifact → string` mode

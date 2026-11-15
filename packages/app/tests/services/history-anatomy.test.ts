@@ -668,6 +668,33 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
         expect(r2.problems).toContain('finding-invalid-key-category:automated-checks');
     });
 
+    test('retired verified-outcome absence is rejected instead of becoming a remediation finding (1339)', () => {
+        const key = 'coverage:spur-task-check:verified-outcome-absent';
+        const r = checkReportStructure(findingBlock(fullFinding(key, 'coverage')));
+        expect(r.problems).toContain(`finding-retired-key:${key}`);
+    });
+
+    test('a projected candidate without a source finding is rejected (1339)', () => {
+        const report = findingBlock(fullFinding('workflow:history-anatomy:observed', 'workflow')).replace(
+            '## Workflow and process improvements\n\nbody',
+            '## Workflow and process improvements\n\n- `workflow:agents-md:navigation` — **owner surface:** `AGENTS.md`. **expected impact:** fewer reads. **verification method:** next report. **reversibility:** revert.',
+        );
+        expect(checkReportStructure(report).problems).toContain(
+            'projected-candidate-without-source-finding:workflow:agents-md:navigation',
+        );
+    });
+
+    test('a projected candidate citing a section-4 finding passes (1339)', () => {
+        const sourceKey = 'workflow:history-anatomy:observed';
+        const report = findingBlock(fullFinding(sourceKey, 'workflow')).replace(
+            '## Workflow and process improvements\n\nbody',
+            `## Workflow and process improvements\n\n- \`workflow:agents-md:navigation\` — **source finding:** \`${sourceKey}\`. **owner surface:** \`AGENTS.md\`. **expected impact:** fewer reads. **verification method:** next report. **reversibility:** revert.`,
+        );
+        expect(checkReportStructure(report).problems).not.toContain(
+            'projected-candidate-without-source-finding:workflow:agents-md:navigation',
+        );
+    });
+
     test('legacy pipe rows keep their field gate and gain the same closed first-segment rule', () => {
         const i = sections.indexOf('Findings');
         const body = [...sections]
@@ -680,6 +707,17 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
             .join('\n\n')}`;
         // Valid row: no finding problems.
         expect(checkReportStructure(withRow).problems.filter((p) => p.startsWith('finding-'))).toEqual([]);
+        // A legacy row remains a valid source for a projected candidate.
+        const projected = withRow.replace(
+            '## Workflow and process improvements\n\nbody',
+            '## Workflow and process improvements\n\n- `workflow:agents-md:navigation` — **source finding:** `workflow:category:key`. **owner surface:** `AGENTS.md`. **expected impact:** fewer reads. **verification method:** next report. **reversibility:** revert.',
+        );
+        expect(checkReportStructure(projected).problems).not.toContain(
+            'projected-candidate-without-source-finding:workflow:agents-md:navigation',
+        );
+        const retiredKey = 'coverage:spur-task-check:verified-outcome-absent';
+        const retired = withRow.replace('workflow:category:key', retiredKey);
+        expect(checkReportStructure(retired).problems).toContain(`finding-retired-key:${retiredKey}`);
         // Retro name as the first segment: fails by name instead of passing vacuously.
         const bad = withRow.replace('workflow:category:key', 'navigation:category:key');
         expect(checkReportStructure(bad).problems).toContain('finding-invalid-key-category:navigation');
