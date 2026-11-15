@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.13.0
+version: 1.14.0
 owner: Robin Min
-updated_at: 2026-10-04
+updated_at: 2026-11-14
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]

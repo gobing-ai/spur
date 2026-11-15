@@ -3,7 +3,7 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-13
+updated_at: 2026-11-14
 related: ["0889", "0898", "0949", "0976", "0958", "1090", "1111", "1147"]
 tags: [contract, planning, workflow]
 ---
@@ -75,13 +75,17 @@ YAML files and the 0041 enums can never drift silently.
 
 Validate: `spur workflow validate config/workflows/task-lifecycle.yaml` — full JSON-Schema
 validation resolves the `@gobing-ai/spur` workspace package and passes (no `--no-schema`
-needed). `feature-dev.yaml` uses the same resolvable ref.
+needed). `feature-dev.yaml` used the same resolvable ref before its retirement.
 
 **Task execution pipeline** — `config/workflows/task-pipeline.yaml` (design §6, ADR-022
 "orchestration is configuration": YAML over the existing engine, zero engine code). `kind:
-state-machine`, shape `precheck → implement [→ escalate] → test [→ test-fix ↔ test-recheck] → review
-→ approve(HITL) → verify → record → done` (precheck failure short-circuits to `failed`; `approve`
-routes to `failed` on rejection or `cancelled` on cancel). **Escalation pause (0933).** The implement
+state-machine`. The current D65/ADR-140 shape is `precheck → implement [⇄ escalate] → gate
+[⇄ remediate] → review → done | failed`. `gate` owns run/recheck visits, `review` owns
+verification and the approval decision point, and `done` performs the deterministic close; there
+are no separate `test`/`test-recheck`, `approve`, `verify`, or `record` states. Completion evidence
+is the tree-hash gate receipt plus the review verdict, not the retired ADR-071 proof-digest chain.
+
+**Escalation pause (0933).** The implement
 `agent.run` declares `escalationFile: .spur/run/<wbs>-question.md`: after a clean exit a non-empty
 file means the agent paused on an operator question instead of finishing, so the attempt succeeds
 with `data.escalated = true` and `requireDiff` (including the 0487 scope guard) is skipped for that
@@ -96,7 +100,7 @@ directly — status moves use the normal `spur task update <wbs> <status>` verb 
 through `spur task record` (0108) / `spur task update --section`, so the structural lifecycle guards
 apply; a hop that suppresses the lifecycle run record (`--no-lifecycle`, so a nested run cannot
 outlive the pipeline as a `running` orphan) still runs the target-aware structural `spur task check
---as <target>` gate inline (0980). `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
+--as <target>` gate inline (0980). `review` ends with an approval decision point rather than a separate `approve` state.
 
 **Rival pipeline — retired.** `config/workflows/task-pipeline2.yaml` (feature I6, task 0596) was a
 parallel file beside the live pipeline, adding a `residual-sweep` FSM stage reached only via the PASS
@@ -106,17 +110,15 @@ pipeline's **4**, so promotion would have raised cost against a goal of lowering
 is the single canonical task pipeline. Two-layer plan rendering is the batch driver's job
 (`plugins/sp/skills/spur-dev/references/execution-batch.md:247-254`).
 
-**D5 transition (ADR-071/072/076).** The proof-state invariant (ADR-071) requires remediation to be
-separated from a digest-bound quality → review → `--fix none` proof chain. The task pipeline half
-landed (task 0703, 2026-08-29): observe-only verify, entry-point capture, bounded remediation hop,
-proof-block evidence, and fail-closed completion guards. The docs pipeline remains open under task
-0704. The `task-pipeline2.yaml`
-candidate was retired without promotion (ADR-076, 2026-08-20) — the invariant it was meant to
-demonstrate stands on its own and governs any future candidate. Composition, action, gate, and artifact shapes are in
-[`workflow-composition-contract.md`](workflow-composition-contract.md).
+**D5 transition (historical ADR-071/072/076; superseded by ADR-140).** The former proof-state
+mechanism separated remediation from a digest-bound quality → review → `--fix none` proof chain.
+That mechanism is retained below as history, not as the current task-pipeline contract. The current
+pipeline uses a gate-computed git-tree receipt and one reviewer verdict; the former `verify` state
+is folded into `review`, and the former `record` state is `done`'s deterministic close. Composition,
+action, gate, and artifact shapes are in [`workflow-composition-contract.md`](workflow-composition-contract.md).
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
-`maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
+`qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
 `deferQualityGate` (default `"true"` = incremental gate: each task writes `DEFERRED` from the light
 tier — changed-scope lint, rules, typecheck, related tests, per-file coverage floor on changed files —
 and the `full` gate runs once per feature (`spur feature verify`) or per batch on the integrated base
@@ -125,26 +127,21 @@ ref; `"false"` = full gate on every task — ADR-124's 2026-10-07 clarification,
 `formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, `__hitlInput`, `maxEscalations`
 (default `2`), `escalationQuestion` (runtime-written from the question file), `deferFeatureSync`
 (default `"false"`; a parallel batch sets `"true"` to defer the post-record feature sync to batch
-integration — ADR-127), plus the proof-chain inputs (task 0703,
-completed by 0785 R2): `taskSpecPath` (task file resolved at `test` entry — `docs/tasks*` is excluded from the digest's
-git-tree half), `featureSpecPath` (linked feature spec resolved at `test` entry from the task frontmatter; empty
-for orphan tasks = legitimately omitted — a declared feature whose path fails to resolve fails closed),
-`proofDigest` (canonical capture at quality-gate entry, re-captured at
-`test-recheck`), and `proofDigestNow` (live re-capture compared at verify entry; re-set by the bound artifact
-registration before `record`). Three are command-shaped (the per-project override
-surface): `qualityGateCmd` (default `bun run spur-check`) is single-sourced across the soft
-probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `bun run format`) is the
-post-implement auto-format; `gateProbeCmd` (default `bun run lint`) is the cheap red-detector run before
-the full gate on `test-recheck` only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
+integration — ADR-127), and `taskSpecPath` (the task spec resolved at `gate` entry for review
+evidence). Three are command-shaped (the per-project override
+surface): `qualityGateCmd` (default `${spurBin:-spur} self exec check`) is single-sourced across the soft
+probe, the `/sp:dev-fixall` input and the recheck; `formatCmd` (default `${spurBin:-spur} self exec format`) is the
+post-implement auto-format; `gateProbeCmd` (default `${spurBin:-spur} self exec lint`) is the cheap red-detector run before
+the full gate on `gate` recheck visits only — a red probe records `FAIL` and skips the full gate (empty ⇒ pre-0587
 behavior, full gate every recheck). `review` is only ever entered through a **full green** `qualityGateCmd` —
 only the full gate writes `PASS` (task 0587 R3). In the default incremental mode
 (`deferQualityGate: "true"`) the gate guard also accepts the `DEFERRED` token the light tier wrote,
 and the feature/batch `full` gate is what issues `PASS`.
 `formatCmd` is invoked best-effort (`${vars.formatCmd} ; exit 0`) — a
-missing or failing formatter must not abort a run, because `qualityGateCmd` at `test` is the gate
+missing or failing formatter must not abort a run, because `qualityGateCmd` at `gate` is the gate
 that actually decides. **Implement-only pin (task 0454):** `implementAgent` is used only by the
 implement `agent.run` hop; override with `--vars '{"implementAgent":"pi-zai"}'` without retargeting
-review/verify. **Agent var precedence (task 0487 R4):** caller `vars.implementAgent` > caller
+review/remediate. **Agent var precedence (task 0487 R4):** caller `vars.implementAgent` > caller
 `vars.agent` > `agent.default` > YAML literal, resolved per var — `--vars '{"agent":"claude"}'`
 therefore reaches the implement hop too, where it previously lost to `agent.default`. Precheck logs
 the configured resolution, not the interactive session model: `auto` resolves through the configured
@@ -154,12 +151,11 @@ No session-model inheritance is implied. **Remediation policy (0777):** `mutatio
 body (or frontmatter). Automatic fixall requires both run and task policies to be `code`. `none`,
 `tests`, invalid or ambiguous declarations halt before agent dispatch, preserving the failed gate
 for scoped manual remediation. A permissive run override cannot weaken a restrictive task policy.
-**Precheck (deterministic and doctor-free since 0723):** precheck runs no
-`doctor.probe` and spawns no `spur agent doctor` subprocess on any execution surface — the inline
-driver executes host-side actions too, so `--agent inline` never implied a bypass. Executor
-liveness, routing, and native capability attestation stay fail-closed at the `agent.run` dispatch
-boundary (0706): precheck does not predict what dispatch proves. The `doctor.probe` built-in
-remains registered for idea-pipeline, which intentionally elects an executor at `start`.
+**Precheck:** `doctor.probe` resolves each declared role once at precheck (B7 R1/0894). This is a
+soft probe: failures mark its status file and stages use their own resolution; it does not abort the
+run. Executor liveness, routing, and native capability attestation remain fail-closed at the
+`agent.run` dispatch boundary (0706). The same built-in serves idea-pipeline and task-pipeline role
+resolution.
 **Size precheck (0454/0723, CLI-owned since 1002):** `spur task check <wbs> --precheck` runs
 the normal task check plus `evaluateTaskSize` from `packages/app/src/services/task-size-precheck.ts`
 and the evidence-channel precheck below. `DEFAULT_TASK_SIZE_LIMITS` supplies 10 R-items and 16
@@ -195,25 +191,21 @@ option by design (ADR-115) — deliberately no run-var knob. **Edit surface:** c
 `config/workflows/task-pipeline.yaml` only (see §2.3 monorepo path model) — no hand-sync to
 `.spur/workflows` or `apps/cli/config`.
 
-**Step→command mapping (ADR-026, amended by ADR-043):** `implement` → `/sp:dev-run --mode implement`
-(NOT `--mode full` — that drives this pipeline, so calling it here recurses); `test` → **the project
-quality gate**, a soft shell probe of `${vars.qualityGateCmd}` plus a bounded pure-slash
-`/sp:dev-fixall` loop — *not* `/sp:dev-unit`, which is the coverage gap-fill competency (router
-C3/C5). The gate run is tee'd to `.spur/run/${wbs}-test-gate.log`, and the `test-fix` hop passes
-`--gate-log .spur/run/${wbs}-test-gate.log` to `/sp:dev-fixall` so the fix agent starts at the
-captured finding's `file:line` anchor rather than re-deriving the failure (task 0482 R3);
-`review` → `/sp:dev-review` (→ `sp:super-reviewer` → `sp:code-verification` +
-`sp:functional-review` + `sp:code-improvement`; three dimensions — SECUA / functional /
-architecture, task 0227); `verify` → `/sp:dev-verify --fix none` (→ `sp:code-verification` verify
-mode) — observe-only per task 0703/ADR-071: a repairable non-PASS routes once through the bounded
-`verify → test-fix` edge (budget shared with the quality gate via
-`.spur/run/<wbs>-test-fix-attempt`), and `test-recheck` re-captures `proofDigest` so the re-entered
-quality → review → verify chain certifies a fresh state. Gate run output is a bounded summary
-(task 0772 R1): a green gate prints status, attempt count, log path, and byte size; a red gate
-prints at most the last 40 lines plus the log path — the durable full log on disk is never
-truncated, and the log path is also what `test-fix` consumes.
+**Step→command mapping (current D65/ADR-140):** `implement` → `/sp:dev-run --mode implement`
+(NOT `--mode full`, which would recurse into this pipeline); `gate` → the typed `command.gate`
+over `spur task gate <wbs> <mode>`, with the gate log at `.spur/run/${wbs}-gate.log`; `remediate`
+→ `/sp:dev-fixall` with that log and its bounded findings; `review` → `/sp:dev-review`, followed
+by `spur task verdict --from-answer` and the approval decision point; `done` → `spur task record`
+and the guarded `spur task update <wbs> done` close. `/sp:dev-unit` remains the separate coverage
+gap-fill competency. There is no separate verify stage or answer-lint step.
 
-**Completion gate (ADR-026; proof block per task 0703/ADR-071; binding + review evidence per task 0785):** the `verify`
+**Current completion gate (D65/ADR-140):** `done`'s onEnter first runs `spur task record
+<wbs> --solution-from-diff --transition testing --no-lifecycle`, then the guarded `spur task update
+<wbs> done --no-lifecycle`. The review verdict and the gate's own tree-hash receipt are the
+evidence; `done` runs the verb's target-aware `task check --as done` instead of re-asserting a
+proof digest.
+
+**Historical completion gate (pre-D65, superseded):** the `verify`
 step emits `.spur/run/<wbs>-verdict.json` whose `checks[]` carries a `proof-input-digest` row and whose
 `proof` block names the digest (`capturePoint: quality-gate-entry`) with per-stage results for
 `qualityGate`, `review`, and `verification` — each carrying the same digest value. Since 0785 R4 the
@@ -232,7 +224,7 @@ run's declared digest, validates the raw proof block against the authoritative R
 then writes the artifact ledger row — before any `task record` or status mutation, so an unbound or forged
 completion can never cross the lifecycle boundary. This is the spur-native replacement for rd3's default-on
 `--postflight-verify`.
-**Proof-input fingerprint scope (task 0817 R4):** `computeProofInputFingerprint` binds exactly three
+**Historical proof-input fingerprint scope (task 0817 R4; superseded for task-pipeline):** `computeProofInputFingerprint` binds exactly three
 components and deliberately nothing more, so an operator can tell a safe task-file edit from a
 digest-breaking one. The git-tree half hashes the working tree minus
 `DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*']`
@@ -248,7 +240,7 @@ markers are canonicalized before folding (`canonicalizeCheckboxMarkers`, 0958 R3
 at any indentation folds to `- [x]`, so ticking `- [ ]` → `- [x]` via `spur task update` cannot move the
 digest while the item's text still can (0958 R4); list bullets, non-checkbox indentation, and checkbox
 ordering remain spec content.
-**Task-input shape validation (task 0818 R4):** `readProofInputContents`
+**Historical task-input shape validation (task 0818 R4; superseded for task-pipeline):** `readProofInputContents`
 (`packages/app/src/workflow/proof-input-fingerprint.ts`) is the shared read boundary for the
 task-spec half and rejects a `taskFile` that is not a task specification before any digest input is
 derived: the body must carry the canonical `## <WBS>. <title>` heading
@@ -275,13 +267,12 @@ re-evaluates the artifact, applying check severity (`blocker` → FAIL, `major` 
 `minor`/`advisory` non-blocking; legacy no-severity `fail` → FAIL / `warn` → PARTIAL) and denying any
 PASS that is not internally consistent (a stored PASS whose coverage rows do not recompute to PASS,
 including a row-less PASS, is treated as non-PASS). `--force-done --reason` remains the sole auditable
-override; workflow routing (`verify → record/failed`) may route states but cannot weaken the final
-transition.
+override; workflow routing may route states but cannot weaken the final transition.
 **`task_run_links` pipeline linkage (kind=pipeline, R4):** resolved by task 0436 — `spur task record`
 now auto-creates the `pipeline` run-link when recording a PASS verdict to `done`, so no link-writing
 CLI verb is needed from a shell step.
 **Step timeout (ADR-026 amendment, 2026-06-23, task 0107; raised task 0398 R4; implement budget raised task 1108):** each `agent.run`
-step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/verify/test-fix and
+step carries a `timeoutMs` option — `${vars.stepTimeoutMs}` for review/remediate and
 `${vars.implementTimeoutMs}` for the heavier implement hop, defaulting to `"1800000"` (30 min) and
 `"2700000"` (45 min, task 1108 — a reasoned default, not a proven bound) respectively. The
 implement budget governs subprocess surfaces; inline dispatch passes it to the host only where the
@@ -397,14 +388,14 @@ pinning the closed catalog and the event map (R8).
 (R1): the action bypasses every inherited session knob (`__agentSessionDir`, `__agentSessionId`, the
 `__agentSession` latch), dispatches into a per-node `fresh-<node>` session directory with no session
 id, and publishes **only** routing evidence on success — never its own session identity — so a
-review/verify hop cannot contaminate a later implement/test-fix resume. Every successful dispatch
+review/remediate hop cannot contaminate a later implement/remediate resume. Every successful dispatch
 persists bounded routing evidence under the workflow var `__agentRouting_<node>` (R3):
-`{"agent": <resolved executor>, "model?"}` — identifiers only. The task pipeline's `review` and
-`verify` steps declare `freshSession: true` and route by `role: reviewer` alone (R2/R7): the
-implementation executor pin is gone, so review/verify resolve through the executor registry and the
+`{"agent": <resolved executor>, "model?"}` — identifiers only. The task pipeline's `review`
+step declares `freshSession: true` and routes by `role: reviewer` alone (R2/R7): the
+implementation executor pin is gone, so the review resolves through the executor registry and the
 reviewer's context comes only from the persisted task spec, the recorded diff, and run artifacts.
 Risk policy (R4): a task's frontmatter priority (extracted to `taskPriority` at the quality-gate
-stage) decides whether the P0/P1 distinct-executor rule applies — review/verify must then resolve a
+stage) decides whether the P0/P1 distinct-executor rule applies — the review must then resolve a
 DIFFERENT executor spec than `__agentRouting_implement` records; lower priorities (and unknown
 priority) require fresh context only, with executor reuse allowed. Distinctness is evaluated AFTER
 routing and BEFORE dispatch via the pure `review-independence` module (R5): missing implementation
@@ -418,9 +409,8 @@ the attempt's own `{agent, executor?, model?}` and a refusal is terminal before 
 fails before the dispatch chain begins. The final `__agentRouting_<node>` writeback records the
 successful invocation's executor profile and model, so a replaced attempt is named as replaced rather
 than as the agent that merely resolved first.
-Composition (R8): the live pipeline itself is checked — a proof-chain test fails if review/verify
-re-pin an executor, lose `freshSession: true`, or drift from `compareExecutorWith: implement`, and
-the composition baseline digest regenerates with every pipeline change.
+Composition (R8): the live pipeline contract test fails if the review re-pins an executor, loses
+`freshSession: true`, or drifts from `compareExecutorWith: implement`.
 
 **Escalation packets (ADR-098, task 0709, R1–R3).** A blocked or failed run emits exactly ONE
 versioned escalation packet — a pure, deterministic projection over evidence that already exists
@@ -460,7 +450,7 @@ with a named reason. Artifacts resolve relative to the launch workdir and git HE
 through the ProcessExecutor (a probe failure refuses — never an empty-string fallback); an engine
 run with no associated checkpoint remains a valid resume.
 
-**Verifier-owned verify answer file (task 0726, R3).** The verify step's `agent.run` declares
+**Historical verifier-owned verify answer file (task 0726, R3; superseded by D65 and the slim-harness refactor).** The verify step's `agent.run` declares
 `expectFile` instead of `answerFile`: the verifier writes `.spur/run/<wbs>-verify-answer.txt` itself
 (append-progress authoring — `Verdict: PARTIAL` first, one complete requirement/AC row at a time,
 first verdict line replaced only after all rows are certified), and the host checks post-exit
@@ -506,10 +496,10 @@ terminal as `done` (backward compatible).
 | Required section          | Owning step                    | When                                                                                                                                                                                                                                |
 | ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Solution` (change-map)   | `/sp:dev-run --mode implement` | After writing code — the implement agent authors a markdown table of changed files with `file:line` + `what/why`; out-of-repo evidence cites the frozen external form `Evidence: @scope/pkg `src/file.ts` line N` (package and line outside the backticks — the L4 done gate emits the exact external-evidence replacement for bare `@scope/pkg:line` anchors in its failure message, fail-closed). Idempotent (upsert via `replaceSection`); writes only when the section is bare (absent, empty, or a placeholder). |
-| `Testing` (verdict table) | `record`                       | Post-verify — transcribes the per-requirement verdict + evidence from `.spur/run/<wbs>-verify-answer.txt` and `.spur/run/<wbs>-verdict.json`.                                                                                       |
-| `Review` (P1–P4 findings) | `record`                       | Post-verify — transcribes SECU findings from the verify output.                                                                                                                                                                     |
+| `Testing` (verdict table) | `done` close                   | Post-review — transcribes the per-requirement verdict + evidence from the review verdict at `.spur/run/<wbs>-verdict.json`.                                                                                       |
+| `Review` (P1–P4 findings) | `done` close                   | Post-review — transcribes SECU findings from the review output.                                                                                                                                                                     |
 
-The `record` step provides a **Solution safety-net**: if the implement step didn't write
+`spur task record` provides a **Solution safety-net**: if the implement step didn't write
 `## Solution`, `record` backfills a minimal change-map from `git diff -U0` against the resolved run
 base — an explicit `solutionDiffBase` wins, then the precheck's `.spur/run/<wbs>-base.sha` capture,
 then `HEAD` — citing the first changed line per file (untracked files, which `git diff <base>` never
@@ -521,34 +511,16 @@ auto-generated change-map header (task 1090). A `sectionIsBare` predicate (in
 empty/whitespace, or placeholder sections — the single reusable mechanism behind all three
 writes.
 
-**Done gate:** the `record → done` transition runs a shell guard `spur task check <wbs>` plus the
-proof-block re-assertion (`.verdict = PASS` and `.proof.digest = $proofDigest`, task 0703 R5) with
-an `always` `record → failed` sibling — mirroring the `verify → record` gate exactly. The guard
-passes because every required section was guaranteed upstream and the evidence still names the
-captured digest; a genuinely non-compliant task routes to `failed` instead of a silent bad `done`.
+**Done gate (current):** `done`'s onEnter performs the former `record` close, then runs `spur task
+update <wbs> done --no-lifecycle`; the verb's target-aware `task check --as done` is the completion
+guard. No `record → done` proof-block assertion remains.
 
-**Planning pipeline** — `config/workflows/planning-pipeline.yaml` (task 0088; design §6). Front-half
-of the dev workflow: `phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff`.
-`kind: state-machine`, `vars: { slug, profile, feature }`, same engine as `task-pipeline.yaml`
-(ADR-022 — zero new engine code). Companions the `sp:spur-plan` skill (how-to-think for the
-non-deterministic steps: phasing judgment, feature-ID derivation, design-doc authoring). HITL gates
-use `hitl.confirm`, skippable with `--vars '{"profile":"auto"}'` (Q4). Doc-write discipline (Q3):
-auto-writes derived docs (`docs/design/*`, `docs/features/*`); **stages** `02_ROADMAP`/`04_DESIGN`
-index edits to `docs/plans/` for human commit. Every authoritative-doc touch invokes `sp:doc-evolve`
-(§5 sync triggers). Terminal at `handoff` (drafted feature list → `sp:spur-dev` steps 7–12) or
-`cancelled`. Validates against the workspace state-machine schema.
-
-**D5-K caller migration landed (task 0604; ADR-072 still Proposed).** Planning is absorbed into
-the canonical idea/dev-plan path: `/sp:dev-plan` routes through `idea-pipeline.yaml`, the scaffold
-manifest no longer carries a planning row, `listBundledProjectSeedFiles` excludes
-`workflows/planning-pipeline.yaml` (`packages/config/src/bundled-config.ts` —
-`RETIRED_PROJECT_SEEDS`), and no skill, README, or help table points at it. A fresh `spur init`
-therefore never receives a second planning graph.
-
-The **source file is deliberately retained** at `config/workflows/planning-pipeline.yaml`: deleting
-it is gated on operator acceptance of ADR-072, which is also what resolves ADR-029's deferred
-consolidation question. Until then it stays schema-valid and schema-valid (composition baseline retired, task 0767),
-but nothing ships or invokes it.
+**Planning pipeline — removed (task 0872, ADR-072/075).** The historical front-half graph was
+`phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff`. Planning is absorbed
+into the canonical idea/dev-plan path: `/sp:dev-plan` routes through `idea-pipeline.yaml`, the
+scaffold manifest excludes `workflows/planning-pipeline.yaml` through `RETIRED_PROJECT_SEEDS`, and
+no skill, README, or help table points at it. A fresh `spur init` therefore never receives a second
+planning graph.
 
 <a id="76-task-dtos-orpc-contract"></a>
 
@@ -645,6 +617,7 @@ artifact via one of two **mutually exclusive** exits:
 > `spur task create` + intake; its use cases are absorbed by `dev-brainstorm --skip-discovery --task`
 > (same result, seeds Background/Requirements/Plan). Operation count dropped 12 → 11.
 
-**Pipeline step→command mapping (ADR-026):** `implement` → `/sp:dev-run --mode implement`, `test` → `/sp:dev-unit`,
-`review` → `/sp:dev-review`, `verify` → `/sp:dev-verify` (§7.5). The remaining commands are
-operator-invoked, not pipeline-driven.
+**Pipeline step→command mapping (current):** `implement` → `/sp:dev-run --mode implement`,
+`gate` → the typed quality gate, `review` → `/sp:dev-review` plus verdict derivation, and `done`
+→ the deterministic record/transition close (§7.5). `/sp:dev-unit` is not the pipeline gate. The
+remaining commands are operator-invoked, not pipeline-driven.

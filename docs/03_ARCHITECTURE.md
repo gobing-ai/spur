@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.78.0
+version: 1.79.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-10
+updated_at: 2026-11-14
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -176,7 +176,7 @@ subscription; commands are displayed without dispatch. Shape and failure behavio
 
 ### Project server ownership
 
-Server startup acquires an application-owned atomic project lifetime claim before database/runtime boot, retains it until runtime shutdown and the separately owned lazy server-context database close complete, and uses the registry guard to refuse an already-live older project server. CLI serve dispatch bypasses the CLI database/runtime boot. The owned desktop child has a private inherited JSON IPC channel for startup errors, Windows graceful shutdown, and parent-disconnect cleanup. Renderer code cannot access this process channel.
+Server startup acquires an application-owned atomic project lifetime claim before database/runtime boot, retains it until runtime shutdown and the separately owned lazy server-context database close complete, and uses the registry guard to refuse an already-live older project server. CLI serve dispatch bypasses the CLI database/runtime boot.
 
 ## 3. CLI Architecture (`apps/cli`)
 
@@ -281,18 +281,20 @@ file, routes to the pipeline's `escalate` `hitl.input` gate, and resumes through
 `spur workflow continue --answer-text <text>` — bounded by the pipeline's `maxEscalations` var. The
 question file is deleted before dispatch, so a stale question can never pause a later run. A nested
 `spur workflow run` is refused while it inherits `SPUR_WORKFLOW_RUN_ACTIVE=1` from the running
-parent; the feature lifecycle's `onEnter` clears the marker for its one bounded, definition-pinned
-child (feature verification), and every other nested invocation stays refused. Exact
+parent, with no feature-verification exception. Entering feature `verifying` calls the `spur feature
+verify` verb directly rather than starting a nested workflow; it clears only `__runId`, so the verb
+opens and finalizes its own receipt run instead of inheriting the outer run (ADR-142). Exact
 variable and resume contracts:
 [planning workflows](design/planning-workflow-contracts.md) and
 [workflow commands](design/cli-contracts.md).
 
 ### 6.3 Interactive task-pipeline control inversion (ADR-047 amendment)
 
-Interactive task pipelines are controlled by the host session interpreting the canonical YAML.
-Deterministic nodes still call their existing application/CLI owners; eligible model stages use
-the host's supported execution surface. Operator decisions stay host-owned. Headless execution
-uses the workflow service and subprocess runner.
+Interactive task pipelines run on the engine: `spur workflow run` returns one work item per model
+stage, the host session performs it, and `spur workflow continue` advances the same engine run.
+The host never re-interprets workflow YAML (ADR-140). Deterministic nodes still call their existing
+application/CLI owners; eligible model stages use the host's supported execution surface. Operator
+decisions stay host-owned. Headless execution uses the workflow service and subprocess runner.
 See [execution selector contract](design/dev-agent-flag-and-dogfood-skill.md).
 
 ### 6.4 Workflow layers (ADR-113)
@@ -440,7 +442,7 @@ mechanisms (ADR-020/023), not a separate CLI noun.
   read-modify-write.
 - **The DB holds only derived data** (lifecycle events, run links, caches) — mirroring ADR-008's
   raw-stays-in-files principle. Deleting the DB loses no planning state.
-- **Generated artifacts** (`kanban.md`, `docs/features/INDEX.md`) are outputs of `refresh`
+- **Generated artifacts** (`docs/features/INDEX.md`) are outputs of `refresh`
   commands, never hand-edited, never inputs.
 - The task/feature domain is **Spur-local** (ADR-006 division: it is Spur's own domain glue, not a
   reusable engine). The generic Gherkin-subset validator is the exception — it is upstreamed to
@@ -939,10 +941,9 @@ Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGE
 
 D5 implemented an existing-seam, infrastructure-first migration. Workflow definitions remain the
 orchestration graph; they do not become a second application layer. Shared deterministic behavior
-is owned behind existing application and persistence interfaces. The canonical task and docs
-pipelines enforce the final-state proof invariant described in ADR-071 and §20.3.
-Since ADR-140 (accepted 2026-10-19, feature D65) that invariant is carried by a tree-hash gate
-receipt instead of the proof-digest chain; §20.3 is kept as the D5 design record.
+is owned behind existing application and persistence interfaces. The canonical task pipeline's
+unchanged-tree evidence invariant is carried by a gate-computed tree-hash receipt and one reviewer
+verdict (ADR-140). `docs-pipeline.yaml` is retired, and §20.3 is kept only as the D5 design record.
 
 ### 20.1 Options and decision
 
@@ -966,8 +967,8 @@ workflow YAML
 resolved workflow
   └─ static contract checker (composition baseline retired, task 0767; facts read live via extractResolvedWorkflowFacts) ──→ field-level graph/effect/artifact/caller diff
 
-repository snapshot + normative task/feature sections
-  └─ ProofInputFingerprint ──→ digest carried by gate/review/verify evidence
+repository working tree (excluding task/feature evidence)
+  └─ captureGateGitTree ──→ tree hash carried by the gate receipt and review verdict
 ```
 
 The live contract checker inspects resolved graph, callers, terminal states, artifact owners,
@@ -978,13 +979,11 @@ executor. Unknown or extension-defined actions fail closed as `stateEffect: may-
 owning capability declares and enforces a narrower contract. An evidence write is proof-neutral only
 when its target is declared, confined, and tagged with the current proof-input digest.
 
-`ProofInputFingerprint` deepens the existing alternate-index snapshot code used by `agent.run`. It
-hashes the working repository outside configured task/feature folders, then combines that tree with
-a canonical projection of normative corpus input: task identity/dependencies plus Background,
-Requirements, Acceptance Criteria, Design, and Plan; feature identity plus Goal, Scope, and
-Acceptance Criteria. Derived Review/Testing/Solution evidence, lifecycle status, timestamps, and
-`.spur/run` artifacts are not proof inputs; their writers must be explicitly declared as evidence
-writes. A write outside those confined projections changes the digest and invalidates the proof.
+The former `ProofInputFingerprint` and per-action proof-effect declarations are legacy for the
+canonical task pipeline. They remain relevant to feature-verification receipts and legacy/custom
+workflow compatibility, but current task completion does not re-capture or compare them. The gate
+computes its own git tree through `captureGateGitTree`, excluding `docs/tasks*` and `docs/features*`;
+the review verdict is the other completion input (ADR-140).
 
 `command.gate` owns bounded attempts, process execution, PASS/FAIL normalization, and persisted
 attempt evidence. It accepts literal executable/args only and delegates directly to
@@ -1050,10 +1049,10 @@ Enforceable invariants:
 
 ### 20.4 Canonical topology and migration
 
-Separate definitions remain where lifecycle or rollback boundaries differ: docs, wrap-up,
-idea/design review, task execution and integration-HEAD PR review. The task pipeline is the
-canonical task graph; retired duplicate candidates have no active callers.
-Agent stages select roles; coordination targets exact occupants. See
+Separate definitions remain where lifecycle or rollback boundaries differ: task execution, idea,
+wrap-up, history anatomy and the task/feature lifecycle state machines. The task pipeline is the
+canonical task graph; docs, planning, integration PR-review and other retired candidates have no
+active callers. Agent stages select roles; coordination targets exact occupants. See
 [workflow composition](design/workflow-composition-contract.md).
 
 ## 21. Workflow Progress Projection (built — ADR-070)
@@ -1096,10 +1095,10 @@ then follows events strictly after the snapshot. A correlated event only wakes a
 changes progress directly. On timeout, disconnect, or event gap, bounded polling re-queries the same
 sources. Duplicate or lost events therefore affect latency, not truth.
 
-Inline execution remains controlled by the host-session driver. A record-only journal writes the
-same run/phase/transition/action observation shapes through the existing persistence interface, but
-cannot execute an action or request a transition. Engine-driven and inline runs consequently share
-one read model without creating a competing controller.
+A host-executor run is an ordinary paused engine run: the host performs returned work items and
+calls `spur workflow continue`; it does not maintain a second YAML interpreter or record-only
+journal. Engine and host-executor runs therefore share one persistence and read model without a
+competing controller (ADR-140).
 
 Enforceable invariants:
 
@@ -1139,7 +1138,7 @@ Production autonomy composes existing owners:
 ~~~text
 agent.run → role/executor resolution → capability attestation
   → typed usage/budget decision → failure transition → bounded escalation artifact
-repository state D → review(D) → read-only verify(D) → verified result(D)
+gate-computed git tree → tree-hash gate receipt + reviewer verdict → guarded done
 checkpoint/index → freshness check → resume or ignore → confined retention cleanup
 ~~~
 
@@ -1236,11 +1235,12 @@ Feature D64's three choices are implemented and each is additive or opt-in, so t
 catalogue of §20/§27 keeps running unchanged by default.
 
 - **Check receipts (ADR-124).** One two-tier primitive owns task-local checking — `light` accumulates
-  during development, `full` runs once at the task quality boundary. Its result is a receipt bound to
-  the same `ProofInputFingerprint` the feature verification receipt uses: a later stage reuses a PASS
-  receipt only while that digest still matches and otherwise re-runs `full`, and stages never invoke
-  gate commands directly. Check truth therefore has one writer per task, and a stale receipt can only
-  cost a re-run, never correctness. `bun run spur-check` stays the `full` chain, ADR-119 keeps
+  during development, `full` runs once at the task quality boundary. Its receipt carries the git tree
+  the gate computes for itself (`captureGateGitTree`, excluding `docs/tasks*` and `docs/features*`):
+  a later stage reuses PASS only while that tree hash still matches and otherwise re-runs `full`, and
+  stages never invoke gate commands directly. Check truth therefore has one writer per task, and a
+  stale receipt can only cost a re-run, never correctness. Feature-verification receipts retain
+  their own digest chain (ADR-142). `bun run spur-check` stays the `full` chain, ADR-119 keeps
   repo-wide checks feature-scoped, and a public `spur check` verb needs separate consent.
 - **`decide` action (ADR-125).** A first-class non-pausing action wraps the upstream DecisionMaker
   behind `workflow.decideDecisionMaker` (default off), writes value, confidence, backend, degraded
@@ -1329,11 +1329,10 @@ and only the pointer's recorded `{host, sessionId}` owner may append the `sessio
 remove it, so a nested run reuses the parent ledger without being able to close it. Row and
 session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
 
-**Accepted target, migration pending:** ADR-130's 2026-10-11 amendment keeps this standalone
-capture behavior but places its cores/helpers in `plugins/sp/lib`, tests in `plugins/sp/tests`,
-and only registered hook/host-extension entries in `plugins/sp/hooks`. Reusable noun behavior
-remains application-owned; generated plugin bundles are temporary compatibility exceptions,
-not a second persistence owner. Current paths above describe the implementation before cutover.
+**Current placement (ADR-130, implemented):** capture/guard cores and pure helpers live in
+`plugins/sp/lib`, tests in `plugins/sp/tests`, and registered hook entries in
+`plugins/sp/scripts/hooks`; `plugins/sp/hooks` contains only `hooks.json`. Reusable noun behavior
+remains application-owned. There is no pending migration or second persistence owner.
 Placement contract: [harness surface governance](design/harness-surface-governance.md) §2.
 
 ## 32. Disposable Run Storage and Durable Evidence (ADR-131; E71)

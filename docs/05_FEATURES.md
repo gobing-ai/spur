@@ -2,10 +2,10 @@
 doc: 05_FEATURES
 owns: STATUS — feature decomposition + state (✅ / 🔶 / ⏳ / 💤)
 authority: derived
-version: 1.6.0
+version: 1.7.0
 derived_from: [01_PRD, 02_ROADMAP, 04_DESIGN]
 owner: Robin Min
-updated_at: 2026-09-09
+updated_at: 2026-11-14
 read_before: citing or changing a feature's state
 edit_rules: 99 §6.6
 sync: [T4, T9]

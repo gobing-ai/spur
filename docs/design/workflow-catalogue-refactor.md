@@ -3,7 +3,7 @@ kind: design
 title: "Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional"
 status: implemented
 created_at: 2026-09-23
-updated_at: 2026-10-10
+updated_at: 2026-11-14
 related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946", "0976", "1111"]
 tags: [system, D64, workflow]
 ---
@@ -80,19 +80,19 @@ One check primitive with two tiers, replacing ad-hoc gate invocations across sta
 | Tier | When | Scope | Reuse |
 | --- | --- | --- | --- |
 | `light` (accumulative) | after each implement/fix edit | changed files: format, lint, typecheck of touched workspaces, related tests, plus the `test-pre-check` and `test-post-check` rule presets | skip any sub-check whose receipt fingerprint matches |
-| `full` (comprehensive) | once at the task quality boundary (`test`) | task-local chain = today's `bun run spur-check` | review/verify/record read the receipt; never re-run |
+| `full` (comprehensive) | once at the task quality boundary (`gate`) | task-local chain = today's `bun run spur-check` | review/done read the receipt; never re-run |
 
 **Receipt.** `.spur/run/<wbs>-check-receipt.json`, schema `check-receipt/v1`:
 `{schemaVersion, wbs, runId, tier, inputDigest, checks:[{id, cmd, status, durationMs, logPath}], status, completedAt}`.
-`inputDigest` is the shared `ProofInputFingerprint` (task markdown + git tree of tracked sources) —
-the same engine as the feature verification receipt; no second fingerprint. The plugin script cannot
-value-import it (standalone contract): it takes the digest the pipeline already passes as
-`env.proofDigest` (captured by `proof.fingerprint`).
+`inputDigest` is the git tree the gate computes for itself with `captureGateGitTree` (a throwaway
+index excluding `docs/tasks*` and `docs/features*`). ADR-140 retired the caller-supplied
+`proofDigest` chain: the plugin never computes this value and no caller supplies it, so a corpus
+edit cannot invalidate a code PASS.
 
 **Reuse rule.** A stage needing a check reads the receipt: `status=PASS` **and** `inputDigest` equals
-the current fingerprint → reuse (trace row `check.reused`). Otherwise run `full`. The invariant
-"`review` is entered only after a green full gate" (task-pipeline vars comment) is preserved by
-construction: only `full` writes the receipt consulted at `review`.
+the current gate-computed tree hash → reuse (trace row `check.reused`). Otherwise run `full`. The
+invariant "`review` is entered only after a green full gate" is preserved by construction: only
+`full` writes the reusable receipt consulted at `review`.
 
 **Deferred tier (task 1111, opt-in).** `quality-gate.ts deferred` serves the opt-in parallel-batch
 policy (`deferQualityGate: "true"`, `--defer-gate`): it runs the light tier for per-task early
@@ -100,8 +100,8 @@ feedback and writes `DEFERRED` (light PASS) or `FAIL` to `<wbs>-test-gate.status
 The invariant above is therefore preserved at **batch** scope under that policy: the one full gate
 runs on the integrated base ref over the merged slices, and nothing is reported PASS without it.
 ADR-124's dated clarification owns the scope change; `flag-glossary.md#flag-defer-gate` owns the
-flag. The `test` state's proof-chain entry (`proof.fingerprint`, ADR-071) is untouched by
-deferral — only the final gate command changes.
+flag. ADR-140 removed the `test` state's proof-chain entry; deferral changes only the gate command
+and where the full-tree PASS is established.
 
 **Writers (0976).** `run` and `recheck` both persist the full-tier receipt for the digest they
 actually evaluated; a no-progress skip writes nothing, so a skip can never launder a FAIL receipt
@@ -115,7 +115,7 @@ and when slash commands (`/sp:dev-fixall`) or skills are composed in. `bun run s
 the `full` task-local chain; `spur-check-feature` stays the ADR-119 feature-scoped pass. A public
 `spur check` verb is **out of scope** unless separately consented.
 
-**Removal.** `verify`, `record` and `precheck` already never run the gate (audit 2026-09-23).
+**Removal.** `review`, `done` and `precheck` never run the gate as a duplicate (audit 2026-09-23).
 The real duplicates are (a) model-stage checklists that tell review agents to re-run `bun run test`
 (`gate-checklists.md`, `secu-review.md`) — they read the receipt instead — and (b) a `test-recheck`
 full gate after a fix pass that changed no tracked source (digest equals the last FAIL receipt),

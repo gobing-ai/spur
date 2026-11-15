@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.95.0
+version: 1.96.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-10-26
+updated_at: 2026-11-14
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -107,7 +107,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | System-event ingestion and presentation | [observabilities-module-polish.md](design/observabilities-module-polish.md) |
 | Task creation and readiness | [task-creation-readiness.md](design/task-creation-readiness.md) |
 | Historical forensics measurement (2026-08-17; evidence, not a current contract) | [sqlite-forensics-token-time-per-step.md](design/sqlite-forensics-token-time-per-step.md) |
-| Gate bounds, verdict replay, and host-pause attribution (1319) | [gate-bounds-and-pause-attribution.md](design/gate-bounds-and-pause-attribution.md) |
+| Gate bounds and host-pause attribution (1319) | [gate-bounds-and-pause-attribution.md](design/gate-bounds-and-pause-attribution.md) |
 
 Existing section headings below forward to their detailed owners so historical references remain valid.
 

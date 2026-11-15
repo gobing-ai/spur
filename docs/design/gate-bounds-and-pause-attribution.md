@@ -1,14 +1,14 @@
 ---
 kind: design
-title: "Gate bounds, verdict replay, and host-pause attribution"
+title: "Gate bounds and host-pause attribution"
 status: implemented
 created_at: 2026-11-08
-updated_at: 2026-11-08
+updated_at: 2026-11-14
 related: [D3, "1319", "1127", "1239", "1240"]
 tags: [contract, D3, quality-gate, workflow, verdict]
 ---
 
-# Gate bounds, verdict replay, and host-pause attribution
+# Gate bounds and host-pause attribution
 
 **Feature:** D3 · **Task:** 1319 · **Status:** implemented in the same commit as this satellite.
 

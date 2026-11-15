@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.72.0
+version: 1.73.0
 owner: Robin Min
-updated_at: 2026-10-26
+updated_at: 2026-11-14
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -218,6 +218,11 @@ its detailed contract belongs in the linked owner. It is not precedent for new t
 - **Decision:** Keep verification in `sp:code-verification`; gate `verify → record` on a PASS verdict and `record → done` on `spur task check`. Pipeline implementation invokes implement-only mode, never recursively drives the pipeline.
 - **Why:** Verification is independent, and persisted verdicts plus structural checks provide deterministic postflight gates.
 - **Detail:** `03`; `04 §7.5`; verdict schema.
+
+**Current reading (ADR-140, D65):** verification is part of `review`, and the former `record`
+state is `done`'s deterministic close. A review verdict plus the gate-computed tree-hash receipt
+and the target-aware `spur task check --as done` carry the gate; the `verify → record` / `record →
+done` state names above are historical.
 
 ## ADR-027: One Spur Config Loader with Portable Core
 
@@ -1561,6 +1566,10 @@ metrics derive from existing records and report missing attribution as null with
 
 **Clarification (task 0754).** Completion requires the certifying run’s current proof binding; missing or stale binding is refused.
 
+**Current reading (ADR-140):** `verifiedOutcome` and its task proof-digest chain are retired for new
+completions. Historical analytics may still read legacy proof artifacts; current completion evidence
+is the tree-hash gate receipt plus the review verdict.
+
 ## ADR-101: History Refresh Uses Process Isolation and Database Single-Flight
 
 **Status:** Accepted · **Date:** 2026-08-29
@@ -1977,6 +1986,10 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
   unaffected and is now the only confidence a completion boundary reads. Do not re-add the asserted
   line on the strength of the sentence above.
 
+**Current reading (2026-11-13):** the task-side correction above is also historical. ADR-140 retired
+the task proof-digest chain, and the ADR-138 amendment retired findings-disposition scans. The task
+boundary is now a green gate receipt for the tree plus one reviewer verdict.
+
 ## ADR-120: Environment Variables Are a Restricted External Surface Behind the ts-utils Gateway
 
 - **Status:** Accepted · **Date:** 2026-09-16
@@ -2109,6 +2122,10 @@ launched with `ackLowConfidence=true`); the feature boundary now carries the sam
   keeping the full gate per task with more caching (the fingerprint changes on every task, so
   reuse rarely hits). The coverage floor is unchanged. The review-verdict step also stops
   replaying tests: the gate receipt for the same tree is the test evidence.
+- **Current reading (ADR-140):** task receipt identity is the git tree the gate computes for itself
+  (`captureGateGitTree`), not the caller-supplied `ProofInputFingerprint` described above. Feature
+  verification receipts retain their own digest chain (ADR-142). The `proof.fingerprint` /
+  `env.proofDigest` task-pipeline details above are historical.
 - **Retains:** ADR-119 (repo-wide checks stay feature-scoped), ADR-118 (stage outcomes).
 - **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.
 
@@ -2334,10 +2351,6 @@ owner split this entry established.
 - **Current reading (2026-10-19):** features P, P1 and P11 are done; shipped workflows call catalog
   decisions (`config/decisions/`, e.g. `idea-pipeline.yaml`, `wrapup-pipeline.yaml`, `task-pipeline.yaml`
   gate/review) and no inline `decide` remains in `config/workflows/`. The staging below is historical.
-- **Current reading (2026-10-19):** features P, P1 and P11 are done. Shipped workflows call
-  catalog decisions from `config/decisions/` (e.g. `idea-pipeline.yaml`, `wrapup-pipeline.yaml`,
-  `task-pipeline.yaml` gate/review), and no inline `decide` remains in `config/workflows/`. The
-  staging described above and below is historical.
 - **Consequence:** two decision vocabularies (catalog and inline `decide`) coexist until P1
   completes; P1's end state is no inline decide in shipped workflows, with inline options
   deprecated for one release. An unregistered configured maker is an error, never a silent

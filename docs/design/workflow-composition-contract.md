@@ -3,7 +3,7 @@ kind: design
 title: "Workflow composition contract"
 status: implemented
 created_at: 2026-08-19
-updated_at: 2026-09-27
+updated_at: 2026-11-14
 related: [D9, F96, "0603", "0604", "0606", "0608", "0610", "0703"]
 tags: [contract, D9, F96, workflow]
 ---
@@ -11,17 +11,20 @@ tags: [contract, D9, F96, workflow]
 # Workflow composition contract
 
 **Area:** workflow definition composition, deterministic action ownership, pipeline promotion, and run artifacts.
-**Status:** composition/projection infrastructure built; the digest-bound proof chain shipped for `task-pipeline` (ADR-071; tasks 0703/0769) — the docs half retired with `docs-pipeline.yaml` (task 0866). Physical path confinement, spec-complete proof inputs, honest review-completion evidence, and bound artifact registration at record entry landed (task 0785). The residual-completeness scan (F96) was retired with the slim-harness refactor.
+**Status:** composition/projection infrastructure built. The ADR-071 digest-bound task proof chain
+is superseded by ADR-140: the canonical task pipeline now uses a gate-computed git-tree receipt and
+one reviewer verdict. Physical path confinement and unbound artifact registration remain live; the
+residual-completeness scan and answer-lint machinery were retired with the slim-harness refactor.
 **Authority:** derived; decisions live in `00_ADR`, module boundaries in `03_ARCHITECTURE`.
 
 ## Target workflow inventory
 
 | Workflow | Lifecycle boundary | Disposition |
 | --- | --- | --- |
-| `task-pipeline.yaml` | one task from precheck through recorded completion | canonical; absorb only a proof-preserving pipeline2 delta |
+| `task-pipeline.yaml` | one task from precheck through recorded completion | canonical D65 graph; `task-pipeline2.yaml` was deleted under ADR-076 and no delta remains to absorb |
 | ~~`task-pipeline2.yaml`~~ | *(deleted 2026-08-20)* | **removed under ADR-076** — unreferenced duplicate declaring a 5th model query against the canonical pipeline's 4; deleted rather than promoted |
-| `planning-pipeline.yaml` | feature planning front half | ~~absorb into the canonical idea/dev-plan path, then delete after caller parity~~ **removed (task 0872, commit 2dc86579a, ADR-072/075)** — superseded by the `task-pipeline` planning stages; recorded in the candidate record's `retirements[]` with 3 real terminal runs retained in history |
-| `idea-pipeline.yaml` | idea discovery, design review, and decomposition | keep separate; migrate last |
+| `planning-pipeline.yaml` | feature planning front half | ~~absorb into the canonical idea/dev-plan path, then delete after caller parity~~ **removed (task 0872, commit 2dc86579a, ADR-072/075)** — superseded by the `idea-pipeline` planning stages; recorded in the candidate record's `retirements[]` with 3 real terminal runs retained in history |
+| `idea-pipeline.yaml` | idea discovery, design review, and decomposition | keep separate; migrated to the ADR-140 engine executor model (task 1241) |
 | ~~`docs-pipeline.yaml`~~ | *(deleted 2026-09-16)* | **removed under task 0866 (feature D62)** — zero non-dry runs and zero real completions in the retained run history, and no invoking command, skill, agent, script or config outside tests and documentation (the `/sp:dev-run --mode implement` caller declared in `plugins/sp/README.md` was never wired; that mode is the single implement competency). The docs-only **procedure** is unaffected — it runs through `/sp:dev-run --mode implement` + `spur task record` on `task-pipeline.yaml` |
 | ~~`feature-dev.yaml`~~ | *(deleted 2026-09-16)* | **removed under task 0866 (feature D62)** — zero non-dry runs and zero real completions; its declared caller (`/sp:dev-runall --feature`) dispatches `task-pipeline.yaml` per task, not this graph. Its only invoking surfaces — the `bun run features` script and the `feature-dev-precheck` plugin script — were retired with it rather than left dangling. The `integration-review` defect records were **not** retired: `docs/inventory/d8-0729-workflow-contract-inventory.md` §F rows 1–2 still stand, row 2's subject having ceased to exist with this deletion while row 1 (`command-gate.ts:157` spreading `timeoutMs` under the wrong key) remains a live S1 defect independent of it |
 | ~~`basic.yaml`~~ | *(deleted 2026-09-16)* | **removed under task 0866 (feature D62)** — zero non-dry runs and zero real completions; it was a generic implement/check/fix example with no caller. The bundled example surface it occupied was not load-bearing: the retained definitions are seeded by `spur init` and exercised by the resolver/composition tests |
@@ -44,9 +47,9 @@ status. The retirement discriminator is **zero real completions AND no live call
 | --- | --- | --- |
 | D5-I | wrap-up metrics off the model hop | landed |
 | D5-J | docs precheck onto soft `command.gate` | landed |
-| D5-K | planning callers absorbed into idea/dev-plan | landed; `planning-pipeline.yaml` retained until ADR-072 is accepted |
-| D5-L | `task-pipeline.yaml` onto the shared primitives | partial — `run.artifact` owns the verdict; `qualityGateCmd` stays a documented per-project **shell** string. The precheck doctor probe **landed** on the `doctor.probe` built-in action kind (task 0608, feature D6 — the D6 ownership-surface decision); the D5-L wave itself shipped under the constraint that `command.gate` cannot express either program's semantics without a new public CLI surface (ADR-051) |
-| D5-M | pipeline2 residual made read-only | landed — the sweep is bracketed by a tree snapshot and any post-PASS mutation routes to `failed`, never `record` (ADR-071) |
+| D5-K | planning callers absorbed into idea/dev-plan | landed; `planning-pipeline.yaml` removed under ADR-072/075 (task 0872) |
+| D5-L | `task-pipeline.yaml` onto the shared primitives | superseded by D65 — typed `command.gate` and tree-hash receipts own the gate; unbound `run.artifact` remains available for ordinary artifacts |
+| D5-M | pipeline2 residual made read-only | retired — the residual sweep was removed by ADR-138/the slim-harness refactor, and its ADR-071 proof bracket was superseded by ADR-140 |
 | D5-N | ~~eval-pipeline promotion bar~~ | **retired (ADR-076, 2026-08-20)** — the bar is no longer a gate; `task-pipeline2.yaml` was deleted rather than promoted. `eval-pipeline` remains a measurement tool only |
 | D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + bundled plugin-script fallback (0824) |
 | D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` (carrier retired 2026-09-16, task 0866) |
@@ -68,6 +71,12 @@ by those unit gates plus the advisory. The snapshot's `stateEffect`/`evidenceEff
 and the proof-input baseline retired with the snapshot.
 
 ## Stable action identity and effects
+
+> **Current reading (ADR-140):** the canonical task pipeline no longer uses the ADR-071 effect,
+> proof-input, or bound-verdict machinery described below. Those details remain for legacy and
+> custom workflow compatibility. Ordinary unbound `run.artifact` registration remains current —
+> for example, `idea-pipeline` registers its handoff without `proofBinding`. Current task completion
+> evidence is the tree-hash gate receipt plus the review verdict.
 
 A definition action has the stable key:
 
@@ -211,7 +220,11 @@ Domain mutations such as task status changes and section updates remain owned by
 application/CLI capabilities. A workflow-local extension is valid only for policy unique to that
 workflow; shared deterministic behavior cannot be copied into multiple extension files.
 
-## Verification proof state
+## Historical verification proof state (superseded by ADR-140)
+
+The following ADR-071 mechanism is historical for the canonical task pipeline. It is not the
+current completion contract; see `workflow-execution-foundation.md` §3.3 and the live
+`config/workflows/task-pipeline.yaml` for the tree-hash receipt and reviewer-verdict flow.
 
 The runtime carries a digest-bound proof state:
 
@@ -318,14 +331,14 @@ entered from HITL states and resume the inherited session (`feature-create`, `ac
 
 | Boundary | Required exit evidence |
 | --- | --- |
-| task execution | quality, review, and `--fix none` verify PASS on one current digest; task structural gate PASS |
+| task execution | current tree-hash gate receipt plus reviewer verdict; task structural gate PASS |
 | docs evolution | doc-evolve contract verification plus repository doc checks |
 | wrap-up | required run artifacts recorded and lifecycle checks PASS |
 | idea/planning | fixed design-review headings, accepted operator disposition, CLI-gated corpus writes |
 | PR review | current integration HEAD captured; pending/unavailable is explicitly advisory unless policy says otherwise |
 
 Pipeline consolidation requires all of: resolved-graph parity, artifact parity, failure-injection
-parity, model-query count within the reviewed baseline, proof-state validity, clean exit 0, scaffold
+parity, model-query count within the reviewed baseline, current receipt/verdict validity, clean exit 0, scaffold
 and bundle parity, and explicit operator approval before deleting a live definition.
 
 ## Migration sequence

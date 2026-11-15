@@ -333,5 +333,5 @@ truly does not apply (do not silently default new tasks to it).
 | Legacy raw bullets | `- AC1 …` (no checkbox, no `Scenario:`) | n/a | unparsed: invisible to subset, binding, and box checks — preserve in place, never author new |
 
 `task-local` altitude skips only the feature-subset check. It does not waive the unchecked-box check,
-required sections, the proof-bound verdict, line anchors, or any other done check — AC syntax alone,
+required sections, the proof-bound verdict, or any other done check — AC syntax alone,
 at any altitude, never makes a task done.

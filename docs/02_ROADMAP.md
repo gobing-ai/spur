@@ -2,10 +2,10 @@
 doc: 02_ROADMAP
 owns: WHEN — phases, current vs deferred, sequencing
 authority: derived
-version: 1.12.0
+version: 1.13.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-05
+updated_at: 2026-11-14
 read_before: placing work in a phase
 edit_rules: 99 §6.3
 sync: [T5, T6]
