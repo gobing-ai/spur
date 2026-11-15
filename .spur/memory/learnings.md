@@ -7043,3 +7043,32 @@ during wrap-up; evidence lives in the task record and `.spur/run/1326-*` artifac
   `docs/help/cmd_history.md`, plus a satellite invariant that forbade the very additive flag the
   change shipped. Check the surface's owning reference and the internal consistency of the satellite,
   not only the files named in the Solution.
+### 2026-11-15 — 1336 (A2A listener on `spur serve`)
+
+- **A bearer surface must not inherit the CSRF rule.** Hono's `csrf()` rejects a POST with no
+  `Content-Type` — exactly what the unmodified `a2a` CLI sends on `task cancel`. Scope the guard
+  (`c.req.path.startsWith('/a2a/')`) instead of reordering the pipeline, and say why in place: a
+  header token is what a cross-site simple request cannot set, so the rule protects nothing there.
+- **Wire shapes: verify against a reference server, not a doc.** `a2a server --echo` (installed CLI)
+  plus `curl` gave the exact card JSON, `{"task":…}` / bare-Task responses and the
+  `{"error":{code,status,message,details}}` envelope in one minute; `specification/a2a.proto` in the
+  a2aproject/A2A repo supplied the `google.api.http` paths (`message:send`, `tasks/{id}`,
+  `tasks/{id}:cancel`). A Hono route cannot hold `:id:cancel` as two params — take the whole
+  `{id}:cancel` segment and split it.
+- **A gate that fails on a changed-file coverage shortfall can be pre-existing.** `packages/config/src/index.ts`
+  sat at 87.5/94.77 before the change; the changed-scope coverage check then demands 90/90 for that
+  file. Covering two small real behaviors (`ExecutorDisabledError`, `resolveBuilderBumpVerConfig`)
+  cleared it honestly — do not lower the threshold.
+- **Enabled-but-unconfigured must not look the same as disabled.** Returning early when the token
+  variable was unset produced a 404 indistinguishable from "off"; mount, log the variable NAME, and
+  refuse with 500 naming `server.a2a.authEnv`.
+- **`FleetService.resolve` is heavier than identity.** It throws when a member pins a globally
+  disabled executor; the listener only needs the address, so `memberAddresses` reads the declaration
+  and shares the slug + `memberLocalId` allocator instead of duplicating either.
+- **`commit-guard-stage` takes files, not directories** — a directory argument stages nothing and is
+  refused as "unchanged since base". Expand the `git status --porcelain` paths.
+- **Host-executor runs need a receipt file, not a sentence.** `spur workflow continue --answer-text`
+  expects a receipt path (`runId`/`state`/`executor`/`outcome`) and validates `expectFiles` and owned
+  sections; under `profile=auto` the approve gate can still pause, and `--answer yes` is the
+  operator's approval.
+
