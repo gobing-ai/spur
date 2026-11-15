@@ -4,7 +4,7 @@ name: Prove a two-install fleet dispatch over A2A
 status: todo
 template: feature-impl
 created_at: 2026-11-15T04:06:32.872Z
-updated_at: "2026-11-15T04:06:47.340Z"
+updated_at: "2026-11-15T08:09:19.549Z"
 feature_id: G9
 priority: P3
 tags:
@@ -43,6 +43,8 @@ Task-local check: the lane is repeatable from one command and leaves both instal
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+**2026-11-15 — not attempted (batch 1331,1334,1337).** Blocked in-batch: dependency 1334 cancelled before implementation (preflight A2). Two-install lane follows 1334.
 
 ### Design
 

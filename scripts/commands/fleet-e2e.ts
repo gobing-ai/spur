@@ -1975,6 +1975,12 @@ const ALL_PERF_MODES = ['supervised-cold', 'supervised-warm', 'attached-ready'] 
 export type PerfMode = (typeof ALL_PERF_MODES)[number];
 /** One trial's deadline. The stub lane settles in seconds; this only bounds a genuinely hung turn. */
 const PERF_TRIAL_TIMEOUT_MS = 90_000;
+/**
+ * The real-agent lane's deadline (task 1331). A real model turn runs the same pipeline the task
+ * would in a repository — implement, quality gate and review — so the stub's 90 s bound fails a
+ * healthy turn as `timed-out`. 15 minutes keeps a hung turn bounded while letting a real one settle.
+ */
+const PERF_REAL_TRIAL_TIMEOUT_MS = 900_000;
 /** The busy wait the attached fixture occupant performs on its first trial (AC1: a visible phase). */
 const PERF_ATTACH_BUSY_MS = 250;
 /** How long the injected-failure attached trial waits before the abort ends it `outcome-unknown`. */
@@ -2302,6 +2308,25 @@ export async function scaffoldPerfProject(
     if (!options.realAgents) {
         writeFileSync(stubPath, stubSource());
         chmodSync(stubPath, 0o755);
+    }
+    // A real member runs the project's quality gate, and the gate's tree capture fails closed on an
+    // unborn HEAD: every scaffold file reads as changed and the light gate can never pass. The stub
+    // lane short-circuits the gate, so this commit is real-agent-only (task 1331).
+    if (options.realAgents) {
+        Bun.spawnSync(['git', 'add', '-A'], { cwd: scratch });
+        Bun.spawnSync(
+            [
+                'git',
+                '-c',
+                'user.name=fleet-e2e',
+                '-c',
+                'user.email=fleet-e2e@example.invalid',
+                'commit',
+                '-qm',
+                'fleet-perf scaffold',
+            ],
+            { cwd: scratch },
+        );
     }
     const db = await createMigratedDb({ url: join(scratch, '.spur/spur.db') });
     const runtime = new StrategyRuntime({ openDb: async () => db } as never);
@@ -2987,7 +3012,7 @@ export async function runFleetPerf(options: {
                             }
                             return true;
                         },
-                        PERF_TRIAL_TIMEOUT_MS,
+                        options.realAgents ? PERF_REAL_TRIAL_TIMEOUT_MS : PERF_TRIAL_TIMEOUT_MS,
                     );
                     void settled;
                     const allRows = await readPerfPhaseRows(dao);

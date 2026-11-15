@@ -136,6 +136,10 @@ Observed source, inspected 2026-10-21:
 
 Unverified: baseline latency distribution; fraction attributable to startup versus model/tools/gates;
 cache hit behavior; memory costs of warm agents; host-version parity for interactive wake hooks.
+A real-agent baseline attempt on 2026-11-15 stayed unverified for a different reason — agent quota and
+a scaffold gate/remediate failure, not an absence of instrumentation; the attempt, the per-agent
+blockers and the two lane defects it fixed are recorded in
+`docs/reports/2026-11-15-fleet-real-agent-latency-baseline-attempt.md` (task 1331).
 Observed executable versions: Codex 0.163.0, Claude Code 2.1.306, PATH Pi 1.4.0. The installed runner
 record cites older probes and the repository Pi dependency is 0.87.1; binary/package identity must
 be recorded rather than assuming those installations are interchangeable.

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Publish a real-agent fleet latency baseline by phase
-status: todo
+status: blocked
 template: feature-impl
 created_at: 2026-11-15T03:27:14.741Z
-updated_at: "2026-11-15T04:02:25.062Z"
+updated_at: "2026-11-15T08:09:14.105Z"
 feature_id: G8
 priority: P3
 tags:
@@ -43,6 +43,15 @@ Task-local check: the report names the command that reproduces it and the trial 
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+**2026-11-15 — blocker (batch 1331,1334,1337).** The real-agent lane was attempted for all three
+agents; zero trials validated. claude: 5-hour usage limit; pi: `AccountQuotaExceeded` (monthly, resets
+2026-11-18); codex: implement + gate ran, `remediate` failed on a missing findings file. Two lane
+prerequisites were fixed while diagnosing (scaffold commit under `--real-agents` so the project gate
+has a base; a 15-minute real-trial bound instead of the stub's 90 s) and are pinned by
+`scripts/commands/fleet-e2e-perf.test.ts`. Full record, reproduction command and the remaining lane
+decision (a real-agent gate the scaffold can satisfy): `docs/reports/2026-11-15-fleet-real-agent-latency-baseline-attempt.md`.
+Unblock when an executor has quota.
+
 ### Design
 
 Reuse the existing perf lane and KPI contract; add no new harness. If a phase cannot be separated for an agent, report it as unavailable with the reason rather than estimating. Output is a report under `docs/reports/` plus its JSON receipt, replacing the 'unverified' rows of the measurement plan. Rejected: a new benchmark tool (the lane exists); synthetic model latency (that is what the stub receipt already is). Invariant: this task changes no dispatch code.
@@ -71,3 +80,7 @@ Reuse the existing perf lane and KPI contract; add no new harness. If a phase ca
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-15T08:06:55.187Z todo → wip (system)
+- 2026-11-15T08:09:09.316Z wip → blocked (system)
+

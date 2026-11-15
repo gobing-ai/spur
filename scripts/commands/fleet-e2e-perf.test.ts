@@ -11,6 +11,7 @@
  * executable and use the installed driver — no host agent binary, no network, no paid run.
  */
 import { describe, expect, spyOn, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import {
     chmodSync,
     existsSync,
@@ -294,4 +295,35 @@ describe('1277 AC1: Pi executable provenance and actual perf executor', () => {
             }
         }
     }, 20_000);
+});
+
+describe('1331: a real-agent trial starts from a committed scaffold', () => {
+    /** HEAD resolves only when the scaffold was committed; an unborn HEAD is the failure mode. */
+    const head = (scratch: string): string | null => {
+        const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: scratch, encoding: 'utf8' });
+        return result.status === 0 ? result.stdout.trim() : null;
+    };
+
+    test('the real lane commits the scaffold; the stub lane leaves HEAD unborn', async () => {
+        const skip = getEnvVar('SPUR_SKIP_PROJECT_CONFIG');
+        const real: Array<Awaited<ReturnType<typeof scaffoldPerfProject>>> = [];
+        try {
+            setEnvVar('SPUR_SKIP_PROJECT_CONFIG', 'false');
+            // A real member runs the project's quality gate, whose tree capture fails closed on an
+            // unborn HEAD (every scaffold file reads as changed) — the trial can never validate.
+            const realLane = await scaffoldPerfProject('pi', { realAgents: true });
+            real.push(realLane);
+            expect(head(realLane.scratch)).not.toBeNull();
+            // The stub lane short-circuits the gate, so its scaffold stays uncommitted.
+            const stubLane = await scaffoldPerfProject('pi', { realAgents: false });
+            real.push(stubLane);
+            expect(head(stubLane.scratch)).toBeNull();
+        } finally {
+            setEnvVar('SPUR_SKIP_PROJECT_CONFIG', skip ?? 'true');
+            for (const project of real) {
+                (await project.openDb()).close();
+                rmSync(project.scratch, { recursive: true, force: true });
+            }
+        }
+    }, 40_000);
 });

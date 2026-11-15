@@ -4,7 +4,7 @@ name: Deliver work to A2A-declared fleet members
 status: todo
 template: feature-impl
 created_at: 2026-11-15T04:02:03.794Z
-updated_at: "2026-11-15T04:02:10.353Z"
+updated_at: "2026-11-15T08:09:19.283Z"
 feature_id: G8
 priority: P2
 tags:
@@ -54,6 +54,14 @@ Task-local check: the E2E run against a local `a2a server --exec` leaves a repea
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+**2026-11-15 — not started (batch 1331,1334,1337).** Cancelled at the batch level before implementation:
+the remaining work is a member-loop turn-driver integration (an A2A member's claimed inbox message is
+completed by the transport service inside `runDrain`) plus a coordination-run `contextId` persistence
+path, the read-only admission check, a doctor line and a two-install E2E lane — a multi-hour feature
+that a batch slot could not finish honestly. Prerequisites verified present for the next run:
+ADR-148 decision 2 is Accepted, `a2a 0.4.0` is on PATH (`a2a send --async`, `task get`, `task cancel`,
+`card get`), and both dependency tasks (1333, 1336) are `done`. Run it as its own `/sp-dev-run 1334`.
 
 ### Design
 
