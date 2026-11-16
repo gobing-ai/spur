@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.4.36] - 2026-11-16
+
+### Added
+- parallel fleet orchestration with worktree lanes and a gated merge queue (eeb1bb9cd)
+  <!-- src: packages/app/src/services/fleet-integration-queue.ts:76 · confidence: HIGH -->
+- add worktree lanes for concurrent writers (125c76df2)
+  <!-- src: packages/app/src/services/worktree-lane-service.ts:16 · confidence: HIGH -->
+- support optional `zg` and `a2a` setup in the installer (3e920d3d3)
+  <!-- src: scripts/install.sh:72 · confidence: HIGH -->
+- prove two-install A2A dispatch with write fencing (85039a915)
+  <!-- src: scripts/commands/a2a-two-install-e2e.ts:25 · confidence: HIGH -->
+- deliver work to A2A-declared members (4589d5958)
+  <!-- src: packages/app/src/services/a2a-member-transport.ts:367 · confidence: HIGH -->
+- make the real-agent perf lane reachable and record the baseline blocker (acccdeed7)
+  <!-- src: scripts/commands/fleet-e2e.ts:813 · confidence: HIGH -->
+- add mode and scope filters to the Board search module (a4e0d730b)
+  <!-- src: apps/web/src/modules/search/index.tsx:144 · confidence: HIGH -->
+- dispatch to a named fleet member with no daemon running (fae9cc924)
+  <!-- src: packages/app/src/services/member-dispatch.ts:87 · confidence: HIGH -->
+- serve fleet members as A2A agents from `spur serve` (a678f20ac)
+  <!-- src: apps/server/src/modules/a2a/index.ts:12 · confidence: HIGH -->
+
+### Fixed
+- keep a docs-only change set green in the light gate tier (669fca26c)
+  <!-- src: packages/app/src/services/quality-gate.ts:776 · confidence: HIGH -->
+- keep optional CLI setup out of hermetic install tests (8f588c33a)
+  <!-- src: scripts/commands/install-sh.test.ts:41 · confidence: HIGH -->
+- reject history-anatomy false-positive findings (cb436e69b)
+  <!-- src: packages/app/src/services/history-anatomy.ts:447 · confidence: HIGH -->
+- give anatomy render sidecars a single writer (62b04128d)
+  <!-- src: config/workflows/history-anatomy.yaml:167 · confidence: HIGH -->
+- fence A2A claims against duplicate sends (86ff8985f)
+  <!-- src: packages/app/src/services/a2a-member-transport.ts:400 · confidence: HIGH -->
+- default the A2A listener off without boot config (80e3e599c)
+  <!-- src: apps/server/src/modules/a2a/index.ts:20 · confidence: HIGH -->
+
+### Changed
+- record fleet orchestration lanes and the gated merge queue as ADR-149 (c0ee19499)
+  <!-- src: docs/00_ADR.md:2859 · confidence: HIGH -->
+- split A, F1, F6 and G feature scope into In/Out bullets (8f7e42d94)
+- restore the `--defer-gate` contract dropped when parallel-isolation was folded (af61ea206)
+- refine task 1342 against the as-built lane tree (2b05a4c0c)
+- plan G76 parallel fleet orchestration as tasks 1341–1346 (ada7a80a3)
+- refresh the G76 task table after landing (9add7234d)
+- close finished features A–D3 after fresh feature-verify receipts (97576196b)
+- record A2A member delivery verification (fdb78ac7c)
+- record 1336 A2A-listener learnings (278ddb15e)
+- refresh migration ownership evidence for 0056 (2203167de)
+- pin A2A as a hidden member transport for named-agent dispatch (e678d5154)
+- feature:G8 dev-runall close-out writes (05691078e)
+- feature:G9 dev-runall close-out writes (0afc38a00)
+- update memory (910a9ab60)
+
+### Removed
+- drop the Board summary-outcomes and daily-readiness panels (056e106be)
+  <!-- src: docs/design/observability-module-refactor.md:183 · confidence: HIGH -->
+
+### Other
+- merge branch `sp/runall-g8-b72c` (G8) — named-member dispatch and hidden plumbing verbs (447604217)
+- cover A2A persistence and member-loop edges (ee2e7dce7)
+- cover A2A member delivery boundaries (c3a806896)
+- keep the batch lane test off the committed receipt (f64408b11)
+
 ## [0.4.35] - 2026-11-14
 
 ### Added
