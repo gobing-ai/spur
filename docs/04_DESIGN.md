@@ -30,7 +30,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Feature sync and agent command contracts | [planning-command-contracts](design/planning-command-contracts.md) |
 | Configuration and asset contracts | [configuration-contracts](design/configuration-contracts.md) |
 | Downstream Board modules — embedded config, native React contributions and iframe URLs | [downstream-board-modules](design/downstream-board-modules.md) |
-| Board module UI kit — shared shell primitives specifier, types and template (proposed) | [board-module-ui-kit](design/board-module-ui-kit.md) |
+| Board module UI kit — shared shell primitives specifier, installed-package types and the starter template | [board-module-ui-kit](design/board-module-ui-kit.md) |
 | Data and output contracts | [data-output-contracts](design/data-output-contracts.md) |
 | Server bootstrap and scheduler contracts | [server-contracts](design/server-contracts.md) |
 | Planning records and lifecycle contracts | [planning-record-contracts](design/planning-record-contracts.md) |

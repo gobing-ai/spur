@@ -701,6 +701,12 @@ invariants: one shell per module route; `tabs.ts` files are append-only; a full-
 the shared centered header rail; the headerless embed never imports its
 module's shell. Shapes: `docs/design/tasks-module-shell-parity.md`.
 
+The shell primitives themselves are shared code (A81 1348): `apps/web/src/components/module-kit/`
+owns `ModuleShell`, `ModuleHeader`, `ModuleTabs`, `TimeRangePresets`, `EmptyState` and `Diagnostic`
+plus the re-exported `Card`/`Badge`/`Button`/`Loading`. Observability is the first adopter; the
+remaining built-in shells still inline their header markup and adopt opportunistically. The same
+components are what a downstream contribution renders (§30).
+
 ## 15. Agent-Facing Plugin Surface Parity (ADR-053/054)
 
 Hand-authored plugin commands and references own the agent-facing surface. The CLI facade
@@ -1342,9 +1348,18 @@ proofs. Configuration and native asset changes require server restart and browse
 deployments do not acquire project-filesystem loading. Exact declarations, lifecycle rules and
 compatibility limits: [downstream Board module contract](design/downstream-board-modules.md).
 
-Accepted, not built (ADR-150): the Board also shares one Spur-owned shell-primitive module through
-the same facade mechanism, rendered by built-in shells and native contributions alike:
-[Board module UI kit](design/board-module-ui-kit.md).
+Built (ADR-150): the Board also shares one Spur-owned shell-primitive module through the same
+facade mechanism, rendered by built-in shells and native contributions alike. The kit lives in
+`apps/web/src/components/module-kit/` and is advertised as the bare specifier
+`@gobing-ai/spur/board/ui` (`BOARD_UI_KIT_SPECIFIER` in `apps/web/src/modules/runtime/manifest.ts`);
+its facade chunk is emitted from the renderer's client graph like the React facades, with the export
+list frozen in `module-kit/exports.ts` because a TSX barrel cannot be measured by `createRequire`.
+`board-runtime.json` adds `uiKitVersion` (protocol versions stay 1). The CLI package publishes
+declaration-only types: `scripts/commands/emit-board-types.ts` mirrors `apps/web/src/components` into
+`apps/cli/board/kit/`, and `./board/ui` maps to that mirror, so the authoring types resolve from the
+installed package while no React value import enters the CLI surface. A starter template ships at
+`plugins/sp/skills/spur-composer/templates/board-module/`. Shell rules: root `DESIGN.md`;
+contract: [Board module UI kit](design/board-module-ui-kit.md).
 
 ## 31. Cross-Platform Hook Core — built (ADR-129; task 0969)
 
