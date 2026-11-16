@@ -4,7 +4,7 @@ owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
 version: 1.75.0
 owner: Robin Min
-updated_at: 2026-11-15
+updated_at: 2026-11-16
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2220,8 +2220,8 @@ boundary is now a green gate receipt for the tree plus one reviewer verdict.
 
 ## ADR-130: Spur Logic Lives in the CLI; Plugin Scripts, Hooks and Lib Are Thin Glue
 
-- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** A9 · **Amended:** 2026-10-11, 2026-10-15, 2026-10-16, 2026-10-21
-- **Current reading (2026-10-16):** Classify by responsibility before path or size. Every script surface has one owner:
+- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** A9 · **Amended:** 2026-10-11, 2026-10-15, 2026-10-16, 2026-10-21, 2026-11-16
+- **Historical reading (2026-10-16; self-dev row revised below on 2026-11-16):** Classify by responsibility before path or size. Every script surface has one owner:
 
   | Surface | Owns | Never holds |
   | --- | --- | --- |
@@ -2238,6 +2238,7 @@ boundary is now a green gate receipt for the tree plus one reviewer verdict.
 - **Consequence:** Plugin skills require a `spur` CLI new enough to carry the absorbed verbs; releases are lockstep and an older CLI rejects an unknown flag, so a skewed install fails closed. Hook cores stay plugin-local (ADR-129): they are the host adapter boundary, need no monorepo, and pay no CLI round-trip per tool event.
 - **Enforcement:** `bun run script-contract-check` (hook-only layout, hook identity, no `@gobing-ai/*` value import in plugin surfaces, no retired script invocation in shipped skills/commands/agents/README/workflows; `spur-check-feature`) and rule `sp-script-placement` (`--placement-only`: entry budget, DB/corpus boundary over plugin scripts/hooks/lib, DB-driver boundary over `scripts/commands`, noun clash, hook layout; every pre-check). Any finding fails; there is no baseline or exception registry. Import checks cannot classify behavior, so review still applies the table above.
 - **Retains:** ADR-021 (thin transports), ADR-051 (public-surface consent), ADR-115 (composition budgets), ADR-129 (hook cores). Supersedes ADR-065's manifest/twin contract.
+- **Amendment (2026-11-16) — shipped ownership before repository tooling.** Supersedes the self-dev row's categorical assignment of build, packaging and release to scripts. Machine installation/setup and consolidated read-only readiness belong to `self`; project scaffolding stays `self init`, SQL evolution stays `self migrate`; build/package/release operations belong to `builder` when they can expose a coherent shipped contract. Other reusable operations stay with their existing noun. Implement once in `packages/app`, with thin CLI transports; a repository-only caller is not a reason to retain an independent implementation. Scripts retain only the first-binary bootstrap, irreducible source generators, repository policy/fixture orchestration and thin source-build entrypoints that avoid a bootstrap cycle. Every retained script needs a responsibility-based reason, not a size exemption. Superskill retains plugin installation and adapter ownership. Status collection must not install, repair, migrate or start services; install reruns must converge without overwriting user state. **Alternatives rejected:** preserving the blanket self-dev exemption leaves split product ownership; promoting the entire dispatcher into `self` mixes build, fixtures and machine lifecycle and grows the runtime unnecessarily. **Consequence:** migrate in caller-complete waves, proving source/packed/standalone behavior before retiring routes. This architectural direction does not grant public-contract or production/workflow mutation consent; ADR-051 still applies to each concrete surface. Proposed contracts and per-script disposition: [Concrete Spur self](design/concrete-spur-self.md) (A93).
 - **Detail:** [harness surface governance](design/harness-surface-governance.md) §2; plans `docs/plans/A9-script-placement-migration.md`, `docs/plans/2026-10-11-harness-script-consolidation.md`; feature A9.
 - **Amendment (2026-09-30 · task 1035):** `plugins/sp/lib` may hold a hand-written helper shared by ≥2 glue files (`spur-bin.ts`, introduced by task 1007 R9). *Retired 2026-10-15 with the skill scripts it served.*
 - **Amendment (2026-10-11):** Responsibility before path or size; reusable harness behavior is application-owned even when Spur uses itself; generated app bundles were compatibility exceptions to retire once an installed contract covered their callers; public nouns, verbs, flags, hidden commands and observable contract changes need explicit operator approval independent of planning auto-approval.

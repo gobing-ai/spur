@@ -5,7 +5,7 @@ authority: derived
 version: 1.80.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-15
+updated_at: 2026-11-16
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -18,6 +18,12 @@ and invariants. Exact non-UI contracts are indexed by [04 Design](04_DESIGN.md);
 and interaction rules live in root [DESIGN.md](../DESIGN.md). Task receipts stay in task records.
 
 ## 1. Topology
+
+ADR-130's 2026-11-16 amendment assigns reusable machine setup/readiness to `self` and coherent
+build/package/release behavior to `builder`, implemented in `packages/app`. Irreducible source
+generators, repository policy/fixtures and first-binary/source-build bootstrap remain local tooling.
+The [A93 migration design](design/concrete-spur-self.md) is proposed; existing script routes below
+remain current until their caller-complete replacement is proven. No app service imports scripts.
 
 Bun-workspace monorepo (no Turborepo, ADR-002). Spur owns four apps and four local packages
 (ADR-001 as amended); all reusable engines are external `@gobing-ai/ts-*` packages (ADR-006).

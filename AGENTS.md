@@ -215,7 +215,8 @@ duplicate catalog ; the facade reference is the single parity authority.
 
 **Public-surface consent:** adding, changing, or removing a public `spur` noun/verb requires
 explicit operator consent with design context. Public commands live under existing nouns unless no
-noun can own the action. Internal self-development commands belong in `scripts/commands`; repo
+noun can own the action. Only irreducible repository policy/fixtures, source generators and bootstrap
+entrypoints belong in `scripts/commands`; reusable self/build behavior follows ADR-130. Repo
 entrypoints compose existing binaries in `package.json`; plugin-only scripts follow ADR-065 in
 `plugins/sp/scripts`. Script placement across surfaces (plugin glue vs `scripts/commands` vs `packages/app`) is governed by ADR-130 and `docs/design/harness-surface-governance.md` §2, enforced by the `sp-script-placement` rule. Full governance: `docs/design/harness-surface-governance.md`.
 

@@ -3,7 +3,7 @@ kind: design
 title: "Harness surface governance"
 status: accepted
 created_at: 2026-08-21
-updated_at: 2026-10-11
+updated_at: 2026-11-16
 related: [G64, A9, "0613", "0614", "0617", "0625", "0670", "0693"]
 tags: [contract, G64, plugin, cli]
 ---
@@ -82,13 +82,13 @@ judges them from step profiles ([workflow composition](workflow-composition-cont
 
 ## 2. Script placement (ADR-051 R4 amendment, ADR-130)
 
-ADR-130 (current reading 2026-10-16) governs. The script-absorption migration completed in tasks
+ADR-130 (amended 2026-11-16) governs. The earlier script-absorption migration completed in tasks
 1211–1213: no skill scripts, generated app bundles, `.mjs` twins or migration exceptions remain.
 
 | Surface | Hosts | Selection condition |
 | --- | --- | --- |
 | `apps/cli/src/commands` (+ `packages/app`) | public `spur` verbs; the logic lives in `packages/app` | a Spur **end user** runs it on any Spur-managed project, or it reads/validates/mutates Spur's own nouns (task, feature, workflow run, history, self). Placed under the **owning existing noun**; each new noun, verb or flag needs the consent gate (§3–4). A new noun additionally records why no existing noun can own the action |
-| `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates and repo evaluation runners. Tests/fixtures follow the owning workspace. Reusable noun queries/rules are application-owned even when the only current caller is this repo; repository policy may compose those services. DB reads open through `packages/domain` (`openExistingDb`) and query through a domain function — no raw `bun:sqlite`, drizzle or `ts-db` adapter |
+| `scripts/commands` | irreducible repository tooling and bootstrap entrypoints | Source generators, repository policy/fixture orchestration, and minimal source-build entrypoints needed to avoid a self-build cycle. Build/package/release behavior with a coherent shipped contract belongs to `builder`; machine setup/readiness belongs to `self`. Existing routes remain until their replacement is proven. Tests/fixtures follow the owning workspace. Reusable noun queries/rules are application-owned even when this repo is the only caller; repository policy may compose those services. DB reads open through `packages/domain` (`openExistingDb`) and query through a domain function — no raw DB adapter |
 | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
 | `plugins/sp/scripts` | registered hook entries only (`hooks/<id>.ts`, next row) | nothing else: no skill, command or pipeline scripts, helpers, tests, `.mjs` twins or manifest. Skills, commands, agents and workflows call the installed `spur` CLI; a missing CLI contract goes through the consent gate (§3–4), never a new script |
 | `plugins/sp/hooks` | the `hooks.json` registry | `hooks.json` only. Pi renders it through superskill's native Pi hook adapter; the plugin-owned `pi/guard-extension.ts` is retired (2026-10-15). No hook entries: one would shadow the staged entry on native installs, and staged targets never receive this tree (2026-10-15, superskill ADR-039) |
@@ -104,8 +104,12 @@ ADR-130 (current reading 2026-10-16) governs. The script-absorption migration co
    implementation in `packages/app`, reuse existing services and invoke an existing owning-noun contract.
    A missing public contract requires a concrete operator consent brief before implementation, including flags,
    hidden commands, output/error changes and compatibility. `--auto` on a planning pipeline is not that consent.
-3. Does it depend on Spur repository build inputs, release policy or test fixtures? Keep that portion in scripts.
-   The `spur-dev.ts` dispatcher may compose it. A repository caller does not make general DB analytics repo-only.
+3. Does it require irreducible source generation, repository policy or test fixtures? Keep only that portion
+   in scripts. Under ADR-130's 2026-11-16 amendment, build/package/release behavior with a coherent shipped
+   contract belongs to `builder`, and machine setup/readiness belongs to `self`; source inputs alone do not
+   establish an exemption. Retain a minimal first-binary bootstrap and source entrypoints when needed to avoid
+   self-build cycles. Existing routes remain until their caller-complete replacement is proven. The
+   [A93 proposed contract and inventory](concrete-spur-self.md) defines the migration, not shipped availability.
 4. Is it host-event translation or immediate local guard/capture? Hook entry → plugin lib core. Preserve
    ADR-129 standalone capture, redaction, bounded execution and error policy without requiring a CLI round-trip
    per tool event. This is a named runtime exception, not permission to implement task/feature policy locally.

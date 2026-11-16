@@ -5,7 +5,7 @@ authority: derived
 version: 1.99.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-11-15
+updated_at: 2026-11-16
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -26,6 +26,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Area | Reference |
 | --- | --- |
 | CLI grammar, initialization, agents, teams and rules | [cli-contracts](design/cli-contracts.md) |
+| Proposed self install/status and staged builder tooling absorption (A93) | [concrete-spur-self](design/concrete-spur-self.md) |
 | History CLI and refresh contracts | [history-cli-contracts](design/history-cli-contracts.md) |
 | Feature sync and agent command contracts | [planning-command-contracts](design/planning-command-contracts.md) |
 | Configuration and asset contracts | [configuration-contracts](design/configuration-contracts.md) |
