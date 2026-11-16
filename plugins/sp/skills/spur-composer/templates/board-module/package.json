@@ -1,0 +1,20 @@
+{
+    "name": "spur-board-module",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Spur Board module starter — a native contribution built from the shared module UI kit",
+    "scripts": {
+        "build": "vite build"
+    },
+    "peerDependencies": {
+        "@gobing-ai/spur": "*",
+        "react": ">=19"
+    },
+    "devDependencies": {
+        "@types/react": "*",
+        "@types/react-dom": "*",
+        "typescript": "*",
+        "vite": "*"
+    }
+}

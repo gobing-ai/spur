@@ -14,7 +14,12 @@ export default defineConfig({
     integrations: [react(), boardRuntime()],
     vite: {
         resolve: {
-            alias: { '@': '/src' },
+            alias: {
+                '@': '/src',
+                // The Board resolves the UI-kit specifier to its own kit module, so the facade plugin
+                // sees a client-graph id instead of an unexternalized bare specifier (ADR-150).
+                '@gobing-ai/spur/board/ui': '/src/components/module-kit/index.ts',
+            },
         },
         plugins: [
             tailwindcss(),

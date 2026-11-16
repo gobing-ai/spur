@@ -7,6 +7,7 @@ import type {
 } from '@gobing-ai/spur-contracts';
 import { type FC, useEffect, useRef, useState } from 'react';
 import { Badge, Button, Loading } from '@/ui';
+import { EmptyState } from '../../components/module-kit/EmptyState';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import JobDetailDrawer from './JobDetailDrawer';
 import { RetentionBadge, timeRangeSince } from './ObservabilityFilters';
@@ -301,9 +302,7 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
                         <Loading size="sm" /> Loading jobs…
                     </div>
                 ) : jobs.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-base-content/50 italic" data-testid="jobs-empty-state">
-                        No jobs found in this time range.
-                    </div>
+                    <EmptyState testId="jobs-empty-state">No jobs found in this time range.</EmptyState>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table table-xs w-full font-mono text-xs" data-testid="queue-jobs-table">

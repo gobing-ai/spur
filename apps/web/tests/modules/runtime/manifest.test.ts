@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
     BOARD_FACADE_SPECIFIERS,
+    BOARD_UI_KIT_SPECIFIER,
     type BoardRuntimeManifest,
     buildRuntimeManifest,
     facadeChunkName,
@@ -17,6 +18,7 @@ function manifestFixture(overrides: Partial<BoardRuntimeManifest> = {}): BoardRu
             versions: { react: '19.2.1', reactDom: '19.2.1', reactRouter: '7.11.0' },
             imports: Object.fromEntries(BOARD_FACADE_SPECIFIERS.map((s) => [s, `/assets/${facadeChunkName(s)}.js`])),
             reservedModules: [{ id: 'tasks', route: 'tasks' }],
+            uiKitVersion: '1.0.0',
         }),
         ...overrides,
     };
@@ -47,8 +49,20 @@ describe('board runtime manifest (task 0988 R2)', () => {
                 versions: { react: '19.2.1', reactDom: '19.2.1', reactRouter: '7.11.0' },
                 imports: { react: '/assets/board-facade-react.js' },
                 reservedModules: [],
+                uiKitVersion: '1.0.0',
             }),
         ).toThrow('no facade asset emitted for "react/jsx-runtime"');
+    });
+
+    test('advertises the shared UI kit as one additive specifier with its own kit version', () => {
+        const manifest = manifestFixture();
+        // A81 1349 R2: the specifier is additive — no protocol version moves.
+        expect(manifest.imports[BOARD_UI_KIT_SPECIFIER]).toBe(`/assets/${facadeChunkName(BOARD_UI_KIT_SPECIFIER)}.js`);
+        expect(manifest.manifestVersion).toBe(1);
+        expect(manifest.catalogVersion).toBe(1);
+        expect(manifest.contributionApiVersion).toBe(1);
+        expect(manifest.uiKitVersion).toBe('1.0.0');
+        expect(facadeChunkName(BOARD_UI_KIT_SPECIFIER)).toBe('board-facade-@gobing-ai-spur-board-ui');
     });
 
     test('facade chunk names are stable and path-safe', () => {

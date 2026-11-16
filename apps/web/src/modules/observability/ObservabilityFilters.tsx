@@ -44,44 +44,11 @@ export function timeRangeSince(range: ObservabilityTimeRange, nowMs: number = Da
     return new Date(nowMs - ms).toISOString();
 }
 
-export interface TimeRangePresetsProps {
-    timeRange: ObservabilityTimeRange;
-    onTimeRangeChange: (range: ObservabilityTimeRange) => void;
-}
-
 /**
- * Preset time-range chip group. Rendered by ObservabilityShell's header row
- * for every tab (task 0793 R2/D2) — the shell's state is the sole owner, so
- * no tab renders its own copy.
+ * Time-range chip group, now owned by the shared module kit: the shell still owns the state
+ * (task 0793 R2/D2) and this module contributes only its range vocabulary.
  */
-export function TimeRangePresets({ timeRange, onTimeRangeChange }: TimeRangePresetsProps) {
-    return (
-        <fieldset
-            className="flex items-center gap-1 bg-base-200 p-1 rounded-lg border-0 m-0"
-            aria-label="Time range presets"
-        >
-            <legend className="sr-only">Time range presets</legend>
-            {TIME_RANGES.map((preset) => {
-                const active = timeRange === preset;
-                return (
-                    <button
-                        key={preset}
-                        type="button"
-                        onClick={() => onTimeRangeChange(preset)}
-                        aria-pressed={active}
-                        className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                            active
-                                ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                : 'text-base-content/70 hover:bg-base-content/10'
-                        }`}
-                    >
-                        {preset === 'all' ? 'All' : preset}
-                    </button>
-                );
-            })}
-        </fieldset>
-    );
-}
+export { TimeRangePresets } from '../../components/module-kit';
 
 export function isFilterActive(filters: ObservabilityFilterValues): boolean {
     return (

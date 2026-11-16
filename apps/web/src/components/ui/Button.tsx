@@ -20,6 +20,8 @@ type ButtonVariant = keyof typeof VARIANT_CLASSES;
 type ButtonSize = keyof typeof SIZE_CLASSES;
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+    /** Button label — React 19 no longer implies a `children` prop. */
+    children?: React.ReactNode;
     /** daisyUI color variant. Default: no variant (bare btn). */
     variant?: ButtonVariant;
     /** daisyUI size preset. Default: md (no explicit size class). */

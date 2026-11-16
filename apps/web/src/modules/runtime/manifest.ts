@@ -1,6 +1,15 @@
 import type { BoardModuleContribution } from '../contribution';
 
 /**
+ * The bare specifier a native contribution imports the module UI kit from (ADR-150).
+ *
+ * Additive: it resolves through the same document import map as React, to a facade chunk
+ * emitted from the Board's own client build graph, so a contribution gets the host's kit
+ * instance and the host stylesheet that already contains its classes.
+ */
+export const BOARD_UI_KIT_SPECIFIER = '@gobing-ai/spur/board/ui';
+
+/**
  * Board runtime distribution contract (task 0988 R2) — the frozen shape written to
  * `board-runtime.json` at the web distribution root and consumed by the shipped board's
  * import map.
@@ -24,6 +33,11 @@ export interface BoardRuntimeManifest {
     readonly imports: Readonly<Record<string, string>>;
     /** Host module identities (and retired identities) a project contribution may not claim. */
     readonly reservedModules: readonly BoardReservedModule[];
+    /**
+     * Semver of the module UI kit's prop contract (ADR-150). Additive field: a breaking prop
+     * change bumps this, and the specifier itself is part of the contribution API version.
+     */
+    readonly uiKitVersion: string;
 }
 
 /** One reserved host identity: built-in module metadata, or a retired route identity. */
@@ -58,6 +72,7 @@ export const BOARD_FACADE_SPECIFIERS = [
     'react-dom/client',
     'react-router',
     'react-router/dom',
+    BOARD_UI_KIT_SPECIFIER,
 ] as const;
 
 /**
@@ -98,6 +113,7 @@ export function buildRuntimeManifest(input: {
     readonly versions: BoardRuntimeVersions;
     readonly imports: Readonly<Record<string, string>>;
     readonly reservedModules: readonly BoardReservedModule[];
+    readonly uiKitVersion: string;
 }): BoardRuntimeManifest {
     return {
         manifestVersion: 1,
@@ -114,6 +130,7 @@ export function buildRuntimeManifest(input: {
             }),
         ),
         reservedModules: input.reservedModules,
+        uiKitVersion: input.uiKitVersion,
     };
 }
 

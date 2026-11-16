@@ -494,14 +494,102 @@ new component library.
   - Keyboard: rows are focusable, Enter opens the drawer, Escape closes it, and focus returns to
     the row.
 
-## Product UI — Downstream Board Modules (proposed)
+<a id="product-ui--downstream-board-modules-proposed"></a>
 
-These accepted design rules accompany the [contribution contract](docs/design/downstream-board-modules.md)
-and do not describe shipped behavior. Both contribution types use the existing sidebar and project
-identity; one selected module occupies the workspace at a time.
+## Product UI — Module Shell (built-in and downstream modules)
 
-- Native contributions follow Board tokens and use scoped styles. External native modules show a
-  right panel only when supplied; preserve built-in panel behavior and saved layout preferences.
+One shell serves every multi-view Board module: the modules Spur ships (History, Observability,
+Tasks, Features, Plans, Designs) and project-owned native modules declared under
+`bootstrap.modules` ([downstream Board modules](docs/design/downstream-board-modules.md)). These
+rules bind both kinds alike — a contribution that follows them is visually indistinguishable from
+a built-in module, and a built-in module that diverges from them is the drift to fix. ADR-081 owns
+the convention; this section is its normative UI expression, and it reconciles the former
+"Downstream Board Modules (proposed)" rules under *Downstream frame and panel rules*.
+
+### Module header anatomy
+
+The shell owns exactly one header row: `flex flex-wrap items-center justify-between gap-4
+border-b border-base-content/10 pb-3`. It never grows a second toolbar row — the first pixel below
+the header is content. Left to right:
+
+1. **Identity block** — the module icon via `<ModuleIcon id={moduleId} size="lg" />` (ADR-133; never
+   an emoji or ad-hoc SVG), the module title as the route's `h1` (`text-xl font-bold tracking-tight`),
+   an optional subtitle (`text-xs text-base-content/60`), and an optional status chip
+   (`role="status"`, `aria-live="polite"`, mono, hairline border, dot plus words — state is never
+   carried by color alone).
+2. **Inline filters** — the module's own controls in the middle of the same row: selects,
+   checkboxes, one combined text input, and shell-owned time-range presets. Controls are compact
+   (`size="sm"`), labelled or `aria-label`led, and this row is the only level-1 filtering surface:
+   no separate filter card and no filter page.
+3. **Primary action** — at most one compact primary button (for example `+ New Task`), before the
+   tabs.
+4. **Tab strip** — right-aligned `role="tablist"`, `bg-base-300 p-1 rounded-xl`, active tab
+   `bg-primary text-primary-content`.
+
+Where each value lives is the module's choice: URL state (`?tab=`, `?status=`), shell state, or
+controlled props when the module is also embedded elsewhere (ADR-081 embed rule).
+
+### Append-only tabs
+
+A multi-view module declares its views as a `tabs.ts` contract — `{ id, label, component }` — never
+an inline array in the shell. Entries are **append-only**: never reorder and never rename, because
+strip order and persisted UI state key on `id`. Removing or renaming a tab is a change to saved
+state and needs a migration, not an edit. A single-view module still renders the strip with one tab
+so the shell reads the same everywhere.
+
+### Density and width
+
+- Default module width is the centered `max-w-[1600px] mx-auto` rail with `px-4`; header and body
+  share one horizontal padding so content aligns under the header.
+- The **full-bleed exception** belongs to a density-first module whose primary canvas is a multi-lane
+  board (ADR-081; Tasks is the instance): the header stays on the centered rail and only the body
+  escapes it.
+- Body rhythm is dense product spacing: `{spacing.md}` 16px gutters inside a module,
+  `{spacing.xs}`–`{spacing.sm}` control gaps, `{spacing.lg}` 24px only between major regions. No hero
+  blocks, no card-per-field layouts, no decorative whitespace.
+- A module embedded inside another module exports a **headerless** content component; the shell is
+  the route component, and header affordances belong to the route (ADR-081).
+
+### Empty, loading and diagnostic states
+
+Every view answers the same three questions in the same shape, in the content region, with the
+header and tabs still rendered:
+
+- **Empty** — one block naming what is absent and the next action that would produce rows (for
+  example "No decisions recorded in this range" plus the command that records them). No
+  illustration, no promotional copy, no placeholder rows.
+- **Loading** — a skeleton or the `Loading` primitive in the content region, announced with
+  `aria-busy`; never a blank canvas and never a spinner that replaces the header. A known-empty
+  result renders empty, not loading.
+- **Diagnostic** — an actionable failure inside the module region: what failed and a Retry or the
+  next safe action. The module's own route fails; the Board, its sidebar and the other modules stay
+  navigable (module error boundary, downstream §6.6).
+
+Missing or unusable values render `-` (never "unavailable", never a silent blank), a truncated cell
+keeps its complete value in the semantic tooltip, and status color is always paired with text or an
+icon.
+
+### Right panel and theme tokens
+
+- A module shows a right panel only when it supplies a panel component; when it does, the panel
+  follows built-in panel behavior, the resize handle and saved layout preferences. A module without
+  a panel renders no empty panel and no resize handle.
+- Light and dark themes resolve from the same semantic tokens (`bg-base-*`, `border-base-content/10`,
+  `text-base-content/60`, `text-primary`, `text-error`, `text-spur-accent`, …). Module code carries no
+  hex literals, no theme-conditional styles and no new palette literals: a value that is wrong in one
+  theme is a token bug, not a module override. Supplementary color stays limited to semantic state.
+- Styles stay scoped: a module may style its own content, never the shell, the frame or another
+  module (downstream §6.3).
+
+### Downstream frame and panel rules
+
+These accompany the [contribution contract](docs/design/downstream-board-modules.md). Both
+contribution types use the existing sidebar and project identity; one selected module occupies the
+workspace at a time.
+
+- Native contributions follow the shell, state and theme rules above and use scoped styles.
+  External native modules show a right panel only when supplied; preserve built-in panel behavior and
+  saved layout preferences.
 - Iframe routes fill the available region beside the sidebar, without an empty right panel,
   right-panel resize handle, or global agent overlay. The child owns content scrolling. Keep
   a compact host action to open the configured resource externally; do not promise child readiness

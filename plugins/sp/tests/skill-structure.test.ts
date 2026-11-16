@@ -2580,3 +2580,46 @@ describe('1227 — gate guidance uses `spur self exec`', () => {
         }
     });
 });
+
+describe('A81 1347 — the module-shell UI contract and the composer route to it', () => {
+    const design = readFileSync(join(REPO_ROOT, 'DESIGN.md'), 'utf8');
+    const composer = readFileSync(join(SKILLS_DIR, 'spur-composer', 'SKILL.md'), 'utf8');
+    const reference = join(SKILLS_DIR, 'spur-composer', 'references', 'board-module-ui.md');
+
+    test('R1 — DESIGN.md owns one module-shell section covering the shared shell contract', () => {
+        expect(design).toContain('## Product UI — Module Shell (built-in and downstream modules)');
+        const section = design.split('## Product UI — Module Shell')[1]?.split('\n## ')[0] ?? '';
+        for (const heading of [
+            '### Module header anatomy',
+            '### Append-only tabs',
+            '### Density and width',
+            '### Empty, loading and diagnostic states',
+            '### Right panel and theme tokens',
+            '### Downstream frame and panel rules',
+        ]) {
+            expect(section, `module-shell section must own ${heading}`).toContain(heading);
+        }
+        // The rules bind contributions, not only the modules Spur ships.
+        expect(section).toContain('project-owned native modules');
+    });
+
+    test('R2 — the former downstream UI section is reconciled, and its deep links still resolve', () => {
+        expect(design).not.toContain('## Product UI — Downstream Board Modules (proposed)');
+        expect(design).toContain('<a id="product-ui--downstream-board-modules-proposed"></a>');
+        // The frame / right-panel rules survive as their own subsection rather than being dropped.
+        expect(design).toContain('right-panel resize handle');
+    });
+
+    test('R3 — spur-composer links the dedicated UI reference from its Board module step', () => {
+        expect(composer).toContain('references/board-module-ui.md');
+        expect(composer).toContain('DESIGN.md#product-ui--module-shell-built-in-and-downstream-modules');
+        const uiReference = readFileSync(reference, 'utf8');
+        for (const owner of [
+            'DESIGN.md#product-ui--module-shell-built-in-and-downstream-modules',
+            'docs/design/downstream-board-modules.md#6-authoring-guide',
+            'docs/design/board-module-ui-kit.md',
+        ]) {
+            expect(uiReference, `reference must link ${owner}`).toContain(owner);
+        }
+    });
+});

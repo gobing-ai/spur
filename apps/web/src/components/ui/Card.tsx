@@ -15,6 +15,8 @@ const VARIANT_CLASSES = {
 type CardVariant = keyof typeof VARIANT_CLASSES;
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+    /** Card content — React 19 no longer implies a `children` prop. */
+    children?: React.ReactNode;
     /** daisyUI variant (border style, layout density, orientation). */
     variant?: CardVariant;
     /** Render the assembled `card` classes onto a single child element instead of a `<div>`. */

@@ -24,6 +24,8 @@ type BadgeVariant = keyof typeof VARIANT_CLASSES;
 type BadgeSize = keyof typeof SIZE_CLASSES;
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+    /** Badge content — React 19 no longer implies a `children` prop. */
+    children?: React.ReactNode;
     /** daisyUI color variant. Default: no variant (bare badge). */
     variant?: BadgeVariant;
     /** daisyUI size preset. Default: md (no explicit size class). */

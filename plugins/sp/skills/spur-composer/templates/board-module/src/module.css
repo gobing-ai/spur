@@ -1,0 +1,12 @@
+/* Module-private styles only.
+ *
+ * Scope every rule to a class you own: the shell, the frame and other modules belong to the host,
+ * and a global reset or a copied host stylesheet would be the drift the UI contract exists to stop.
+ * Theme-aware values resolve from the host's semantic tokens (for example `var(--color-base-content)`)
+ * or inherited color — never a hard-coded palette value.
+ */
+.starter-note {
+    margin: 0;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}

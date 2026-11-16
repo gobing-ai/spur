@@ -25,6 +25,11 @@ export const boardHostRuntimeSchema = z.object({
     reactVersion: z.string(),
     reactDomVersion: z.string(),
     reactRouterVersion: z.string(),
+    /**
+     * Semver of the shared module UI kit's prop contract (ADR-150). Optional: a board built
+     * before the kit shipped advertises no kit, and an old manifest must keep parsing.
+     */
+    uiKitVersion: z.string().optional(),
     /** Supported bare specifier -> same-origin facade asset URL (the document import map). */
     imports: z.record(z.string(), z.string()),
     reservedModules: z.array(boardReservedIdentitySchema),

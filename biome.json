@@ -18,6 +18,8 @@
             "!**/vendors",
             "!docs/.tasks",
             "!drizzle",
+            "!apps/cli/board/kit",
+            "!docs/reports/artifacts",
             "!**/.spur"
         ]
     },

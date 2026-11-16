@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A81"
 name: "Board module UI contract and shared UI kit for downstream modules"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-16T19:05:03.386Z"
-updated_at: "2026-11-16T19:05:43.601Z"
+updated_at: "2026-11-16T19:46:21.581Z"
 ---
 
 # A81: Board module UI contract and shared UI kit for downstream modules
@@ -121,10 +121,13 @@ Feature: Board module UI contract and shared UI kit for downstream modules
 | --- | ---- | ------ |
 | 1350 | Add the starter module template, prove it in the installed Board and document the kit | todo |
 | 1349 | Ship the module kit as a Board runtime facade specifier with installed-package types | todo |
-| 1347 | Define the Board module-shell UI contract in DESIGN.md and route spur-composer to it | todo |
+| 1347 | Define the Board module-shell UI contract in DESIGN.md and route spur-composer to it | wip |
 | 1348 | Extract Board shell primitives into a shared module kit and adopt them in a built-in shell | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-11-16T19:46:21.581Z backlog → active (system)
+

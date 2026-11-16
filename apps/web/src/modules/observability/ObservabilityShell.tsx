@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import ModuleIcon from '../../components/ModuleIcon';
-import { TimeRangePresets } from './ObservabilityFilters';
+import { ModuleHeader, ModuleShell, ModuleTabs, TimeRangePresets } from '../../components/module-kit';
+import { TIME_RANGES } from './ObservabilityFilters';
 import {
     OBSERVABILITY_TABS,
     type ObservabilityLiveness,
@@ -75,69 +76,44 @@ export default function ObservabilityShell() {
                 : 'bg-base-content/40';
 
     return (
-        <div className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full" data-observability-shell>
-            {/* Header & Tab Navigation Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0">
-                <div className="flex items-center gap-3">
+        <ModuleShell data-observability-shell>
+            {/* ADR-081 header: identity left, shell-owned range presets middle, tab strip right. */}
+            <ModuleHeader
+                icon={
                     <ModuleIcon id="observability" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Observabilities</h1>
-                        <p className="text-xs text-base-content/60">
-                            System event streams, queue execution telemetry, and routing attribution
-                        </p>
-                        <p
-                            className="livechip mt-1 inline-flex items-center gap-1.5 rounded-full border border-base-content/10 px-2 py-0.5 text-xs text-base-content/60 font-mono"
-                            data-testid="observability-liveness-chip"
-                            role="status"
-                            aria-live="polite"
-                        >
-                            <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
-                            {chipLabel}
-                            {isSystemEvents && liveness.lastEventAt && (
-                                <>
-                                    {' · last '}
-                                    <time dateTime={liveness.lastEventAt}>
-                                        {new Date(liveness.lastEventAt).toLocaleTimeString()}
-                                    </time>
-                                </>
-                            )}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Shell-owned time-range presets — visible on every tab (task 0793 R2/D2).
-                    ADR-081 header anatomy: filters middle, tab strip right. */}
-                <TimeRangePresets timeRange={timeRange} onTimeRangeChange={setTimeRange} />
-
-                {/* Tab Strip */}
-                <div
-                    role="tablist"
-                    aria-label="Observability tabs"
-                    className="flex items-center gap-1 bg-base-300 p-1 rounded-xl"
-                >
-                    {OBSERVABILITY_TABS.map((tab) => {
-                        const selected = tab.id === activeId;
-                        return (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={selected}
-                                aria-controls={`observability-tab-panel-${tab.id}`}
-                                id={`observability-tab-${tab.id}`}
-                                onClick={() => handleTabClick(tab.id)}
-                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                                    selected
-                                        ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                        : 'text-base-content/70 hover:bg-base-content/10'
-                                }`}
-                            >
-                                {tab.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
+                }
+                title="Observabilities"
+                subtitle="System event streams, queue execution telemetry, and routing attribution"
+                status={
+                    <p
+                        className="livechip mt-1 inline-flex items-center gap-1.5 rounded-full border border-base-content/10 px-2 py-0.5 text-xs text-base-content/60 font-mono"
+                        data-testid="observability-liveness-chip"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+                        {chipLabel}
+                        {isSystemEvents && liveness.lastEventAt && (
+                            <>
+                                {' · last '}
+                                <time dateTime={liveness.lastEventAt}>
+                                    {new Date(liveness.lastEventAt).toLocaleTimeString()}
+                                </time>
+                            </>
+                        )}
+                    </p>
+                }
+                filters={<TimeRangePresets presets={TIME_RANGES} value={timeRange} onChange={setTimeRange} />}
+                tabs={
+                    <ModuleTabs
+                        tabs={OBSERVABILITY_TABS}
+                        value={activeId}
+                        onChange={handleTabClick}
+                        label="Observability tabs"
+                        idPrefix="observability-tab"
+                    />
+                }
+            />
 
             {/* Tab Panel */}
             <div
@@ -155,6 +131,6 @@ export default function ObservabilityShell() {
                     />
                 ) : null}
             </div>
-        </div>
+        </ModuleShell>
     );
 }

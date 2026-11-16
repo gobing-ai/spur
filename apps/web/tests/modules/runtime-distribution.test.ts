@@ -12,7 +12,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { BOARD_FACADE_SPECIFIERS, type BoardRuntimeManifest } from '../../src/modules/runtime/manifest';
+import { BOARD_UI_KIT_VERSION } from '../../src/components/module-kit/exports';
+import {
+    BOARD_FACADE_SPECIFIERS,
+    BOARD_UI_KIT_SPECIFIER,
+    type BoardRuntimeManifest,
+} from '../../src/modules/runtime/manifest';
 import { buildBoardToTemp, removeBoardBuild, WEB_ROOT } from '../test-helpers/board-build';
 
 let dist: string;
@@ -63,6 +68,26 @@ describe('board-runtime.json (R2)', () => {
         expect(runtime.manifestVersion).toBe(1);
         expect(runtime.catalogVersion).toBe(1);
         expect(runtime.contributionApiVersion).toBe(1);
+    });
+
+    test('advertises the shared module UI kit as one additive specifier (A81 1349)', async () => {
+        const runtime = await manifest();
+        // A81 R3: the kit is additive — the protocol versions do not move for an existing consumer.
+        expect(runtime.uiKitVersion).toBe(BOARD_UI_KIT_VERSION);
+        const url = importUrl(runtime, BOARD_UI_KIT_SPECIFIER);
+        expect(await Bun.file(join(dist, url.replace(/^\//, ''))).exists()).toBe(true);
+        // The facade re-exports the kit's own components from the renderer's build graph.
+        const facade = await readFile(join(dist, url.replace(/^\//, '')), 'utf-8');
+        for (const name of [
+            'ModuleShell',
+            'ModuleHeader',
+            'ModuleTabs',
+            'TimeRangePresets',
+            'EmptyState',
+            'Diagnostic',
+        ]) {
+            expect([name, facade.includes(name)]).toEqual([name, true]);
+        }
     });
 
     test('records the versions the client build actually resolved', async () => {

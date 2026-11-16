@@ -1,0 +1,44 @@
+import type React from 'react';
+import type { ReactNode } from 'react';
+
+/** Severity of the diagnostic surface; both tones use the same neutral container. */
+export type DiagnosticTone = 'error' | 'warning';
+
+/** Presentational core of an actionable module failure. */
+export interface DiagnosticProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
+    /** One line naming what could not be displayed. */
+    title: ReactNode;
+    /** Why it failed, in user-facing words. */
+    detail?: ReactNode;
+    /** Machine-readable anchor (category, specifier, failing value) in mono type. */
+    code?: ReactNode;
+    /** The next safe action. */
+    hint?: ReactNode;
+    /** Test id for the module's own assertions. */
+    testId?: string;
+    /** Severity announced to assistive tech; `error` alerts, `warning` is a status. */
+    tone?: DiagnosticTone;
+}
+
+/**
+ * ## Diagnostic
+ *
+ * An actionable failure rendered inside the module region: what failed, why, and what to do
+ * next. Context-free, so both the host's module error boundary and a contribution can render
+ * the same shape; the header and Board navigation stay usable around it.
+ */
+export function Diagnostic({ title, detail, code, hint, testId, tone = 'error', ...rest }: DiagnosticProps) {
+    return (
+        <div
+            role={tone === 'error' ? 'alert' : 'status'}
+            data-testid={testId}
+            className="m-4 rounded-md border border-spur-border bg-spur-surface p-4 text-sm text-spur-text"
+            {...rest}
+        >
+            <p className="font-semibold">{title}</p>
+            {detail ? <p className="mt-1 text-spur-text-muted">{detail}</p> : null}
+            {code ? <p className="mt-1 font-mono text-xs text-spur-text-muted">{code}</p> : null}
+            {hint ? <p className="mt-1 text-spur-text-muted">{hint}</p> : null}
+        </div>
+    );
+}

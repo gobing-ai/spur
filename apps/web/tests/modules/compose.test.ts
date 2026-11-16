@@ -171,6 +171,28 @@ describe('composeBoardModules', () => {
         expect(docs?.component).not.toBeUndefined();
     });
 
+    it('names the unresolved UI-kit specifier in the import diagnostic and keeps built-ins usable', async () => {
+        // A81 1349 R5: a contribution that imports `@gobing-ai/spur/board/ui` on a Board whose
+        // manifest does not advertise it fails the ENTRY import, so the browser's own error names
+        // the specifier. That path must land on the module's route as a contained diagnostic.
+        const composed = await composeBoardModules(catalog({ modules: [reactDescriptor('panel')] }), BUILTINS, {
+            importEntry: async () => {
+                throw new TypeError('Failed to resolve module specifier "@gobing-ai/spur/board/ui"');
+            },
+        });
+
+        expect(composed.modules.map((m) => m.id)).toEqual(['tasks', 'projects', 'panel']);
+        const panel = requireEntry(composed.modules.find((m) => m.id === 'panel'));
+        expect(panel.route).toBe('modules/panel');
+        const html = renderToStaticMarkup(createElement(requireEntry(panel).component));
+        expect(html).toContain('module-diagnostic');
+        expect(html).toContain('data-failure-category="import"');
+        expect(html).toContain('@gobing-ai/spur/board/ui');
+        // Built-ins stay navigable around the failed module.
+        expect(composed.modules.map((m) => m.id)).toContain('tasks');
+        expect(composed.hostDiagnostics).toEqual([]);
+    });
+
     it('contains one failing module without rejecting the batch', async () => {
         const composed = await composeBoardModules(
             catalog({ modules: [reactDescriptor('broken'), reactDescriptor('ok')] }),

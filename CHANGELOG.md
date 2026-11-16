@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- share the Board module UI kit with native contributions as `@gobing-ai/spur/board/ui`, with type-only declarations in the installed package (ADR-150)
+  <!-- src: apps/web/src/modules/runtime/manifest.ts:10 · confidence: HIGH -->
+- ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
+  <!-- src: scripts/commands/emit-board-types.ts:76 · confidence: HIGH -->
+
 ## [0.4.36] - 2026-11-16
 
 ### Added

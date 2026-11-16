@@ -27,6 +27,9 @@
         "./schemas/*": "./schemas/*",
         "./board": {
             "types": "./board/index.d.ts"
+        },
+        "./board/ui": {
+            "types": "./board/kit/module-kit/index.d.ts"
         }
     },
     "files": [

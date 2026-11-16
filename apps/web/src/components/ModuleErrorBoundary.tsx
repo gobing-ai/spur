@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import type { BoardModuleDiagnostic } from '../modules/compose';
+import { Diagnostic } from './module-kit/Diagnostic';
 
 /**
  * Failure containment for downstream (native) Board modules (task 0990 R3/R4).
@@ -30,22 +31,15 @@ function redactPaths(message: string): string {
 /** Accessible diagnostic for one unusable module: names it, says why, offers a reload. */
 export function ModuleDiagnostic({ diagnostic }: { diagnostic: BoardModuleDiagnostic }) {
     return (
-        <div
-            role="alert"
-            data-testid="module-diagnostic"
+        <Diagnostic
+            testId="module-diagnostic"
             data-module-id={diagnostic.moduleId}
             data-failure-category={diagnostic.category}
-            className="m-4 rounded-md border border-spur-border bg-spur-surface p-4 text-sm text-spur-text"
-        >
-            <p className="font-semibold">“{diagnostic.moduleId}” could not be displayed.</p>
-            <p className="mt-1 text-spur-text-muted">{GUIDANCE[diagnostic.category]}</p>
-            <p className="mt-1 font-mono text-xs text-spur-text-muted">
-                {diagnostic.category}: {redactPaths(diagnostic.message)}
-            </p>
-            <p className="mt-1 text-spur-text-muted">
-                Reload this page after fixing the project module configuration. Other modules stay usable.
-            </p>
-        </div>
+            title={`“${diagnostic.moduleId}” could not be displayed.`}
+            detail={GUIDANCE[diagnostic.category]}
+            code={`${diagnostic.category}: ${redactPaths(diagnostic.message)}`}
+            hint="Reload this page after fixing the project module configuration. Other modules stay usable."
+        />
     );
 }
 

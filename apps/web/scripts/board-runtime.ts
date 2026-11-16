@@ -30,8 +30,10 @@ import { createRequire } from 'node:module';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AstroConfig, AstroIntegration } from 'astro';
+import { BOARD_UI_KIT_VERSION, MODULE_KIT_EXPORTS } from '../src/components/module-kit/exports';
 import {
     BOARD_FACADE_SPECIFIERS,
+    BOARD_UI_KIT_SPECIFIER,
     type BoardFacadeSpecifier,
     type BoardReservedModule,
     type BoardRuntimeVersions,
@@ -103,6 +105,17 @@ function exportNamesOf(resolvedId: string): string[] {
     return Object.keys(loaded).filter((name) => IDENTIFIER.test(name));
 }
 
+/**
+ * Export names for one specifier: measured for npm packages, declared for the UI kit.
+ *
+ * The kit barrel is a TSX module, so it cannot be `require`d the way React is; its frozen
+ * `MODULE_KIT_EXPORTS` list is used instead, and a unit test keeps that list equal to the
+ * barrel's real runtime exports.
+ */
+function exportNamesFor(specifier: BoardFacadeSpecifier, resolvedId: string): string[] {
+    return specifier === BOARD_UI_KIT_SPECIFIER ? [...MODULE_KIT_EXPORTS] : exportNamesOf(resolvedId);
+}
+
 /** Vite plugin: emit facade entries in the client build and capture their emitted URLs. */
 function facadePlugin(
     facades: Map<BoardFacadeSpecifier, string>,
@@ -137,7 +150,7 @@ function facadePlugin(
                 const resolved = await this.resolve(specifier);
                 if (!resolved) throw new Error(`board-runtime: cannot resolve "${specifier}" in the client build`);
                 if (resolved.external) throw new Error(`board-runtime: "${specifier}" resolved as external`);
-                sources.set(specifier, facadeSource(specifier, exportNamesOf(resolved.id)));
+                sources.set(specifier, facadeSource(specifier, exportNamesFor(specifier, resolved.id)));
                 this.emitFile({
                     type: 'chunk',
                     id: `${FACADE_ID_PREFIX}${specifier}`,
@@ -213,6 +226,7 @@ export function boardRuntime(): AstroIntegration {
                     versions: versions.value,
                     imports: facadeUrls(facades, base),
                     reservedModules: loadHostReservedModules(webRoot),
+                    uiKitVersion: BOARD_UI_KIT_VERSION,
                 });
                 await mkdir(outDir, { recursive: true });
                 await writeFile(

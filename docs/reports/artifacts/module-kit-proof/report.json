@@ -1,0 +1,114 @@
+{
+    "host": {
+        "manifestVersion": 1,
+        "contributionApiVersion": 1,
+        "reactVersion": "19.2.1",
+        "reactDomVersion": "19.2.1",
+        "reactRouterVersion": "7.11.0",
+        "imports": {
+            "react": "/_astro/board-facade-react.iFSev7qM.js",
+            "react/jsx-runtime": "/_astro/board-facade-react-jsx-runtime.DMKO1y04.js",
+            "react/jsx-dev-runtime": "/_astro/board-facade-react-jsx-dev-runtime.DQPjfFv1.js",
+            "react-dom": "/_astro/board-facade-react-dom.Dgydu7Km.js",
+            "react-dom/client": "/_astro/board-facade-react-dom-client.LWAeFUtS.js",
+            "react-router": "/_astro/board-facade-react-router.3H8-F88W.js",
+            "react-router/dom": "/_astro/board-facade-react-router-dom.3hnbasVr.js",
+            "@gobing-ai/spur/board/ui": "/_astro/board-facade-_gobing-ai-spur-board-ui.DIqoHoMa.js"
+        },
+        "reservedModules": [
+            {
+                "id": "observability",
+                "route": "observability"
+            },
+            {
+                "id": "search",
+                "route": "search"
+            },
+            {
+                "id": "history",
+                "route": "history"
+            },
+            {
+                "id": "plans",
+                "route": "plans"
+            },
+            {
+                "id": "designs",
+                "route": "designs"
+            },
+            {
+                "id": "features",
+                "route": "features"
+            },
+            {
+                "id": "tasks",
+                "route": "tasks"
+            },
+            {
+                "id": "projects",
+                "route": "projects"
+            },
+            {
+                "id": "settings",
+                "route": "settings"
+            },
+            {
+                "id": "workspace",
+                "route": "workspace",
+                "retired": true,
+                "redirectTo": "/board/projects"
+            },
+            {
+                "id": "teams",
+                "route": "teams",
+                "retired": true,
+                "redirectTo": "/board/settings/agents"
+            }
+        ]
+    },
+    "uiKitVersion": "1.0.0",
+    "browser": "HeadlessChrome/149.0.7827.55",
+    "build": {
+        "imported": [
+            "react/jsx-dev-runtime",
+            "@gobing-ai/spur/board/ui",
+            "react"
+        ],
+        "styleBytes": 52,
+        "entryBytes": 3556
+    },
+    "themes": {
+        "light": {
+            "module": {
+                "header": "oklab(0.21 0.00164225 -0.00577088 / 0.1)|12px|16px|400|rgba(0, 0, 0, 0)",
+                "title": "oklch(0.21 0.006 285.885)|0px|20px|700|rgba(0, 0, 0, 0)",
+                "tablist": "oklch(0.21 0.006 285.885)|4px|16px|400|oklch(0.95 0 0)",
+                "empty": "oklab(0.21 0.00164225 -0.00577088 / 0.5)|32px|12px|400|rgba(0, 0, 0, 0)"
+            },
+            "builtin": {
+                "header": "oklab(0.21 0.00164225 -0.00577088 / 0.1)|12px|16px|400|rgba(0, 0, 0, 0)",
+                "title": "oklch(0.21 0.006 285.885)|0px|20px|700|rgba(0, 0, 0, 0)",
+                "tablist": "oklch(0.21 0.006 285.885)|4px|16px|400|oklch(0.95 0 0)"
+            },
+            "moduleShot": "/Users/robin/xprojects/spur-new-runall-a81-92b185/docs/reports/artifacts/module-kit-proof/module-light.png",
+            "builtinShot": "/Users/robin/xprojects/spur-new-runall-a81-92b185/docs/reports/artifacts/module-kit-proof/builtin-light.png"
+        },
+        "dark": {
+            "module": {
+                "header": "oklab(0.97807 -0.00659902 -0.0282392 / 0.1)|12px|16px|400|rgba(0, 0, 0, 0)",
+                "title": "oklch(0.97807 0.029 256.847)|0px|20px|700|rgba(0, 0, 0, 0)",
+                "tablist": "oklch(0.97807 0.029 256.847)|4px|16px|400|oklch(0.2115 0.012 254.09)",
+                "empty": "oklab(0.97807 -0.00659901 -0.0282392 / 0.5)|32px|12px|400|rgba(0, 0, 0, 0)"
+            },
+            "builtin": {
+                "header": "oklab(0.97807 -0.00659902 -0.0282392 / 0.1)|12px|16px|400|rgba(0, 0, 0, 0)",
+                "title": "oklch(0.97807 0.029 256.847)|0px|20px|700|rgba(0, 0, 0, 0)",
+                "tablist": "oklch(0.97807 0.029 256.847)|4px|16px|400|oklch(0.2115 0.012 254.09)"
+            },
+            "moduleShot": "/Users/robin/xprojects/spur-new-runall-a81-92b185/docs/reports/artifacts/module-kit-proof/module-dark.png",
+            "builtinShot": "/Users/robin/xprojects/spur-new-runall-a81-92b185/docs/reports/artifacts/module-kit-proof/builtin-dark.png"
+        }
+    },
+    "generatedAt": "2026-11-16T20:12:55.027Z",
+    "moduleDist": "kit-demo"
+}

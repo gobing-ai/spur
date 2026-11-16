@@ -117,13 +117,16 @@ externals and the frame/trust limits — is owned by
 [downstream Board modules §6](../../../../docs/design/downstream-board-modules.md#6-authoring-guide);
 the user walkthrough is
 [docs/help/how_to_customize_project_modules.md](../../../../docs/help/how_to_customize_project_modules.md).
-Link them, never restate them.
+Whatever the shell must look like — anatomy, tabs, density, states, tokens — is owned by
+root [`DESIGN.md` § Product UI — Module Shell](../../../../DESIGN.md#product-ui--module-shell-built-in-and-downstream-modules).
+Link them, never restate them; [references/board-module-ui.md](references/board-module-ui.md) is
+the one routing index for the `compose` and `build` rows below.
 
 | Step | Action |
 | --- | --- |
 | select | A built-in module or an existing declaration already covers the need → no new module. An app that already runs and permits framing → `type: iframe`. Otherwise → `type: react`. |
-| compose | Add one declaration to the project `.spur/config.yaml` `bootstrap.modules` list. Stage it with `enabled: false` first: it is fully validated (id shape, duplicates, host/retired collisions) but loads no assets. |
-| build | `react` only: the downstream project builds its own ESM entry plus CSS into the declared `directory`, externalizing exactly the `imports` keys of the installed `web/board-runtime.json`. Building the module is the project's code work, not composer's. |
+| compose | Add one declaration to the project `.spur/config.yaml` `bootstrap.modules` list. Stage it with `enabled: false` first: it is fully validated (id shape, duplicates, host/retired collisions) but loads no assets. The shell contract and the starter template are routed by [references/board-module-ui.md](references/board-module-ui.md). |
+| build | `react` only: start from the starter template ([references/board-module-ui.md](references/board-module-ui.md) → `templates/board-module/`) and build its ESM entry plus CSS into the declared `directory`, externalizing exactly the `imports` keys of the installed `web/board-runtime.json`. Building the module is the project's code work, not composer's. |
 | gate | Restart `spur self serve`; the preflight fails startup on any declaration, asset or runtime-version error. Confirm the module in `GET /api/board/modules` and open `/board/modules/<id>`. `spur self serve --json` is a dry port probe and does **not** run this preflight. |
 | enable | Flip to `enabled: true`, restart and reload. There is no hot reload. |
 

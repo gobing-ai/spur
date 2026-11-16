@@ -14,7 +14,7 @@ tags: [contract, A8, web, config]
 
 The installed Board discovers only built-in modules through its build-time Vite glob. Downstream projects need explicit project-owned extensions without modifying Spur's checkout. Native React contributions are the selected primary direction; an iframe adapter can put existing embeddable applications into the same navigation. This design is accepted and implemented by feature A8 (tasks 0988–0992); the authored surfaces below are the shipped contract, and their proof status is recorded in §5. See [A8](../features/A8_downstream-spur-board-modules-and-embedded-resources.md), [the investigation](../plans/2026-09-27-dynamic-board-modules-brainstorm.md), and [ADR-128](../00_ADR.md#adr-128-project-owned-board-contributions-share-one-host-registry).
 
-This scope includes compiled React libraries and iframe URLs. It excludes server entry imports, external manifests, process management/proxying, iframe-directory hosting, automatic cross-document messaging, simultaneous split views, and live configuration replacement. One selected module occupies the Board workspace at a time. UI rules belong to [root DESIGN.md](../../DESIGN.md#product-ui--downstream-board-modules-proposed).
+This scope includes compiled React libraries and iframe URLs. It excludes server entry imports, external manifests, process management/proxying, iframe-directory hosting, automatic cross-document messaging, simultaneous split views, and live configuration replacement. One selected module occupies the Board workspace at a time. UI rules belong to [root DESIGN.md](../../DESIGN.md#product-ui--module-shell-built-in-and-downstream-modules).
 
 ## 2. Context and constraints
 
@@ -191,12 +191,28 @@ diagnostic on the module's own route rather than a thrown error. Import React th
 specifiers the Board advertises, never a bundled copy — the Board resolves them to its own instances
 via the document import map.
 
+**The shell comes from the host.** `@gobing-ai/spur/board/ui` is one of those advertised specifiers
+(A81, ADR-150): it resolves to the module UI kit, so a contribution renders `ModuleShell`,
+`ModuleHeader`, `ModuleTabs`, `TimeRangePresets`, `EmptyState`, `Diagnostic` and the re-exported
+`Card`/`Badge`/`Button`/`Loading` with the host's components and stylesheet — no copied CSS. Its
+rules are root [`DESIGN.md` § Product UI — Module Shell](../../DESIGN.md#product-ui--module-shell-built-in-and-downstream-modules);
+its specifier, exports, `uiKitVersion` and failure behavior are
+[`board-module-ui-kit.md`](board-module-ui-kit.md).
+
+**Start from the template.** `plugins/sp/skills/spur-composer/templates/board-module/` ships the
+starter module (Vite library config reading the installed `board-runtime.json`, an entry that exports
+`webModule` from the kit, scoped styles, and a paste-ready `module.yaml`); `sp:spur-composer` links it
+through `references/board-module-ui.md`. Copy it into the project rather than starting from a blank
+directory.
+
 ### 6.3 Vite library setup
 
 Build an ESM library with an explicit CSS entry. Externalize exactly the bare specifiers from the
 installed `web/board-runtime.json` (`react`, `react/jsx-runtime`, `react/jsx-dev-runtime`,
-`react-dom`, `react-dom/client`, `react-router`, `react-router/dom`); there is no wildcard, so bundling
-any other dependency into your output is the supported path. Non-JS assets referenced from CSS need
+`react-dom`, `react-dom/client`, `react-router`, `react-router/dom`, `@gobing-ai/spur/board/ui`); there
+is no wildcard, so bundling any other dependency into your output is the supported path. Read the list
+from the manifest (the starter template does) instead of typing it: a specifier the host does not
+advertise fails to resolve at load. Non-JS assets referenced from CSS need
 their own emitted files. Scope your CSS — no global resets, no shell-wide output — and prefer classes
 you own.
 

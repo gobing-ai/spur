@@ -180,6 +180,12 @@ const AUTHORING_GUIDE = new URL('../../../docs/design/downstream-board-modules.m
 /** Repo-relative path to the downstream end-user walkthrough. */
 const USER_HELP_GUIDE = new URL('../../../docs/help/how_to_customize_project_modules.md', import.meta.url);
 
+/** The starter module template's paste-ready declaration (A81 1350). */
+const STARTER_TEMPLATE_DECLARATION = new URL(
+    '../../../plugins/sp/skills/spur-composer/templates/board-module/module.yaml',
+    import.meta.url,
+);
+
 /** Every fenced YAML block in the guide, with its 1-based opening-fence line. */
 function yamlFences(markdown: string): { line: number; body: string }[] {
     return [...markdown.matchAll(/^```ya?ml[^\n]*\n([\s\S]*?)^```/gm)].map((match) => ({
@@ -237,6 +243,24 @@ describe('published authoring examples (R5)', () => {
             }
         }
         expect(failures).toEqual([]);
+    });
+
+    // The starter template's declaration is what a new author pastes first, so it is held to the
+    // same gate as the guides: it must clear the schema AND the cross-declaration rules.
+    test('the starter template declaration is preflight-clean', async () => {
+        const text = await readFile(STARTER_TEMPLATE_DECLARATION, 'utf8');
+        const config = spurConfigSchema.parse(parse(text));
+        const modules = config.bootstrap?.modules ?? [];
+        expect(modules).toHaveLength(1);
+        expect(modules[0]).toMatchObject({
+            id: 'starter',
+            type: 'react',
+            directory: 'modules/starter',
+            entry: 'entry.js',
+            styles: ['style.css'],
+            enabled: false,
+        });
+        expect(validateBoardModuleDeclarations(modules, reserved)).toBe(modules);
     });
 
     test('the published default is an empty module list', () => {

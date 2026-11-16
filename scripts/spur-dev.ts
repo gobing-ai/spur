@@ -13,7 +13,7 @@
  *   bundle-laya-worker [out-dir]                copy the laya-local Python worker next to the bundle
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
  *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
- *   emit-board-types                            emit apps/cli/board/index.d.ts from the authoring source
+ *   emit-board-types                            emit apps/cli/board/index.d.ts and the module-kit declarations from their authoring sources
  *   emit-migration-sql                          emit the 0037 migration SQL module from its released .sql
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              cross-compile per-platform spur
@@ -67,7 +67,7 @@ import { bundleLayaWorker } from './commands/bundle-laya-worker';
 import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { devAll } from './commands/dev-all';
-import { emitBoardDeclarations } from './commands/emit-board-types';
+import { emitBoardDeclarations, emitKitDeclarations } from './commands/emit-board-types';
 import { emitMigrationSql } from './commands/emit-migration-sql';
 import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
@@ -144,6 +144,10 @@ try {
         case 'emit-board-types': {
             const result = await emitBoardDeclarations();
             console.log(`${result.changed ? 'Wrote' : 'Unchanged'} board declaration ${result.target}`);
+            const kit = await emitKitDeclarations();
+            console.log(
+                `${kit.changed ? 'Wrote' : 'Unchanged'} module-kit declarations (${kit.files} files) ${kit.entry}`,
+            );
             break;
         }
         case 'verify-pack': {

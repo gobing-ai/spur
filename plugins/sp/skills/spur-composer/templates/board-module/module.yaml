@@ -1,0 +1,15 @@
+# Paste under `bootstrap:` in the project `.spur/config.yaml`, then restart `spur self serve`.
+# The serve preflight validates this declaration before the server listens (ADR-128), and
+# `packages/config/tests/board-modules.test.ts` keeps this file parseable.
+bootstrap:
+    modules:
+        - id: starter
+          name: Starter module
+          icon: "◆"
+          type: react
+          # Both paths are project-relative: the built module tree and its entry inside it.
+          directory: modules/starter
+          entry: entry.js
+          styles: [style.css]
+          sidebarLabel: Starter
+          enabled: false

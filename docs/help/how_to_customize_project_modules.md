@@ -224,13 +224,41 @@ Restart `spur self serve`, reload, and open `/board/modules/team-board`.
 
 ---
 
+### 3.7 Start from the starter template and the shared UI kit (recommended)
+
+You do not have to hand-build the shell. Spur ships a starter module and the same UI primitives its
+own modules render:
+
+- **Template** — `plugins/sp/skills/spur-composer/templates/board-module/` in the Spur installation
+  (or the plugin directory of your agent install). Copy it into your project: it carries the Vite
+  library config, an entry that renders the shell from the kit, a scoped stylesheet, and a
+  paste-ready `module.yaml` declaration.
+- **UI kit** — import the shell from the bare specifier `@gobing-ai/spur/board/ui`. It is resolved by
+  the Board itself, so your module gets the host's components and the host stylesheet: `ModuleShell`,
+  `ModuleHeader`, `ModuleTabs`, `TimeRangePresets`, `EmptyState`, `Diagnostic`, plus `Card`, `Badge`,
+  `Button` and `Loading` re-exported unchanged.
+- **Types** — the same specifier carries the authoring types in the installed package
+  (`@gobing-ai/spur/board/ui`), so your entry typechecks without copying them.
+- **Build** — externalize exactly the specifiers the installed `web/board-runtime.json` advertises
+  (the template reads that file, so the list cannot drift). Never bundle React, and never ship
+  Tailwind or a copy of the host stylesheet.
+
+The shell's rules — header anatomy, tabs, density, states, themes — are owned by root `DESIGN.md`
+(§ Product UI — Module Shell); the kit's specifier, exports and versions by
+`docs/design/board-module-ui-kit.md`; the declaration and build contract by
+`docs/design/downstream-board-modules.md` §6. The sections below remain useful for module-private
+content; prefer a kit component over re-implementing one of them.
+
+---
+
 
 ---
 
 ## 4. Visual design system & theme alignment
 
 Custom modules share the DOM with the host Spur Board. To look and feel like native Spur modules
-across both light and dark modes, adhere to the following design system practices:
+across both light and dark modes, adhere to the following design system practices — and prefer the UI
+kit's components (§3.7) over re-implementing a shell pattern yourself:
 
 ### 4.1 Consuming Spur design tokens
 
