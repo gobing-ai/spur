@@ -198,7 +198,7 @@ async function runFixture(tasks: string[], maxWriters: number, memberWorkMs: num
  * Run the batch lane and write its receipt. Serial first (one writer), then parallel
  * (`maxWriters: 2`), so both runs share the fixture definition and the machine state.
  */
-export async function runBatchPerf(options: { memberWorkMs?: number; gateMs?: number } = {}): Promise<{
+export async function runBatchPerf(options: { memberWorkMs?: number; gateMs?: number; outDir?: string } = {}): Promise<{
     receipt: BatchPerfReceipt;
     receiptPath: string;
     exitCode: number;
@@ -221,13 +221,10 @@ export async function runBatchPerf(options: { memberWorkMs?: number; gateMs?: nu
     });
     // The fixture proves itself: a merge commit would mean the landing bypassed ff-only.
     const linear = serial.merges === 0 && parallel.merges === 0;
-    const receiptPath = join(
-        process.cwd(),
-        'docs',
-        'reports',
-        `fleet-perf-batch-${receipt.generatedAt.slice(0, 10)}.json`,
-    );
-    mkdirSync(join(process.cwd(), 'docs', 'reports'), { recursive: true });
+    // `outDir` keeps the TEST off the tracked report: a test must not rewrite a committed receipt.
+    const outDir = options.outDir ?? process.cwd();
+    const receiptPath = join(outDir, 'docs', 'reports', `fleet-perf-batch-${receipt.generatedAt.slice(0, 10)}.json`);
+    mkdirSync(join(outDir, 'docs', 'reports'), { recursive: true });
     writeFileSync(receiptPath, `${JSON.stringify({ ...receipt, linearLandings: linear }, null, 4)}\n`);
     // A failing ratio is reported, not asserted away: the lane exits 0 when it MEASURED, and the
     // receipt carries the verdict.

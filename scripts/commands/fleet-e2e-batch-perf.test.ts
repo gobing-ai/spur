@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { batchFixtureDigest, batchPerfReceipt, runBatchPerf } from './fleet-e2e-batch-perf';
 
 describe('G76 1346 — batch perf lane', () => {
@@ -51,7 +54,9 @@ describe('G76 1346 — batch perf lane', () => {
     });
 
     test('the lane measures a real serial and parallel run and writes the receipt', async () => {
-        const { receipt, exitCode } = await runBatchPerf();
+        // A temp out dir: the measurement writes a receipt, and a test must not rewrite the
+        // committed report in docs/reports.
+        const { receipt, exitCode } = await runBatchPerf({ outDir: mkdtempSync(join(tmpdir(), 'batch-perf-')) });
         expect(exitCode).toBe(0);
         // Four tasks in waves of two land in half the serial wall time, plus orchestration overhead.
         expect(receipt.serialWallMs).toBeGreaterThan(receipt.parallelWallMs);

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G76"
 name: "Parallel fleet orchestration: worktree lanes and a gated merge queue"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-11-16T01:08:56.445Z"
-updated_at: "2026-11-16T02:22:06.225Z"
+updated_at: "2026-11-16T03:39:18.223Z"
 ---
 
 # G76: Parallel fleet orchestration: worktree lanes and a gated merge queue
@@ -115,4 +115,5 @@ Feature: Parallel fleet orchestration: worktree lanes and a gated merge queue
 ## History
 
 - 2026-11-16T02:22:06.225Z backlog → active (system)
+- 2026-11-16T03:39:18.223Z active → verifying (system)
 
