@@ -479,3 +479,20 @@ dependencies are **integrated**, not merely pipeline-terminal, and admission rea
 integrated base ref before the deferred feature sync; any rebase conflict aborts, retains lane and
 branch, and holds the task with `integration-conflict` for the operator — never auto-resolved; a
 retained lane's next attempt opens a new lane.
+
+**Deferred gate (`--defer-gate`, task 1111 R3/R4).** The opt-in flag adds
+`"deferQualityGate":"true"` to each lane pipeline's `--vars` (deferQualityGate is added ONLY under the opt-in --defer-gate flag),
+so each task's `gate` state runs the light tier and writes `DEFERRED` instead of a full-gate `PASS`
+(see [flag-glossary](flag-glossary.md#flag-defer-gate)). After the queue drains:
+
+```
+post: integrated full gate on BASE_REF (only under --defer-gate) -> feature sync + refresh
+if deferred:
+    run the project qualityGateCmd on BASE_REF   # the ONE full gate for the batch
+    PASS -> proceed to feature sync
+    FAIL -> batch verdict FAIL; feature sync SKIPPED; report every affected branch with a
+            re-gate command, newest-first (git log order); no automatic bisect, no revert
+```
+
+Every report row of a deferred task carries `gate: deferred`, so a light receipt is never mistaken
+for the batch's full-gate evidence.
