@@ -1342,6 +1342,10 @@ proofs. Configuration and native asset changes require server restart and browse
 deployments do not acquire project-filesystem loading. Exact declarations, lifecycle rules and
 compatibility limits: [downstream Board module contract](design/downstream-board-modules.md).
 
+Accepted, not built (ADR-150): the Board also shares one Spur-owned shell-primitive module through
+the same facade mechanism, rendered by built-in shells and native contributions alike:
+[Board module UI kit](design/board-module-ui-kit.md).
+
 ## 31. Cross-Platform Hook Core — built (ADR-129; task 0969)
 
 The sp plugin owns one indexed-context implementation (cores in `plugins/sp/lib`, registered entries in `plugins/sp/scripts/hooks`, run by `superskill hook run`). `recordToolUseEvent`

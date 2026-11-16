@@ -2892,3 +2892,22 @@ re-import pressure this entry already records).
   only), ADR-143, ADR-145 (fresh reviewer conversations).
 - **Detail:** [fleet orchestration lanes](design/fleet-orchestration-lanes.md);
   [plan](plans/2026-11-15-multi-agent-task-orchestration.md).
+
+## ADR-150: The Board Shares Shell Primitives With Native Contributions Through Its Runtime Facade
+
+- **Status:** Accepted (design) · **Date:** 2026-11-16 · **Feature:** A81 · **Amends:** ADR-128 · **Extends:** ADR-081
+- **Decision:** The Board exposes one Spur-owned UI module (`@gobing-ai/spur/board/ui`) of shell
+  primitives to native contributions as an additional explicit facade specifier emitted from the
+  renderer's client build graph. Built-in shells render the same primitives. Types ship
+  declaration-only; contributions ship no host CSS. Root `DESIGN.md`'s module-shell rules bind
+  built-in and downstream modules alike.
+- **Why:** ADR-128 shared only React and React Router, so downstream modules re-implemented the
+  ADR-081 shell in look-alike CSS and drifted (knowledge-kit's three modules). Sharing the host's own
+  components makes parity structural and lets theme and restyle changes propagate.
+- **Alternatives:** A documented contract plus a shipped token stylesheet avoids a new runtime
+  promise but remains imitation; a project-specific Board build (ADR-128 fallback) shares everything
+  at the cost of a portable build kit and full rebuilds.
+- **Consequence:** Spur owns a versioned UI prop contract (`uiKitVersion` in `board-runtime.json`)
+  in addition to the React ABI; adding a kit component is a public promise. `contributionApiVersion`
+  stays 1.
+- **Detail:** [Board module UI kit](design/board-module-ui-kit.md); [downstream Board module contract](design/downstream-board-modules.md).
