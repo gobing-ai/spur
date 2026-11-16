@@ -1,0 +1,42 @@
+{
+    "generatedAt": "2026-11-16T03:26:38.955Z",
+    "serialWallMs": 9080,
+    "parallelWallMs": 4941,
+    "ratio": 0.5441629955947137,
+    "gateShare": 0.098,
+    "tasks": [
+        {
+            "wbs": "0601",
+            "dispatchedAt": "2026-11-16T03:26:34.036Z",
+            "receiptAt": "2026-11-16T03:26:36.070Z",
+            "integratedAt": "2026-11-16T03:26:36.484Z"
+        },
+        {
+            "wbs": "0602",
+            "dispatchedAt": "2026-11-16T03:26:34.036Z",
+            "receiptAt": "2026-11-16T03:26:36.067Z",
+            "integratedAt": "2026-11-16T03:26:36.281Z"
+        },
+        {
+            "wbs": "0603",
+            "dispatchedAt": "2026-11-16T03:26:36.513Z",
+            "receiptAt": "2026-11-16T03:26:38.545Z",
+            "integratedAt": "2026-11-16T03:26:38.946Z"
+        },
+        {
+            "wbs": "0604",
+            "dispatchedAt": "2026-11-16T03:26:36.514Z",
+            "receiptAt": "2026-11-16T03:26:38.544Z",
+            "integratedAt": "2026-11-16T03:26:38.742Z"
+        }
+    ],
+    "target": 0.6,
+    "pass": true,
+    "gateShardingFlag": false,
+    "retiredSkillBaseline": null,
+    "retiredSkillBaselineNote": "not measured: the skill-owned worktree path was retired by G76 1343 before this lane ran",
+    "memberWorkMs": 2000,
+    "gateMs": 120,
+    "maxWriters": 2,
+    "linearLandings": true
+}

@@ -1,10 +1,17 @@
 ---
-name: execution-worktree-setup
-description: "Worktree batch start (task 1128 split): --worktree creation or adoption — WT-1 dirty-tree precheck, WT-2 create/reuse/evidence-staging/name resolution, WT-3 crash-safe marker and WT-3b the batch commit on the branch. Read it with --worktree at batch start; landing stays in execution-worktree-landing.md."
+name: execution-worktree
+description: "Worktree lifecycle for `--worktree [<name>]` (task 1343; formerly execution-worktree-setup): WT-1 dirty precheck, WT-2 create/reuse + evidence staging, WT-3 crash-safe marker, WT-3b the batch commit, WT-6 `--continue` re-entry and WT-7 exclusions — plus the engine-owned contract for `--mode parallel`. Landing is read at batch end: execution-worktree-landing.md."
 see_also:
   - execution-batch
-  - execution-workflow
+  - execution-worktree-landing
+  - parallel-execution
 ---
+
+# Worktree lifecycle start (`--worktree [<name>]`)
+
+Read with `--worktree` at batch start. The driver loop itself stays in
+[execution-batch.md](execution-batch.md); landing (WT-4/WT-4r/WT-5/WT-PR) is
+[execution-worktree-landing.md](execution-worktree-landing.md), read at batch end.
 
 # Worktree setup (WT-1…WT-3b)
 
@@ -15,8 +22,8 @@ Read with `--worktree` at batch start (task 1128 R1).
 When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
 [`--worktree [<name>]`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an
 isolated git worktree instead of the operator's working directory. This section owns the worktree
-lifecycle for the sequential batch loop. `--mode parallel` has its own per-task isolation — see
-[§ Parallel isolation](execution-parallel-isolation.md#parallel-isolation---mode-parallel); `--worktree --mode parallel` is
+lifecycle for the sequential batch loop. `--mode parallel` no longer uses this file at all — see
+[§ parallel mode](#-mode-parallel--engine-owned-g76-134113421343); `--worktree --mode parallel` is
 rejected there (parallel mode already isolates each task in its own worktree).
 
 **Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
@@ -404,3 +411,71 @@ same call, verifies the WT-3 identity, and never relies on a persistent `cd` or 
 The FF-only git merge carries only commits — uncommitted writes in the worktree would be left
 behind by the merge and then destroyed by create mode's `git worktree remove`. WT-3b exists so
 that can never happen.
+
+### WT-6 — `--continue` re-entry (R7)
+
+A `--continue` resume of a batch started with `--worktree` must re-enter the existing worktree via
+its WT-3 marker rather than creating a second one. Marker lookup tries two paths in order:
+
+1. **Name-resolution path (when `--worktree <name>` is present)** — run the [§ Name resolution](#name-resolution---worktree-name)
+   algorithm against `<name>`. The resolved worktree's path identifies the marker file to adopt.
+   This path covers the common resume shapes: the operator remembers the name used last time, or
+   passes the path (tier-1 match).
+2. **Command+selector fallback (bare `--worktree` or absent flag)** — scan
+   `.spur/run/worktree-*.json` **in the invoking tree** (where WT-3 wrote the marker —
+   task 0701 R2c) for a marker whose `command` + `selector` match the current
+   invocation and whose `status` is `active` or `retained`. Create-mode runs that did not name their
+   tree resolve here.
+3. **Found by either path** → `cd` into the marker's `path`, skip WT-1/WT-2 (no new worktree), and
+   resume the loop from the checkpoint (Steps 1–5 with `--continue` semantics).
+4. **Not found** → fail loudly: "no resolvable worktree marker for `<command> <selector>` under
+   `.spur/run/`; cannot resume a `--worktree` batch without one. Re-run without `--worktree` to
+   start a new batch in the main tree, or inspect `.spur/run/` for prior markers." Do **not**
+   silently run in the main tree.
+
+Name resolution failing at resume (0 or ≥2 hits) has the same abort semantics as a fresh run: it
+names candidates and requires the path form — it does **not** fall through to the command+selector
+fallback, because `<name>` was explicit and unambiguous intent.
+
+### WT-7 — Exclusions (R8)
+
+- **`dev-next`** does not get `--worktree` — it dispatches a single step; per-step isolation is not
+  worth the worktree cost. `dev-run` is different: it drives a whole task pipeline, so it does get
+  the flag.
+- **`--mode parallel`** is rejected when combined with `--worktree` — parallel mode already
+  isolates each task in its own worktree
+  ([§ Parallel isolation](#parallel-isolation---mode-parallel)), and reuse mode
+  (`--worktree <name>`) has no per-task meaning.
+- **`--mode implement`** is rejected when combined with `--worktree` on `dev-run` — that mode *is*
+  the pipeline's implement stage (bug-742) and runs in whatever tree the driver set up; a second
+  worktree would split one task's evidence across two trees.
+- **`dev-review` without `--triage`** is rejected when combined with `--worktree` — a read-only
+  review writes nothing worth isolating; review another worktree by passing a path inside it.
+- **No** create-with-name (`--worktree <name>` never creates; an unresolvable name is an error),
+  no `--worktree-keep` variant, no auto-cleanup of stale worktrees or markers from prior runs.
+
+### Corpus visibility note
+
+While the batch runs, corpus writes (`spur task update`, `spur feature update`) land in the
+**worktree copy**; the operator's main tree still shows pre-run task statuses. This is expected —
+the merge (WT-4) or manual integration (WT-5) propagates the writes back. Worth one line in each
+command doc so it does not read as a bug.
+
+## `--mode parallel` — engine-owned (G76 1341/1342/1343)
+
+Parallel mode no longer runs per-task worktree prose. The frozen set is tagged `fleet:auto`, the
+fleet tick opens one **lane** per write dispatch (`packages/app/src/services/worktree-lane-service.ts`),
+the integration queue rebases, gates and fast-forwards each finished lane
+(`packages/app/src/services/fleet-integration-queue.ts`), and the batch client only ticks
+(`runForegroundTicks`, `packages/app/src/services/fleet-foreground-loop.ts`). The batch report is
+projected from `fleet.lane.*` / `fleet.task.integrated` events (`fleetReportRows`) instead of from
+terminal output, and a project without an enabled fleet, a coder member or `agent.fleet.maxWriters`
+refuses parallel mode with the fix named (`parallelRefusal`) rather than falling back to serial.
+
+Contracts that survive the move, unchanged: per-task isolation is still one tree per task;
+`--worktree` is rejected under `--mode parallel`; a task becomes eligible only when its in-set
+dependencies are **integrated**, not merely pipeline-terminal, and admission reads
+`fleet.task.integrated`, never corpus status; `--defer-gate` runs the one full gate on the
+integrated base ref before the deferred feature sync; any rebase conflict aborts, retains lane and
+branch, and holds the task with `integration-conflict` for the operator — never auto-resolved; a
+retained lane's next attempt opens a new lane.

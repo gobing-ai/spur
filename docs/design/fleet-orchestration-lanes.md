@@ -138,3 +138,19 @@ Reconciliation compares claim rows, dispatch attempts and `git worktree list --p
 - **Attached occupants (ADR-146)** cannot work in a lane `cwd`: a bound occupant's workspace is fixed at bind time (`packages/app/src/services/fleet-guest-service.ts:704-709`). In lane mode they take only review and read turns (task 1341 refinement).
 - **Lane cwd carrier.** The member derives the lane path from the request key `fleet:task:<wbs>:<attempt>` and the project config. There is no inbox or wire change. Remote members land through fetched branches (task 1345).
 - **Feature sync.** Running sync after each feature's last landing, rather than once at the end of the batch, could interleave with later lanes. Those lanes never write generated regions, so ordering is safe. The R6 fixture asserts this.
+
+## As built (tasks 1341–1346)
+
+| Element | Where it landed |
+| --- | --- |
+| `maxWriters` / `laneRoot` config, lane mode gating | `packages/config/src/index.ts` `AgentFleetSchema`; `StrategyRuntime.laneMode` reads the declared section |
+| Lane lifecycle (`open`/`retain`/`dispose`/`list`/`reconcile`, plus `open(wbs, attempt, { branch })` for a fetched remote branch) | `packages/app/src/services/worktree-lane-service.ts` |
+| Admission (`writer-cap`, `file-overlap`, `awaiting-integration`, `integration-conflict`) | `packages/app/src/services/strategy-runtime.ts` (`gtdStrategy.select`) |
+| Serialized landing (`integrate` claim, rebase → gate → `--ff-only` → persist → `fleet.task.integrated` → dispose; `not-started` for an unfetchable remote) | `packages/app/src/services/fleet-integration-queue.ts` |
+| Foreground batch client, fleet-less refusal, ledger report | `packages/app/src/services/fleet-foreground-loop.ts` |
+| Reviewer routing in the same lane (`cwd` in the work-item envelope + `{coder, reviewer, session}` receipt) | `packages/app/src/workflow/fleet-work-item.ts` |
+| Throughput measurement (`--perf --modes batch`, receipt `docs/reports/fleet-perf-batch-<date>.json`) | `scripts/commands/fleet-e2e-batch-perf.ts` |
+
+Two behaviours worth reading before changing this area: the queue is derived from receipts plus
+`fleet.*` events each tick (no queue table), and a lane that vanished instead of landing still holds
+its dependents, because the attempt's receipt — not the worktree — is the admission evidence.

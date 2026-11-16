@@ -15,15 +15,14 @@ const ref = (name: string): string => join(REFERENCES, name);
 const DRIVER_DOCS = [
     'execution-batch.md',
     'execution-batch-report.md',
-    'execution-worktree-setup.md',
+    'execution-worktree.md',
     'execution-worktree-landing.md',
-    'execution-parallel-isolation.md',
     'execution-batch-continuation.md',
 ] as const;
 /** Files that MUST define at least one commit step — losing one is a contract loss, not a move. */
 const COMMIT_STEP_DOCS = [
     'execution-batch-report.md',
-    'execution-worktree-setup.md',
+    'execution-worktree.md',
     'execution-worktree-landing.md',
 ] as const;
 

@@ -74,7 +74,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree,
 `<name>` form adopts an existing worktree by name/path/branch). The lifecycle — dirty-tree precheck,
 creation or adoption, crash-safe `.spur/run/` marker, merge-or-retain, `--continue` re-entry — is
-`execution-worktree-setup.md` (creation/adoption, WT-1…WT-3b) + `execution-worktree-landing.md`
+`execution-worktree.md` (creation/adoption, WT-1…WT-3b) + `execution-worktree-landing.md`
 (WT-4/WT-5) applied to a batch of one: marker `command` is `dev-run`
 and `selector` is the `<wbs>`, the derived branch is `sp/run-<wbs>-<short-id>`, and the success
 condition is the task reaching terminal `done` with no failed stage. A failing gate, a non-PASS

@@ -1,10 +1,15 @@
 ---
 name: execution-worktree-landing
-description: "Worktree batch end (task 1128 split): WT-4 success (merge, remove, delete or retain), WT-5 failure retention, the retained-worktree report template and the conflict-merge recipe. Read it at batch end; setup stays in execution-worktree-setup.md."
+description: "Worktree batch end (task 1343 rename of execution-worktree-landing): WT-4 success (merge, remove, delete or retain), WT-PR remote PR landing, WT-4r rebasing a retained branch, WT-5 failure retention, the retained-worktree report template and the conflict-merge recipe. Read it at batch end; the lifecycle start stays in execution-worktree.md."
 see_also:
   - execution-batch
+  - execution-worktree
   - execution-workflow
 ---
+
+# Worktree landing (WT-4/WT-5)
+
+Read at batch end (task 1128 R1).
 
 # Worktree landing (WT-4/WT-5)
 

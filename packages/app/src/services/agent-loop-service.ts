@@ -667,6 +667,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                         const workResult =
                             claimed.length === 1 && requestKeys?.length === 1 && requestKeys[0]
                                 ? await runFleetWorkItem({
+                                      lane: { projectPath, fleet: declaration },
                                       cwd: deps.cwd,
                                       recipient,
                                       key: requestKeys[0],

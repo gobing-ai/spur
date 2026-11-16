@@ -1,0 +1,8 @@
+{
+    "task": "1342",
+    "landed": ["0601", "0602", "0603"],
+    "merges": 0,
+    "lanesAfterDrain": 0,
+    "orphansAfterDrain": 0,
+    "featureSyncs": 1
+}

@@ -16,9 +16,8 @@ const PARTS = {
     'execution-batch': [
         'execution-batch.md',
         'execution-batch-report.md',
-        'execution-worktree-setup.md',
+        'execution-worktree.md',
         'execution-worktree-landing.md',
-        'execution-parallel-isolation.md',
         'execution-batch-continuation.md',
     ],
 } as const satisfies Record<string, readonly string[]>;

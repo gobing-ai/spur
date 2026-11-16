@@ -110,8 +110,8 @@ Read this `SKILL.md` plus your mode's files below before the first dispatch; eve
 (budgets: `plugins/sp/tests/bootstrap-budget.test.ts`, task 1128).
 
 - sequential-inline: `references/execution-batch.md`
-- --worktree: `references/execution-batch.md`, `references/execution-worktree-setup.md`
-- --mode parallel: `references/execution-batch.md`, `references/execution-parallel-isolation.md`
+- --worktree: `references/execution-batch.md`, `references/execution-worktree.md`
+- --mode parallel: `references/execution-batch.md`, `references/execution-worktree.md`
 
 `--mode auto` reads as sequential-inline until § 2.4a resolves it.
 

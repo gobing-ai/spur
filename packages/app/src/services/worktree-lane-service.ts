@@ -100,15 +100,20 @@ export class WorktreeLaneService {
      * Open (or reuse) the lane for one attempt: idempotent per (wbs, attempt). Bootstraps
      * `.spur/run` — `.spur/config.yaml` is tracked, so the checkout already carries config.
      */
-    async open(wbs: string, attempt: number): Promise<Lane & { reused: boolean }> {
-        const branch = laneBranch(wbs, attempt);
+    async open(wbs: string, attempt: number, opts: { branch?: string } = {}): Promise<Lane & { reused: boolean }> {
+        // G76 1345: a fetched remote branch is checked out AS the lane, so the integration queue
+        // lands it through the identical rebase/gate/ff-only path. Absent = this attempt's own name.
+        const branch = opts.branch ?? laneBranch(wbs, attempt);
         const path = lanePath(this.project, this.deps.laneRoot, wbs, attempt);
         const existing = (await this.list()).find((lane) => lane.path === path);
         if (existing === undefined) {
             await this.fs.ensureDir(this.root);
             const branchExists = (await this.git('branch', '--list', branch)) !== '';
             if (branchExists) await this.git('worktree', 'add', path, branch);
-            else await this.git('worktree', 'add', '-b', branch, path, 'HEAD');
+            else if (opts.branch !== undefined) {
+                // A fetched branch must exist; creating it here would silently land an empty lane.
+                throw new Error(`lane open: branch ${branch} does not exist in ${this.project}`);
+            } else await this.git('worktree', 'add', '-b', branch, path, 'HEAD');
             await this.fs.ensureDir(join(path, '.spur', 'run'));
         }
         const lane = { path: normalizeProjectPath(path), branch, wbs, attempt };

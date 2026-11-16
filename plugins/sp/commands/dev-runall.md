@@ -47,7 +47,7 @@ structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.
 `NON_ABORTING_PREFLIGHT_CODES` behind `spur task preflight --classify-feature`; `--fix` repairs land in the report's `autoRepairs`) —
 any other strict error aborts), `--mode`
 `<sequential|parallel|auto>` (default `sequential`; `parallel` fans out a proven-independent subset —
-see `execution-parallel-isolation.md`; `auto` picks one per batch — see below), `--concurrency <n>`
+see `execution-worktree.md` § parallel; `auto` picks one per batch — see below), `--concurrency <n>`
 (parallel-mode worker bound — at most <n> task pipelines at once, default 2; a dependent task starts
 only after its in-set dependencies are **integrated** onto the base ref), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
@@ -65,7 +65,7 @@ targeting the base ref; mutually exclusive with `--wrap`), `--next`
 `--worktree` `[<name>]` (run the batch in an isolated git worktree —
 FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form
 creates a fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
-`execution-worktree-setup.md` + `execution-worktree-landing.md`).
+`execution-worktree.md` + `execution-worktree-landing.md`).
 
 **`--mode auto` (smart scheduling).** Ordering is always dependency-correct — every mode
 topo-sorts the frozen set with `spur task batch-plan order` (deterministic, never hand-sorted). `auto`
@@ -77,7 +77,7 @@ Default stays `sequential`: parallel costs ~N× tokens, worktree setup and subpr
 a dependency chain never pays back. Rules: execution-batch.md § 2.4a.
 
 **`--worktree` and parallel mode.** `--worktree --mode parallel` is **rejected** — parallel mode
-already isolates each task in its own worktree (see `execution-parallel-isolation.md`), and
+already isolates each task in its own worktree (see `execution-worktree.md`), and
 reuse mode (`--worktree <name>`) has no per-task meaning. Run parallel batches without
 `--worktree`, or run them sequentially with it.
 

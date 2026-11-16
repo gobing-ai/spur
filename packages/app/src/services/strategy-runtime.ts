@@ -10,10 +10,11 @@ import {
     readLifecycle,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { declaredTaskFiles } from '../workflow/plan-projection';
 import { DeliveryReconciler, type UnresolvedDelivery } from './delivery-reconciler';
 import type { FleetDispatcher, FleetReceipt } from './fleet-dispatcher';
+import { FleetIntegrationQueue } from './fleet-integration-queue';
 import type { FleetService, OrchestratorBinding, ResolvedFleetMember } from './fleet-service';
 import { type InboxMessage, InboxService } from './inbox-service';
 import { normalizeProjectPath } from './project-registry';
@@ -85,7 +86,17 @@ export type DispatchHoldReason =
     /** Lane mode (G76 1341): lanes in use reached `agent.fleet.maxWriters`; detail `<inUse>/<max>`. */
     | 'writer-cap'
     /** Lane mode (G76 1341): a declared file is shared with an in-flight lane; detail `<wbs> <path>`. */
-    | 'file-overlap';
+    | 'file-overlap'
+    /**
+     * G76 1342: a prerequisite finished its pipeline but its lane has not landed, so the code it
+     * produced is not on the base yet; detail names the prerequisite wbs.
+     */
+    | 'awaiting-integration'
+    /**
+     * G76 1342: this task's lane was retained on a rebase conflict and waits for the operator;
+     * detail carries `<lane path> <branch>`.
+     */
+    | 'integration-conflict';
 
 /**
  * One candidate's latest keyed dispatch attempt (G71 R1). `receipt` is absent while the
@@ -160,6 +171,13 @@ export interface StrategyContext {
         maxWriters: number;
         inUse: Array<{ wbs: string; files: string[] }>;
         filesOf: (wbs: string) => string[];
+        /**
+         * G76 1342 landing admission: the first prerequisite with a success receipt and no
+         * `fleet.task.integrated` event, or null. Landing state only — never corpus status.
+         */
+        awaitingIntegration?: (wbs: string) => string | null;
+        /** G76 1342: this task's lane retained on a rebase conflict (`integration-conflict`). */
+        conflictOf?: (wbs: string) => { path: string; branch: string } | null;
     };
 }
 
@@ -292,6 +310,20 @@ export const gtdStrategy: Strategy = {
                 hold('unmet-dependency', blocking);
                 continue;
             }
+            // 3a. Landing admission (G76 1342). A prerequisite that finished but has not landed
+            //     produced no base-ref code yet, so dispatching on corpus status alone would build
+            //     on a tree that does not exist. A lane retained on a rebase conflict likewise
+            //     waits for the operator: its next attempt is a new lane, never a silent retry.
+            const notLanded = lanes?.awaitingIntegration?.(candidate.wbs) ?? null;
+            if (notLanded !== null) {
+                hold('awaiting-integration', notLanded);
+                continue;
+            }
+            const conflicted = lanes?.conflictOf?.(candidate.wbs) ?? null;
+            if (conflicted !== null) {
+                hold('integration-conflict', `${conflicted.path} ${conflicted.branch}`);
+                continue;
+            }
             // 3b. dispatch freshness + in-flight exclusivity (G71 R1). The candidate's
             //     OWN in-flight attempt is named first so the hold reads specifically;
             //     any other in-flight attempt then blocks this candidate too.
@@ -412,6 +444,17 @@ export interface StrategyRuntimeContext {
     memberAttachments?: (instanceIds: string[]) => Promise<ReadonlyMap<string, MemberAttachmentState | null>>;
     /** Warn sink for housekeeping failures that must not fail a tick. */
     logger?: { warn(message: string, meta?: Record<string, unknown>): void };
+    /**
+     * G76 1342: the project gate for one lane tree, run before its landing. Absent = the queue
+     * runs `spur task gate <wbs> recheck` in the lane, which is the pipeline's own gate command
+     * and therefore reuses a PASS receipt when the rebased tree hash is unchanged.
+     */
+    integrationGate?: (wbs: string, cwd: string) => Promise<'PASS' | 'FAIL'>;
+    /**
+     * G76 1342: refresh one feature after its last landing (the once-per-feature sync). Absent
+     * means this host owns no feature service — the pipeline's own `done` sync still runs.
+     */
+    syncFeature?: (featureId: string) => Promise<void>;
 }
 
 /** R6: what a restart found and whether the runtime may accept dispatch work. */
@@ -596,6 +639,9 @@ export class StrategyRuntime {
         // Reconcile once, then work from one snapshot: a second selectNext per decision
         // (the pre-G71 shape) re-reconciled twice per tick for no new information.
         const resumed = await this.resume(normalized);
+        // G76 1342: land at most one finished lane before selecting, so a dependent task sees
+        // the code its prerequisite produced rather than just its corpus status.
+        await this.integrateOnce(normalized, opts);
         const { result, statusByWbs } = await this.selectFrom(normalized, resumed);
         const holds: DispatchHold[] = [...result.holds];
         const dispatcher = this.ctx.dispatcher;
@@ -1001,7 +1047,7 @@ export class StrategyRuntime {
             ready: (wbs) => ready.get(wbs) === true,
             dispatchAttempts,
             ...(lanes !== null
-                ? { lanes: await this.laneSnapshot(normalized, lanes.maxWriters, candidates, dispatchAttempts) }
+                ? { lanes: await this.laneSnapshot(normalized, lanes, candidates, dispatchAttempts) }
                 : {}),
         });
         return { name, result, statusByWbs };
@@ -1013,10 +1059,11 @@ export class StrategyRuntime {
      */
     private async laneSnapshot(
         normalized: string,
-        maxWriters: number,
+        lanes: { maxWriters: number; service: WorktreeLaneService },
         candidates: TaskSummary[],
         dispatchAttempts: ReadonlyMap<string, DispatchAttemptState>,
     ): Promise<NonNullable<StrategyContext['lanes']>> {
+        const maxWriters = lanes.maxWriters;
         const fs = createNodeFileSystem(normalized);
         const files = new Map<string, string[]>();
         for (const candidate of candidates) {
@@ -1034,7 +1081,148 @@ export class StrategyRuntime {
         const inUse = [...dispatchAttempts.entries()]
             .filter(([, state]) => state.receipt === undefined)
             .map(([wbs]) => ({ wbs, files: files.get(wbs) ?? [] }));
-        return { maxWriters, inUse, filesOf: (wbs) => files.get(wbs) ?? [] };
+        // G76 1342: landing facts, read from receipts plus `fleet.*` events — never corpus status.
+        const landing = await this.integrationState(normalized, lanes, candidates);
+        const unlanded = new Map(landing.unlanded.map((entry) => [entry.wbs, entry.wbs]));
+        const dependenciesOf = new Map(candidates.map((candidate) => [candidate.wbs, candidate.dependencies]));
+        return {
+            maxWriters,
+            inUse,
+            filesOf: (wbs) => files.get(wbs) ?? [],
+            awaitingIntegration: (wbs) =>
+                (dependenciesOf.get(wbs) ?? []).find((dependency) => unlanded.has(dependency)) ?? null,
+            conflictOf: (wbs) => landing.conflicts.get(wbs) ?? null,
+        };
+    }
+
+    /**
+     * G76 1342 landing state: successful attempts whose lane has not landed, and the lanes a
+     * rebase conflict retained. Both are derived from the base DB's events and the attempt rows, so
+     * a crash costs no bookkeeping — and a lane that vanished instead of landing still holds its
+     * dependents, because the attempt's receipt (not the worktree) is the admission evidence.
+     */
+    private async integrationState(
+        normalized: string,
+        lanes: { service: WorktreeLaneService },
+        candidates: TaskSummary[],
+    ): Promise<{
+        unlanded: Array<{ wbs: string; attempt: number }>;
+        conflicts: Map<string, { path: string; branch: string }>;
+    }> {
+        const db = await this.ctx.openDb(normalized);
+        const events = await new SystemEventDao(db).query({
+            names: ['fleet.task.integrated', 'fleet.lane.retained', 'fleet.lane.disposed'],
+            limit: 500,
+        });
+        const integrated = new Set<string>();
+        const disposed = new Set<string>();
+        const conflicts = new Map<string, { path: string; branch: string }>();
+        for (const row of events) {
+            const payload = JSON.parse(row.payload_json ?? '{}') as {
+                wbs?: unknown;
+                attempt?: unknown;
+                path?: unknown;
+                branch?: unknown;
+                reason?: unknown;
+            };
+            const wbs = typeof payload.wbs === 'string' ? payload.wbs : null;
+            const attempt = typeof payload.attempt === 'number' ? payload.attempt : null;
+            if (wbs === null || attempt === null) continue;
+            const key = `${wbs}:${attempt}`;
+            if (row.event_name === 'fleet.task.integrated') integrated.add(key);
+            if (row.event_name === 'fleet.lane.disposed') disposed.add(key);
+            if (
+                row.event_name === 'fleet.lane.retained' &&
+                payload.reason === 'integration-conflict' &&
+                typeof payload.path === 'string' &&
+                typeof payload.branch === 'string'
+            ) {
+                conflicts.set(wbs, { path: payload.path, branch: payload.branch });
+            }
+        }
+        const unlanded: Array<{ wbs: string; attempt: number }> = [];
+        const watched = new Set<string>();
+        for (const lane of await lanes.service.list()) watched.add(lane.wbs);
+        for (const candidate of candidates) for (const dependency of candidate.dependencies) watched.add(dependency);
+        const inbox = new InboxService({ getDb: async () => db });
+        for (const wbs of watched) {
+            const attempts = await inbox.attempts(wbs);
+            if (attempts.latest === null) continue;
+            const key = `${wbs}:${attempts.count}`;
+            if (integrated.has(key) || disposed.has(key)) continue;
+            if ((await this.receiptOf(normalized, wbs, inbox))?.status !== 'completed') continue;
+            unlanded.push({ wbs, attempt: attempts.count });
+        }
+        return { unlanded, conflicts };
+    }
+
+    /** The newest attempt's receipt for one task, or null when the attempt never settled. */
+    private async receiptOf(normalized: string, wbs: string, inbox?: InboxService): Promise<FleetReceipt | null> {
+        const dispatcher = this.ctx.dispatcher;
+        if (dispatcher === undefined) return null;
+        const db = await this.ctx.openDb(normalized);
+        const reader = inbox ?? new InboxService({ getDb: async () => db });
+        const latest = (await reader.attempts(wbs)).latest;
+        if (latest === null) return null;
+        return (await dispatcher.receipt(latest.id, latest.toId)) ?? null;
+    }
+
+    /**
+     * Land one finished lane (G76 1342). Failures never fail the tick: a lane that cannot land
+     * stays retained and the next tick retries, so a landing defect cannot stop dispatch.
+     */
+    private async integrateOnce(normalized: string, opts: { ownerEpoch: number }): Promise<void> {
+        try {
+            const lanes = await this.laneMode(normalized);
+            if (lanes === null) return;
+            // Dispatchable candidates are the tasks whose dependencies can be waiting to land.
+            const dispatchable = [
+                ...(await this.ctx.tasks.list({ status: 'todo' })),
+                ...(await this.ctx.tasks.list({ status: 'wip' })),
+            ];
+            const landing = await this.integrationState(normalized, lanes, dispatchable);
+            if (landing.unlanded.length === 0) return;
+            const tasks = new Map((await this.ctx.tasks.list()).map((task) => [task.wbs, task]));
+            const queue = new FleetIntegrationQueue({
+                baseBranch: await this.currentBranch(normalized),
+                lanes: lanes.service,
+                getDb: () => this.ctx.openDb(normalized),
+                candidates: async () => landing.unlanded,
+                runGate: this.ctx.integrationGate ?? ((wbs, cwd) => this.defaultGate(wbs, cwd)),
+                featureOf: async (wbs) => tasks.get(wbs)?.feature_id ?? null,
+                taskFileOf: async (wbs) => tasks.get(wbs)?.filePath ?? null,
+                syncFeature: async (featureId) => {
+                    await this.ctx.syncFeature?.(featureId);
+                },
+            });
+            await queue.drainOne(normalized, opts);
+        } catch (error) {
+            this.ctx.logger?.warn('strategy tick: integration queue failed', {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    /** The base tree's checked-out branch — the ref a landing fast-forwards. */
+    private async currentBranch(normalized: string): Promise<string> {
+        const res = await new NodeProcessExecutor().run({
+            command: 'git',
+            args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+            cwd: normalized,
+            rejectOnError: false,
+        });
+        return (res.stdout ?? '').trim();
+    }
+
+    /** Default pre-landing gate: the pipeline's own command, run in the lane (`recheck`). */
+    private async defaultGate(wbs: string, cwd: string): Promise<'PASS' | 'FAIL'> {
+        const res = await new NodeProcessExecutor().run({
+            command: 'spur',
+            args: ['task', 'gate', wbs, 'recheck'],
+            cwd,
+            rejectOnError: false,
+        });
+        return res.exitCode === 0 ? 'PASS' : 'FAIL';
     }
 
     /**

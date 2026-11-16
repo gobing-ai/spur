@@ -1,15 +1,23 @@
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import type { AgentFleet } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { ActionResult } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { AgentRunDeps } from '../services/agent-service';
 import type { WarmTurnDispatcher } from '../services/warm-turn-dispatch';
+import { isProjectLane } from '../services/worktree-lane-service';
 import type { WorkflowAgentService } from './actions/agent-run';
 
 interface FleetWorkItem {
     options: Record<string, unknown>;
     vars: Record<string, string>;
     excludeGlobs?: string[];
+    /**
+     * G76 1344: the lane the turn runs in (ADR-149). Written by the dispatching pipeline,
+     * validated by the member against the project's lane root — a member never runs a turn in
+     * a tree it cannot prove belongs to this project.
+     */
+    cwd?: string;
 }
 
 function paths(cwd: string, key: string): { input: string; result: string; state: string } | null {
@@ -37,6 +45,40 @@ function bindingVars(vars: Record<string, unknown>): Record<string, string> {
     ) as Record<string, string>;
 }
 
+/** True when the envelope's cwd is one of this project's lanes (G76 1344). */
+function isLaneCwd(
+    input: { cwd: string; lane?: { projectPath: string; fleet?: AgentFleet | null } },
+    cwd: string,
+): boolean {
+    // A member may always run in the tree it was handed — the in-tree dispatch this path had.
+    if (cwd === input.cwd) return true;
+    const lane = input.lane;
+    if (lane !== undefined && cwd === lane.projectPath) return true;
+    // No declaration means no lanes: an envelope claiming one is refused rather than trusted.
+    if (lane === undefined || lane.fleet === undefined || lane.fleet === null) return false;
+    return isProjectLane(lane.projectPath, lane.fleet, cwd);
+}
+
+/** The routing identities a review turn records beside the pipeline's own routing var (G76 1344). */
+export interface ReviewRoutingIdentity {
+    coder: string | null;
+    reviewer: string;
+    session: 'fresh';
+}
+
+/** Read the implement stage's recorded executor, so the review receipt names both sides. */
+function coderIdentity(vars: Record<string, string>): string | null {
+    const raw = vars.__agentRouting_implement;
+    if (raw === undefined) return null;
+    try {
+        const parsed = JSON.parse(raw) as { agent?: unknown; executor?: unknown };
+        const name = typeof parsed.agent === 'string' ? parsed.agent : parsed.executor;
+        return typeof name === 'string' && name.length > 0 ? name : null;
+    } catch {
+        return null;
+    }
+}
+
 /** Persist a stage contract and discard any result from an earlier attempt. */
 export async function writeFleetWorkItem(
     cwd: string,
@@ -45,12 +87,22 @@ export async function writeFleetWorkItem(
     options: Record<string, unknown>,
     vars: Record<string, unknown>,
     excludeGlobs?: string[],
+    /** Lane the turn must run in (G76 1344); omitted for an in-tree dispatch. */
+    lanePath?: string,
 ): Promise<void> {
     const file = paths(cwd, `${runId}/${state}`);
     if (file === null) throw new Error('Invalid fleet work-item identity');
     const fs = createNodeFileSystem(cwd);
     if (await fs.exists(file.result)) await fs.deleteFile(file.result);
-    await fs.writeFile(file.input, JSON.stringify({ options, vars: bindingVars(vars), excludeGlobs }));
+    await fs.writeFile(
+        file.input,
+        JSON.stringify({
+            options,
+            vars: bindingVars(vars),
+            excludeGlobs,
+            ...(lanePath !== undefined ? { cwd: lanePath } : {}),
+        }),
+    );
 }
 
 /** Read the member's completed contract result; missing or malformed results fail closed. */
@@ -101,6 +153,12 @@ export async function runFleetWorkItem(input: {
      * separately from the action-contract verdict, never merged into it.
      */
     turn?: WarmTurnDispatcher;
+    /**
+     * G76 1344: the BASE project path and its declared lane root, so a lane cwd in the envelope
+     * can be proven to belong to this project before the turn runs there. Absent = this host
+     * accepts no lane cwd and refuses one rather than guessing.
+     */
+    lane?: { projectPath: string; fleet?: AgentFleet | null };
 }): Promise<ActionResult | null> {
     const file = paths(input.cwd, input.key);
     const fs = createNodeFileSystem(input.cwd);
@@ -114,6 +172,13 @@ export async function runFleetWorkItem(input: {
         ),
     );
     const work = JSON.parse(await fs.readFile(file.input)) as FleetWorkItem;
+    if (work !== null && typeof work === 'object' && work.cwd !== undefined && !isLaneCwd(input, work.cwd)) {
+        // Never invent a tree: an unprovable cwd is a malformed envelope, not a fallback.
+        throw new Error(`Invalid fleet work-item envelope: cwd ${work.cwd} is not a lane of this project`);
+    }
+    // G76 1344: the turn runs in the lane the dispatching pipeline named, which is where its
+    // review evidence (and the task file it is judging) live. Absent = the member's own tree.
+    const runCwd = work !== null && typeof work === 'object' && work.cwd !== undefined ? work.cwd : input.cwd;
     if (
         work === null ||
         typeof work.options !== 'object' ||
@@ -140,7 +205,7 @@ export async function runFleetWorkItem(input: {
     );
     const runner = new AgentRunActionRunner(input.service, undefined, undefined, { excludeGlobs: work.excludeGlobs });
     const result = await runner.execute(
-        { ...work.options, agent: flags.agent, cwd: input.cwd },
+        { ...work.options, agent: flags.agent, cwd: runCwd },
         {
             runId,
             stateOrNodeId: file.state,
@@ -171,6 +236,16 @@ export async function runFleetWorkItem(input: {
             ),
         ),
     };
+    // G76 1344 R2: a review turn records BOTH identities next to the pipeline's own routing var,
+    // so a reader can prove the reviewer was a distinct member in a fresh session.
+    if (work.options.role === 'reviewer') {
+        const identity: ReviewRoutingIdentity = {
+            coder: coderIdentity(work.vars),
+            reviewer: input.recipient,
+            session: 'fresh',
+        };
+        await fs.writeFile(join(dirname(file.result), 'routing.json'), `${JSON.stringify(identity)}\n`);
+    }
     await fs.writeFile(file.result, JSON.stringify(projected));
     const runs = new CoordinationRunDao(await input.getDb());
     let row = await runs.getByRunId(runId);

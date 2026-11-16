@@ -453,6 +453,9 @@ export class AgentRunActionRunner implements ActionRunner {
                 options,
                 context.vars,
                 this.agentConfig.excludeGlobs,
+                // G76 1344: name the tree the turn must run in, so a pipeline running in a lane
+                // is judged in that lane — and the member can prove the tree before it runs.
+                cwd,
             );
         }
         const dispatch = await dispatchToFleet(

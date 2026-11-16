@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
@@ -161,4 +161,78 @@ test('ordinary and foreign keys do not read arbitrary work-item paths', async ()
             }),
         ).toBeNull();
     }
+});
+
+// G76 1344 — the review turn runs in the dispatching pipeline's lane, and a lane it cannot
+// prove belongs to this project is a malformed envelope, never a fallback tree.
+test('a declared lane cwd is accepted and becomes the turn cwd (G76 1344 R1/R2)', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'fleet-lane-'));
+    const project = join(base, 'repo');
+    const lane = join(base, 'repo.spur-lanes', 'repo-0601-1');
+    mkdirSync(lane, { recursive: true });
+    mkdirSync(join(project, '.spur', 'run'), { recursive: true });
+    const db = await createMigratedDb({ url: ':memory:' });
+    await writeFleetWorkItem(
+        project,
+        'parent',
+        'review',
+        { role: 'reviewer', input: 'Review the lane', answerFile: '.spur/run/answer.txt' },
+        { wbs: '0601', __agentRouting_implement: JSON.stringify({ agent: 'claude' }) },
+        undefined,
+        lane,
+    );
+    const { svc, invocations } = service('Verdict: PASS');
+    const result = await runFleetWorkItem({
+        cwd: project,
+        lane: {
+            projectPath: project,
+            fleet: {
+                enabled: true,
+                strategy: 'gtd',
+                members: [{ id: 'reviewer', role: 'reviewer' }],
+                maxWriters: 2,
+                laneRoot: join(base, 'repo.spur-lanes'),
+            },
+        },
+        recipient: 'repo-reviewer',
+        key: 'parent/review',
+        messageId: 'msg-lane',
+        flags: { agent: 'claude', 'run-id': 'child' },
+        service: svc,
+        getDb: async () => db,
+    });
+    expect(result?.ok).toBe(true);
+    // The turn really ran in the lane: its declared answer artifact landed there.
+    expect(readFileSync(join(lane, '.spur/run/answer.txt'), 'utf8')).toContain('Verdict: PASS');
+    void invocations;
+    // The receipt names both identities, and the reviewer's session is fresh by contract.
+    const routing = JSON.parse(readFileSync(join(project, '.spur/run/parent/prompts/routing.json'), 'utf8')) as {
+        coder: string;
+        reviewer: string;
+        session: string;
+    };
+    expect(routing).toEqual({ coder: 'claude', reviewer: 'repo-reviewer', session: 'fresh' });
+});
+
+test('a cwd outside the project and its lanes is a malformed envelope (G76 1344)', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'fleet-lane-bad-'));
+    const project = join(base, 'repo');
+    mkdirSync(join(project, '.spur', 'run'), { recursive: true });
+    const db = await createMigratedDb({ url: ':memory:' });
+    await writeFleetWorkItem(project, 'parent', 'review', { role: 'reviewer', input: 'Review' }, {}, undefined, '/tmp');
+    await expect(
+        runFleetWorkItem({
+            cwd: project,
+            lane: {
+                projectPath: project,
+                fleet: { enabled: true, strategy: 'gtd', members: [], maxWriters: 1 },
+            },
+            recipient: 'repo-reviewer',
+            key: 'parent/review',
+            messageId: 'msg-bad',
+            flags: { agent: 'claude', 'run-id': 'child' },
+            service: service('x').svc,
+            getDb: async () => db,
+        }),
+    ).rejects.toThrow('Invalid fleet work-item envelope');
 });

@@ -8,29 +8,31 @@ const DEV_RUNALL = join(ROOT, 'plugins', 'sp', 'commands', 'dev-runall.md');
 const FLAG_GLOSSARY = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
 const SUPER_PLANNER = join(ROOT, 'plugins', 'sp', 'agents', 'super-planner.md');
 const PLUGIN_SP = join(ROOT, 'plugins', 'sp');
-/** Task 1128 — the § Parallel isolation prose body moved to its own on-demand file. */
-const PARALLEL_ISOLATION = referencePath('execution-parallel-isolation.md');
-const SECTION_HEADING = '## Parallel isolation (`--mode parallel`)';
-const SECTION_LINK = '#parallel-isolation---mode-parallel';
+/**
+ * Task 1343 (G76 1341/1342) moved parallel isolation out of the prose and into the fleet kernel.
+ * The section now records the contract and names its owners; the git mechanics are pinned by
+ * `packages/app/tests/services/fleet-integration-queue.test.ts` and `fleet-lanes-e2e.test.ts`.
+ */
+const WORKTREE_REFERENCE = referencePath('execution-worktree.md');
+const SECTION_HEADING = '## `--mode parallel` — engine-owned (G76 1341/1342/1343)';
+const SECTION_LINK = '#-mode-parallel--engine-owned-g76-134113421343';
 const NEW_REJECTION_REASON = 'parallel mode already isolates each task in its own worktree';
-
-// 0931 R1-R6 — `--mode parallel` isolates every concurrently running task in its own create-mode
-// worktree (`sp/run-<wbs>-<short-id>`), bounds the fan-out with `--concurrency` (default 2),
-// integrates by rebase + `--ff-only` only, retains the worktree on a rebase conflict as
-// `integration-conflict` (never auto-resolved), and defers the per-task feature sync
-// (`deferFeatureSync`) until after integration. This file is the prose contract;
-// `parallel-integration-git.test.ts` proves the git mechanics in a temp repo.
+const ENGINE_OWNERS = [
+    'packages/app/src/services/worktree-lane-service.ts',
+    'packages/app/src/services/fleet-integration-queue.ts',
+    'packages/app/src/services/fleet-foreground-loop.ts',
+];
 
 /** Fold a markdown slice to single spaces so prose assertions survive rewrapping. */
 function flat(raw: string): string {
     return raw.replace(/\s+/g, ' ');
 }
 
-/** The § Parallel isolation section: from its heading to the next same-level heading. */
-function parallelIsolationSection(): string {
-    const raw = readFileSync(PARALLEL_ISOLATION, 'utf8');
+/** The engine-owned parallel section: from its heading to the next `## ` heading. */
+function parallelSection(): string {
+    const raw = readFileSync(WORKTREE_REFERENCE, 'utf8');
     const start = raw.indexOf(SECTION_HEADING);
-    if (start < 0) throw new Error(`missing "${SECTION_HEADING}" in execution-parallel-isolation.md`);
+    if (start < 0) throw new Error(`missing "${SECTION_HEADING}" in execution-worktree.md`);
     const next = raw.indexOf('\n## ', start + 1);
     return raw.slice(start, next < 0 ? undefined : next);
 }
@@ -49,80 +51,59 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
     return out;
 }
 
-describe('task 0931 — parallel isolation prose contract', () => {
+describe('task 1343 — parallel mode is engine-owned', () => {
     const executionBatch = readRunbook('execution-batch');
     const superPlanner = readFileSync(SUPER_PLANNER, 'utf8');
-    const section = parallelIsolationSection();
+    const section = parallelSection();
     const prose = flat(section);
 
-    test('AC1 (R1) — per-task create-mode worktrees, WT-3 markers with batchId, no shared tree', () => {
-        expect(prose).toContain('every concurrently running task gets its **own create-mode git worktree**');
-        expect(section).toContain('sp/run-<wbs>-<short-id>');
-        expect(prose).toContain('cut from the current base-ref tip');
-        expect(prose).toContain('Two task pipelines never share a working tree');
-        expect(prose).toContain('the main tree receives no task writes while the batch runs');
-        // Per-task WT-3 marker: schema fields + the batch-shared batchId.
-        expect(section).toContain('{command: dev-runall, selector: <wbs>, batchId: <batchId>}');
-        expect(prose).toContain('(path, branch, baseRef, baseSha) + batchId shared by every marker');
+    test('R1/R2 — the section names the three engine owners and no per-task worktree prose', () => {
+        for (const owner of ENGINE_OWNERS) expect(section).toContain(owner);
+        expect(prose).toContain('The frozen set is tagged `fleet:auto`');
+        expect(prose).toContain('opens one **lane** per write dispatch');
+        expect(prose).toContain('rebases, gates and fast-forwards each finished lane');
+        // R4 inversion: no driver git command survives in the skill prose for parallel mode.
+        expect(section).not.toContain('git worktree');
+        expect(section).not.toMatch(/git merge/);
+        expect(section).not.toContain('sp/run-<wbs>-<short-id>');
     });
 
-    test('AC2 (R2) — bounded concurrency, integration-gated eligibility, sequential default', () => {
-        expect(section).toContain('|running| < CONCURRENCY and ready has t with deps(t) ⊆ integrated:');
-        expect(section).toContain('[`--concurrency <n>`](flag-glossary.md#flag-concurrency)');
-        expect(prose).toContain('default **2**, `n ≥ 1`');
-        expect(prose).toContain('at most that many pipelines run at once');
-        expect(prose).toContain('only when all of its in-set dependencies are **integrated** onto the base ref');
-        expect(prose).toContain('Omitting `--mode` stays sequential');
+    test('R2 — the report is projected from the ledger, not from terminal output', () => {
+        expect(prose).toContain('projected from `fleet.lane.*` / `fleet.task.integrated` events');
+        expect(prose).toContain('`fleetReportRows`');
     });
 
-    test('AC3 (R3) — integration is rebase then --ff-only; never a merge commit, never --no-ff', () => {
-        expect(section).toContain('git -C "$WT" rebase "$BASE_REF"');
-        expect(section).toContain('git merge --ff-only --no-edit "$BRANCH"');
-        expect(prose).toContain('integrations are **serialized** (one at a time) in completion order');
-        expect(prose).toContain(
-            'The pipeline never creates a merge commit, and no conflict is ever resolved automatically',
-        );
-        expect(section).not.toContain('--no-ff');
-        // Task 1014: the WT-5 operator divergence recipe is the file's single sanctioned `--no-ff`
-        // (a manual merge commit by the operator). Driver integration stays rebase + --ff-only —
-        // pinned per-section above.
-        expect(executionBatch.match(/--no-ff/g)?.length).toBe(1);
+    test('R3 — a fleet-less project refuses parallel mode and names the fix', () => {
+        expect(prose).toContain('without an enabled fleet, a coder member or `agent.fleet.maxWriters`');
+        expect(prose).toContain('refuses parallel mode with the fix named');
+        expect(prose).toContain('`parallelRefusal`');
+        expect(prose).toContain('rather than falling back to serial');
     });
 
-    test('AC4 (R4) — conflict aborts the rebase, retains the worktree, reports, blocks; no auto-resolution', () => {
-        expect(section).toContain('git -C "$WT" rebase --abort');
-        expect(prose).toContain('There is no auto-resolution');
-        expect(prose).toContain('(WT-5, marker `retained`)');
-        expect(section).toContain('outcome is `integration-conflict`');
-        // The report row names path, branch, and the manual resume/merge/discard commands.
-        expect(section).toContain('resume:  cd <worktree-path> && git rebase <BASE_REF>');
-        expect(section).toContain('merge:   git checkout <BASE_REF> && git merge --ff-only --no-edit <branch>');
-        expect(section).toContain('discard: git worktree remove <worktree-path> && git branch -D <branch>');
-        expect(prose).toContain('dependent subtree is blocked under the normal failure policy');
-    });
-
-    test('AC5 (R5) — generated regions: deferFeatureSync deferral + one post-integration sync/refresh', () => {
-        expect(prose).toContain('`deferFeatureSync: "true"` (default `"false"`)');
-        expect(prose).toContain('feature sync deferred to batch integration');
-        expect(prose).toContain('branches never touch feature files or `docs/features/INDEX.md`');
-        expect(section).toContain('`spur feature refresh --feature <f>`');
-        expect(prose).toContain('`chore(corpus)` commit');
-        // Step 5 vocabulary + super-planner carry the parallel-only outcome.
+    test('surviving contracts: integrated-not-terminal, --worktree rejection, defer-gate, conflict retention', () => {
+        expect(prose).toContain('only when its in-set dependencies are **integrated**, not merely pipeline-terminal');
+        expect(prose).toContain('admission reads `fleet.task.integrated`, never corpus status');
+        expect(prose).toContain('`--worktree` is rejected under `--mode parallel`');
+        expect(prose).toContain('`--defer-gate` runs the one full gate on the integrated base ref');
+        expect(prose).toContain('rebase conflict aborts, retains lane and branch');
+        expect(prose).toContain('`integration-conflict`');
+        expect(prose).toContain('never auto-resolved');
         expect(flat(executionBatch)).toContain('and the parallel-only `integration-conflict`');
         expect(superPlanner).toContain('integration-conflict');
     });
 
-    test('R6 — the lifted rejection: --worktree + --mode parallel fails with the new reason everywhere', () => {
-        expect(prose).toContain(NEW_REJECTION_REASON);
+    test('R6 — the lifted rejection reason still reaches the command surface', () => {
         expect(flat(readFileSync(DEV_RUNALL, 'utf8'))).toContain(NEW_REJECTION_REASON);
         expect(flat(readFileSync(FLAG_GLOSSARY, 'utf8'))).toContain(NEW_REJECTION_REASON);
-        expect(prose).toContain('`--worktree --mode parallel` fails with');
     });
 
-    test('R6 — Step 3 routes parallel mode to the new section; the shared-tree wording is gone', () => {
+    test('R4 — execution-batch keeps the driver loop and points at the reference', () => {
         expect(executionBatch).toContain(SECTION_LINK);
+        expect(executionBatch).toContain('Nothing in this file runs `git worktree` or a landing merge.');
         expect(executionBatch).not.toContain('subagent/worktree-safe context');
         expect(executionBatch).not.toContain('## Parallel Execution');
+        // The retired per-task isolation loop is gone from the driver file.
+        expect(executionBatch).not.toContain('WT-2 create  sp/run-<wbs>-<short-id>');
     });
 
     test('AC5 — no retired 0142 deferral reference remains on any non-test plugin surface', () => {

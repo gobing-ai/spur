@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Fleet worktree lanes and concurrent writers
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-16T01:10:54.672Z
-updated_at: "2026-11-16T01:56:23.174Z"
+updated_at: "2026-11-16T02:28:51.475Z"
 feature_id: G76
 
 priority: P1
 estimate_hours: 10
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1341. Fleet worktree lanes and concurrent writers
@@ -28,17 +30,17 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 
 ### Requirements
 
-- [ ] R1 — WorktreeLaneService (packages/app) opens `sp/run-<wbs>-<attempt>` lanes under `agent.fleet.laneRoot`, idempotent per (wbs, attempt), and is the only orchestration code running `git worktree`.
-- [ ] R2 — The write slot is keyed by lane realpath; `agent.fleet.maxWriters` (default 1) and `agent.fleet.laneRoot` validate in packages/config (operator consent 2026-11-15).
-- [ ] R3 — Lane admission replaces the global `dispatch-in-flight` hold with `writer-cap` and `file-overlap` holds (reusing the `scheduleBatch` overlap rule); dispatch attempts, not base-tree status, decide in-flight.
-- [ ] R4 — Tick-host start reconciles claims, attempts and `git worktree list` (design §4.5).
-- [ ] R5 — Whether attached occupants (ADR-146) can run in a lane cwd is verified and recorded in design §5.
+- [x] R1 — WorktreeLaneService (packages/app) opens `sp/run-<wbs>-<attempt>` lanes under `agent.fleet.laneRoot`, idempotent per (wbs, attempt), and is the only orchestration code running `git worktree`.
+- [x] R2 — The write slot is keyed by lane realpath; `agent.fleet.maxWriters` (default 1) and `agent.fleet.laneRoot` validate in packages/config (operator consent 2026-11-15).
+- [x] R3 — Lane admission replaces the global `dispatch-in-flight` hold with `writer-cap` and `file-overlap` holds (reusing the `scheduleBatch` overlap rule); dispatch attempts, not base-tree status, decide in-flight.
+- [x] R4 — Tick-host start reconciles claims, attempts and `git worktree list` (design §4.5).
+- [x] R5 — Whether attached occupants (ADR-146) can run in a lane cwd is verified and recorded in design §5.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Independent tasks run concurrently in isolated lanes
-- [ ] AC2 — Overlapping declared files serialize
-- [ ] AC3 — Crash recovery leaves no orphan or duplicate lane
+- [x] AC1 — Independent tasks run concurrently in isolated lanes
+- [x] AC2 — Overlapping declared files serialize
+- [x] AC3 — Crash recovery leaves no orphan or duplicate lane
 
 ### Q&A
 
@@ -176,11 +178,34 @@ Lane mode (on only when `agent.fleet.maxWriters` is present) gives each write di
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — WorktreeLaneService opens `sp/run-<wbs>-<attempt>` under `agent.fleet.laneRoot`, idempotent per (wbs, attempt), and is the only orchestration code running `git worktree` | MET | `packages/app/src/services/worktree-lane-service.ts:103-119` (`open` reuses a listed lane); `:95-140` is the only orchestrator mutating worktrees — a repo-wide `rg` for `worktree add |
+| R2 — the write slot is keyed by lane realpath; `maxWriters`/`laneRoot` validate in packages/config | MET | `packages/app/src/services/write-slot-service.ts:96,98,128-133,184-193,234-236` (`slotPath` keys the row, the base path fences and opens the db); `packages/config/src/index.ts:664-670`; `packages/config/tests/config-schemas.test.ts:186-194` (25 pass, `maxWriters: 0` fails at path `maxWriters`); `packages/domain/tests/dao/project-claim-dao.test.ts:119-141` (9 pass) proves a lane claim is fenced by the base project and listed by slot |
+| R3 — lane admission replaces `dispatch-in-flight` with `writer-cap`/`file-overlap` | MET | `packages/app/src/services/strategy-runtime.ts:303-320,362`; legacy path preserved by the `lanes === undefined` branch (`:320`) and the unchanged `strategy-runtime` suite (117 pass across the lane-related app suites) |
+| R4 — tick-host start reconciles claims, attempts and `git worktree list` (design §4.5) | MET | `packages/app/src/services/strategy-runtime.ts:544-556` (write-side `resume` only), `:578` `attemptState`; `worktree-lane-service.ts:158-169` (reuse open attempts, prune orphans with no attempt row and no commits) |
+| R5 — attached occupants in a lane is verified and recorded in design §5 | MET | `docs/design/fleet-orchestration-lanes.md:138`; enforced at `packages/app/src/services/strategy-runtime.ts:236-237` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — independent tasks run concurrently in isolated lanes | MET | test | `packages/app/tests/services/fleet-lanes-e2e.test.ts` (F1 over a real git repo, real `StrategyRuntime`/`FleetService`/`FleetDispatcher`); receipt `docs/reports/fleet-lanes-p1.json` peakConcurrentLanes 2 |
+| AC2 — overlapping declared files serialize | MET | test | `packages/app/tests/services/fleet-lanes-e2e.test.ts` F2 (`file-overlap` hold naming the in-flight wbs + path); `packages/app/tests/services/worktree-lane-service.test.ts` pins `declaredTaskFiles` positive/negative extraction |
+| AC3 — crash recovery leaves no orphan or duplicate lane | MET | test | `packages/app/tests/services/fleet-lanes-e2e.test.ts` F3 (restart reuses the lane) and F10 (orphan pruned by `reconcile`); `docs/reports/fleet-lanes-p1.json` orphansAfterReconcile 0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -190,4 +215,6 @@ Lane mode (on only when `agent.fleet.maxWriters` is present) gives each write di
 
 - 2026-11-16T01:21:03.778Z backlog → todo (system)
 - 2026-11-16T01:51:00.609Z todo → wip (system)
+- 2026-11-16T02:28:50.185Z wip → testing (system)
+- 2026-11-16T02:28:51.469Z testing → done (system)
 

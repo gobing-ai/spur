@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G76"
 name: "Parallel fleet orchestration: worktree lanes and a gated merge queue"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-16T01:08:56.445Z"
-updated_at: "2026-11-16T01:10:45.329Z"
+updated_at: "2026-11-16T02:22:06.225Z"
 ---
 
 # G76: Parallel fleet orchestration: worktree lanes and a gated merge queue
@@ -103,7 +103,7 @@ Feature: Parallel fleet orchestration: worktree lanes and a gated merge queue
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1345 | Land A2A remote writer branches through the integration queue | todo |
-| 1341 | Fleet worktree lanes and concurrent writers | todo |
+| 1341 | Fleet worktree lanes and concurrent writers | wip |
 | 1342 | Fleet integration queue and integrated-dependency admission | todo |
 | 1343 | Thin dev-runall parallel client and retire worktree prose | todo |
 | 1346 | Measure parallel fleet throughput on the perf lane | todo |
@@ -113,3 +113,6 @@ Feature: Parallel fleet orchestration: worktree lanes and a gated merge queue
 ## Notes
 
 ## History
+
+- 2026-11-16T02:22:06.225Z backlog → active (system)
+

@@ -629,6 +629,19 @@ capability record (`persistentStdin` → `resumeById` → one-shot) and each del
 reason-named `fleet.member-session-reset` ledger row (ADR-121, G66). Boundary details:
 [project fleet dispatch](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
 
+**Lane mode and landing (G76, ADR-149).** With `agent.fleet.maxWriters` present, the same
+`StrategyRuntime` tick dispatches into worktree **lanes** instead of one in-tree writer: the write
+claim is keyed by the lane realpath (`WriteSlotService.claim(decision, slotPath)`,
+`ProjectClaimDao.listBySlot`) and admission is per lane — `writer-cap` and `file-overlap` replace the
+global `dispatch-in-flight` hold. `WorktreeLaneService` (`packages/app/src/services/
+worktree-lane-service.ts`) is the only orchestration code that mutates worktrees. A finished lane is
+landed by `FleetIntegrationQueue.drainOne` under one `'integrate'` claim: rebase, gate on the rebased
+tree (the gate receipt's own tree hash decides reuse), `merge --ff-only`, evidence persist, dispose —
+`fleet.task.integrated` is what a dependent task admits on, never corpus status. A remote A2A writer's
+`remoteBranch` is fetched into `sp/remote-<wbs>-<attempt>` and lands through that same queue. The
+batch client (`fleet-foreground-loop.ts`) only ticks; the parallel batch report is a projection of the
+same `fleet.*` ledger. Absent `maxWriters`, the single-writer path is byte-for-byte unchanged.
+
 Server startup derives the declared fleet specs from `agent.fleet` after the quota-update drain and
 before autostart or request admission (G72 R2 / ADR-086 A3: instances are derived, not stored, so
 nothing is materialized into `.spur/agents/` — that directory holds hand-authored specs only). CLI

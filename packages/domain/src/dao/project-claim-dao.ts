@@ -10,7 +10,7 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * slot's TTL/heartbeat semantics apply to guests without a new table. `worktree`
  * is the engine's task-run owner, independent of the fleet member's write slot.
  */
-export type ClaimSlot = 'orchestrator' | 'write' | 'worktree' | `guest:${string}`;
+export type ClaimSlot = 'orchestrator' | 'write' | 'worktree' | 'integrate' | `guest:${string}`;
 
 /**
  * Claim time-to-live (0836 Q&A — CLOSED): a module constant, not config. Nothing

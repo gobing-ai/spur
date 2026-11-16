@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Fleet integration queue and integrated-dependency admission
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T01:11:43.595Z
-updated_at: "2026-11-16T02:06:52.991Z"
+updated_at: "2026-11-16T02:41:02.449Z"
 feature_id: G76
 
 dependencies: ["1341"]
 priority: P1
 estimate_hours: 10
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1342. Fleet integration queue and integrated-dependency admission
@@ -34,17 +36,17 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 
 ### Requirements
 
-- [ ] R1 — A serialized integration consumer under an `integrate` claim rebases each successful lane onto the base tip and gates the rebased tree unless its tree hash matches a PASS receipt.
-- [ ] R2 — The base ref advances only by `--ff-only`; `persistWorktreeRuns` copies run evidence back; each touched feature syncs once after its last landing; the lane is then disposed.
-- [ ] R3 — A rebase conflict aborts, retains lane and branch, and holds the task with `integration-conflict`; no automatic resolution.
-- [ ] R4 — A candidate whose prerequisite is done but not landed holds with `awaiting-integration`; admission reads `fleet.task.integrated`, never corpus status.
-- [ ] R5 — Lane and landing events (`fleet.lane.opened|retained|disposed`, `fleet.task.integrated`) are written with their state change.
+- [x] R1 — A serialized integration consumer under an `integrate` claim rebases each successful lane onto the base tip and gates the rebased tree unless its tree hash matches a PASS receipt.
+- [x] R2 — The base ref advances only by `--ff-only`; `persistWorktreeRuns` copies run evidence back; each touched feature syncs once after its last landing; the lane is then disposed.
+- [x] R3 — A rebase conflict aborts, retains lane and branch, and holds the task with `integration-conflict`; no automatic resolution.
+- [x] R4 — A candidate whose prerequisite is done but not landed holds with `awaiting-integration`; admission reads `fleet.task.integrated`, never corpus status.
+- [x] R5 — Lane and landing events (`fleet.lane.opened|retained|disposed`, `fleet.task.integrated`) are written with their state change.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A dependent task waits for integration, not completion
-- [ ] AC2 — Landing gates the rebased tree and fast-forwards
-- [ ] AC3 — A conflict retains the lane for the operator
+- [x] AC1 — A dependent task waits for integration, not completion
+- [x] AC2 — Landing gates the rebased tree and fast-forwards
+- [x] AC3 — A conflict retains the lane for the operator
 
 ### Q&A
 
@@ -128,15 +130,68 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+The landing path is now engine code, not skill prose. A finished lane is rebased onto the base tip,
+gated on its rebased tree (the gate receipt already keys on the tree hash, so an unchanged tree
+reuses its PASS), fast-forwarded with no merge commit, and disposed; its run evidence is copied back
+first. A dependent task admits on `fleet.task.integrated`, never on corpus status, and a retained
+lane keeps its task on `integration-conflict` until the operator resolves it.
+
+**Change map**
+
+- **Claim slot:** `packages/domain/src/dao/project-claim-dao.ts:13` adds `'integrate'`, keyed by the base path, so landings never contend with lane write claims.
+- **Queue (new):** `packages/app/src/services/fleet-integration-queue.ts`
+  - `:71` `drainOne` takes the `integrate` claim, lands at most one lane, releases in `finally`.
+  - `:89` `pending` derives the queue from success candidates minus `fleet.task.integrated` events — no queue table, no migration.
+  - `:110` `land` is the algorithm: rebase → abort-and-retain on conflict → gate → `merge --ff-only` → `persistWorktreeRuns` before disposal → emit `fleet.task.integrated` → feature sync after the feature's last landing → `dispose`.
+  - `:175` `gateReceipt` reads the lane's own `-check-receipt.json` for the tree hash; a missing receipt weakens the record, never the verdict.
+- **Runtime:** `packages/app/src/services/strategy-runtime.ts`
+  - `:94-99` adds the `awaiting-integration` and `integration-conflict` hold reasons.
+  - `:313-327` admission step 3a, before the writer cap: a not-landed prerequisite is named, a retained conflict holds its task.
+  - `:452-457` two host seams — `integrationGate` (default `spur task gate <wbs> recheck` in the lane) and `syncFeature`.
+  - `:644` `tick` lands one lane before selecting, so a dependent sees the code it needs.
+  - `:1104-1170` `integrationState` derives un-landed successes from completed attempts (lanes plus each candidate's dependencies) and retained conflicts from `fleet.*` events — a lane that vanished instead of landing still holds its dependents.
+  - `:1174-1232` `integrateOnce`, `currentBranch` and `defaultGate`; a landing failure is logged, never fatal to the tick.
+- **Barrel:** `packages/app/src/index.ts` exports the queue and the lane service (the lane service was missing from 1341's surface).
+- **Tests:** `packages/app/tests/services/fleet-integration-queue.test.ts` — real git repo, real lane service, injected gate/feature seams: ff-only landing, gate-in-lane, gate failure retention, rebase conflict retention, once-per-feature sync, plus the pure admission holds. Artifact `docs/reports/fleet-integration-p2.json`.
+
+**Verification**
+
+- `(cd packages/app && bun test tests/services/fleet-integration-queue.test.ts)`: 7 pass.
+- `(cd packages/app && bun test tests/services/fleet-integration-queue.test.ts tests/services/strategy-runtime.test.ts tests/services/fleet-lanes-e2e.test.ts)`: 59 pass, 0 fail — the legacy single-writer and 1341 lane paths are unchanged.
+- `bun run apps/cli/src/index.ts rule run --preset recommended-post-check --rule every-export-has-tsdoc` and `--rule require-corresponding-test`: PASS.
+- Artifact reproducible with `SPUR_WRITE_INTEGRATION_RECEIPT=1`: landed 0601/0602/0603, merges 0, orphans 0, one feature sync.
+- probe: not-applicable (no public CLI surface changed; the config keys and the `integrate` slot are internal).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — a serialized integration consumer under an `integrate` claim rebases each successful lane onto the base tip and gates the rebased tree unless its tree hash matches a PASS receipt | MET | `packages/app/src/services/fleet-integration-queue.ts:71-86` (claim-then-drain, release in `finally`), `:110-133` (rebase, then `runGate` in the lane); the receipt keying is the gate's own (`quality-gate.ts` `captureGateGitTree`) — no second hash; `packages/domain/src/dao/project-claim-dao.ts:13` adds the `'integrate'` slot; test `packages/app/tests/services/fleet-integration-queue.test.ts` asserts the gate ran with `cwd` = lane path |
+| R2 — the base ref advances only by `--ff-only`; `persistWorktreeRuns` copies run evidence back; each touched feature syncs once after its last landing; the lane is then disposed | MET | `:135-141` (`merge --ff-only`, retention on failure), `:143-152` (`persistWorktreeRuns` before disposal, retain on throw), `:167-172` (sync only when no sibling of the feature is still queued), `:173` (`dispose`); the E2E asserts `rev-list --count --merges HEAD == 0`, an empty lane list, and one sync |
+| R3 — a rebase conflict aborts, retains lane and branch, and holds the task with `integration-conflict`; no automatic resolution | MET | `:114-122` (`rebase --abort` + `retain('integration-conflict')`); `packages/app/src/services/strategy-runtime.ts:322-327` holds the task with the lane path and branch; E2E F8 asserts lane and branch survive, no gate call, and the lane is left clean for the next attempt |
+| R4 — a candidate whose prerequisite is done but not landed holds with `awaiting-integration`; admission reads `fleet.task.integrated`, never corpus status | MET | `strategy-runtime.ts:317-321` + `:1104-1170` (un-landed set from completed attempt receipts minus `fleet.task.integrated`, over lanes plus each candidate's dependencies); pure admission test asserts the hold and detail |
+| R5 — lane and landing events are written with their state change | MET | `fleet-integration-queue.ts:62,173` (`fleet.task.integrated` before the release, `fleet.lane.disposed` through the lane service); `fleet.lane.retained` on every non-landing outcome (`:120,130,139,150`); the E2E reads the `fleet.task.integrated` row back from `system_events` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — a dependent task waits for integration, not completion | MET | test | `packages/app/tests/services/fleet-integration-queue.test.ts` "F4/F5 — a finished but unlanded prerequisite holds its dependent with awaiting-integration" |
+| AC2 — landing gates the rebased tree and fast-forwards | MET | test | E2E "F7/F6": gate called in the lane, `merges: 0`, base tip equals the lane tip; artifact `docs/reports/fleet-integration-p2.json` |
+| AC3 — a conflict retains the lane for the operator | MET | test | E2E "F8": `rebase --abort`, lane and `sp/run-0602-1` retained, no gate call, no self-resolution |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -145,4 +200,7 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 ### History
 
 - 2026-11-16T01:21:04.241Z backlog → todo (system)
+- 2026-11-16T02:34:54.580Z todo → wip (system)
+- 2026-11-16T02:41:01.183Z wip → testing (system)
+- 2026-11-16T02:41:02.445Z testing → done (system)
 

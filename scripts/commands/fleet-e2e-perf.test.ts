@@ -103,8 +103,13 @@ describe('1276 R1: an unsupported warm lane is named, never silently qualified',
 
 describe('1283: --modes selects measured lanes and fails loudly on a typo', () => {
     test('an absent --modes measures every lane, in the documented order', () => {
-        expect(parsePerfArgs(['--perf']).modes).toEqual(['supervised-cold', 'supervised-warm', 'attached-ready']);
-        expect(perfModesOf(undefined)).toEqual(['supervised-cold', 'supervised-warm', 'attached-ready']);
+        expect(parsePerfArgs(['--perf']).modes).toEqual([
+            'supervised-cold',
+            'supervised-warm',
+            'attached-ready',
+            'batch',
+        ]);
+        expect(perfModesOf(undefined)).toEqual(['supervised-cold', 'supervised-warm', 'attached-ready', 'batch']);
     });
 
     test('a present-but-empty --modes is a usage error, never an empty receipt (1285)', () => {

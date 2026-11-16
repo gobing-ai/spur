@@ -74,6 +74,7 @@ import {
     type TurnBinary,
     type TurnSessionDriver,
 } from '@gobing-ai/ts-ai-runner';
+import { runBatchPerf } from './fleet-e2e-batch-perf';
 import { type PerfMeasured, perfMeasured, runPairedTurnPerf, type TurnPerfComparison } from './fleet-e2e-turn-perf';
 
 const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -1971,7 +1972,12 @@ const PERF_AGENTS = ['claude', 'codex', 'pi'] as const;
  * lanes; `attached-ready` runs the SAME first-batch workload through 1282's attached-turn
  * dispatcher against a bound fixture occupant. `--modes` selects the subset to run.
  */
-const ALL_PERF_MODES = ['supervised-cold', 'supervised-warm', 'attached-ready'] as const;
+/**
+ * G76 1346 adds `batch`: the serial-vs-parallel integration-queue lane. It measures the ORCHESTRATION
+ * (real lanes, real queue, deterministic member/gate windows), not an agent, and writes its own
+ * `docs/reports/fleet-perf-batch-<date>.json` receipt.
+ */
+const ALL_PERF_MODES = ['supervised-cold', 'supervised-warm', 'attached-ready', 'batch'] as const;
 export type PerfMode = (typeof ALL_PERF_MODES)[number];
 /** One trial's deadline. The stub lane settles in seconds; this only bounds a genuinely hung turn. */
 const PERF_TRIAL_TIMEOUT_MS = 90_000;
@@ -2893,6 +2899,19 @@ export async function runFleetPerf(options: {
     // adds the 1282 dispatcher lane per agent. The warm QUALIFICATION row is cheap provenance and
     // stays in every run so the receipt's measured record keeps its shape.
     const modes = options.modes;
+    // The batch lane is repo-level (no agent column) and cheap: run it first, then continue with
+    // the per-agent lanes when they were also selected.
+    if (modes.includes('batch')) {
+        const batch = await runBatchPerf();
+        process.stdout.write(
+            `fleet-perf batch: serial ${batch.receipt.serialWallMs}ms, parallel ${batch.receipt.parallelWallMs}ms, ` +
+                `ratio ${batch.receipt.ratio?.toFixed(3) ?? 'n/a'} (target ${batch.receipt.target}) — ` +
+                `${batch.receipt.pass ? 'PASS' : 'MISS'}${batch.receipt.gateShardingFlag ? ', gate sharding flagged' : ''}; ` +
+                `receipt at ${batch.receiptPath}\n`,
+        );
+        if (batch.exitCode !== 0) return batch.exitCode;
+        if (modes.length === 1) return 0;
+    }
     const supervisedCold = modes.includes('supervised-cold');
     const supervisedWarm = modes.includes('supervised-warm');
     const attachedReady = modes.includes('attached-ready');

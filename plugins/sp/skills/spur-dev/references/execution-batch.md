@@ -17,9 +17,9 @@ see_also:
   `worktree-<marker-id>-batch-report.md` (frozen plan + outcomes), `<wbs>-verdict.json` (verdict),
   `<wbs>-question.md` (paused on an operator question).
 - **Re-read per state** — this file (Steps 1–5, WT-6/WT-7), [execution-batch-report.md](execution-batch-report.md)
-  at Step 5, [execution-worktree-setup.md](execution-worktree-setup.md) for a worktree start,
+  at Step 5, [execution-worktree.md](execution-worktree.md) for a worktree start,
   [execution-worktree-landing.md](execution-worktree-landing.md) at batch end,
-  [execution-parallel-isolation.md](execution-parallel-isolation.md) for `--mode parallel`,
+  [execution-worktree.md](execution-worktree.md) for `--mode parallel`,
   [execution-batch-continuation.md](execution-batch-continuation.md) for `--continue`.
 - **Never re-derive the plan** — the frozen plan is the persisted report; a new selector match is
   `not-admitted`, not a plan change.
@@ -583,59 +583,12 @@ template, the worktree evidence-persistence rules and Step 6 Batch wrap (`--wrap
 
 ## Worktree isolation (`--worktree [<name>]`)
 
-Read [execution-worktree-setup.md](execution-worktree-setup.md) when `--worktree` is passed at batch
-start (the lifecycle, WT-1…WT-3b). Read [execution-worktree-landing.md](execution-worktree-landing.md)
-at batch end (WT-4/WT-5, the retained-worktree report and the conflict-merge recipe). WT-6/WT-7 and
-the corpus-visibility note stay below.
-
-### WT-6 — `--continue` re-entry (R7)
-
-A `--continue` resume of a batch started with `--worktree` must re-enter the existing worktree via
-its WT-3 marker rather than creating a second one. Marker lookup tries two paths in order:
-
-1. **Name-resolution path (when `--worktree <name>` is present)** — run the [§ Name resolution](execution-worktree-setup.md#name-resolution---worktree-name)
-   algorithm against `<name>`. The resolved worktree's path identifies the marker file to adopt.
-   This path covers the common resume shapes: the operator remembers the name used last time, or
-   passes the path (tier-1 match).
-2. **Command+selector fallback (bare `--worktree` or absent flag)** — scan
-   `.spur/run/worktree-*.json` **in the invoking tree** (where WT-3 wrote the marker —
-   task 0701 R2c) for a marker whose `command` + `selector` match the current
-   invocation and whose `status` is `active` or `retained`. Create-mode runs that did not name their
-   tree resolve here.
-3. **Found by either path** → `cd` into the marker's `path`, skip WT-1/WT-2 (no new worktree), and
-   resume the loop from the checkpoint (Steps 1–5 with `--continue` semantics).
-4. **Not found** → fail loudly: "no resolvable worktree marker for `<command> <selector>` under
-   `.spur/run/`; cannot resume a `--worktree` batch without one. Re-run without `--worktree` to
-   start a new batch in the main tree, or inspect `.spur/run/` for prior markers." Do **not**
-   silently run in the main tree.
-
-Name resolution failing at resume (0 or ≥2 hits) has the same abort semantics as a fresh run: it
-names candidates and requires the path form — it does **not** fall through to the command+selector
-fallback, because `<name>` was explicit and unambiguous intent.
-
-### WT-7 — Exclusions (R8)
-
-- **`dev-next`** does not get `--worktree` — it dispatches a single step; per-step isolation is not
-  worth the worktree cost. `dev-run` is different: it drives a whole task pipeline, so it does get
-  the flag.
-- **`--mode parallel`** is rejected when combined with `--worktree` — parallel mode already
-  isolates each task in its own worktree
-  ([§ Parallel isolation](#parallel-isolation---mode-parallel)), and reuse mode
-  (`--worktree <name>`) has no per-task meaning.
-- **`--mode implement`** is rejected when combined with `--worktree` on `dev-run` — that mode *is*
-  the pipeline's implement stage (bug-742) and runs in whatever tree the driver set up; a second
-  worktree would split one task's evidence across two trees.
-- **`dev-review` without `--triage`** is rejected when combined with `--worktree` — a read-only
-  review writes nothing worth isolating; review another worktree by passing a path inside it.
-- **No** create-with-name (`--worktree <name>` never creates; an unresolvable name is an error),
-  no `--worktree-keep` variant, no auto-cleanup of stale worktrees or markers from prior runs.
-
-### Corpus visibility note
-
-While the batch runs, corpus writes (`spur task update`, `spur feature update`) land in the
-**worktree copy**; the operator's main tree still shows pre-run task statuses. This is expected —
-the merge (WT-4) or manual integration (WT-5) propagates the writes back. Worth one line in each
-command doc so it does not read as a bug.
+Read [execution-worktree.md](execution-worktree.md) when `--worktree` is passed at batch start
+(WT-1…WT-3b, plus WT-6 `--continue` re-entry and WT-7 exclusions) and
+[execution-worktree-landing.md](execution-worktree-landing.md) at batch end (WT-4/WT-PR/WT-4r/WT-5,
+the retained-worktree report and the conflict-merge recipe). While the batch runs, corpus writes
+land in the worktree copy, so the operator’s main tree shows pre-run statuses until the landing
+merge or a manual integration — expected, not a bug.
 
 ## Gate preflight
 
@@ -688,9 +641,10 @@ Before launching a full `spur-check:full`:
 
 ## Parallel isolation (`--mode parallel`)
 
-Read [execution-parallel-isolation.md § Parallel isolation](execution-parallel-isolation.md#parallel-isolation---mode-parallel)
-with `--mode parallel` — per-task worktrees, the rebase + fast-forward integration, conflict
-retention and the generated-region deferral.
+Parallel mode is engine-owned (G76 1341/1342/1343): the fleet tick opens one lane per write
+dispatch, the integration queue rebases, gates and fast-forwards each finished lane, and this
+driver only ticks — see [execution-worktree.md](execution-worktree.md) § `--mode parallel`.
+Nothing in this file runs `git worktree` or a landing merge.
 
 ## Subagent execution disciplines
 

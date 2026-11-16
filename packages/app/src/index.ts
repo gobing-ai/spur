@@ -373,6 +373,18 @@ export {
     type FleetReceiptStatus,
     RECEIPT_POLL_INTERVAL_MS,
 } from './services/fleet-dispatcher';
+// Fleet foreground loop (G76 1343): the parallel batch client plus its refusal and report seams
+export {
+    type FleetReportRow,
+    type ForegroundIteration,
+    type ForegroundLoopEnd,
+    type ForegroundLoopOptions,
+    type ForegroundTick,
+    fleetReportRows,
+    parallelRefusal,
+    renderFleetBatchReport,
+    runForegroundTicks,
+} from './services/fleet-foreground-loop';
 export {
     ATTACHED_DRAIN_GRACE_MS,
     type DeclaredMemberView,
@@ -393,6 +405,14 @@ export {
     type MemberPinFailureCode,
     type MemberPinResult,
 } from './services/fleet-guest-service';
+// Fleet integration queue (G76 1342): the serialized landing path for finished write lanes
+export {
+    FleetIntegrationQueue,
+    type FleetIntegrationQueueDeps,
+    type IntegrationCandidate,
+    type IntegrationGateVerdict,
+    type IntegrationOutcome,
+} from './services/fleet-integration-queue';
 export {
     type FleetMemberLister,
     type RoleTargetResolution,
@@ -1000,6 +1020,18 @@ export {
     type WorkflowLayerId,
     workflowLayers,
 } from './services/workflow-service';
+// Fleet worktree lanes (G76 1341): pure path helpers plus the lane lifecycle service
+export {
+    isProjectLane,
+    type Lane,
+    type LaneAttemptState,
+    laneBranch,
+    laneForRequestKey,
+    lanePath,
+    resolveLaneRoot,
+    WorktreeLaneService,
+    type WorktreeLaneServiceDeps,
+} from './services/worktree-lane-service';
 export {
     MAX_CITED_RUN_FILES,
     type PersistOutInput,

@@ -159,7 +159,7 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 
 ### Other
 - require `--no-edit` on the worktree landing merge and a `proto trust` step — an agent host refuses a bare `git merge` even for a fast-forward, and `proto` records trust per absolute path so a fresh worktree needs `proto trust .prototools` before its first commit (1320) (f9b8ad6df)
-  <!-- src: plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:77, plugins/sp/skills/spur-dev/references/execution-worktree-setup.md:200 · confidence: HIGH -->
+  <!-- src: plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:82, plugins/sp/skills/spur-dev/references/execution-worktree.md:207 · confidence: HIGH -->
 - add `--no-edit` to the WT-5 landing hint so the documented resume command runs unattended (b1683b990)
   <!-- src: plugins/sp/skills/spur-dev/references/execution-worktree-landing.md:419 · confidence: HIGH -->
 - record 1320's root cause: both landing gaps were missing runbook steps, not code defects (9df3f1bd4)

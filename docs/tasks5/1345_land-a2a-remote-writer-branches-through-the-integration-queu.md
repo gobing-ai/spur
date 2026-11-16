@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Land A2A remote writer branches through the integration queue
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T01:11:47.121Z
-updated_at: "2026-11-16T01:21:05.617Z"
+updated_at: "2026-11-16T03:18:56.809Z"
 feature_id: G76
 
 dependencies: ["1342"]
 priority: P2
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1345. Land A2A remote writer branches through the integration queue
@@ -24,14 +26,14 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 
 ### Requirements
 
-- [ ] R1 — A completed remote write result fetches `remoteBranch` into `sp/remote-<wbs>-<attempt>` and enters the integration queue unchanged.
-- [ ] R2 — Spur gates the rebased tree; a remote self-reported pass is never accepted (ADR-138).
-- [ ] R3 — A missing branch or failed fetch is `not-started` for integration; the remote writing turn is never replayed.
-- [ ] R4 — Fetch uses the operator git config; Spur stores no credentials.
+- [x] R1 — A completed remote write result fetches `remoteBranch` into `sp/remote-<wbs>-<attempt>` and enters the integration queue unchanged.
+- [x] R2 — Spur gates the rebased tree; a remote self-reported pass is never accepted (ADR-138).
+- [x] R3 — A missing branch or failed fetch is `not-started` for integration; the remote writing turn is never replayed.
+- [x] R4 — Fetch uses the operator git config; Spur stores no credentials.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A remote writer's branch lands through the same gate
+- [x] AC1 — A remote writer's branch lands through the same gate
 
 ### Q&A
 
@@ -72,15 +74,56 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+A remote writer's branch now lands through the queue that already exists. `remoteBranch` was recorded
+by the A2A transport and never used; the queue interprets it as `<remote>/<branch>`, fetches it with
+the operator's own git config and credential helpers, opens it as the lane, and then rebases, gates,
+fast-forwards, persists and disposes exactly as a local lane does. The remote's self-reported pass is
+never read — only Spur's own receipt counts (ADR-138).
+
+**Change map**
+
+- **Queue:** `packages/app/src/services/fleet-integration-queue.ts`
+  - `:17-24` `IntegrationCandidate.remoteBranch` — optional `<remote>/<branch>` from a remote writer.
+  - `:37-41` `IntegrationOutcome` gains `not-started` with a reason, so a failed fetch is an integration verdict, never a replay of the remote turn (ADR-126 A4).
+  - `:110-135` `land` resolves the lane: an existing local lane is used as-is, a remote candidate is fetched and opened, and anything else is `not-started`.
+  - `:196-224` `fetchRemote` — validates `<remote>/<branch>`, proves the remote is configured (`git remote get-url`), fetches into `sp/remote-<wbs>-<attempt>`; no URL or credential is stored (R4).
+  - `:189-191` the fetched ref is deleted with the lane after a landing, because `dispose` only knows the local attempt name.
+- **Lane service:** `packages/app/src/services/worktree-lane-service.ts:103-125` `open(wbs, attempt, { branch })` checks out a fetched branch as the lane, and refuses a branch that does not exist instead of creating an empty lane.
+- **Tests:** `packages/app/tests/services/fleet-integration-queue.test.ts` § "remote writer branches" — a real bare remote + pushed branch lands through the same gate (landed, ff-only, no lane left, remote ref consumed); a missing branch and an unknown remote are `not-started` with the base ref untouched and no gate call.
+
+**Verification**
+
+- `(cd packages/app && bun test tests/services/fleet-integration-queue.test.ts)`: 10 pass (7 queue + 3 remote).
+- `(cd packages/app && bun run typecheck)`: clean; biome clean.
+- probe: not-applicable (no public noun/verb/flag, no new config key).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — a completed remote write result fetches `remoteBranch` into `sp/remote-<wbs>-<attempt>` and enters the integration queue unchanged | MET | `packages/app/src/services/fleet-integration-queue.ts:110-135` (remote candidate → fetch → lane open), `:196-224` (`fetchRemote`); `packages/app/src/services/worktree-lane-service.ts:103-125` (`open(..., { branch })` checks the fetched branch out as the lane); test "AC1 — a remote branch is fetched into the queue namespace and lands through the same gate" |
+| R2 — Spur gates the rebased tree; a remote self-reported pass is never accepted | MET | the landing calls the injected project gate in the lane (`fleet-integration-queue.ts:137-146`) and the test asserts exactly one Spur gate call for a remote landing; nothing reads the remote artifact's verdict |
+| R3 — a missing branch or a failed fetch is `not-started` for integration; the remote writing turn is never replayed | MET | `:37-41` (`not-started` outcome with reason), `:126-135` (lane-open failure), `:199-222` (unknown remote / failed fetch); tests "R3 — a missing branch is not-started…" and "R3/R4 — an unknown remote is refused by name"; no dispatch path is touched, so no turn can be re-sent |
+| R4 — fetch uses the operator git config; Spur stores no credentials | MET | `fetchRemote` runs `git remote get-url` + `git fetch <remote> <branch>:<ref>` through `NodeProcessExecutor` with the operator's environment (`:196-224`); no URL, token or config key is persisted anywhere in the change |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — a remote writer's branch lands through the same gate | MET | test | `packages/app/tests/services/fleet-integration-queue.test.ts` § "remote writer branches" (3 cases): landed with `merges 0`, the fetched content on `HEAD`, lane gone and the remote ref consumed |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -89,4 +132,7 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 ### History
 
 - 2026-11-16T01:21:05.617Z backlog → todo (system)
+- 2026-11-16T03:16:24.287Z todo → wip (system)
+- 2026-11-16T03:18:55.483Z wip → testing (system)
+- 2026-11-16T03:18:56.804Z testing → done (system)
 
