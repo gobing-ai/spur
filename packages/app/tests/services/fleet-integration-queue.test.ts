@@ -67,8 +67,12 @@ async function makeRig(): Promise<Rig> {
     await writeFile(join(repo, 'src', 'a.ts'), 'export const a = 1;\n');
     await writeFile(join(repo, '.gitignore'), '.spur/\nnode_modules\n');
     await git(repo, 'init', '-q', '-b', 'main');
-    await git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A');
-    await git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'init');
+    // Repo-local identity: `git rebase` rewrites commits and needs a committer identity, which a
+    // bare CI runner has no global config for (1342 rebase path). `-c` flags cover one command only.
+    await git(repo, 'config', 'user.email', 't@t');
+    await git(repo, 'config', 'user.name', 't');
+    await git(repo, 'add', '-A');
+    await git(repo, 'commit', '-qm', 'init');
     const project = normalizeProjectPath(repo);
     const laneRoot = join(base, 'lanes');
     const db = await createMigratedDb();
@@ -113,8 +117,8 @@ async function commitInLane(rig: Rig, wbs: string, attempt: number, file: string
     const target = join(lane.path, file);
     await mkdir(join(target, '..'), { recursive: true });
     await writeFile(target, body);
-    await git(lane.path, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A');
-    await git(lane.path, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `${wbs} work`);
+    await git(lane.path, 'add', '-A');
+    await git(lane.path, 'commit', '-qm', `${wbs} work`);
     rig.candidates.push({ wbs, attempt });
     return lane.path;
 }
@@ -302,8 +306,8 @@ describe('remote writer branches (G76 1345)', () => {
         // The remote member's work: a commit on a branch that exists only on the remote.
         await git(repo, 'checkout', '-q', '-b', 'writer-0601');
         await writeFile(join(repo, file), body);
-        await git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A');
-        await git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'remote work');
+        await git(repo, 'add', '-A');
+        await git(repo, 'commit', '-qm', 'remote work');
         await git(repo, 'push', '-q', 'origin', 'writer-0601');
         await git(repo, 'checkout', '-q', 'main');
         await git(repo, 'branch', '-q', '-D', 'writer-0601');

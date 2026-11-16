@@ -118,8 +118,12 @@ async function runFixture(tasks: string[], maxWriters: number, memberWorkMs: num
     await writeFile(join(repo, 'src', 'seed.ts'), 'export const seed = 1;\n');
     await writeFile(join(repo, '.gitignore'), '.spur/\n');
     await git(repo, 'init', '-q', '-b', 'main');
-    await git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A');
-    await git(repo, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'init');
+    // Repo-local identity: `git rebase` rewrites commits and needs a committer identity; a bare CI
+    // runner has no global git config, so `-c` on a single command does not cover the queue's rebase.
+    await git(repo, 'config', 'user.email', 't@t');
+    await git(repo, 'config', 'user.name', 't');
+    await git(repo, 'add', '-A');
+    await git(repo, 'commit', '-qm', 'init');
     const db = await createMigratedDb({ url: ':memory:' });
     const lanes = new WorktreeLaneService({ projectPath: repo, laneRoot: join(base, 'lanes'), getDb: async () => db });
     const candidates: IntegrationCandidate[] = [];
@@ -167,8 +171,8 @@ async function runFixture(tasks: string[], maxWriters: number, memberWorkMs: num
                     await sleep(memberWorkMs);
                     await mkdir(join(lane.path, 'src'), { recursive: true });
                     await writeFile(join(lane.path, 'src', `${wbs}.ts`), `export const task${wbs} = ${wbs};\n`);
-                    await git(lane.path, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A');
-                    await git(lane.path, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `${wbs} work`);
+                    await git(lane.path, 'add', '-A');
+                    await git(lane.path, 'commit', '-qm', `${wbs} work`);
                     candidates.push({ wbs, attempt });
                     windows.set(wbs, {
                         wbs,
