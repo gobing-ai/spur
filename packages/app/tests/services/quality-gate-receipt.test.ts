@@ -415,6 +415,25 @@ describe('runDeferredGate (1111 R1/R2)', () => {
             expect(failing.status).toBe('FAIL');
             expect(readFileSync(statusPath, 'utf8').trim()).toBe('FAIL');
             expect(readFileSync(join(dir, '.spur', 'run', '1111t-light-gate.log'), 'utf8')).toContain('deferred');
+            // The fix hop reads this file; a FAIL without it dies on a missing file, not on the finding.
+            expect(
+                readFileSync(join(dir, '.spur', 'run', '1111t-test-gate.findings'), 'utf8').trim().length,
+            ).toBeGreaterThan(0);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('a documentation-only change set is not a lint failure (deferred stays DEFERRED)', () => {
+        const { dir, cleanup } = gitRepoFixture();
+        try {
+            // Commit the fixture's code edit so documentation is the whole change set: biome skips
+            // every markdown path and would exit 1 with "No files were processed".
+            runShellCommand('git add -A && git commit -qm code', dir);
+            mkdirSync(join(dir, 'docs'), { recursive: true });
+            writeFileSync(join(dir, 'docs', 'note.md'), '# note\n');
+            const gate = silenceStdout(() => runDeferredGate({ wbs: '1111d' }, { cwd: dir }));
+            expect(gate.status).toBe('DEFERRED');
         } finally {
             cleanup();
         }

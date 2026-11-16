@@ -745,6 +745,9 @@ export function workspaceHasTypecheck(workspace: string): boolean {
     }
 }
 
+/** Documentation extensions the formatter does not own — the same set the pipeline's `fast` lane names. */
+const DOC_FILE_PATTERN = /\.(md|mdx|txt)$/i;
+
 /**
  * The light sub-checks for a scope, in run order: `format-lint:changed` (repo root),
  * `typecheck:<ws>` per admitted workspace, `test:<ws>` per workspace with related tests.
@@ -766,8 +769,13 @@ export function planLightChecks(
         return { id, cmd: renderScoped(command, values) };
     };
     const plans: LightCheckPlan[] = [];
+    // A documentation-only change set has nothing for the formatter to read: Biome skips every
+    // `.md` path and then exits 1 with "No files were processed", which the check scored as a
+    // FAIL. The pipeline already classifies a docs-only diff as non-code (the `fast` lane), so
+    // only lintable files are handed to the formatter; a mixed scope keeps today's full list.
+    const lintable = scope.files.filter((file) => !DOC_FILE_PATTERN.test(file));
     if (scope.files.length > 0) {
-        plans.push(plan('format-lint:changed', 'lint-changed', { files: scope.files }));
+        if (lintable.length > 0) plans.push(plan('format-lint:changed', 'lint-changed', { files: lintable }));
         // Task 1142 R1: The light tier covers the cheap failure classes.
         // Appends rules:pre and rules:post after the lint step whenever scope is non-empty.
         plans.push(plan('rules:pre', 'rules-pre', { files: scope.files }));
@@ -869,7 +877,16 @@ export function runDeferredGate(env: QualityGateEnv, options: QualityGateOptions
     const abs = (p: string): string => (cwd ? join(cwd, p) : p);
     mkdirSync(abs(runDir), { recursive: true });
     const statusFile = join(runDir, `${env.wbs}-test-gate.status`);
+    const findingsFile = join(runDir, `${env.wbs}-test-gate.findings`);
     writeFileSync(abs(statusFile), `${status}\n`);
+    // The findings artifact is part of every mode's contract (the CLI help names it): a FAIL routes
+    // `gate → remediate`, whose fix hop reads this file. Omitting it in the deferred path made that
+    // hop fail on a missing file instead of on the finding it was meant to repair.
+    if (status === 'FAIL') {
+        const gateLog = existsSync(abs(light.logFile)) ? readFileSync(abs(light.logFile), 'utf8') : '';
+        const findings = extractFindings(gateLog);
+        writeFileSync(abs(findingsFile), findings.trim().length > 0 ? findings : tailLines(gateLog, 40));
+    }
     const note =
         status === 'DEFERRED'
             ? `deferred gate: light tier PASS — the integrated full gate is owed on the batch base ref (1111 R3)\n`

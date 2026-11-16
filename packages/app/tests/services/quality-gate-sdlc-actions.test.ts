@@ -77,6 +77,18 @@ describe('light-tier action resolution (1224 R1/R2/R8)', () => {
         expect(withoutTypecheck).not.toContain('typecheck:packages/app');
     });
 
+    test('a documentation-only scope plans no format-lint:changed; a mixed scope lints only code', () => {
+        const docs = planLightChecks({ files: ['docs/a.md', 'docs/b.md'], workspaces: [], tests: [] }, () => false);
+        expect(docs.map((plan) => plan.id)).toEqual(['rules:pre', 'rules:post']);
+        const mixed = planLightChecks(
+            { files: ['docs/a.md', 'packages/app/src/a.ts'], workspaces: [], tests: [] },
+            () => false,
+        );
+        expect(mixed.find((plan) => plan.id === 'format-lint:changed')?.cmd).toBe(
+            'bunx biome check packages/app/src/a.ts',
+        );
+    });
+
     test('R2 — a declared typecheck owns its scope, so package.json no longer gates it', () => {
         const builder = declaredBuilder({
             'typecheck-changed': 'mypy {workspace}',
