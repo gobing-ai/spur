@@ -2,11 +2,11 @@
 schema_version: 1
 id: A
 name: Foundation
-status: active
+status: done
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-11-16T05:12:43.100Z"
+updated_at: "2026-11-16T05:28:18.878Z"
 ---
 
 # A: Foundation
@@ -37,3 +37,6 @@ F (cohesion with their consumer); only platform-wide work lands directly here.
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing; group taxonomy operator-approved)
+- 2026-11-16T05:28:18.042Z active → verifying (system)
+- 2026-11-16T05:28:18.878Z verifying → done (system)
+

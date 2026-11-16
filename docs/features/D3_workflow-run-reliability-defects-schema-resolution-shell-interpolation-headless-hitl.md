@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D3"
 name: "Workflow run reliability defects: schema resolution, shell interpolation, headless HITL"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-04T17:26:12.441Z"
-updated_at: "2026-10-19T07:59:28.416Z"
+updated_at: "2026-11-16T07:05:35.699Z"
 ---
 
 # D3: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL
@@ -139,4 +139,6 @@ Feature: Workflow run reliability defects
 - 2026-10-07T21:24:19.145Z done → active (system)
 - 2026-10-08T08:14:43.084Z active → verifying (system)
 - 2026-10-19T07:59:28.416Z verifying → active (system)
+- 2026-11-16T07:05:33.901Z active → verifying (system)
+- 2026-11-16T07:05:35.699Z verifying → done (system)
 

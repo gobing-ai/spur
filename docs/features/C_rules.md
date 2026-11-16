@@ -2,11 +2,11 @@
 schema_version: 1
 id: C
 name: Rules
-status: active
+status: verifying
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-12T06:34:54.920Z"
+updated_at: "2026-11-16T07:37:43.979Z"
 ---
 
 # C: Rules
@@ -44,3 +44,5 @@ Feature group. No rd3-migration batch items; shipped surface (01_PRD §5.1).
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
+- 2026-11-16T07:37:43.979Z active → verifying (system)
+

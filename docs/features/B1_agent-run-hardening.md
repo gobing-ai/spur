@@ -2,11 +2,11 @@
 schema_version: 1
 id: B1
 name: Agent run hardening
-status: verifying
+status: done
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-21T18:35:01.920Z"
+updated_at: "2026-11-16T06:43:06.424Z"
 ---
 
 # B1: Agent run hardening
@@ -64,4 +64,5 @@ interaction patterns worth keeping surface in cc-agents task 0405 (acpx-query ar
 - 2026-08-24T17:41:00.145Z active → verifying (system)
 - 2026-10-03T05:03:04.668Z verifying → active (system)
 - 2026-10-03T05:05:59.748Z active → verifying (system)
+- 2026-11-16T06:43:06.424Z verifying → done (system)
 

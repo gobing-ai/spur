@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B21"
 name: "Executor tier policy as a leaf module"
-status: verifying
+status: done
 priority: P3
 tags: []
 created_at: "2026-09-26T04:49:53.036Z"
-updated_at: "2026-10-19T07:40:13.318Z"
+updated_at: "2026-11-16T06:49:07.487Z"
 ---
 
 # B21: Executor tier policy as a leaf module
@@ -77,4 +77,5 @@ Feature: Executor tier policy as a leaf module
 - 2026-10-08T08:15:44.473Z active → verifying (system)
 - 2026-10-19T07:37:46.474Z verifying → active (system)
 - 2026-10-19T07:40:13.318Z active → verifying (system)
+- 2026-11-16T06:49:07.487Z verifying → done (system)
 

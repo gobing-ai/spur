@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A331"
 name: "Verified offline migration artifacts and safe upgrades"
-status: active
+status: done
 priority: P3
 tags: []
 created_at: "2026-11-05T20:01:17.581Z"
-updated_at: "2026-11-06T08:57:29.605Z"
+updated_at: "2026-11-16T05:57:40.440Z"
 ---
 
 # A331: Verified offline migration artifacts and safe upgrades
@@ -57,4 +57,6 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md` W7. Evid
 ## History
 
 - 2026-11-06T08:57:29.605Z backlog → active (system)
+- 2026-11-16T05:57:39.603Z active → verifying (system)
+- 2026-11-16T05:57:40.440Z verifying → done (system)
 

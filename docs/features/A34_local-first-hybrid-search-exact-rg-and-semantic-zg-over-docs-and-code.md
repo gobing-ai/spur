@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A34"
 name: "Local-first hybrid search: exact (rg) and semantic (zg) over docs and code"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-11-03T16:48:14.451Z"
-updated_at: "2026-11-05T20:03:46.490Z"
+updated_at: "2026-11-16T06:07:58.034Z"
 ---
 
 # A34: Local-first hybrid search: exact (rg) and semantic (zg) over docs and code
@@ -196,4 +196,5 @@ Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review:
 - 2026-11-03T18:24:31.988Z backlog → active (system)
 - 2026-11-03T20:20:06.746Z active → verifying (system)
 - 2026-11-05T19:58:33.867Z verifying → active (system)
+- 2026-11-16T06:07:58.034Z active → verifying (system)
 

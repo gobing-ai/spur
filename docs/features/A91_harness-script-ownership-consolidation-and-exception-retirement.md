@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A91"
 name: "Harness script ownership consolidation and exception retirement"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-10-12T03:30:19.795Z"
-updated_at: "2026-10-16T04:16:44.767Z"
+updated_at: "2026-11-16T06:25:19.700Z"
 ---
 
 # A91: Harness script ownership consolidation and exception retirement
@@ -102,4 +102,5 @@ Feature: Harness script ownership consolidation
 - 2026-10-15T23:03:06.162Z verifying → done (system)
 - 2026-10-16T01:39:18.787Z done → active (system)
 - 2026-10-16T04:16:44.767Z active → verifying (system)
+- 2026-11-16T06:25:19.700Z verifying → done (system)
 

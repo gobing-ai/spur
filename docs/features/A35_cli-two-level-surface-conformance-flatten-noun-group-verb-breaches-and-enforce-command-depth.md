@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A35"
 name: "CLI two-level surface conformance: flatten noun-group-verb breaches and enforce command depth"
-status: active
+status: done
 priority: P2
 tags: []
 created_at: "2026-11-04T05:13:27.778Z"
-updated_at: "2026-11-04T16:40:08.928Z"
+updated_at: "2026-11-16T06:19:28.273Z"
 ---
 
 # A35: CLI two-level surface conformance: flatten noun-group-verb breaches and enforce command depth
@@ -56,4 +56,6 @@ Feature: CLI two-level surface conformance: flatten noun-group-verb breaches and
 ## History
 
 - 2026-11-04T16:40:08.928Z backlog → active (system)
+- 2026-11-16T06:19:27.451Z active → verifying (system)
+- 2026-11-16T06:19:28.273Z verifying → done (system)
 
