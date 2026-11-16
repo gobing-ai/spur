@@ -160,7 +160,8 @@ async function screenshot(name: string): Promise<string> {
     const result = (await browser.send('Page.captureScreenshot', { format: 'png' }, page)) as { data: string };
     const target = join(ARTIFACT_DIR, `${name}.png`);
     await writeFile(target, Buffer.from(result.data, 'base64'));
-    return target;
+    // File name only: the report sits beside the shots and is copied into the tracked snapshot.
+    return `${name}.png`;
 }
 
 beforeAll(async () => {

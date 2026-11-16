@@ -90,8 +90,8 @@
                 "title": "oklch(0.21 0.006 285.885)|0px|20px|700|rgba(0, 0, 0, 0)",
                 "tablist": "oklch(0.21 0.006 285.885)|4px|16px|400|oklch(0.95 0 0)"
             },
-            "moduleShot": "/Users/robin/xprojects/spur-new/.spur/run/module-kit-proof/module-light.png",
-            "builtinShot": "/Users/robin/xprojects/spur-new/.spur/run/module-kit-proof/builtin-light.png"
+            "moduleShot": "module-light.png",
+            "builtinShot": "builtin-light.png"
         },
         "dark": {
             "module": {
@@ -105,8 +105,8 @@
                 "title": "oklch(0.97807 0.029 256.847)|0px|20px|700|rgba(0, 0, 0, 0)",
                 "tablist": "oklch(0.97807 0.029 256.847)|4px|16px|400|oklch(0.2115 0.012 254.09)"
             },
-            "moduleShot": "/Users/robin/xprojects/spur-new/.spur/run/module-kit-proof/module-dark.png",
-            "builtinShot": "/Users/robin/xprojects/spur-new/.spur/run/module-kit-proof/builtin-dark.png"
+            "moduleShot": "module-dark.png",
+            "builtinShot": "builtin-dark.png"
         }
     },
     "generatedAt": "2026-11-16T20:39:32.944Z",
