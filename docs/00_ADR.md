@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.74.0
+version: 1.75.0
 owner: Robin Min
 updated_at: 2026-11-15
 read_before: any structural change; before diverging from a decision
@@ -2855,3 +2855,40 @@ re-import pressure this entry already records).
   completed task returns its answer through the inbox and carries `metadata.remoteBranch`; the
   sender records the branch but never fetches or merges it.
 - **Detail:** [A2A member transport](design/a2a-member-transport.md).
+
+## ADR-149: The Fleet Runtime Is the One Orchestration Kernel; Write Dispatch Is Worktree-Isolated and Lands Through a Gated Queue
+
+- **Status:** Accepted (design) · **Date:** 2026-11-15 · **Feature:** G76 · **Amends:** ADR-127, ADR-126 A4 · **Extends:** ADR-140, ADR-145, ADR-148
+- **Decision:**
+  - `StrategyRuntime` is the only multi-task orchestrator. `/sp:dev-runall --mode parallel` becomes
+    a client that authorizes a frozen set and runs the same fenced tick in a foreground loop when
+    `spur serve` is absent; the skill no longer drives worktrees or integration.
+  - Every write-shaped fleet dispatch runs in its own worktree lane cut from the base tip. The write
+    slot is keyed by worktree realpath, so "one writer per worktree" admits up to
+    `agent.fleet.maxWriters` concurrent writers (default 1) instead of one per project.
+  - A candidate is admitted only when its prerequisites are **integrated** (a landing receipt
+    exists), it shares no declared file with an in-flight candidate, and a writer lane is free.
+    Dispatch attempts, not corpus status read from the base tree, decide in-flight.
+  - Landing is one serialized, engine-owned queue: rebase onto the base tip, gate the rebased tree
+    unless its tree hash matches a PASS receipt, `--ff-only`, persist run evidence, sync each touched
+    feature once. A conflict aborts and retains the lane; there is no automatic resolution. A remote
+    A2A `remoteBranch` enters the same queue, and Spur's gate is its trust boundary.
+  - One coder member drives a task's whole pipeline run in its lane; the orchestrator never splits
+    pipeline stages across members. Reviewer-role stages resolve to a fleet reviewer member through
+    the existing role path.
+- **Why:** the fleet was deterministic and fenced but serial — one in-flight dispatch held every
+  candidate — and had no isolation or integration stage, while the parallel skill path had both but
+  ran ~1,800 lines of git lifecycle prose through LLM context, the driver overhead ADR-140 removed
+  elsewhere. The two schedulers also disagreed on dependency readiness (done vs integrated).
+- **Alternatives rejected:** keep writers serial and parallelize only read/review turns (little
+  throughput); keep both orchestrators (two correctness rules, duplicate maintenance);
+  orchestrator-level stage splitting (a second FSM over `task-pipeline`, ADR-022); always re-gate
+  at landing (serializes every landing on the host-wide gate for no added safety when the tree is
+  unchanged); speculative batched merge queues (deferred until receipts show re-gating dominates).
+- **Consequence:** throughput is bounded by the host-wide gate lock (ADR-140 §6), so the gain is in
+  overlapping implementation; lanes need crash reconciliation against `git worktree list`; the
+  inbox stays the only transport and no public noun or verb is added.
+- **Retains:** ADR-022, ADR-057, ADR-119 (feature-scoped sync), ADR-138 (deterministic evidence
+  only), ADR-143, ADR-145 (fresh reviewer conversations).
+- **Detail:** [fleet orchestration lanes](design/fleet-orchestration-lanes.md);
+  [plan](plans/2026-11-15-multi-agent-task-orchestration.md).

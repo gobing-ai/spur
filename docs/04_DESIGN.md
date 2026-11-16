@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.98.0
+version: 1.99.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-11-15
@@ -85,6 +85,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Fleet task turns and measured warm execution (G74, ADR-145; implemented — `fleet-e2e --perf --modes` lane comparison) | [fleet-task-turn-execution.md](design/fleet-task-turn-execution.md) |
 | Named-agent dispatch with A2A as a hidden member transport (G8 sender shipped in 1333–1335; G9 listener built in 1336, two-install dispatch and write fencing proven in 1337; ADR-148) | [a2a-member-transport.md](design/a2a-member-transport.md) |
 | Verified attached fleet occupants (G75, ADR-146; §3 guest renewal + §4 `join --member` implemented by 1279/1281, §5 attached stages + drain by 1282, probe report `docs/reports/fleet-host-capabilities.json` by 1280) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
+| Parallel fleet orchestration — worktree lanes, lane admission and the gated merge queue (G76, ADR-149; proposed) | [fleet-orchestration-lanes.md](design/fleet-orchestration-lanes.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
 | E7 run-record contract — implemented (two-file pair, terminal state projection, inline driver setup); Feature E72 Trace tab + run progress route — implemented (2026-10-04) | [run-record-contract.md](design/run-record-contract.md) |

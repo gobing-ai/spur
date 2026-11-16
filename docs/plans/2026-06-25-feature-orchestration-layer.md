@@ -1,14 +1,16 @@
 ---
 kind: plan
 title: "Plan: Feature-Orchestration Layer for the `sp:dev-*` Workflow"
-status: proposed
+status: superseded
 created_at: 2026-06-25
-updated_at: 2026-06-25
-related: []
+updated_at: 2026-11-15
+related: [docs/plans/2026-11-15-multi-agent-task-orchestration.md]
 tags: [proposal, plugin, workflow]
 ---
 
 # Plan: Feature-Orchestration Layer for the `sp:dev-*` Workflow
+
+> **Superseded (2026-11-15)** by [multi-agent task orchestration](2026-11-15-multi-agent-task-orchestration.md) and ADR-149; retained as history.
 
 **Date:** 2026-06-25
 **Status:** Draft for approval
