@@ -7356,3 +7356,68 @@ Skipped: the pre-existing `changelog-confidence` red (already recorded for the G
 - Landings overlapping member work is the difference between measuring throughput and measuring a
   wave loop: chain them instead of landing only between waves.
 
+## 2026-11-16 — A81 (1347, 1348, 1349, 1350)
+
+### 1347 — DESIGN.md module-shell contract + composer routing
+
+- **Renaming a DESIGN.md section breaks deep links that no test owns.** Historical task files cite
+  `DESIGN.md#product-ui--downstream-board-modules-proposed`; keep an `<a id="…">` alias at the old
+  anchor and repoint the one live satellite link in the same commit.
+- **A plugin reference must route, not summarize.** `references/board-module-ui.md` lists owners
+  (DESIGN.md, downstream §6, the satellite) plus an explicit "restates none of them" boundary;
+  `skill-structure.test.ts` R16c then proves every relative link and heading anchor resolves.
+- **Doc-contract assertions are the executable evidence for a docs task.** A small `describe` block
+  that pins the section headings, the surviving frame rules and the SKILL.md link turned a
+  static-ref-only verdict (PARTIAL) into MET.
+
+### 1348 — module-kit extraction
+
+- **Lift markup, never re-style it.** Copying the classes verbatim and pinning the ADR-081 header and
+  tab-strip class strings in a test is what makes "no visual regression" checkable without a browser.
+- **`render()` queries resolve against `document.body`, not the container.** A suite with several
+  `render` calls needs `afterEach(cleanup)` or the second `getByRole` throws "found multiple".
+- **A generated declaration tree is build output.** When the emitter writes a committed mirror,
+  biome must ignore it (`biome.json` includes list) or the format rule fails on quotes/indentation the
+  compiler will always re-emit.
+
+### 1349 — runtime facade specifier + installed types
+
+- **`createRequire` cannot measure a TSX barrel.** The facade generator measures npm packages by
+  loading them; for the kit the export list had to be frozen in `module-kit/exports.ts` and kept
+  honest by an equality test against the real barrel keys.
+- **A single-file `.d.ts` cannot represent a barrel that re-exports siblings and `../ui/*`.** Mirror
+  the source tree instead (`apps/cli/board/kit/` ≙ `apps/web/src/components/`), and refuse any emitted
+  path outside the mirror root. The published subpath, not the on-disk folder, is the contract.
+- **React 19 dropped the implicit `children` prop.** `Card`/`Badge`/`Button` rendered children at
+  runtime but rejected `<Badge>x</Badge>` in types; the installed-consumer typecheck is what surfaced
+  it — compile a consumer outside the checkout before claiming types resolve.
+- **A value `import React from 'react'` survives into emitted declarations.** Rewrite it to
+  `import type React` in the emitter so the published artifact carries no runtime import.
+- **Dev-script output that lives in the repo needs an owner test.** `emit-board-types.test.ts`
+  compares the committed mirror against generated output, which is what makes regeneration safe.
+
+### 1350 — starter template + browser proof + docs
+
+- **A template's Vite externals must be read from the installed manifest.** Walking up from the
+  project (and from `vite`) to `node_modules/@gobing-ai/spur/web/board-runtime.json` keeps the
+  external list equal to the host's promise instead of a hand-typed copy.
+- **That file only exists after `bundle-web`.** A fresh worktree has no `apps/cli/web`, so a template
+  build fails until the board distribution is packed into the package (or a packed tarball is
+  installed) — the heavy proof packs the CLI so the fixture sees a real install.
+- **Measure host-styling parity numerically.** Reading the same computed properties (border, padding,
+  font, tab background) from the module's shell and from a built-in shell per theme, then asserting a
+  cross-theme difference, proves both parity and token resolution in one pass.
+- **Publish the proof as an artifact.** Four screenshots plus `report.json` under
+  `docs/reports/artifacts/` make the browser claim repeatable; the directory is excluded from biome
+  because the test writes it.
+
+### Cross-cutting (pipeline behaviour worth remembering)
+
+- **AC evidence type decides the verdict.** A behavior-bearing AC row with `static-ref` evidence is
+  downgraded MET→PARTIAL, which routes the run to `remediate`; with a `--defer-gate` pipeline that
+  state has no gate findings file and the run ends `failed`. Give docs ACs a `test`/`command` row
+  (a real contract test) rather than a citation.
+- **Host-executor resume is receipt-driven.** `spur workflow continue <run> --answer-text` expects a
+  receipt path (`.spur/run/<runId>/receipts/<state>.json`, `outcome: done`), not prose; the guard
+  refuses a malformed or missing receipt before mutating anything.
+
