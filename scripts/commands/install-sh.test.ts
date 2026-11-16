@@ -36,6 +36,10 @@ function install(extraEnv: Record<string, string> = {}) {
             HOME: root,
             SPUR_INSTALL: bin,
             SPUR_RELEASE_URL: `file://${release}`,
+            // Off by default: the optional CLI step would otherwise reach the host's
+            // package managers and network, making every test host-dependent.
+            SPUR_INSTALL_ZG: '0',
+            SPUR_INSTALL_A2A: '0',
             ...extraEnv,
         },
     });
@@ -130,6 +134,9 @@ function shim(dir: string, name: string, body: string): void {
     writeFileSync(join(dir, name), body, { mode: 0o755 });
 }
 
+// The helper defaults the optional CLI step off; these tests opt back in to cover the default.
+const OPTIONAL_ON = { SPUR_INSTALL_ZG: '1', SPUR_INSTALL_A2A: '1' };
+
 describe('scripts/install.sh optional zg and a2a dependencies (1340)', () => {
     test('existing zg and a2a are never reinstalled', () => {
         const fake = join(root, 'fake');
@@ -140,7 +147,7 @@ describe('scripts/install.sh optional zg and a2a dependencies (1340)', () => {
         shim(fake, 'npm', '#!/bin/sh\necho npm >> "$HOME/package-calls"\nexit 1\n');
         shim(fake, 'curl', '#!/bin/sh\nexec /usr/bin/curl "$@"\n');
         writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
-        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin`, ...OPTIONAL_ON });
         expect(code, stderr).toBe(0);
         expect(existsSync(join(root, 'package-calls'))).toBe(false);
     });
@@ -169,7 +176,7 @@ done
         shim(fake, 'npm', '#!/bin/sh\necho npm >> "$HOME/package-calls"\nexit 1\n');
         shim(fake, 'curl', '#!/bin/sh\nexec /usr/bin/curl "$@"\n');
         writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
-        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin`, ...OPTIONAL_ON });
         expect(code, stderr).toBe(0);
         expect(readFileSync(join(root, 'brew-calls'), 'utf8')).toContain('install a2a');
         expect(readFileSync(join(root, 'brew-calls'), 'utf8')).toContain('install zvec-grep');
@@ -205,7 +212,7 @@ exec /usr/bin/curl "$@"
 `,
         );
         writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
-        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin`, ...OPTIONAL_ON });
         expect(code, stderr).toBe(0);
         expect(readFileSync(join(root, 'npm-calls'), 'utf8')).toContain('--allow-scripts=@zvec/zvec-grep');
         expect(existsSync(join(bin, 'zg'))).toBe(true);
@@ -226,7 +233,7 @@ exec /usr/bin/curl "$@"
 `,
         );
         writeSums(`${sha256(FAKE_BIN)}  ${ASSET}\n`);
-        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin` });
+        const { code, stderr } = install({ PATH: `${fake}:/usr/bin:/bin`, ...OPTIONAL_ON });
         expect(code, stderr).toBe(0);
         expect(stderr).toContain('brew install zvec-grep');
         expect(stderr).toContain('npm install -g @zvec/zvec-grep --allow-scripts=@zvec/zvec-grep');
