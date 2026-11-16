@@ -4,7 +4,7 @@ name: Fleet integration queue and integrated-dependency admission
 status: todo
 template: feature-impl
 created_at: 2026-11-16T01:11:43.595Z
-updated_at: "2026-11-16T01:21:04.241Z"
+updated_at: "2026-11-16T02:06:52.991Z"
 feature_id: G76
 
 dependencies: ["1341"]
@@ -21,6 +21,16 @@ Implements: R2 — A dependent task waits for integration, not completion; R4 �
 Adds the serialized, engine-owned landing path that ADR-127 assigned to skill prose: rebase, gate on tree change, fast-forward, persist evidence, sync features.
 
 Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plans/2026-11-15-multi-agent-task-orchestration.md` (failure catalogue §4.7).
+
+
+**Ready-refine corrections (2026-11-15, `--depth ready`):**
+- The `StrategyRuntime.tick` anchor was `strategy-runtime.ts:512`, which no longer points at `tick` once the 1341 tree lands. It is now cited by symbol. The `captureGateGitTree` anchor moved from `:1488` to `:1483`.
+- As-built facts from the 1341 tree (wip, uncommitted on `main`; it touches `packages/app/src/services/strategy-runtime.ts`, `packages/app/src/services/write-slot-service.ts` and `packages/domain/src/dao/project-claim-dao.ts`):
+  - `observe` retains a lane only for a non-`completed` receipt. A `completed` lane is left in place and never disposed, and this queue picks it up.
+  - Lanes are listed through `WorktreeLaneService.list()`. Live write holders come from `StrategyRuntime.liveWriteHolders` (the base claim plus lane-keyed `write` rows from `ProjectClaimDao.listBySlot`).
+  - `WriteSlotService.claim/validateResult/release` take an optional `slotPath`, the lane realpath.
+  - Lane git calls go through `NodeProcessExecutor`, so every `WorktreeLaneService` method is async. 1341's gate fix makes this mandatory (`no-direct-process-spawn`), and new queue code follows the same rule.
+- Concurrency: start 1342 only after 1341 is committed, because both edit `strategy-runtime.ts`.
 
 ### Requirements
 
@@ -63,13 +73,13 @@ Contract: `docs/design/fleet-orchestration-lanes.md` (ADR-149); plan: `docs/plan
 | Claim | `ClaimSlot` | reuse `'write'`? **No.** Add the literal `'integrate'` to `ClaimSlot` (`project-claim-dao.ts:13`), keyed by the base project path |
 | Hold | `DispatchHoldReason` | add `'awaiting-integration'`, `'integration-conflict'` |
 | Events | `SystemEventDao` | `fleet.task.integrated` (payload = the `landed` outcome), `fleet.lane.disposed` |
-| Tick wiring | `StrategyRuntime.tick` (`strategy-runtime.ts:512`) | after `observe`-settled successes, call `queue.drainOne` **once per tick** before selecting |
+| Tick wiring | `StrategyRuntime.tick` (`packages/app/src/services/strategy-runtime.ts`, symbol `tick`) | after `observe`-settled successes, call `queue.drainOne` **once per tick** before selecting |
 
 **Queue order.** Successful attempts with no `fleet.task.integrated` event, oldest receipt first. The queue is derived from receipts plus events each tick, with no persisted queue table.
 
 **Landing algorithm (inside the `'integrate'` claim; one lane per call).**
 1. In the lane: `git rebase <base-branch>`. A non-zero exit runs `git rebase --abort`, emits `fleet.lane.retained{reason:'integration-conflict'}` and returns `conflict`.
-2. Gate: run the existing gate for the wbs in the lane. Its receipt is already keyed by the gate's own git tree hash (`quality-gate.ts:30-38`, `captureGateGitTree` `:1488`). An unchanged tree reuses the PASS receipt, which is "re-gate only if the tree changed" (operator Q4). Add no second hash mechanism. A FAIL retains the lane and returns `gate-failed`.
+2. Gate: run the existing gate for the wbs in the lane. Its receipt is already keyed by the gate's own git tree hash (`quality-gate.ts:30-38`, `captureGateGitTree` `:1483`). An unchanged tree reuses the PASS receipt, which is "re-gate only if the tree changed" (operator Q4). Add no second hash mechanism. A FAIL retains the lane and returns `gate-failed`.
 3. In the base: `git merge --ff-only sp/run-<wbs>-<attempt>`. Failure → retain and return `conflict` (the base moved under us; the next tick retries the rebase).
 4. `persistWorktreeRuns({ fromWorkdir: lane, toWorkdir: base, taskFiles: [<task file>] })` (`worktree-persist.ts:127`). A throw retains the lane (evidence first).
 5. Emit `fleet.task.integrated` in the same DB transaction as the claim bookkeeping.
