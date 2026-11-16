@@ -130,7 +130,7 @@
         ├── [done] **G73**: Cooperative fleet participation: hook lifecycle and guest join ([G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md](./G73_cooperative-fleet-participation-hook-lifecycle-and-guest-join.md))
         ├── [done] **G74**: Faster fleet task execution with correlated warm turns ([G74_faster-fleet-task-execution-with-correlated-warm-turns.md](./G74_faster-fleet-task-execution-with-correlated-warm-turns.md))
         ├── [verifying] **G75**: Verified live-session fleet participation ([G75_verified-live-session-fleet-participation.md](./G75_verified-live-session-fleet-participation.md))
-        └── [active] **G76**: Parallel fleet orchestration: worktree lanes and a gated merge queue ([G76_parallel-fleet-orchestration-worktree-lanes-and-a-gated-merge-queue.md](./G76_parallel-fleet-orchestration-worktree-lanes-and-a-gated-merge-queue.md))
+        └── [verifying] **G76**: Parallel fleet orchestration: worktree lanes and a gated merge queue ([G76_parallel-fleet-orchestration-worktree-lanes-and-a-gated-merge-queue.md](./G76_parallel-fleet-orchestration-worktree-lanes-and-a-gated-merge-queue.md))
     ├── [active] **G8**: Named-agent dispatch with A2A as a hidden transport ([G8_a2a-outbound-executor-edge-for-workflow-agent-run.md](./G8_a2a-outbound-executor-edge-for-workflow-agent-run.md))
     └── [done] **G9**: Cross-machine fleet: spur serve speaks A2A ([G9_cross-machine-fleet-spur-serve-speaks-a2a.md](./G9_cross-machine-fleet-spur-serve-speaks-a2a.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
