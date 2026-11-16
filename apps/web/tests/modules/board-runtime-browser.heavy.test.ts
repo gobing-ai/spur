@@ -22,6 +22,7 @@ import { availableBrowserBinary, type BrowserSession, launchBrowser } from '../t
 // Browser proofs require a real Chromium; state the absence instead of failing machines (and CI runners) without one.
 const browserReady = availableBrowserBinary() !== undefined;
 
+import { BOARD_FACADE_SPECIFIERS } from '../../src/modules/runtime/manifest';
 import {
     type DownstreamConsumer,
     deployFixtureIntoBoardBuild,
@@ -106,15 +107,9 @@ describe.skipIf(!browserReady)('installed package exports (R3)', () => {
         };
         expect(manifest.manifestVersion).toBe(1);
         expect(manifest.contributionApiVersion).toBe(1);
-        expect(Object.keys(manifest.imports ?? {}).sort()).toEqual([
-            'react',
-            'react-dom',
-            'react-dom/client',
-            'react-router',
-            'react-router/dom',
-            'react/jsx-dev-runtime',
-            'react/jsx-runtime',
-        ]);
+        // A81 1349: the shared UI kit is one ADDITIVE specifier — the protocol versions above stay 1.
+        expect(Object.keys(manifest.imports ?? {}).sort()).toEqual([...BOARD_FACADE_SPECIFIERS].sort());
+        expect(Object.keys(manifest.imports ?? {})).toContain('@gobing-ai/spur/board/ui');
     }, 60_000);
 
     test('the downstream entry type-checks against the installed ./board export', async () => {

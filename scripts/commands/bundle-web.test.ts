@@ -26,6 +26,7 @@ async function writeBoardFixture(
             BOARD_FACADE_SPECIFIERS.map((specifier) => [specifier, '/_astro/board-facade-react.js']),
         ),
         reservedModules: [],
+        uiKitVersion: '1.0.0',
     });
     await writeFile(
         join(source, 'index.html'),

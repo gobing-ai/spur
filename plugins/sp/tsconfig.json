@@ -4,5 +4,8 @@
         "types": ["bun"],
         "paths": { "@gobing-ai/spur-app": ["../../packages/app/src/index.ts"] }
     },
-    "include": ["**/*.ts"]
+    "include": ["**/*.ts"],
+    // Plugin skill templates are copied INTO a downstream project and built there (their own
+    // dependencies, e.g. `vite`, resolve in that project), so they are never compiled in place.
+    "exclude": ["skills/*/templates/**"]
 }

@@ -11,7 +11,8 @@
  *
  * Host-styling parity is measured, not asserted by eye: the same computed properties are read from
  * the module's shell and from a built-in module's shell, in each theme. Screenshots and a JSON
- * report are written to `docs/reports/artifacts/module-kit-proof/` so the evidence is repeatable.
+ * report are written to the gitignored `.spur/run/module-kit-proof/`; the committed snapshot under
+ * `docs/reports/artifacts/module-kit-proof/` is refreshed from it deliberately.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -26,7 +27,11 @@ import { packCliTarball } from '../test-helpers/downstream-fixture';
 const WEB_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const REPO_ROOT = join(WEB_ROOT, '..', '..');
 const TEMPLATE_DIR = join(REPO_ROOT, 'plugins/sp/skills/spur-composer/templates/board-module');
-const ARTIFACT_DIR = join(REPO_ROOT, 'docs/reports/artifacts/module-kit-proof');
+// Evidence goes to a gitignored plane: a heavy test that rewrites TRACKED files mid-pass moves the
+// working tree, and `spur feature verify` fails a pass whose tree digest moved during the run. The
+// committed snapshot under `docs/reports/artifacts/module-kit-proof/` is refreshed deliberately (see
+// its README) and is never written by this test.
+const ARTIFACT_DIR = join(REPO_ROOT, '.spur', 'run', 'module-kit-proof');
 
 const MODULE_ID = 'kit-demo';
 const browserReady = availableBrowserBinary() !== undefined;
