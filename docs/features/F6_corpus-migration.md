@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: [rd3-migration, wave-0]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-07-25T19:33:21.942Z"
+updated_at: "2026-11-16T05:12:45.302Z"
 ---
 
 # F6: Corpus migration
@@ -18,9 +18,8 @@ legacy corpora. Built in W0; **cutover only after the board** (operator never bo
 
 ## Scope
 
-The migration tool, dry-run reporting, idempotency. **Out:** the cutover event itself (gated on
-the server/web design task delivering a daily-driver board) and the legacy-board freeze
-(cc-agents task 0404).
+- In: the migration tool, dry-run reporting, idempotency.
+- Out: the cutover event itself (gated on the server/web design task delivering a daily-driver board) and the legacy-board freeze (cc-agents task 0404).
 
 ## Acceptance Criteria
 

@@ -6,7 +6,7 @@ status: verifying
 priority: P0
 tags: [rd3-migration, wave-0]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-21T18:35:06.559Z"
+updated_at: "2026-11-16T05:12:44.199Z"
 ---
 
 # F1: Planning foundation
@@ -19,8 +19,8 @@ cross-cutting consolidation on ts-utils/ts-runtime — per design §2–§4 and 
 
 ## Scope
 
-`packages/domain` modules only (schemas, MarkdownDocument, bdd, locks) + test helpers + upstream
-consolidation audit. **Out:** services, CLI verbs (F2/F3), lifecycle wiring (F4).
+- In: `packages/domain` modules only (schemas, MarkdownDocument, bdd, locks) + test helpers + upstream consolidation audit.
+- Out: services, CLI verbs (F2/F3), lifecycle wiring (F4).
 
 ## Acceptance Criteria
 

@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: 2026-06-12T23:45:00.000Z
+updated_at: "2026-11-16T05:12:43.100Z"
 ---
 
 # A: Foundation
@@ -18,8 +18,8 @@ packaging that every other group stands on.
 
 ## Scope
 
-`spur init`, `.spur/config.yaml` + `packages/config`, `spur status`, `spur migrate` (DB),
-schema composition, repo-root `./config` default assets, tooling presets.
+- In: `spur init`, `.spur/config.yaml` + `packages/config`, `spur status`, `spur migrate` (DB), schema composition, repo-root `./config` default assets, tooling presets.
+- Out: everything built on top of the foundation (planning, execution, collaboration features).
 
 ## Tasks
 
