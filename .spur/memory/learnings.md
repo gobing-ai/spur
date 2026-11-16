@@ -7296,3 +7296,63 @@ Skipped: the pre-existing `changelog-confidence` red (already recorded for the G
 - **The feature record's generated task table is not a status source to trust by eye.** G9's record still lists 1336 `wip` and 1337 `todo` while both tasks are `done`; the projection is refreshed by the feature tool, not by the wrap step.
 
 Skipped: the pre-existing `changelog-confidence` red (already recorded for the G8 batch, not caused by this pass) and a repository-wide doc sweep — this pass audited the A2A owner set only. The 1337 code diff itself is out of wrap scope (the doc-sync step owns doc scope only).
+
+# Learnings — G76 batch (1341–1346), 2026-11-15
+
+## 2026-11-15 — 1341 (lane service, admission, member cwd)
+
+- `WorktreeLaneService` is the only orchestration code allowed to run `git worktree`; a read-only
+  `worktree list` in `branch-topology` predates it and stays. Reviewers check this with a repo-wide
+  grep, so a new `git worktree` call outside the service is a review finding, not a style choice.
+- Every lane git call must go through `NodeProcessExecutor` with an argv array. `node:child_process`
+  in `packages/app/src` fails the `no-direct-process-spawn` rule at the pre-check, before any test
+  runs — port first, then write call sites as `await`.
+- `certification pass` (a task whose implementation already landed) is admitted by the 0976 path:
+  `requireDiff` sees zero non-corpus changes and `spur task check <wbs>` PASS certifies it. Do not
+  invent a diff to satisfy the guard.
+
+## 2026-11-15 — 1342 (integration queue)
+
+- The queue derives its work from completion receipts minus `fleet.task.integrated` events. There is
+  no queue table; a crash therefore costs nothing, but admission must read the *receipt*, not the
+  worktree — a lane that vanished must still hold its dependents.
+- Landings are serialized by one `'integrate'` claim on the base path. Wrapping the whole landing in
+  `try/finally` (release) is what keeps a thrown rebase or persist from wedging the project.
+- `persistWorktreeRuns` runs BEFORE `dispose`: a throw retains the lane, because the alternative is
+  losing run rows with the worktree.
+
+## 2026-11-15 — 1343 (thin parallel client)
+
+- A dispatchless tick is not idleness. Counting a busy member, a full writer cap or a pending landing
+  as `idle` ends a batch client while its pipelines still run; the working-hold set plus a hard
+  `maxTicks` bound is the honest pair.
+- Retiring operational prose: the bootstrap-budget test reads `SKILL.md ## Bootstrap reads` and sums
+  bytes, while `skill-structure` resolves every relative link and pins each `WT-n` heading to exactly
+  one file. Move content in one commit and run both, or the deletion surfaces as a link failure much
+  later.
+
+## 2026-11-15 — 1344 (reviewer routing)
+
+- The role path already existed (`resolveMember` + `FRESH_SESSION_ROLES`); the missing half was the
+  tree. A fleet envelope now carries `cwd`, and the member refuses a tree it cannot prove belongs to
+  the project — a malformed envelope is an error, never a fallback tree.
+- When a contract file gains a required field, the *existing* fakes that construct the old shape are
+  the first failures: run the neighbouring suites (`fleet-dispatch`, `agent-run-admission`) before
+  claiming the change is green.
+
+## 2026-11-15 — 1345 (remote branches)
+
+- A remote writer's branch is `<remote>/<branch>`; fetch it into `sp/remote-<wbs>-<attempt>` and land
+  it through the same queue. A failed fetch is `not-started` for INTEGRATION and must never replay the
+  remote turn (ADR-126 A4).
+- A fetched ref is Spur's own: delete it with the lane after a landing, because `dispose` only knows
+  the local attempt name.
+
+## 2026-11-15 — 1346 (perf lane)
+
+- Measure orchestration with real lanes and the real queue, and state the fixture's simulated windows
+  in the receipt. A 400 ms window makes git and gate overhead dominate (ratio 0.62, MISS); the same
+  fixture at 2 s lands 0.544. Publishing the window size is what keeps the claim honest.
+- Landings overlapping member work is the difference between measuring throughput and measuring a
+  wave loop: chain them instead of landing only between waves.
+
