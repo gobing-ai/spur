@@ -183,6 +183,15 @@ describe('AgentExecutorConfigSchema disabled (0796)', () => {
 });
 
 describe('AgentFleetSchema (0858 R1/R8)', () => {
+    test('G76 1341: maxWriters must be a positive integer; absent keeps lane mode off', () => {
+        expect(AgentFleetSchema.parse({}).maxWriters).toBeUndefined();
+        expect(AgentFleetSchema.parse({ maxWriters: 2, laneRoot: '../lanes' }).maxWriters).toBe(2);
+        const bad = AgentFleetSchema.safeParse({ maxWriters: 0 });
+        expect(bad.success).toBe(false);
+        expect(bad.error?.issues[0]?.path).toEqual(['maxWriters']);
+        expect(AgentFleetSchema.safeParse({ laneRoot: '' }).success).toBe(false);
+    });
+
     test('R1: defaults — enabled false, strategy rest, members []', () => {
         const fleet = AgentFleetSchema.parse({});
         expect(fleet.enabled).toBe(false);

@@ -78,7 +78,9 @@ export class ProjectClaimDao {
      * expiry bumps `ownerEpoch` (the fencing token 0837 reads). The optional
      * `strategyVersion` (0837) is written on insert AND on takeover; omitted
      * (0836 orchestrator callers) stays/lands NULL. Optional owner/strategy
-     * fences are checked inside the acquisition statement.
+     * fences are checked inside the acquisition statement. `fence.projectPath`
+     * (G76 1341) names the project whose orchestrator/strategy rows fence a claim
+     * keyed by another path — a lane realpath; it defaults to `projectPath`.
      */
     async claim(
         projectPath: string,
@@ -86,10 +88,11 @@ export class ProjectClaimDao {
         holderId: string,
         ttlMs: number,
         strategyVersion?: number,
-        fence?: { ownerEpoch?: number; strategyVersion?: number },
+        fence?: { ownerEpoch?: number; strategyVersion?: number; projectPath?: string },
     ): Promise<ProjectClaim | null> {
         const now = Date.now();
         const version = strategyVersion ?? null;
+        const fencePath = fence?.projectPath ?? projectPath;
         // ONE statement decides AND reports: `RETURNING` emits a row only when
         // the insert/update actually landed (a WHERE-failed conflict emits
         // none), so a refused claimant reads null and a winner reads the row
@@ -124,11 +127,11 @@ export class ProjectClaimDao {
             now,
             now + ttlMs,
             fence?.ownerEpoch ?? null,
-            projectPath,
+            fencePath,
             fence?.ownerEpoch ?? null,
             now,
             fence?.strategyVersion ?? null,
-            projectPath,
+            fencePath,
             fence?.strategyVersion ?? null,
         );
         return row === undefined ? null : toClaim(row);
@@ -178,6 +181,18 @@ export class ProjectClaimDao {
             slot,
         );
         return row === undefined ? null : toClaim(row);
+    }
+
+    /** Every unreleased claim on one slot across project paths (G76 1341: one write claim per lane). */
+    async listBySlot(slot: ClaimSlot): Promise<ProjectClaim[]> {
+        const rows = await this.db.queryAll<ProjectClaimRow>(
+            `SELECT project_path, slot, holder_id, owner_epoch, strategy_version, claimed_at, heartbeat_at, expires_at
+             FROM project_claims
+             WHERE slot = ? AND expires_at > 0
+             ORDER BY project_path`,
+            slot,
+        );
+        return rows.map(toClaim);
     }
 
     /** Release the claim, only if `holderId` still holds it. True when this call released it. */

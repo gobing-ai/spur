@@ -8,6 +8,7 @@ import {
 } from '@gobing-ai/spur-domain';
 import { type AgentName, type AgentProcessOptions, type AgentSpec, AiRunner } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { WorkflowAgentService } from '../workflow/actions/agent-run';
 import { FRESH_SESSION_ROLES } from '../workflow/fleet-dispatch';
 import type { FleetPhaseEmit } from '../workflow/fleet-work-item';
@@ -23,6 +24,7 @@ import type { StrategyRuntime } from './strategy-runtime';
 import { FOLLOW_POLL_INTERVAL_MS } from './system-event-follow';
 import type { SystemEventBus } from './system-event-tap';
 import { createWarmTurnDispatcher } from './warm-turn-dispatch';
+import { laneForRequestKey } from './worktree-lane-service';
 import { WRITE_SLOT_TTL_MS } from './write-slot-service';
 
 /**
@@ -569,7 +571,21 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                 } else {
                     // R2: a keyed run holds the write slot, so the member heartbeats it
                     // for the run's duration. An unkeyed batch claims no slot.
-                    if (keyed) stopHeartbeat = createWriteSlotHeartbeat({ projectPath, recipient, getDb: deps.getDb });
+                    // G76 1341: lane mode runs the keyed attempt in its lane, derived from the
+                    // request key — the write claim is keyed by the lane realpath.
+                    const firstKey = requestKeys?.[0];
+                    const lane = keyed && firstKey ? laneForRequestKey(projectPath, declaration, firstKey) : null;
+                    const laneCwd =
+                        lane !== null && (await createNodeFileSystem(lane).exists(lane))
+                            ? normalizeProjectPath(lane)
+                            : null;
+                    if (keyed) {
+                        stopHeartbeat = createWriteSlotHeartbeat({
+                            projectPath: laneCwd ?? projectPath,
+                            recipient,
+                            getDb: deps.getDb,
+                        });
+                    }
                     // 1076 R2/R3 (ADR-132): a keyed run OWNS its id, so the durable record, the
                     // coordination row, the lineage edge and the live frame tags all name the same
                     // run. AgentService reads `run-id` from the flags; the supervisor is told the
@@ -597,6 +613,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                         // fired once at loop start).
                         const baseFlags = {
                             ...rewritten,
+                            ...(laneCwd !== null ? { cwd: laneCwd } : {}),
                             ...(runId !== undefined ? { 'run-id': runId } : {}),
                             ...(executionId !== undefined ? { 'execution-id': executionId } : {}),
                         };

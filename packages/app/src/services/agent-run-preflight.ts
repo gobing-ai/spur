@@ -4,6 +4,7 @@ import { booleanFlag, numberFlag, stringFlag } from './agent-run-flags';
 import type { AgentServiceContext } from './agent-service';
 import { parseRequiresCapabilities, type RequiresCapabilities } from './capability-attestation';
 import { FleetService, mergeAgentSpecs } from './fleet-service';
+import { isProjectLane } from './worktree-lane-service';
 
 /** Outcome of {@link agentRunPreflight}: an exit-2 refusal, or the validated launch values. */
 export type AgentRunPreflight =
@@ -47,7 +48,8 @@ export async function agentRunPreflight(
             ...(ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: ctx.reloadAgentConfig } : {}),
             openDb: ctx.getDb,
         });
-        if ((await fleet.load(ctx.cwd)) !== null) {
+        const declared = await fleet.load(ctx.cwd);
+        if (declared !== null) {
             await fleet.assertLaunchGroundTruth(ctx.cwd);
             // G72 R2: the declared fleet members come from `agent.fleet` (nothing is written
             // to `.spur/agents/` any more), so the launch lookup is the same merged list the
@@ -58,7 +60,10 @@ export async function agentRunPreflight(
             ).find((s) => s.id === launchSpecId);
             if (spec === undefined) return { ok: false, exitCode: 2, message: `Missing fleet spec: ${launchSpecId}` };
             await fleet.assertLaunchGroundTruth(spec.workspace);
-            await fleet.assertLaunchGroundTruth(stringFlag(flags, 'cwd', ctx.cwd));
+            // G76 1341: a lane cwd is a linked worktree of this project, not its root — the
+            // ground-truth guard would refuse it, so a project lane is accepted by name.
+            const runCwd = stringFlag(flags, 'cwd', ctx.cwd);
+            if (!isProjectLane(ctx.cwd, declared, runCwd)) await fleet.assertLaunchGroundTruth(runCwd);
             // G71 R2: the `beforeDispatch` refusal is GONE. Operator resume is an inbox
             // message to the member (`spur message send --to <member> "/sp:dev-run <wbs>
             // --continue"`), and a drained run physically cannot carry `beforeDispatch` — the

@@ -90,9 +90,12 @@ export class WriteSlotService {
      * Refuse stale owner/strategy decisions, require proven read-only capability
      * for a slot-free claim, and atomically fence a writer's acquisition against
      * the observed owner and persisted strategy. Refusals never start work.
+     * `slotPath` (G76 1341) keys the claim by a lane realpath while the project's
+     * own orchestrator/strategy rows still fence it; absent = the project path.
      */
-    async claim(decision: DispatchDecision): Promise<ClaimOutcome> {
+    async claim(decision: DispatchDecision, slotPath?: string): Promise<ClaimOutcome> {
         const projectPath = normalizeProjectPath(decision.projectPath);
+        const slotKey = slotPath === undefined ? projectPath : normalizeProjectPath(slotPath);
         const db = await this.ctx.openDb(projectPath);
         const dao = new ProjectClaimDao(db);
 
@@ -122,12 +125,12 @@ export class WriteSlotService {
         }
         // 4. atomic claim — the dao's single ON CONFLICT statement IS R2.
         const lease = await dao.claim(
-            projectPath,
+            slotKey,
             'write',
             decision.instanceId,
             WRITE_SLOT_TTL_MS,
             decision.strategyVersion,
-            { ownerEpoch: orchestrator?.ownerEpoch, strategyVersion: strategy?.strategyVersion },
+            { ownerEpoch: orchestrator?.ownerEpoch, strategyVersion: strategy?.strategyVersion, projectPath },
         );
         if (lease === null) {
             const ownerNow = await dao.get(projectPath, 'orchestrator');
@@ -155,7 +158,7 @@ export class WriteSlotService {
             occurred_at: new Date().toISOString(),
             actor: decision.instanceId,
             payload_json: JSON.stringify({
-                projectPath,
+                projectPath: slotKey,
                 change: 'claim',
                 holderId: decision.instanceId,
                 ownerEpoch: decision.ownerEpoch,
@@ -178,14 +181,16 @@ export class WriteSlotService {
         instanceId: string,
         ownerEpoch: number,
         ref?: ResultRef,
+        slotPath?: string,
     ): Promise<'accepted' | 'stale-owner-rejected'> {
-        const normalized = normalizeProjectPath(projectPath);
-        const db = await this.ctx.openDb(normalized);
+        const base = normalizeProjectPath(projectPath);
+        const normalized = slotPath === undefined ? base : normalizeProjectPath(slotPath);
+        const db = await this.ctx.openDb(base);
         const row = await new ProjectClaimDao(db).get(normalized, 'write');
         const current = row?.ownerEpoch ?? 0;
         // The existing durable capacity receipt pins the originating owner without
         // another claim-table migration. Missing/pruned evidence fails closed.
-        const owner = await new ProjectClaimDao(db).get(normalized, 'orchestrator');
+        const owner = await new ProjectClaimDao(db).get(base, 'orchestrator');
         const [event] = await new SystemEventDao(db).query({
             names: ['fleet.capacity.changed'],
             actor: instanceId,
@@ -226,9 +231,10 @@ export class WriteSlotService {
     }
 
     /** Release the write slot — only the current holder can. True when this call released it. */
-    async release(projectPath: string, instanceId: string, ownerEpoch: number): Promise<boolean> {
-        const normalized = normalizeProjectPath(projectPath);
-        const db = await this.ctx.openDb(normalized);
+    async release(projectPath: string, instanceId: string, ownerEpoch: number, slotPath?: string): Promise<boolean> {
+        const base = normalizeProjectPath(projectPath);
+        const normalized = slotPath === undefined ? base : normalizeProjectPath(slotPath);
+        const db = await this.ctx.openDb(base);
         const released = await new ProjectClaimDao(db).release(normalized, 'write', instanceId, ownerEpoch);
         // 0839 R1: a freed slot wakes capacity waiters; only the fact of an
         // actual release emits — a failed release changed nothing.

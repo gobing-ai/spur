@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { FleetStrategy } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
@@ -9,12 +10,15 @@ import {
     readLifecycle,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { declaredTaskFiles } from '../workflow/plan-projection';
 import { DeliveryReconciler, type UnresolvedDelivery } from './delivery-reconciler';
 import type { FleetDispatcher, FleetReceipt } from './fleet-dispatcher';
 import type { FleetService, OrchestratorBinding, ResolvedFleetMember } from './fleet-service';
 import { type InboxMessage, InboxService } from './inbox-service';
 import { normalizeProjectPath } from './project-registry';
 import type { TaskService, TaskSummary } from './task-service';
+import { isProjectLane, type LaneAttemptState, WorktreeLaneService } from './worktree-lane-service';
 import { type DispatchDecision, WRITE_SLOT_TTL_MS, WriteSlotService } from './write-slot-service';
 
 // ---------------------------------------------------------------------------
@@ -77,7 +81,11 @@ export type DispatchHoldReason =
      * A keyed dispatch has no definite receipt yet (G71 R1): the member may still be
      * working, so nothing new may be dispatched. Never a reason to retry or to fail.
      */
-    | 'dispatch-in-flight';
+    | 'dispatch-in-flight'
+    /** Lane mode (G76 1341): lanes in use reached `agent.fleet.maxWriters`; detail `<inUse>/<max>`. */
+    | 'writer-cap'
+    /** Lane mode (G76 1341): a declared file is shared with an in-flight lane; detail `<wbs> <path>`. */
+    | 'file-overlap';
 
 /**
  * One candidate's latest keyed dispatch attempt (G71 R1). `receipt` is absent while the
@@ -143,6 +151,16 @@ export interface StrategyContext {
      * the strategy itself does no I/O — this is what keeps `select` pure.
      */
     dispatchAttempts: ReadonlyMap<string, DispatchAttemptState>;
+    /**
+     * Lane admission (G76 1341). Absent = the legacy single-writer path (one in-flight
+     * attempt holds everything). Present: in-flight lanes with their declared files, the
+     * cap, and each candidate's declared files (`declaredTaskFiles`, resolved by the runtime).
+     */
+    lanes?: {
+        maxWriters: number;
+        inUse: Array<{ wbs: string; files: string[] }>;
+        filesOf: (wbs: string) => string[];
+    };
 }
 
 /** The strategy's whole output: decisions to dispatch, holds for everything skipped. */
@@ -215,6 +233,8 @@ export const gtdStrategy: Strategy = {
         const attachedGap = (member: ResolvedFleetMember): string | null => {
             const attachment = ctx.memberAttachments?.get(member.instanceId);
             if (attachment === undefined) return null; // A plain member, not an occupant.
+            // G76 1341 R5: an occupant's workspace is fixed at bind time, so it cannot run in a lane cwd.
+            if (ctx.lanes !== undefined) return 'lane mode: attached occupants take read/review turns only';
             const lifecycle = ctx.memberLifecycle.get(member.instanceId);
             if (lifecycle === 'working') return 'reported working (human turn)';
             if (attachment.draining) return 'draining';
@@ -240,6 +260,8 @@ export const gtdStrategy: Strategy = {
         const inFlight = [...ctx.dispatchAttempts.entries()]
             .filter(([, state]) => state.receipt === undefined)
             .map(([wbs, state]) => `${wbs} (attempt ${state.attempt})`);
+        const lanes = ctx.lanes;
+        const inUse = [...(lanes?.inUse ?? [])];
         const priorityOf = (c: TaskSummary): string => {
             const p = c.frontmatter.priority;
             return typeof p === 'string' && p !== '' ? p : 'P9';
@@ -278,7 +300,22 @@ export const gtdStrategy: Strategy = {
                 hold('dispatch-in-flight', `attempt ${attempt.attempt} has no terminal receipt yet`);
                 continue;
             }
-            if (inFlight.length > 0) {
+            // 3c. Lane mode (G76 1341) replaces the global hold with admission: a free lane
+            //     under the cap, and no declared file shared with an in-flight lane (the
+            //     scheduleBatch overlap rule). Dispatch attempts, not base-tree status, are in flight.
+            const files = lanes?.filesOf(candidate.wbs) ?? [];
+            if (lanes !== undefined) {
+                if (inUse.length >= lanes.maxWriters) {
+                    hold('writer-cap', `${inUse.length}/${lanes.maxWriters}`);
+                    continue;
+                }
+                const mine = new Set(files);
+                const clash = inUse.find((lane) => lane.files.some((file) => mine.has(file)));
+                if (clash !== undefined) {
+                    hold('file-overlap', `${clash.wbs} ${clash.files.find((file) => mine.has(file))}`);
+                    continue;
+                }
+            } else if (inFlight.length > 0) {
                 hold('dispatch-in-flight', `waiting on in-flight dispatch ${inFlight.join(', ')}`);
                 continue;
             }
@@ -322,6 +359,8 @@ export const gtdStrategy: Strategy = {
                 requiresWrite: member.writeCapable,
                 taskId: candidate.wbs,
             });
+            // An admitted lane counts against the cap and overlap for the rest of this pass.
+            if (lanes !== undefined) inUse.push({ wbs: candidate.wbs, files });
         }
         return { decisions, holds };
     },
@@ -340,8 +379,11 @@ export interface StrategyRuntimeContext {
     openDb: (projectPath: string) => Promise<DbAdapter>;
     /** Candidate enumeration — `TaskService.list` (the Background's named gate owner). */
     tasks: Pick<TaskService, 'list'>;
-    /** Fleet resolution + orchestrator binding (0835/0836). */
-    fleet: Pick<FleetService, 'resolve' | 'resolveOrchestrator'>;
+    /**
+     * Fleet resolution + orchestrator binding (0835/0836). `load` (optional) reads the
+     * declared section; `agent.fleet.maxWriters` present there turns lane mode on (G76 1341).
+     */
+    fleet: Pick<FleetService, 'resolve' | 'resolveOrchestrator'> & Partial<Pick<FleetService, 'load'>>;
     /**
      * Dependency readiness per candidate, sourced in production from
      * `TaskCheckService.firstBlockingPrerequisite` (the task-check.ts:1343 L4
@@ -499,7 +541,47 @@ export class StrategyRuntime {
                 });
             }
         }
+        // G76 1341 R4 (design §4.5): lane crash reconciliation, write side only — a
+        // read-only resume (Board) never touches git.
+        if (!options.readOnly) {
+            try {
+                await (await this.laneMode(normalized))?.service.reconcile((wbs, attempt) =>
+                    this.attemptState(normalized, wbs, attempt),
+                );
+            } catch (error) {
+                this.ctx.logger?.warn('strategy resume: lane reconcile failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
         return { strategy, version, orchestrator, unresolved, reconciled: true };
+    }
+
+    /** Lane mode (G76 1341): on only when the declared section carries `maxWriters`. */
+    private async laneMode(
+        normalized: string,
+    ): Promise<{ maxWriters: number; laneRoot?: string; service: WorktreeLaneService } | null> {
+        const cfg = await this.ctx.fleet.load?.(normalized);
+        if (cfg?.maxWriters === undefined) return null;
+        return {
+            maxWriters: cfg.maxWriters,
+            ...(cfg.laneRoot !== undefined ? { laneRoot: cfg.laneRoot } : {}),
+            service: new WorktreeLaneService({
+                projectPath: normalized,
+                ...(cfg.laneRoot !== undefined ? { laneRoot: cfg.laneRoot } : {}),
+                getDb: () => this.ctx.openDb(normalized),
+            }),
+        };
+    }
+
+    /** One attempt's state from its keyed inbox row + receipt: superseded attempts are settled. */
+    private async attemptState(normalized: string, wbs: string, attempt: number): Promise<LaneAttemptState> {
+        const db = await this.ctx.openDb(normalized);
+        const attempts = await new InboxService({ getDb: async () => db }).attempts(wbs);
+        if (attempts.latest === null || attempts.count < attempt) return 'none';
+        if (attempts.count > attempt) return 'terminal';
+        const receipt = await this.ctx.dispatcher?.receipt(attempts.latest.id, attempts.latest.toId);
+        return receipt === null || receipt === undefined || receipt.status === 'outcome-unknown' ? 'open' : 'terminal';
     }
 
     /**
@@ -533,6 +615,7 @@ export class StrategyRuntime {
         const db = await this.ctx.openDb(normalized);
         const inbox = new InboxService({ getDb: async () => db });
         const slots = new WriteSlotService(this.ctx);
+        const lanes = await this.laneMode(normalized);
         const dispatched: DispatchDecision[] = [];
         for (const decision of result.decisions) {
             if (decision.ownerEpoch !== opts.ownerEpoch) break;
@@ -541,14 +624,28 @@ export class StrategyRuntime {
             // A prior keyed attempt means the earlier run never landed a terminal receipt.
             const priorAttempts = (await this.readAttempts(inbox, wbs)).count;
             const resumeHint = statusByWbs.get(wbs) === 'wip' || priorAttempts > 0;
-            const claim = await slots.claim(decision);
+            const attempt = priorAttempts + 1;
+            // G76 1341: the lane opens BEFORE the claim, which is keyed by its realpath. A
+            // lane left by a refused claim has no attempt row, so reconcile prunes it.
+            let slotPath: string | undefined;
+            if (lanes !== null) {
+                try {
+                    slotPath = (await lanes.service.open(wbs, attempt)).path;
+                } catch (error) {
+                    holds.push({
+                        wbs,
+                        reason: 'executor-unavailable',
+                        detail: `lane open failed: ${error instanceof Error ? error.message : String(error)}`,
+                    });
+                    continue;
+                }
+            }
+            const claim = await slots.claim(decision, slotPath);
             if (!claim.ok) {
                 holds.push({ wbs, reason: 'no-idle-instance', detail: claim.refusal });
                 continue;
             }
             try {
-                const attempts = await this.readAttempts(inbox, wbs);
-                const attempt = attempts.count + 1;
                 const { messageId } = await dispatcher.enqueue({
                     member: decision.instanceId,
                     fromId: opts.orchestratorId,
@@ -570,12 +667,17 @@ export class StrategyRuntime {
                 dispatched.push(decision);
                 // The slot stays held until the receipt lands: the orchestrator keeps it
                 // alive across the gap before the member picks the message up.
-                this.startHeartbeat(normalized, decision.instanceId, opts.ownerEpoch);
+                this.startHeartbeat(normalized, decision.instanceId, opts.ownerEpoch, slotPath);
             } catch (error) {
                 // Nothing was enqueued, so the slot must not stay claimed — a dead
                 // dispatch channel must not wedge the project for a TTL.
                 if (claim.lease !== undefined) {
-                    await slots.release(claim.lease.projectPath, claim.lease.holderId, claim.lease.ownerEpoch);
+                    await slots.release(
+                        normalized,
+                        claim.lease.holderId,
+                        claim.lease.ownerEpoch,
+                        claim.lease.projectPath,
+                    );
                 }
                 holds.push({
                     wbs,
@@ -606,31 +708,61 @@ export class StrategyRuntime {
         ) {
             return { released: [] };
         }
-        const holder = await claims.get(normalized, 'write');
-        if (holder === null || holder.expiresAt <= Date.now()) {
-            this.stopHeartbeat(normalized);
-            return { released: [] };
-        }
-        // The member picked the message up: its own run loop heartbeats the slot now
-        // (1074 R2), so the orchestrator's standby heartbeat is finished.
-        if (await new CoordinationRunDao(db).hasRunning(holder.holderId)) {
-            this.stopHeartbeat(normalized);
-            return { released: [] };
-        }
-        const dispatcher = this.ctx.dispatcher;
-        if (dispatcher === undefined) return { released: [] };
-        const rows = await new InboxService({ getDb: async () => db }).requests(holder.holderId);
-        const pending = rows.find((row) => row.taskId !== null);
-        if (pending === undefined) return { released: [] };
-        const receipt: FleetReceipt | null = await dispatcher.receipt(pending.id, holder.holderId);
-        if (receipt === null) return { released: [] };
-        this.stopHeartbeat(normalized);
+        const lanes = await this.laneMode(normalized);
+        // One live write holder in-tree, or one per lane in lane mode (G76 1341).
+        const holders = await this.liveWriteHolders(normalized, claims, lanes);
+        if (holders.length === 0) this.stopHeartbeat(normalized);
+        const released: string[] = [];
         const slots = new WriteSlotService(this.ctx);
-        await slots.validateResult(normalized, holder.holderId, holder.ownerEpoch, {
-            taskId: pending.taskId ?? undefined,
-        });
-        const released = await slots.release(normalized, holder.holderId, holder.ownerEpoch);
-        return { released: released ? [holder.holderId] : [] };
+        const inbox = new InboxService({ getDb: async () => db });
+        for (const holder of holders) {
+            const slotPath = holder.projectPath === normalized ? undefined : holder.projectPath;
+            // The member picked the message up: its own run loop heartbeats the slot now
+            // (1074 R2), so the orchestrator's standby heartbeat is finished.
+            if (await new CoordinationRunDao(db).hasRunning(holder.holderId)) {
+                this.stopHeartbeat(holder.projectPath);
+                continue;
+            }
+            const dispatcher = this.ctx.dispatcher;
+            if (dispatcher === undefined) continue;
+            const pending = (await inbox.requests(holder.holderId)).find((row) => row.taskId !== null);
+            if (pending === undefined) continue;
+            const receipt: FleetReceipt | null = await dispatcher.receipt(pending.id, holder.holderId);
+            if (receipt === null) continue;
+            this.stopHeartbeat(holder.projectPath);
+            await slots.validateResult(
+                normalized,
+                holder.holderId,
+                holder.ownerEpoch,
+                { taskId: pending.taskId ?? undefined },
+                slotPath,
+            );
+            if (await slots.release(normalized, holder.holderId, holder.ownerEpoch, slotPath)) {
+                released.push(holder.holderId);
+            }
+            // A non-landing outcome keeps its lane for inspection (design §4.4 inv. 5);
+            // landing and disposal are the merge queue's (1342).
+            const attempt = Number(/:(\d+)$/.exec(pending.requestKey ?? '')?.[1]);
+            if (lanes !== null && slotPath !== undefined && receipt.status !== 'completed' && attempt > 0) {
+                await lanes.service.retain(pending.taskId ?? '', attempt, receipt.status);
+            }
+        }
+        return { released };
+    }
+
+    /** Live write claims for this project: the base path, plus its lanes when lane mode is on. */
+    private async liveWriteHolders(
+        normalized: string,
+        claims: ProjectClaimDao,
+        lanes: { maxWriters: number; laneRoot?: string } | null,
+    ) {
+        const now = Date.now();
+        const cfg = lanes === null ? null : { maxWriters: lanes.maxWriters, laneRoot: lanes.laneRoot };
+        return (await claims.listBySlot('write')).filter(
+            (claim) =>
+                claim.expiresAt > now &&
+                (claim.projectPath === normalized || isProjectLane(normalized, cfg, claim.projectPath)),
+        );
     }
 
     /**
@@ -639,19 +771,19 @@ export class StrategyRuntime {
      * the orchestrator keeps the lease alive at `WRITE_SLOT_TTL_MS / 3`. One timer per
      * project: repeating ticks reuse it rather than stacking intervals.
      */
-    private startHeartbeat(projectPath: string, member: string, ownerEpoch: number): void {
-        if (this.heartbeats.has(projectPath)) return;
+    private startHeartbeat(projectPath: string, member: string, ownerEpoch: number, slotPath?: string): void {
+        // Keyed by the claim's path: one timer per lane in lane mode (G76 1341), the db stays the base's.
+        const key = slotPath ?? projectPath;
+        if (this.heartbeats.has(key)) return;
         const timer = setInterval(() => {
             void this.ctx
                 .openDb(projectPath)
-                .then((db) =>
-                    new ProjectClaimDao(db).heartbeat(projectPath, 'write', member, WRITE_SLOT_TTL_MS, ownerEpoch),
-                )
+                .then((db) => new ProjectClaimDao(db).heartbeat(key, 'write', member, WRITE_SLOT_TTL_MS, ownerEpoch))
                 .catch(() => undefined);
         }, WRITE_SLOT_TTL_MS / 3);
         // A standby heartbeat must never hold the host process open by itself.
         (timer as { unref?: () => void }).unref?.();
-        this.heartbeats.set(projectPath, { timer });
+        this.heartbeats.set(key, { timer });
     }
 
     /** Stop the standby heartbeat — the member owns the slot now, or the dispatch settled. */
@@ -760,13 +892,16 @@ export class StrategyRuntime {
         }
 
         const resolved = await this.ctx.fleet.resolve(normalized);
-        const writeHolder = await claims.get(normalized, 'write');
-        const writeHeldLive = writeHolder !== null && writeHolder.expiresAt > Date.now() ? writeHolder.holderId : null;
+        const lanes = await this.laneMode(normalized);
+        // An instance holding a write claim — in-tree or in any lane (G76 1341) — is not idle.
+        const writeHeldLive = new Set(
+            (await this.liveWriteHolders(normalized, claims, lanes)).map((claim) => claim.holderId),
+        );
         const runs = new CoordinationRunDao(db);
         const idleInstances: ResolvedFleetMember[] = [];
         for (const member of resolved.members) {
             const busy = await runs.hasRunning(member.instanceId);
-            if (member.enabled && member.instanceId !== writeHeldLive && !busy) {
+            if (member.enabled && !writeHeldLive.has(member.instanceId) && !busy) {
                 idleInstances.push(member);
             }
         }
@@ -865,8 +1000,41 @@ export class StrategyRuntime {
             dependencyBlocked: (wbs) => blocked.get(wbs) ?? null,
             ready: (wbs) => ready.get(wbs) === true,
             dispatchAttempts,
+            ...(lanes !== null
+                ? { lanes: await this.laneSnapshot(normalized, lanes.maxWriters, candidates, dispatchAttempts) }
+                : {}),
         });
         return { name, result, statusByWbs };
+    }
+
+    /**
+     * Lane admission inputs (G76 1341): each candidate's declared files that exist in the
+     * base tree, and the in-flight attempts (no definite receipt) holding a lane.
+     */
+    private async laneSnapshot(
+        normalized: string,
+        maxWriters: number,
+        candidates: TaskSummary[],
+        dispatchAttempts: ReadonlyMap<string, DispatchAttemptState>,
+    ): Promise<NonNullable<StrategyContext['lanes']>> {
+        const fs = createNodeFileSystem(normalized);
+        const files = new Map<string, string[]>();
+        for (const candidate of candidates) {
+            let content = '';
+            try {
+                if (candidate.filePath !== undefined) content = await fs.readFile(candidate.filePath);
+            } catch {
+                // An unreadable task file declares nothing; admission falls back to the writer cap.
+            }
+            const declared: string[] = [];
+            for (const file of declaredTaskFiles(content))
+                if (await fs.exists(join(normalized, file))) declared.push(file);
+            files.set(candidate.wbs, declared);
+        }
+        const inUse = [...dispatchAttempts.entries()]
+            .filter(([, state]) => state.receipt === undefined)
+            .map(([wbs]) => ({ wbs, files: files.get(wbs) ?? [] }));
+        return { maxWriters, inUse, filesOf: (wbs) => files.get(wbs) ?? [] };
     }
 
     /**

@@ -116,4 +116,27 @@ describe('ProjectClaimDao (0836 R3)', () => {
         expect((await dao.get(P, 'orchestrator'))?.holderId).toBe('proj-planner-1');
         adapter.close();
     });
+
+    test('a lane-keyed write claim is fenced by the base project and listed by slot (G76 1341)', async () => {
+        const { dao, adapter } = await makeDao();
+        try {
+            const lane = '/tmp/proj-a.spur-lanes/proj-a-0101-1';
+            await new ProjectStrategyDao(adapter).set(P, 'gtd');
+            // No orchestrator on the base path: the lane claim is refused by the base fence.
+            expect(await dao.claim(lane, 'write', 'c1', 30_000, 1, { ownerEpoch: 1, projectPath: P })).toBeNull();
+            await dao.claim(P, 'orchestrator', 'lead', 30_000);
+            const held = await dao.claim(lane, 'write', 'c1', 30_000, 1, {
+                ownerEpoch: 1,
+                strategyVersion: 1,
+                projectPath: P,
+            });
+            expect(held?.projectPath).toBe(lane);
+            await dao.claim(P, 'write', 'c2', 30_000);
+            expect((await dao.listBySlot('write')).map((c) => c.holderId).sort()).toEqual(['c1', 'c2']);
+            await dao.release(lane, 'write', 'c1', 1);
+            expect((await dao.listBySlot('write')).map((c) => c.holderId)).toEqual(['c2']);
+        } finally {
+            adapter.close();
+        }
+    });
 });

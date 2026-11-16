@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fleet worktree lanes and concurrent writers
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-16T01:10:54.672Z
-updated_at: "2026-11-16T01:21:03.778Z"
+updated_at: "2026-11-16T01:56:23.174Z"
 feature_id: G76
 
 priority: P1
@@ -102,22 +102,77 @@ Read-only `resume` (Board) never touches git.
 - 1344 reuses the lane cwd for the reviewer turn.
 - 1345 reuses the queue, not this task.
 
+**Implementation scope addendum (implement pass, 2026-11-15).** The member-side lane cwd and heartbeat (R2) land in `packages/app/src/services/agent-loop-service.ts`. The drain passes the lane as the run's `--cwd`, and the fleet launch ground-truth guard in `packages/app/src/services/agent-run-preflight.ts` must accept a lane of this project instead of rejecting it as a foreign tree. Tests: `packages/app/tests/services/worktree-lane-service.test.ts`, `packages/app/tests/services/fleet-lanes-e2e.test.ts`, `packages/domain/tests/dao/project-claim-dao.test.ts`, `packages/config/tests/`.
+
 ### Plan
 
-1. Write the E2E failure cases first, against a temp fixture repo with fake-agent members:
+1. [x] Write the E2E failure cases first, against a temp fixture repo with fake-agent members:
    - F1 (two lanes write concurrently) and F2 (overlap serializes) → R3.
    - F3 (crash mid-dispatch reuses the lane) and F10 (orphan pruned) → R4.
-2. Config keys `maxWriters`/`laneRoot` plus Zod bounds, with a config-load failure test naming the key (R2).
-3. Add `WorktreeLaneService` `open`/`retain`/`dispose`/`reconcile` and the pure `lanePath`/`laneBranch`/`laneForRequestKey` helpers (R1, R4).
-4. Add `ProjectClaimDao.listBySlot`, the lane-keyed write claim, and multi-holder `observe`/`selectFrom` (R2).
-5. In `gtdStrategy`, add `writer-cap`/`file-overlap` admission and `declaredTaskFiles`. The absent `maxWriters` key keeps the legacy path; its existing `strategy-runtime` tests must stay green unchanged (R3).
-6. Member-side lane cwd plus lane-keyed heartbeat in `agent-loop-service.ts` (R1).
-7. Update design §5 with the attached-occupant decision (R5).
-8. E2E: 3 independent tasks on 2 coders with `maxWriters: 2`. Artifact: `docs/reports/fleet-lanes-p1.json` (peak concurrent lanes = 2, zero orphans after a reconcile). Run `bun run spur-check`.
+2. [x] Config keys `maxWriters`/`laneRoot` plus Zod bounds, with a config-load failure test naming the key (R2).
+3. [x] Add `WorktreeLaneService` `open`/`retain`/`dispose`/`reconcile` and the pure `lanePath`/`laneBranch`/`laneForRequestKey` helpers (R1, R4).
+4. [x] Add `ProjectClaimDao.listBySlot`, the lane-keyed write claim, and multi-holder `observe`/`selectFrom` (R2).
+5. [x] In `gtdStrategy`, add `writer-cap`/`file-overlap` admission and `declaredTaskFiles`. The absent `maxWriters` key keeps the legacy path; its existing `strategy-runtime` tests must stay green unchanged (R3).
+6. [x] Member-side lane cwd plus lane-keyed heartbeat in `agent-loop-service.ts` (R1).
+7. [x] Update design §5 with the attached-occupant decision (R5).
+8. [x] E2E: 3 independent tasks on 2 coders with `maxWriters: 2`. Artifact: `docs/reports/fleet-lanes-p1.json` (peak concurrent lanes = 2, zero orphans after a reconcile). Run `bun run spur-check`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Lane mode (on only when `agent.fleet.maxWriters` is present) gives each write dispatch attempt its own git worktree. The write claim is keyed by the lane realpath and fenced by the base project. Admission is per lane (`writer-cap` / `file-overlap`). Lanes survive orchestrator restarts and non-landing outcomes. Without the key, the legacy single-writer path is unchanged: the existing `strategy-runtime` suite passes untouched.
+
+**Change map**
+
+- **Config (R2):** `packages/config/src/index.ts:668-670` adds `maxWriters` (int ≥ 1, optional) and `laneRoot` (non-empty, optional).
+- **Lane service (R1, R4):** `packages/app/src/services/worktree-lane-service.ts:17-67` adds the pure helpers `laneBranch`, `resolveLaneRoot` (refuses a root inside the repo), `lanePath`, `laneForRequestKey` and `isProjectLane`. `packages/app/src/services/worktree-lane-service.ts:87-185` adds `WorktreeLaneService`:
+  - `open` is idempotent per (wbs, attempt) and bootstraps `.spur/run`.
+  - `retain` and `dispose` follow design §4.4.
+  - `list` reads `git worktree list --porcelain`.
+  - `reconcile` reuses open attempts and prunes orphans with no attempt row and no commits.
+  - Events: `fleet.lane.opened`, `fleet.lane.retained` and `fleet.lane.disposed`.
+- **DAO (R2):**
+  - `packages/domain/src/dao/project-claim-dao.ts:95` adds an optional `fence.projectPath`, so a lane-keyed claim is fenced by the base project's orchestrator and strategy rows.
+  - `packages/domain/src/dao/project-claim-dao.ts:187` adds `listBySlot`.
+- **Write slot:** `packages/app/src/services/write-slot-service.ts:96` gives `claim` an optional `slotPath`. `packages/app/src/services/write-slot-service.ts:184` and `packages/app/src/services/write-slot-service.ts:234` give `validateResult` and `release` the same. The DB opens at the base; the row is keyed at the lane.
+- **Declared files (R3):** `packages/app/src/workflow/plan-projection.ts:484` adds `declaredTaskFiles`, which collects backticked repo paths from `### Design` and `### Plan`. `ponytail:` regex ceiling; a frontmatter `files:` key is the upgrade.
+- **Strategy (R3, R5):**
+  - `packages/app/src/services/strategy-runtime.ts:310` adds the `writer-cap` hold.
+  - `packages/app/src/services/strategy-runtime.ts:316` adds `file-overlap`, which replaces the global `dispatch-in-flight` hold only when `ctx.lanes` is set.
+  - `packages/app/src/services/strategy-runtime.ts:238` keeps attached occupants off lane write dispatch (R5).
+- **Runtime (R2, R4):**
+  - `packages/app/src/services/strategy-runtime.ts:562` adds `laneMode`, read from the optional `fleet.load`.
+  - `packages/app/src/services/strategy-runtime.ts:634` opens the lane before `claim(decision, lanePath)`. An open failure becomes an `executor-unavailable` hold. The heartbeat is keyed per lane.
+  - `packages/app/src/services/strategy-runtime.ts:712` makes `observe` iterate every live lane holder. A non-`completed` receipt retains the lane; `observe` never disposes.
+  - `packages/app/src/services/strategy-runtime.ts:755` adds `liveWriteHolders`, the base claim plus this project's lanes.
+  - `packages/app/src/services/strategy-runtime.ts:1015` adds `laneSnapshot`: declared files that exist on disk, and in-flight attempts.
+  - `packages/app/src/services/strategy-runtime.ts:545` runs write-side `reconcile` in `resume`. `packages/app/src/services/strategy-runtime.ts:579` classifies attempts for it.
+- **Member side (R1):**
+  - `packages/app/src/services/agent-loop-service.ts:577` derives the lane from the request key. The heartbeat uses the lane path.
+  - `packages/app/src/services/agent-loop-service.ts:613` passes the lane path as the run `cwd`.
+  - `packages/app/src/services/agent-run-preflight.ts:66` accepts a project lane `cwd` in place of the root ground-truth check.
+- **Design §5 (R5):** the attached-occupant decision was already recorded in `docs/design/fleet-orchestration-lanes.md` during refinement and is now enforced in code.
+
+**Verification**
+
+- `(cd packages/app && bun test tests/services/fleet-lanes-e2e.test.ts tests/services/worktree-lane-service.test.ts tests/services/strategy-runtime.test.ts tests/services/write-slot-service.test.ts tests/services/agent-loop-service.test.ts tests/services/agent-run-preflight.test.ts tests/services/agent-loop-orchestrator-tick.test.ts)`: 117 pass, 0 fail. The E2E (`packages/app/tests/services/fleet-lanes-e2e.test.ts`) uses a real git repo, the real StrategyRuntime, FleetService and FleetDispatcher, and a migrated db. It covers F1, F2, the writer cap, R5, F3, retained failure, F10 and the receipt.
+- `(cd packages/domain && bun test tests/dao/project-claim-dao.test.ts)`: 9 pass.
+- `(cd packages/config && bun test tests/config-schemas.test.ts)`: 25 pass. `maxWriters: 0` fails at path `maxWriters`.
+- Typecheck exits 0 for `@gobing-ai/spur-app`, `@gobing-ai/spur-domain`, `@gobing-ai/spur-config` and `@gobing-ai/spur`.
+- Artifact `docs/reports/fleet-lanes-p1.json` is reproducible with `SPUR_WRITE_LANES_RECEIPT=1`: peakConcurrentLanes 2, orphansAfterReconcile 0, dispatchOrder 0601/0602/0603.
+- probe: not-applicable (no public surface changed). The config keys were approved by the operator; there is no new noun, verb or flag.
+
+**Deferred to 1342:** landing, the merge queue and `dispose` after a landing receipt. A lane retained after a `completed` receipt stays until 1342 integrates it.
+
+**Handoff: open gate findings (light gate, host run `94bbbb53` failed at remediate)**
+
+- `no-direct-process-spawn` (error): `packages/app/src/services/worktree-lane-service.ts:1` uses `node:child_process`. Port `git()` to async `NodeProcessExecutor().run({command:'git', args, cwd, rejectOnError:false})`, following `packages/app/src/services/corpus-check.ts:231-238`. Every caller of `git()` must then await it.
+- `no-direct-fs-io` (warning, fails at `--fail-on warning`):
+  - `packages/app/src/services/worktree-lane-service.ts:3`: use `createNodeFileSystem(project)` `ensureDir`/`exists`.
+  - `packages/app/src/services/strategy-runtime.ts:2-3` (`laneSnapshot` readFile/existsSync): same fix.
+  - `packages/app/src/services/agent-loop-service.ts:2` (lane `existsSync`): same fix.
+- `env-var-hygiene` (error): `packages/app/tests/services/fleet-lanes-e2e.test.ts:354` reads `process.env`. Use `getEnvVar` from `@gobing-ai/spur-config`.
+- `every-export-has-tsdoc` (error): add doc comments at `packages/app/src/services/worktree-lane-service.ts:80` (`WorktreeLaneServiceDeps`) and `packages/app/src/services/worktree-lane-service.ts:87` (`WorktreeLaneService`).
+- Then re-run `spur task gate 1341 light` and start a fresh host pipeline run. Commit as `feat(fleet): worktree lanes and concurrent writers (1341)`.
 
 ### Testing
 
@@ -134,4 +189,5 @@ Read-only `resume` (Board) never touches git.
 ### History
 
 - 2026-11-16T01:21:03.778Z backlog → todo (system)
+- 2026-11-16T01:51:00.609Z todo → wip (system)
 

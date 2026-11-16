@@ -476,6 +476,25 @@ function normalizeTaskPath(path: string): string {
 }
 
 /**
+ * A task's declared files (G76 1341): backticked repo-relative path tokens in its
+ * `### Design` and `### Plan` sections, normalized like {@link scheduleBatch}'s overlap
+ * input. Pure — the caller filters to paths that exist on disk. A `:line` suffix is dropped.
+ * ponytail: regex extractor; upgrade to a frontmatter `files:` key if receipts show collisions it misses.
+ */
+export function declaredTaskFiles(content: string): string[] {
+    const files = new Set<string>();
+    for (const section of content.split(/^(?=### )/m)) {
+        if (!/^### (Design|Plan)\b/.test(section)) continue;
+        for (const [, token] of section.matchAll(/`([^`\s]+)`/g)) {
+            const path = normalizeTaskPath((token ?? '').replace(/:\d+(-\d+)?$/, ''));
+            // Repo-relative file paths only: a slash, an extension, no scheme or absolute root.
+            if (/^[\w.@-][\w./@-]*\/[\w.@-]+\.\w+$/.test(path) && !path.startsWith('../')) files.add(path);
+        }
+    }
+    return [...files];
+}
+
+/**
  * A task row's phase digits (R5): one digit per phase row of the task's
  * workflow plan, addressed under the task's letter. Row ids stay
  * `phase.<key>`; labels are fresh so they never collide with the wave letters.

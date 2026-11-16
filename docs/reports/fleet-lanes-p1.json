@@ -1,0 +1,10 @@
+{
+    "task": "1341",
+    "maxWriters": 2,
+    "coders": 2,
+    "tasks": 3,
+    "dispatchOrder": ["0601", "0602", "0603"],
+    "peakConcurrentLanes": 2,
+    "lanesAfterReconcile": 3,
+    "orphansAfterReconcile": 0
+}

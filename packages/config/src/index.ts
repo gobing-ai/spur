@@ -661,6 +661,13 @@ export const AgentFleetSchema = z.object({
     strategy: z.enum(FLEET_STRATEGIES).default('rest'),
     orchestrator: z.string().min(1).optional(),
     members: z.array(FleetMemberEntrySchema).default([]),
+    /**
+     * G76 (ADR-149): concurrent write lanes. PRESENT turns lane mode on (`1` = one lane);
+     * absent keeps the in-tree single-writer path unchanged.
+     */
+    maxWriters: z.number().int().min(1).optional(),
+    /** Lane parent dir, resolved against the project; default `../<repo>.spur-lanes`. Must lie outside the repo. */
+    laneRoot: z.string().min(1).optional(),
 });
 
 /** Inferred type for {@link AgentFleetSchema}. */
