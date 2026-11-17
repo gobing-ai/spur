@@ -4,7 +4,7 @@ name: Registry prefix contract for local projects
 status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.302Z
-updated_at: "2026-11-17T01:11:14.065Z"
+updated_at: "2026-11-17T05:11:15.160Z"
 feature_id: K4
 priority: P1
 tags:
@@ -99,13 +99,13 @@ Derived collisions (two names slugifying alike with no explicit prefix) stay a *
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — local entries accept an optional validated prefix; absent derives `/` + slug(name); invalid slug, reserved segment or explicit collision refused with an actionable error; existing files load unchanged | MET | `packages/config/src/projects.ts:17,21,34-95` (schema field + slug/normalize/validate/resolve/collisions); `packages/app/src/services/project-registry.ts:41-72,353-390` (write contract); tests `packages/config/tests/projects-prefix.test.ts`, `packages/app/tests/services/project-registry-prefix.test.ts`, `apps/cli/tests/commands/projects-prefix.test.ts` |
-| R2 — remote entries never get, require or accept a prefix; `resolveProjectPrefix` returns `null` for them and their host/port behaviour is unchanged | MET | `packages/config/src/projects.ts:68-75`; remote refusal `packages/app/src/services/project-registry.ts:56-58`; remote round-trip test `packages/app/tests/services/project-registry-prefix.test.ts` ("keeps remote entries byte-identical"), CLI refusal `apps/cli/tests/commands/projects-prefix.test.ts` |
+| R1 — local entries accept an optional validated prefix; absent derives `/` + slug(name); invalid slug, reserved segment or explicit collision refused with an actionable error; existing files load unchanged | MET | `packages/config/src/projects.ts:7-92` (schema `prefix`, `RESERVED_PREFIX_SEGMENTS`:21, `slugifyProjectName`:34, `normalizePrefix`:45, `validatePrefix`:51, `resolveProjectPrefix`:68, `findPrefixCollisions`:81); tests `packages/config/tests/projects-prefix.test.ts`, `packages/app/tests/services/project-registry-prefix.test.ts`, `apps/cli/tests/commands/projects-prefix.test.ts` — Fresh 2026-11-16: config 27 pass, app 49 pass, cli 14 pass |
+| R2 — remote entries never get, require or accept a prefix; `resolveProjectPrefix` returns `null` for them and their host/port behaviour is unchanged | MET | `packages/config/src/projects.ts:68` returns null for non-local host via `isLocalHost`:27; registry refusal tested in `packages/app/tests/services/project-registry-prefix.test.ts` — Fresh 2026-11-16: pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Local entries accept an optional validated prefix (req: R1) | MET | test | `(cd packages/config && bun test)` 315 pass; `(cd packages/app && bun test tests/services/project-registry)` 52 pass; `(cd apps/cli && bun test tests/commands/projects)` 31 pass — slug/reserved/collision/derived/preserve cases |
-| AC2 — Remote entries keep host and port semantics (req: R2) | MET | test | probe `spur projects add /tmp/remote --host 192.168.87.27 --prefix kk --json` → exit 1, `Prefix is only valid for local projects…`; registry untouched; remote entry round-trip asserted in `packages/app/tests/services/project-registry-prefix.test.ts` |
+| AC1 — Local entries accept an optional validated prefix (req: R1) | MET | test | `packages/config/tests/projects-prefix.test.ts`, `apps/cli/tests/commands/projects-prefix.test.ts` — Fresh 2026-11-16: exit 0 |
+| AC2 — Remote entries keep host and port semantics (req: R2) | MET | test | `packages/app/tests/services/project-registry-prefix.test.ts` remote-prefix refusal + round-trip — Fresh 2026-11-16: exit 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Gateway routes local prefixes on one fixed port
 status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.306Z
-updated_at: "2026-11-17T01:23:24.567Z"
+updated_at: "2026-11-17T05:11:15.614Z"
 feature_id: K4
 priority: P1
 tags:
@@ -114,15 +114,15 @@ Deliberate split: lazy **start** coalescing is proven with an injected start fun
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R3 — `spur self serve --gateway` listens on one fixed port (default `server.gateway.port`), proxies `/<prefix>/<rest>` to that local entry's loopback serve with the prefix stripped, 404 names known prefixes, derived collision → 409 with remedy, `/<prefix>` → 308, `GET /` index and `GET /api/health` answer at the root | MET | `packages/app/src/services/project-gateway.ts:70-250`, `apps/server/src/gateway.ts:30-55`, `apps/cli/src/commands/serve.ts:84-125`, `packages/config/src/index.ts:1367-1380`; tests `packages/app/tests/services/project-gateway.test.ts` (routing, 404 incl. remote invisibility, 409+308, index+health), `apps/cli/tests/commands/serve-gateway.heavy.test.ts` (two real serves, one port, prefix stripped) |
-| R4 — a stopped project starts once through `startRegisteredProject` even under concurrent first requests; a live/owner-claimed serve is adopted without a duplicate; start failure → 502 naming the project and its log path; a refused connection after adoption triggers exactly one restart attempt | MET | coalescing `project-gateway.ts:76-90`, adopt/start via `startRegisteredProject` in `apps/cli/src/commands/serve.ts:104-112`, 502 bodies `project-gateway.ts:120-130,167-200`; tests "starts a stopped project exactly once under concurrent first requests" (10 requests → 1 call), "502s with the project name and log path", "retries a refused connection exactly once after adoption, then 502s", heavy "only beta's prefix degrades" |
-| R5 — response bodies stream unbuffered (SSE arrives incrementally) and a client abort aborts the upstream fetch | MET | `project-gateway.ts:139-152` (body streamed, `signal: req.signal`), `apps/server/src/gateway.ts:44-46` (`idleTimeout: 0`); test "streams SSE incrementally and aborts the upstream when the client aborts" (first event before close; upstream observes abort) |
+| R3 — `spur self serve --gateway` listens on one fixed port (default `server.gateway.port`), proxies `/<prefix>/<rest>` to that local entry's loopback serve with the prefix stripped, 404 names known prefixes, derived collision → 409 with remedy, `/<prefix>` → 308, `GET /` index and `GET /api/health` answer at the root | MET | `packages/app/src/services/project-gateway.ts:304-482` (index:348, health:335, 404:460, 409:471, 308:476), `apps/server/src/gateway.ts:30-50`, `apps/cli/src/commands/serve.ts:76-115`; tests `packages/app/tests/services/project-gateway.test.ts`, `apps/server/tests/gateway.test.ts` — Fresh 2026-11-16: app 49 pass, server 109 pass |
+| R4 — a stopped project starts once through `startRegisteredProject` even under concurrent first requests; a live/owner-claimed serve is adopted without a duplicate; start failure → 502 naming the project and its log path; a refused connection after adoption triggers exactly one restart attempt | MET | coalescing `project-gateway.ts:309-325`, single-retry/502 bodies `project-gateway.ts:388-436`, start via `startRegisteredProject` `apps/cli/src/commands/serve.ts:104-112`; `packages/app/tests/services/project-gateway.test.ts` concurrent-start + 502 cases — Fresh 2026-11-16: pass |
+| R5 — response bodies stream unbuffered (SSE arrives incrementally) and a client abort aborts the upstream fetch | MET | streamed body `project-gateway.ts:285-287`, `signal: req.signal` `project-gateway.ts:377`, `idleTimeout: 0` `apps/server/src/gateway.ts:38`; SSE + abort tests in `packages/app/tests/services/project-gateway.test.ts` — Fresh 2026-11-16: pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Gateway routes each local prefix on one fixed port (req: R3) | MET | test | `(cd packages/app && bun test tests/services/project-gateway.test.ts)` 10 pass; `(cd apps/cli && bun test tests/commands/serve-gateway.heavy.test.ts)` 1 pass (2.2 s: two serves on 388x/389x-style ports, one gateway port); probe `self serve --gateway --port 3961 --json` → `{port, url, gateway:true, running:false}`; live `/api/health` listed `[{alpha,/alpha,false},{beta,/beta,false}]`, `/nope/board` → 404 naming `/alpha, /beta`, `/alpha` → 308 → `/alpha/` |
-| AC2 — Gateway lazily starts or adopts a project serve (req: R4) | MET | test | exactly-once start under 10 concurrent requests, 502 on start failure naming `<path>/.spur/run/serve-spawn.log`, single retry-then-502 on a refused adopted port, heavy adoption without a duplicate spawn |
-| AC3 — Server-sent event streams pass through the gateway (req: R5) | MET | test | SSE test: first `data: alpha-1` event read from the gateway response while the upstream is still open; abort propagates to the upstream signal within 300 ms |
+| AC1 — Gateway routes each local prefix on one fixed port (req: R3) | MET | test | `packages/app/tests/services/project-gateway.test.ts`, `apps/server/tests/gateway.test.ts`, `apps/cli/tests/commands/serve-gateway.test.ts` — Fresh 2026-11-16: exit 0 |
+| AC2 — Gateway lazily starts or adopts a project serve (req: R4) | MET | test | `packages/app/tests/services/project-gateway.test.ts` exactly-once start under concurrency, 502 naming `.spur/run/serve-spawn.log`, retry-then-502 — Fresh 2026-11-16: exit 0 |
+| AC3 — Server-sent event streams pass through the gateway (req: R5) | MET | test | `packages/app/tests/services/project-gateway.test.ts` SSE incremental read + abort propagation — Fresh 2026-11-16: exit 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Accept ADR-151 and sync gateway docs
 status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.308Z
-updated_at: "2026-11-17T02:37:53.181Z"
+updated_at: "2026-11-17T05:11:16.541Z"
 feature_id: K4
 priority: P3
 tags:
@@ -76,11 +76,11 @@ Docs-only: no code, config, template or constitution change. `config/templates` 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R11 — ADR-151 is Accepted and matches the shipped surface (`self serve --gateway`, `self daemon <action>`, `projects add --prefix`); `docs/design/project-gateway.md` risk-register rows carry their landing task and any deviations; `project-switcher.md`, `03_ARCHITECTURE.md`, `04_DESIGN.md`, `downstream-board-modules.md`, `board-module-ui-kit.md` and the `spur-cli` self/projects references reflect the prefix contract, gateway and daemon; doc checks pass | MET | `docs/00_ADR.md:2916-2950` (Status Accepted 2026-11-17 + shipped-surface line + IPv6/IPv4 consequence); `docs/design/project-gateway.md:5,111-125,176-196` (§5.1 landed-mechanism note, §6 per-row task confirmation + three deviations); `docs/design/project-switcher.md:33,222-229`; `docs/03_ARCHITECTURE.md:187-190`; `docs/04_DESIGN.md:73`; `plugins/sp/skills/spur-cli/references/projects.md:18-22,66-88`; `self.md`/`serve.md` (written by 1362) verified against the shipped flags; `downstream-board-modules.md` §6.9 and `board-module-ui-kit.md` §6 (written by 1358) verified to describe `basePath`/`withBase`/`resolveApiUrl` and kit 1.1.0 |
+| R11 — ADR-151 is Accepted and matches the shipped surface (`self serve --gateway`, `self daemon <action>`, `projects add --prefix`); `docs/design/project-gateway.md` risk-register rows carry their landing task and any deviations; `project-switcher.md`, `03_ARCHITECTURE.md`, `04_DESIGN.md`, `downstream-board-modules.md`, `board-module-ui-kit.md` and the `spur-cli` self/projects references reflect the prefix contract, gateway and daemon; doc checks pass | MET | `docs/00_ADR.md` ADR-151 Accepted; `docs/design/project-gateway.md`, `docs/design/project-switcher.md`, `docs/03_ARCHITECTURE.md`, `plugins/sp/skills/spur-cli/references/{self,projects,serve}.md` reflect shipped surface — Fresh 2026-11-16: `spur feature check K4 --strict` run below |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Architecture decision and size evaluation are recorded (req: R11) | MET | command | `spur feature check K4 --json` → `{"pass": true, "findings": []}`; stale-reference gate `rg -n "projects gateway\|projects daemon\|X-Forwarded-Prefix" docs plugins/sp` → only the two task files themselves (1359's recorded decision and 1363's verification line — history notes, as the gate allows); `bun run link-check` → OK; `bun run transition-shim-check` → PASS (0 new/stale); `bun run script-contract-check` → 0 violations; ADR-151 keeps its size statement ("L, 7 tasks 1357–1363") and now names each shipped surface |
+| AC1 — Architecture decision and size evaluation are recorded (req: R11) | MET | command | `spur feature check K4 --as done --strict --json` (batch shippable gate, this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

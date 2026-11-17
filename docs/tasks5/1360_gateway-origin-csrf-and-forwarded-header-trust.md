@@ -4,7 +4,7 @@ name: Gateway origin, CSRF and forwarded-header trust
 status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.306Z
-updated_at: "2026-11-17T01:31:21.913Z"
+updated_at: "2026-11-17T05:11:15.851Z"
 feature_id: K4
 priority: P1
 tags:
@@ -98,11 +98,11 @@ Rejected: serve-side forwarded-header trust (N serves, version skew); `HTMLRewri
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R8 — unlisted Host → 421; cross-origin non-safe request → 403 before upstream contact (`/a2a/` exempt); accepted requests reach the serve with `Host`/`Origin` rewritten to `http://127.0.0.1:<port>` so the serve's own host guard and `csrf()` pass; `text/html` responses get root-absolute attribute and import-map URLs rebased under `/<prefix>/` plus `<meta name="spur-base">`; `Location: /x` → `/<prefix>/x`; `site.webmanifest` `start_url`/`scope`/icon `src` rebased | MET | `packages/app/src/services/project-gateway.ts:71-100` (guard), `:108-119` (header rewrite), `:121-190` (rebases), `:224-259` (adaptation), `:250-260` (guard runs before routing); `packages/app/src/services/host-guard.ts:15-47`; tests `packages/app/tests/services/project-gateway-edge.test.ts` (14 pass), `packages/app/tests/services/host-guard.test.ts` (3 pass), `apps/server/tests/gateway-edge.test.ts` (6 pass against a real `createApp()` serve) |
+| R8 — unlisted Host → 421; cross-origin non-safe request → 403 before upstream contact (`/a2a/` exempt); accepted requests reach the serve with `Host`/`Origin` rewritten to `http://127.0.0.1:<port>` so the serve's own host guard and `csrf()` pass; `text/html` responses get root-absolute attribute and import-map URLs rebased under `/<prefix>/` plus `<meta name="spur-base">`; `Location: /x` → `/<prefix>/x`; `site.webmanifest` `start_url`/`scope`/icon `src` rebased | MET | guard `packages/app/src/services/project-gateway.ts:112-146` (421 then host-based Origin CSRF; FIXED this run: Origin compared by host so an https tunnel Origin matches the http loopback req.url), header rewrite `:159-166`, rebases `:185-243`, adapt `:275-295`; tests `packages/app/tests/services/project-gateway-edge.test.ts:56,70` (new), `apps/server/tests/gateway-edge.test.ts:113` (new, real serve csrf()) — Fresh 2026-11-16: app 30 pass, server gateway 8 pass; real Bun.serve repro POST Origin https://board.example.com → 200 (was 403) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Gateway serves the tunnel origin and adapts requests for the upstream (req: R8) | MET | test | `(cd apps/server && bun test tests/gateway-edge.test.ts)` 6 pass: tunnel-host HTML carries the meta and zero unprefixed `/_astro`, SPA deep link rebased, upstream 302 `Location: /api/health` → `/p/api/health`, `Host: evil.test` → 421 with no upstream hit, cross-origin POST → 403 with no upstream hit, same-origin POST → 200 through the serve's own `csrf()`; `(cd packages/app && bun test tests/services/project-gateway-edge.test.ts)` 14 pass. Probe against the real built Board through a real gateway: `curl -H 'Host: localhost' …/p/board` returned `<meta name="spur-base" content="/p/">` and import-map entries `/p/_astro/board-facade-react.*.js`; `Host: evil.test` → 421; `Origin: https://evil.test` POST → 403; same-origin POST → 400 (oRPC body validation), identical to the direct-upstream control |
+| AC1 — Gateway serves the tunnel origin and adapts requests for the upstream (req: R8) | MET | test | `apps/server/tests/gateway-edge.test.ts:64-135` tunnel host HTML/manifest/Location rebase, 421, https-Origin POST 200, cross-origin 403 — Fresh 2026-11-16: 8 pass after fix (1 fail before fix) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

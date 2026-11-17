@@ -4,7 +4,7 @@ name: Runtime base path for the Board
 status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.305Z
-updated_at: "2026-11-17T02:44:00.791Z"
+updated_at: "2026-11-17T05:11:15.401Z"
 feature_id: K4
 priority: P1
 tags:
@@ -118,15 +118,15 @@ dependency edge nothing needed. `bun.lock` is therefore untouched by this task.
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R6 — under `/<prefix>/` every API call, router route, raw link, Markdown link, SSE stream, lazy chunk/preload, module asset and static asset resolves under the base; at `/` behavior is unchanged; native modules get `basePath`/`withBase`/`resolveApiUrl` from the module kit | MET | base contract `apps/web/src/components/base-path.ts:1-60`; API `apps/web/src/lib/rpc-client.ts:8-13,24`; router `apps/web/src/router.tsx:105-110`; links `apps/web/src/modules/features/FeatureDetail.tsx:485-489`, `apps/web/src/modules/search/index.tsx:128-130`, `apps/web/src/modules/task-kanban/MarkdownBody.tsx:165-190`; chunks `apps/web/astro.config.mjs:15-22`; module assets `apps/web/src/modules/compose.ts:56-72,78-86`; kit `apps/web/src/components/module-kit/{index,exports}.ts` + regenerated `apps/cli/board/kit/module-kit/index.d.ts` |
+| R6 — under `/<prefix>/` every API call, router route, raw link, Markdown link, SSE stream, lazy chunk/preload, module asset and static asset resolves under the base; at `/` behavior is unchanged; native modules get `basePath`/`withBase`/`resolveApiUrl` from the module kit | MET | `apps/web/src/components/base-path.ts:15-72` (`basePath`, `withBase`, `resolveApiUrl`, `scopedKey`), gateway meta injection `packages/app/src/services/project-gateway.ts:185-202`; tests `apps/web/tests/lib/base-path.test.ts`, `apps/web/tests/components/base-path.test.ts` — Fresh 2026-11-16: web 31 pass; browser E2E `apps/web/tests/board-base-path.heavy.test.ts` not runnable in sandbox (Chromium DevTools port hidden, `apps/web/tests/test-helpers/cdp.ts:124`) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Board works under a prefix and at the root (req: R6) | MET | test | `apps/web/tests/board-base-path.heavy.test.ts` 2 pass in real Chromium (built board behind the real gateway handler): meta `/proj/`, router mounted at `/proj/board*`, deep-link refresh renders, upstream paths `/api/events/planning` + `/api/tasks…` arrive **stripped**, and every browser request carries `/proj/` (zero escapes); the root case serves the same build with no meta at `/board*`. `(cd apps/web && bun test)` 559 pass, including `tests/components/base-path.test.ts` + `tests/lib/base-path.test.ts`. Build emits `./chunk.js` refs and no absolute preload helper; grep gate over `apps/web/src` shows only router-relative or `withBase`-wrapped URLs |
+| AC1 — Board works under a prefix and at the root (req: R6) | PARTIAL | test | unit/happy-dom `apps/web/tests/components/base-path.test.ts` — Fresh 2026-11-16: pass; real-browser `apps/web/tests/board-base-path.heavy.test.ts` UNAVAILABLE this run (sandbox blocks Chromium; same failure in unrelated `composed-board-browser.heavy.test.ts`); prior pass recorded only in batch report, not re-run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
