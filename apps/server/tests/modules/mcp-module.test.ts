@@ -418,20 +418,17 @@ describe('AC2 — spur:// resources delegate to @gobing-ai/spur-app', () => {
         expect(result.uri).toBe('spur://context/learnings.md');
     });
 
-    test('spur://context/ cannot escape the directory by traversal', async () => {
-        const { app } = harness();
-        const res = await post(app, {
-            token: TOKEN,
-            body: {
-                jsonrpc: '2.0',
-                id: 1,
-                method: 'resources/read',
-                params: { uri: 'spur://context/../spur/config.yaml' },
-            },
+    for (const uri of ['spur://context/../spur/config.yaml', 'spur://context/..', 'spur://context/.']) {
+        test(`spur://context/ cannot escape the directory by traversal (${uri})`, async () => {
+            const { app } = harness();
+            const res = await post(app, {
+                token: TOKEN,
+                body: { jsonrpc: '2.0', id: 1, method: 'resources/read', params: { uri } },
+            });
+            expect(res.status).toBe(500);
+            expect(JSON.stringify(await jsonOf(res))).toContain('unknown resource');
         });
-        expect(res.status).toBe(500);
-        expect(JSON.stringify(await jsonOf(res))).toContain('unknown resource');
-    });
+    }
 
     test('an unknown resource scheme is refused', async () => {
         const { app } = harness();

@@ -156,7 +156,10 @@ class McpDispatcher implements McpHandlerRegistry {
             );
         }
         const [, kind, id] = match;
-        if (kind === undefined || id === undefined) throw new Error(`unknown resource "${uri}"`);
+        // `.`/`..` are single segments too — refuse them so the read never resolves outside the leaf dir.
+        if (kind === undefined || id === undefined || id === '.' || id === '..') {
+            throw new Error(`unknown resource "${uri}"`);
+        }
         if (kind === 'tasks') return this.ctx.taskService().show(id);
         if (kind === 'features') {
             const feature: FeatureShowResult | null = await this.ctx.featureService().show(id);
