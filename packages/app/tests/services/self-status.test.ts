@@ -225,13 +225,26 @@ describe('collectSelfStatus — agents section', () => {
         const file = await registry([{ name: 'project', path: '/project', port: 4321 }]);
         const env = { PATH: '/usr/bin', SPUR_PROJECTS_FILE: file };
         const live = await collectSelfStatus(
-            baseContext({ fs: fakeFs(withSpecs, dirs), env, fetchImpl: okFetch([{ id: 'planner' }, { id: 7 }]) }),
+            baseContext({
+                fs: fakeFs(withSpecs, dirs),
+                env,
+                fetchImpl: okFetch({
+                    processes: [
+                        { agentId: 'planner', status: 'running' },
+                        { agentId: 'stopped', status: 'exited' },
+                    ],
+                }),
+            }),
         );
         expect(live.sections.agents.state).toBe('ready');
         expect(live.sections.agents.data?.running).toEqual(['planner']);
 
         const wrapped = await collectSelfStatus(
-            baseContext({ fs: fakeFs(withSpecs, dirs), env, fetchImpl: okFetch({ processes: [{ id: 'planner' }] }) }),
+            baseContext({
+                fs: fakeFs(withSpecs, dirs),
+                env,
+                fetchImpl: okFetch({ processes: [{ agentId: 'planner', status: 'running' }] }),
+            }),
         );
         expect(wrapped.sections.agents.data?.running).toEqual(['planner']);
 

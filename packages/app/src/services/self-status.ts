@@ -1,9 +1,11 @@
 import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
 import { getProjectsFilePath, resolveProjectHost } from '@gobing-ai/spur-config';
-import { loadAgentSpecs } from '@gobing-ai/ts-ai-runner';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
+import { getDecisionService } from '../decision/decision-service';
 import { computeDecisionReadiness, type DecisionReadiness } from '../workflow/decision-readiness';
+import { fetchAgentProcesses } from './agent-process-status';
+import { resolveGlobalConfigDir } from './global-seed';
 import { normalizeProjectPath, ProjectRegistry } from './project-registry';
 
 /**
@@ -141,25 +143,6 @@ async function bounded<T>(
     }
 }
 
-/**
- * Spec ids from the shared, DB-free reader `spur agent status` also starts from
- * (`loadAgentSpecs`). A spec that fails its schema keeps the legacy tolerant file-stem contract:
- * readiness reporting must not lose an id because one sibling file is malformed.
- */
-async function readAgentSpecIds(fs: FileSystem, cwd: string): Promise<{ ids: string[]; parsed: boolean }> {
-    const dir = join(cwd, '.spur', 'agents');
-    try {
-        const specs = await loadAgentSpecs(dir);
-        const ids = specs.map((spec) => spec.id).sort();
-        // The typed reader returns [] for a malformed sibling instead of throwing; the tolerant
-        // listing is what keeps the legacy field populated in that case.
-        if (ids.length > 0) return { ids, parsed: true };
-    } catch {
-        // fall through to the tolerant listing
-    }
-    return { ids: await listAgentSpecIdsFromDisk(fs, cwd), parsed: false };
-}
-
 /** Tolerant spec-id listing (file stems), the legacy `agentSpecs` contract. */
 async function listAgentSpecIdsFromDisk(fs: FileSystem, cwd: string): Promise<string[]> {
     const dir = join(cwd, '.spur', 'agents');
@@ -292,13 +275,9 @@ async function collectAgents(
     const host = resolveProjectHost(entry);
     const fetchImpl = ctx.fetchImpl ?? fetch;
     try {
-        const response = await fetchImpl(`http://${host}:${entry.port}/api/processes`, { redirect: 'error', signal });
-        if (!response.ok) throw new Error(`status ${response.status}`);
-        const payload = (await response.json()) as unknown;
-        const rows = Array.isArray(payload) ? payload : ((payload as { processes?: unknown[] }).processes ?? []);
-        const running = rows
-            .map((row) => (typeof row === 'object' && row !== null ? (row as { id?: unknown }).id : undefined))
-            .filter((id): id is string => typeof id === 'string');
+        const processes = await fetchAgentProcesses(`http://${host}:${entry.port}/api`, { fetchImpl, signal });
+        if (processes === null) throw new Error('process status unavailable');
+        const running = [...processes].filter(([, process]) => process.status === 'running').map(([id]) => id);
         return {
             state: 'ready',
             scope: 'project',
@@ -333,14 +312,15 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
         const packageJsonPath = join(ctx.cwd, 'package.json');
         const spurConfigExists = await fs.exists(spurConfigPath);
         const packageJsonExists = await fs.exists(packageJsonPath);
+        const globalPath = join(resolveGlobalConfigDir(ctx), 'config.yaml');
+        const globalConfigExists = await fs.exists(globalPath);
         const dbPath = databasePath(ctx.cwd, ctx.env);
         const dbExists = await fs.exists(dbPath);
 
         // The legacy field stays tolerant (file stems), exactly as `spur status` always reported it.
         // The richer `AgentCoordinationService` read merges fleet members through the project database,
         // which status must not open, so the aggregate reports the specs it can read and names that limit.
-        const specRead = await readAgentSpecIds(fs, ctx.cwd);
-        const agentSpecs = specRead.ids;
+        const agentSpecs = await listAgentSpecIdsFromDisk(fs, ctx.cwd);
         const fleetConfigured = ctx.config?.agent?.fleet !== undefined;
 
         const entry = process.argv[1] ?? null;
@@ -369,7 +349,12 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
                       scope: 'project',
                       source: '.spur/config.yaml',
                       message: spurConfigExists ? '' : 'no project config; run `spur self init` in this directory',
-                      data: { project: spurConfigExists, globalLayers: ctx.config === null ? 0 : 1 },
+                      data: {
+                          project: spurConfigExists,
+                          projectPath: spurConfigPath,
+                          globalPath,
+                          globalLayers: globalConfigExists ? 1 : 0,
+                      },
                   };
 
         const ledgerReason =
@@ -405,7 +390,12 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
             },
         };
 
-        const projectsProbe = await bounded(controller, (probeSignal) => probeProjectServer(ctx.cwd, ctx, probeSignal));
+        const decisionMaker = decisionMakerSummary(ctx.config, ctx.env);
+        const [projectsProbe, agentsProbe, decisionsProbe] = await Promise.all([
+            bounded(controller, (signal) => probeProjectServer(ctx.cwd, ctx, signal)),
+            bounded(controller, (signal) => collectAgents(ctx, signal, agentSpecs)),
+            bounded(controller, () => collectDecisions(ctx, decisionMaker)),
+        ]);
         const projects = projectsProbe.ok
             ? projectsProbe.value
             : unavailable(
@@ -414,7 +404,6 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
                   'project readiness exceeded the collection deadline',
               );
 
-        const agentsProbe = await bounded(controller, (probeSignal) => collectAgents(ctx, probeSignal, agentSpecs));
         const agents: SelfStatusSection = !agentsProbe.ok
             ? unavailable(
                   'project',
@@ -432,8 +421,13 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
                 }
               : agentsProbe.value;
 
-        const decisionMaker = decisionMakerSummary(ctx.config, ctx.env);
-        const decisions = collectDecisions(ctx, decisionMaker);
+        const decisions = decisionsProbe.ok
+            ? decisionsProbe.value
+            : unavailable(
+                  'project',
+                  'decision/decision-service.ts',
+                  'decision readiness exceeded the collection deadline',
+              );
 
         const tasksDir = join(ctx.cwd, (ctx.config?.tasks?.active as string | undefined) ?? 'docs/tasks');
         const featuresDir = join(ctx.cwd, (ctx.config?.features?.dir as string | undefined) ?? 'docs/features');
@@ -477,7 +471,7 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
         };
 
         const degraded = Object.values(sections).some(
-            (section) => section.state === 'degraded' || section.state === 'error',
+            (section) => section.state === 'degraded' || section.state === 'error' || section.state === 'unavailable',
         );
         const ok = spurConfigExists && ctx.configError === undefined;
         return {
@@ -509,7 +503,7 @@ function decisionMakerSummary(config: SpurConfig | null, env: Record<string, str
 }
 
 /** Decision catalog/maker readiness from config only; ledger-backed readiness stays unavailable. */
-function collectDecisions(ctx: SelfStatusContext, decisionMaker: DecisionReadiness): SelfStatusSection {
+async function collectDecisions(ctx: SelfStatusContext, decisionMaker: DecisionReadiness): Promise<SelfStatusSection> {
     const source = 'decision/decision-service.ts';
     const configuredMakers = Object.keys(ctx.config?.decisions?.makers ?? {}).sort();
     const defaultMaker = ctx.config?.decisions?.maker;
@@ -523,12 +517,14 @@ function collectDecisions(ctx: SelfStatusContext, decisionMaker: DecisionReadine
             data: { decisionMaker, configuredMakers, ledger: reason },
         };
     }
+    const status = (await getDecisionService(ctx.config, ctx.cwd)).status();
     return {
-        state: 'ready',
+        state: status.errors.length === 0 ? 'ready' : 'degraded',
         scope: 'project',
         source,
-        message: '',
+        message: status.errors.join('; '),
         data: {
+            ...status,
             decisionMaker,
             configuredMakers,
             defaultMaker: defaultMaker ?? null,

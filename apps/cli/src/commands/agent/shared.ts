@@ -13,6 +13,7 @@ import {
     FleetDispatcher,
     FleetGuestService,
     FleetService,
+    fetchAgentProcesses,
     type InboxClaim,
     InboxService,
     isPortLive,
@@ -20,6 +21,7 @@ import {
     MEMBER_BINDING_CAPABILITIES,
     type MemberAttachmentState,
     type MemberDispatchDeps,
+    mapAgentProcessStatus,
     memberDelivery,
     normalizeProjectPath,
     ProjectRegistry,
@@ -276,32 +278,7 @@ export interface LiveProcess {
 
 /** Live process table from the `spur serve` supervisor, keyed by spec id; null when the server is unreachable or answers non-OK. */
 export async function fetchServerProcesses(server: string): Promise<Map<string, LiveProcess> | null> {
-    try {
-        const res = await (_testFetch ?? fetch)(`${server}/processes`, {
-            method: 'GET',
-            signal: AbortSignal.timeout(1500),
-        });
-        if (!res.ok) return null;
-        const body = (await res.json()) as {
-            processes?: Array<{
-                agentId: string;
-                pid: number | null;
-                status: string;
-                session?: MemberSessionObservation;
-            }>;
-        };
-        const map = new Map<string, LiveProcess>();
-        for (const proc of body.processes ?? []) {
-            map.set(proc.agentId, {
-                status: mapServerStatus(proc.status),
-                pid: proc.pid ?? null,
-                ...(proc.session !== undefined ? { session: proc.session } : {}),
-            });
-        }
-        return map;
-    } catch {
-        return null;
-    }
+    return fetchAgentProcesses(server, { fetchImpl: _testFetch ?? fetch });
 }
 
 /**
@@ -313,17 +290,7 @@ export type FleetProcessStatus = 'running' | 'stopped' | 'errored' | 'unknown';
 
 /** Map a `SupervisorService` process status onto {@link FleetProcessStatus}. */
 export function mapServerStatus(status: string): FleetProcessStatus {
-    switch (status) {
-        case 'running':
-            return 'running';
-        case 'errored':
-            return 'errored';
-        case 'stopped':
-        case 'exited':
-            return 'stopped';
-        default:
-            return 'unknown';
-    }
+    return mapAgentProcessStatus(status);
 }
 
 /** Narrow an untrusted server `error` field to a single human line (0699 R1). */

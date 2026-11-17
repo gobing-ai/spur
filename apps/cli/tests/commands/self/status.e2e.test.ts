@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { runCli } from '../../helpers';
@@ -85,6 +85,110 @@ interface SelfStatusJson {
     overallState: string;
     sections: Record<string, { state: string; scope: string; source: string; message: string; data?: unknown }>;
 }
+
+describe('A93 verification regressions', () => {
+    test('reports the actual global layer and config locations', async () => {
+        const fx = await fixture('project: fixture\n');
+        try {
+            const first = await runCli(['self', 'status', '--json'], fx.cwd, fx.env);
+            expect((first.json as SelfStatusJson).sections.configuration?.data).toMatchObject({ globalLayers: 0 });
+            await mkdir(fx.env.SPUR_GLOBAL_RULES_DIR ?? '', { recursive: true });
+            const globalPath = join(fx.env.SPUR_GLOBAL_RULES_DIR ?? '', 'config.yaml');
+            await writeFile(globalPath, '# global defaults\n');
+            const second = await runCli(['self', 'status', '--json'], fx.cwd, fx.env);
+            expect((second.json as SelfStatusJson).sections.configuration?.data).toMatchObject({
+                globalLayers: 1,
+                globalPath,
+                projectPath: join(await realpath(fx.cwd), '.spur', 'config.yaml'),
+            });
+        } finally {
+            await fx.cleanup();
+        }
+    });
+
+    test('unavailable sections degrade the aggregate without changing the scaffold exit', async () => {
+        const fx = await fixture('project: fixture\n');
+        try {
+            const result = await runCli(['self', 'status', '--json'], fx.cwd, fx.env);
+            const json = result.json as SelfStatusJson;
+            expect(result.code).toBe(0);
+            expect(json.sections.workflows?.state).toBe('unavailable');
+            expect(json.overallState).toBe('degraded');
+        } finally {
+            await fx.cleanup();
+        }
+    });
+
+    test('uses real agentId process rows and preserves every legacy spec filename', async () => {
+        const fx = await fixture('project: fixture\n');
+        const server = Bun.serve({
+            hostname: '127.0.0.1',
+            port: 0,
+            fetch: () =>
+                Response.json({
+                    processes: [
+                        { agentId: 'planner', status: 'running', pid: 42 },
+                        { agentId: 'stopped', status: 'exited', pid: null },
+                    ],
+                }),
+        });
+        try {
+            await mkdir(join(fx.cwd, '.spur', 'agents'), { recursive: true });
+            await writeFile(join(fx.cwd, '.spur', 'agents', 'planner.yaml'), 'id: planner\n');
+            await writeFile(
+                fx.env.SPUR_PROJECTS_FILE ?? '',
+                JSON.stringify({
+                    schema_version: 1,
+                    projects: [{ name: 'fixture', path: fx.cwd, host: '127.0.0.1', port: server.port }],
+                }),
+            );
+            const before = await snapshot(fx.cwd);
+            const result = await runCli(['self', 'status', '--json'], fx.cwd, fx.env);
+            const json = result.json as SelfStatusJson;
+            expect(result.code).toBe(0);
+            expect(json.agentSpecs).toEqual(['planner']);
+            expect(json.sections.agents?.data).toMatchObject({ running: ['planner'], live: true });
+            expect(await snapshot(fx.cwd)).toEqual(before);
+        } finally {
+            server.stop(true);
+            await fx.cleanup();
+        }
+    });
+
+    test('consolidates the shared decision catalog without creating a database', async () => {
+        const fx = await fixture('project: fixture\n');
+        try {
+            await mkdir(join(fx.cwd, '.spur', 'decisions'), { recursive: true });
+            await writeFile(
+                join(fx.cwd, '.spur', 'decisions', 'audit.yaml'),
+                [
+                    'version: 1',
+                    'defaults:',
+                    '  minConfidence: 0.8',
+                    'decisions:',
+                    '  audit-self:',
+                    '    type: choice',
+                    '    description: readiness fixture',
+                    '    parameters: {}',
+                    '    criteria:',
+                    '      ready: Ready',
+                    '      wait: Wait',
+                    '    fallback: ready',
+                    '',
+                ].join('\n'),
+            );
+            const result = await runCli(['self', 'status', '--json'], fx.cwd, fx.env);
+            const data = (result.json as SelfStatusJson).sections.decisions?.data as {
+                perDecision?: Array<{ id: string }>;
+            };
+            expect(result.code).toBe(0);
+            expect(data.perDecision?.some((row) => row.id === 'audit-self')).toBe(true);
+            expect(existsSync(join(fx.cwd, '.spur', 'spur.db'))).toBe(false);
+        } finally {
+            await fx.cleanup();
+        }
+    });
+});
 
 describe('spur self status — no project', () => {
     test('reports missing readiness, exits 1 and creates nothing', async () => {

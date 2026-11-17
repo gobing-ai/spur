@@ -1261,5 +1261,9 @@ The aggregate that carries it is additive (A93 1352): `schemaVersion: 1`,
 render the same app-owned collector and dispatch before database boot, so reporting readiness never
 creates the schema it reports on; ledger-backed sections report `unavailable` rather than empty
 counts while the installed ts-db facade has no proven non-mutating read.
+Unavailable sections degrade `overallState` without changing the project-scaffold exit contract.
+Agent process rows use the same reader as `agent status`; decision catalog rows use
+`DecisionService.status()` without reading the ledger or calling makers. Optional probes run
+concurrently under the shared deadline, and configuration reports the actual global/project paths.
 Known limitations: no hot reload (config is read at process start), no live connectivity probe,
 and provider probabilities are uncalibrated policy, not measured quality.

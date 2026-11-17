@@ -4,7 +4,7 @@ name: Consolidate read-only self status through shared noun collectors
 status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.455Z
-updated_at: "2026-11-17T00:15:28.317Z"
+updated_at: "2026-11-17T04:29:18.217Z"
 feature_id: A93
 priority: P2
 tags:
@@ -96,6 +96,13 @@ Collection is app-owned and additive:
 
 `agentSpecs` keeps its tolerant file-stem contract; the richer fleet merge stays in `spur agent status` because it reads the project database, and the section says so instead of reporting a false empty set.
 
+#### Forced verification corrections — 2026-11-16
+
+- `packages/app/src/services/agent-process-status.ts:24` is the shared supervisor reader used by standalone agent status and the self aggregate; it keys rows by agentId and normalizes process states.
+- `apps/cli/src/commands/agent/shared.ts:280` delegates to that reader, preserving its injected fetch and legacy output types.
+- `packages/app/src/services/self-status.ts:304` keeps legacy filename identities, runs independent probes concurrently, uses the real decision catalog, reports actual config layers/paths and degrades unavailable readiness.
+- Real-CLI regressions at `apps/cli/tests/commands/self/status.e2e.test.ts:89` failed before the wire/aggregate/config corrections. The corresponding real-CLI/HTTP proof at `packages/app/tests/services/agent-process-status.test.ts:10` was added after extraction of the shared reader. No ledger is opened.
+
 ### Testing
 
 **Pipeline verify results**
@@ -104,15 +111,15 @@ Collection is app-owned and additive:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/self-status.ts:249` builds all nine design §3 sections in app code. Decision readiness reuses the shared `computeDecisionReadiness` (`packages/app/src/workflow/decision-readiness.ts:16`); agent spec ids come from the same DB-free `loadAgentSpecs` reader the standalone `spur agent status` starts from (`packages/app/src/services/self-status.ts:135`), and the fleet merge that needs the database stays with that verb and is named in the section message. No recursive CLI call, no `--probe`/`--reliability`. |
-| R2 | MET | `apps/cli/src/index.ts:96` routes `status` / `self status` into the boot-free dispatch set before `createMigratedDbAdapter`; a config load failure takes the same single-error exit 1 path (`apps/cli/src/index.ts:128`). Legacy fields and renderer lines are preserved (`apps/cli/src/commands/status.ts:64`), and all nine E2E cases assert them plus `schemaVersion`/`overallState`/`sections`. |
-| R3 | MET | `SELF_STATUS_DEADLINE_MS = 5000` with one `AbortController` shared by every async probe (`packages/app/src/services/self-status.ts:120`). `bounded()` races the abort promise, so a provider that ignores its signal is still cut off — the coverage pass found the missing race and fixed it (`packages/app/src/services/self-status.ts:157`). Proven by `status.e2e.test.ts` "a serve that never answers…" (real subprocess, ~5 s) and the unit case "the hanging probe reports unavailable while answered sections still ship". |
-| R4 | MET | `ProjectRegistry.peek()` only (`packages/app/src/services/self-status.ts:170`); no `getDb`/`openExistingDb` anywhere on the path, so a missing DB is `missing` and an existing one reports `unavailable` with the ts-db reason instead of counts. E2E covers missing/configured/invalid/unreachable plus a credential sentinel that never appears in stdout or stderr. |
+| R1 | MET | `packages/app/src/services/agent-process-status.ts:24`, `apps/cli/src/commands/agent/shared.ts:280`, `packages/app/src/services/self-status.ts:506`; shared process reader and DecisionService catalog now supply both surfaces without a ledger read. |
+| R2 | MET | `packages/app/src/services/self-status.ts:304`, `apps/cli/src/index.ts:99`; legacy fields/config exits retained; real layer/path metadata and unavailable-state degradation verified by actual CLI regression cases. |
+| R3 | MET | `packages/app/src/services/self-status.ts:394`; independent probes use one cancellation deadline, preserve answered sections and cancel timeout work. Bounded-provider E2E and app tests passed. |
+| R4 | MET | `packages/app/src/services/self-status.ts:304`; registry peek, explicit missing/unavailable ledger sections and credential sentinel/no-created-DB assertions passed through source, packed and standalone entrypoints. Fix-pass artifacts: `.spur/run/1352-verify-answer.txt:1-35` and `.spur/run/1352-verdict.json:1-78` (re-evaluated requirement/AC evidence); session-local batch report `.spur/run/A93-verifyall-20261116-report.md:1-60`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/cli/tests/commands/self/status.e2e.test.ts:96` — configured project: legacy fields, sections, no `.spur/spur.db` created, filesystem snapshot unchanged |
-| AC2 | MET | test | `apps/cli/tests/commands/self/status.e2e.test.ts:210` — refused port degrades its section; `status.e2e.test.ts:229` — non-answering listener bounded by the deadline with partial results intact |
+| Self status consolidates existing noun readiness without mutation | MET | test | `apps/cli/tests/commands/self/status.e2e.test.ts:89`; fresh test output and real CLI receipts: batch artifact `.spur/run/run_096acd54-1a43-4707-b33d-50fe6a2bcea0-feature-verification.log` line 1. |
+| Unavailable status providers produce bounded partial results | MET | test | `apps/cli/tests/commands/self/status.e2e.test.ts:89`; fresh test output and real CLI receipts: batch artifact `.spur/run/run_096acd54-1a43-4707-b33d-50fe6a2bcea0-feature-verification.log` line 1. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
