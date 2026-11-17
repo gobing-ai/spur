@@ -77,7 +77,7 @@ skips the gateway port; spawned serves already bind `127.0.0.1` (`project-start.
    evaluated against the public origin by **host**: the `Origin` must parse as `http(s)://` and its
    host must equal the (already allowlisted) request `Host`. Scheme is not compared because the tunnel
    terminates TLS — the browser sends `https://…` while the loopback listener's `req.url` is `http://…`.
-   Same `/<prefix>/a2a/*` exemption (bearer-authenticated); refusal is 403 before any upstream contact.
+   Same `/<prefix>/a2a/*` and `/<prefix>/mcp/*` exemptions (bearer-authenticated); refusal is 403 before any upstream contact.
 3. `GET /` → gateway index (name, prefix, running) linking to `/<prefix>/board`. `GET /api/health`
    → `{ ok, gateway: true, port, projects: [{name, prefix, running}] }` (used by `spur self status`).
 4. `/<prefix>` (no slash) → 308 to `/<prefix>/`. `/<prefix>/<rest>` → resolve the local entry by

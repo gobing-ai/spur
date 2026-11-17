@@ -1433,3 +1433,19 @@ freshness and confinement correctness. The durable plane is kept git-proof-inert
 (`ensureDurablePlaneIgnored`). Automatic per-workflow terminal deletion and new retention policies are omitted
 (ADR-131 invariant). Exact lifetimes, confinement, compatibility and failure behavior:
 [disposable run storage](design/disposable-run-storage.md).
+
+## 33. Embedded MCP 2.0+ Server (ADR-152; feature B9, tasks 1370–1374)
+
+`spur serve` mounts `mcpModule` (`apps/server/src/modules/mcp/`, registered in the server module
+registry) on `POST /mcp` only when `server.mcp.enabled` is true (default off; enabled without
+`server.mcp.authEnv` fails the config load), speaking stateless MCP 2.0+ Streamable HTTP: a
+`2026-07-28` protocol-version floor rejects legacy versions and sessions instead of negotiating
+them, and every request is self-contained (`application/json` or one request-scoped SSE frame).
+Five harness tools (`task_show`, `task_list`, `workflow_status`, `workflow_run`, `workflow_continue`)
+and three `spur://` resources (tasks/features/context) delegate directly to `@gobing-ai/spur-app`
+services — the invariant is that neither the server adapter nor the `spur mcp` stdio bridge spawns
+the CLI or duplicates the workflow FSM; the bridge (`apps/cli/src/commands/mcp.ts`) is a
+transport-only NDJSON→HTTP shim that forwards the protocol version and bearer token. The gateway
+treats `/<prefix>/mcp` like `/<prefix>/a2a`: CSRF-exempt (bearer-authenticated), host allowlist
+still first. Exact protocol, tools, resource confinement and bridge URL resolution:
+[embedded MCP server](design/embedded-mcp-server.md).

@@ -125,6 +125,8 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 | `server.webDistPath` | —                         | `null` (auto-resolve: cwd `dist/web`, package `web/` next to `spur.js`, binary-adjacent `web/`, monorepo `dist/web`) |
 | `server.a2a.enabled` | `SPUR_A2A_ENABLED`        | `false` (A2A listener in `spur serve`; off mounts no route)                                                          |
 | `server.a2a.authEnv` | `SPUR_A2A_AUTH_ENV`       | — (NAME of the variable holding the A2A bearer token; required when `enabled` is true, never stored)                  |
+| `server.mcp.enabled` | `SPUR_MCP_ENABLED`        | `false` (embedded MCP server in `spur serve`; off mounts no route)                                                   |
+| `server.mcp.authEnv` | `SPUR_MCP_AUTH_ENV`       | — (NAME of the variable holding the MCP bearer token; required when `enabled` is true, never stored)                   |
 | `telemetry.enabled`  | `SPUR_TELEMETRY_ENABLED`  | `false`                                                                                                              |
 | `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | —                                                                                                                    |
 | `logging.level`      | `SPUR_LOG_LEVEL`          | `info` (debug\|info\|warn\|error)                                                                                    |

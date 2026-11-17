@@ -2952,3 +2952,37 @@ re-import pressure this entry already records).
   The gateway is IPv6/IPv4 sensitive: it binds `server.host` (`localhost` → `::1` on macOS), so
   gateway health probes target `localhost`, not `127.0.0.1`.
 - **Detail:** [Project gateway](design/project-gateway.md); [project switcher](design/project-switcher.md).
+
+## ADR-152: spur serve embeds a stateless MCP 2.0+ server that delegates to spur-app services
+
+- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9
+- **Decision:** `spur serve` mounts `mcpModule` on `POST /mcp` (registered in the server module
+  registry, off unless `server.mcp.enabled`) speaking stateless MCP 2.0+ Streamable HTTP only: a
+  `2026-07-28` protocol-version floor is enforced on every request and legacy versions
+  (`2024-11-05`, `2025-03-26`, `2025-11-25`) are rejected, never negotiated. Requests are
+  self-contained — no `initialize` handshake, no `Mcp-Session-Id` session store, no persistent SSE;
+  answers are `application/json` or one request-scoped SSE frame. Bearer auth reads the token from
+  the environment variable `server.mcp.authEnv` names (required at config load when enabled; only
+  the NAME is configuration, the value is never persisted). Five tools (`task_show`, `task_list`,
+  `workflow_status`, `workflow_run`, `workflow_continue`) and three `spur://` resources
+  (tasks/features/context) delegate directly to `@gobing-ai/spur-app` services — no CLI spawn, no
+  second workflow state machine. Stdio-only agents reach the endpoint through the thin `spur mcp`
+  NDJSON→HTTP bridge, which is transport-only (it forwards protocol headers and the bearer token and
+  never duplicates tool execution). The gateway exempts `/<prefix>/mcp` from browser-origin CSRF —
+  bearer-authenticated routes a cross-site simple request cannot produce — while keeping the host
+  allowlist first for every path.
+- **Why:** coding agents increasingly speak MCP, and Spur's harness surface was otherwise reachable
+  only through the CLI and Board. Embedding one stateless endpoint in the serve that already owns
+  the project runtime reuses `@gobing-ai/spur-app` as the single execution seam (ADR-021) with no
+  second runtime, port or database. Statelessness keeps the trust posture of a loopback bearer
+  endpoint: nothing to hijack between requests, and fail-closed config (enabled without `authEnv`
+  fails the load).
+- **Alternatives:** a separate `spur mcp serve` process (a second runtime and failure domain
+  duplicating DB/scheduler access); supporting legacy protocol versions and sticky sessions (a
+  session store and SSE lifecycle inside a process-scoped serve, and a weaker default);
+  CLI-spawning per call (the shell path ADR-057 forbids, with no structured results).
+- **Consequence:** the tool/resource set is a public contract bounded by `@gobing-ai/spur-app`
+  service signatures; growing it is a surface-consent change. `spur mcp` must stay a transport shim
+  — protocol logic lives only in the server adapter. The version floor makes pre-2.0 MCP clients
+  unsupported by design rather than mis-negotiated.
+- **Detail:** [Embedded MCP server](design/embedded-mcp-server.md).
