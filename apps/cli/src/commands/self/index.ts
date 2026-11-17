@@ -5,6 +5,7 @@ import { registerMaintainCommand } from '../maintain';
 import { registerMigrateCommand } from '../migrate';
 import { registerServeCommand } from '../serve';
 import { registerStatusCommand } from '../status';
+import { registerDaemonCommand } from './daemon';
 import { registerExecCommand } from './exec';
 import { registerInstallCommand } from './install';
 import { registerSearchCommand } from './search';
@@ -15,6 +16,7 @@ import { registerSearchCommand } from './search';
  * aliases over the same builders in `src/index.ts`.
  */
 export function registerSelfCommand(self: Command, context: CliContext): void {
+    registerDaemonCommand(self, context);
     registerExecCommand(self, context);
     registerInitCommand(self, context);
     registerInstallCommand(self, context);

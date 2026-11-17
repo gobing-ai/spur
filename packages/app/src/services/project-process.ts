@@ -2,6 +2,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { connect, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { isLocalHost } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 
 // Process and port helpers shared by the project registry and project-stop. Extracted from
@@ -188,11 +189,7 @@ export function setPortProbeForTests(probe: PortProbe | undefined): void {
 }
 
 /** Check whether a host is local (localhost, 127.0.0.1, ::1, or empty/omitted). */
-export function isLocalHost(host?: string): boolean {
-    if (!host) return true;
-    const trimmed = host.trim().toLowerCase();
-    return trimmed === 'localhost' || trimmed === '127.0.0.1' || trimmed === '::1' || trimmed === '';
-}
+export { isLocalHost };
 
 /** Classify a net.Server bind error code into a PortProbeResult. */
 export function classifyPortBindError(err: unknown): PortProbeResult {

@@ -2,7 +2,7 @@
 kind: design
 title: "Project gateway — one port, path prefixes, LaunchAgent (feature K4)"
 created_at: 2026-11-16
-updated_at: 2026-11-16
+updated_at: 2026-11-17
 related: [K4, K1]
 tags: [system, K4, server, web, cli]
 doc: design/project-gateway
@@ -112,6 +112,9 @@ Verified on Astro 6.4.2 / Vite 7.3.7 / react-router 7.11.0 against `dist/web` (2
 
 - **JS chunks** import each other relatively (`from"./x.js"`) except Vite's preload helper
   (`function(e){return"/"+e}`), which would 404 lazy-chunk CSS/modulepreload under a prefix.
+  **Landed as designed (1358):** the shipped build emits `"./chunk.js"` references and no absolute
+  preload helper (`rg 'return"/"\+' dist/web/_astro` is empty), so the `cssCodeSplit:false` +
+  `modulePreload:false` fallback was not needed.
   Fix in `apps/web/astro.config.mjs` `vite`:
   `experimental: { renderBuiltUrl(f, { hostType }) { return hostType === 'html' ? undefined : { relative: true }; } }`.
   Spike: build exit 0, absolute helper gone, preloads resolve via `new URL(dep, import.meta.url)`;
@@ -126,7 +129,11 @@ Verified on Astro 6.4.2 / Vite 7.3.7 / react-router 7.11.0 against `dist/web` (2
   `index.html` and the SPA `notFound` fallback (`apps/server/src/bootstrap.ts:66-102`) that serves deep
   links. Direct per-port access has no meta → base `/`.
 
-### 5.2 Runtime base — `apps/web/src/lib/base-path.ts`
+### 5.2 Runtime base — `apps/web/src/components/base-path.ts` (re-exported from `src/lib/base-path.ts`)
+
+The implementation lives under `src/components` because the module-kit barrel publishes it and
+`emit-board-types` only mirrors declarations inside that root; `src/lib/base-path.ts` re-exports it
+for application imports (1358).
 
 ```ts
 export function basePath(): string;          // meta[name=spur-base] content, normalized to '/…/'; '/' when absent
@@ -171,7 +178,20 @@ zero requests to origin-root paths. The network log is the artifact.
 | B13 | P2 | Switcher builds `http://host:port/board` (`ProjectSwitcher.tsx:39,293,311`) | Local → `/<prefix>/board` when `basePath() !== '/'`; `/api/projects` adds `prefix`, `url` | 1361 |
 | B14 | P3 | Same origin ⇒ one project's module JS can call another's `/<p>/api` | Accepted: local operator trust; access control at the CF tunnel (ADR-151) | — |
 | B15 | — | Dev mode and memory-router tests | Unaffected (base `/`) | — |
-| B16 | P1 | No end-to-end proof of zero root escapes | Heavy browser E2E with network log (§5.3) | 1358 |
+| B16 | P1 | No end-to-end proof of zero root escapes | Heavy browser E2E with network log (§5.3): `apps/web/tests/board-base-path.heavy.test.ts` asserts every request carries the prefix | 1358 |
+
+**Shipped deviations (2026-11-17).** Everything in the register landed on its owning task. Three
+details moved during implementation:
+
+- B10's two-tab browser proof was replaced by deterministic checks: per-base `scopedKey` isolation
+  tests plus a static guard that only `lib/planning-events.ts` opens a planning `EventSource`
+  (driving a real draft needs a live API the browser fixture does not serve).
+- Gateway health probes target `localhost`, not `127.0.0.1`: the gateway binds `server.host`
+  (`localhost` → `::1` on macOS), and an IPv4-only probe reported a healthy daemon as down — found by
+  the manual launchd proof in 1362.
+- The 3000-band free-port probe is IPv4-only, so it can hand a serve a port another process holds on
+  `::1` only; the spawn then fails through the owner-claim refusal and `spur projects start` reports
+  the daemon log. Left as-is (pre-existing `allocatePort` behavior, outside K4's scope).
 
 ## 7. LaunchAgent lifecycle
 

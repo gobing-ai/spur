@@ -64,6 +64,11 @@ export interface ProjectStartOptions {
      * {@link defaultResolveOwnerPort} (owner-claim read + lsof + health probe).
      */
     resolveOwnerPort?: (projectRoot: string) => Promise<number | null>;
+    /**
+     * Ports a spawned serve must never take — the project gateway holds one fixed port and the
+     * band probe would otherwise hand it to the first serve that starts after a gateway stop.
+     */
+    reservedPorts?: ReadonlySet<number>;
 }
 
 /** POSIX single-quote for embedding in `sh -c`. */
@@ -442,7 +447,8 @@ export async function startRegisteredProject(
         };
     }
 
-    const allocatedPort = options.port && options.port > 0 ? options.port : await registry.allocatePort();
+    const allocatedPort =
+        options.port && options.port > 0 ? options.port : await registry.allocatePort(undefined, options.reservedPorts);
     const invocation = resolveSpurServeCommand();
     const spawn = options.spawn ?? testDetachedServeSpawn ?? defaultDetachedServeSpawn;
     // Fresh-output offset for the failure suffix — captured before the daemon can write.

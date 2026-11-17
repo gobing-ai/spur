@@ -45,3 +45,12 @@ spur self migrate --check     # read-only importer-schema drift report
 
 - [Command index](./index.md)
 - `docs/04_DESIGN.md` — §1.2 `spur self migrate` and the database / migrations section.
+
+## Gateway daemon (feature K4)
+
+`spur self daemon <install|uninstall|status> [--port <n>] [--json]` keeps the one-port project
+gateway always on as a macOS user LaunchAgent (`~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`,
+logs under `~/Library/Logs/spur/`). `install` refuses a non-macOS platform and a port held by another
+process without writing anything; `status` reports loaded/pid/last exit plus `GET /api/health`;
+`uninstall` boots it out and removes the plist (absent = success). The agent runs
+`spur self serve --gateway`. See [cmd_serve](./cmd_serve.md) for gateway mode itself.

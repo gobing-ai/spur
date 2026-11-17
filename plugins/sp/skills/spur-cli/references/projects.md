@@ -17,10 +17,10 @@ shapes live in `apps/cli/src/commands/projects.ts`.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `add <path>` | Upsert an existing path in the registry | `--name <name>` `--json` |
+| `add <path>` | Upsert an existing path in the registry | `--name <name>` `--prefix <slug>` `--json` |
 | `remove <target>` | Remove an entry by display name or path | `--json` |
 | `clean` | Purge missing project folders and terminate lingering processes (alias: `refresh`) | `--no-terminate-processes` `--json` |
-| `list` | List entries with live running status | `--json` `--fleet` |
+| `list` | List entries with live running status, their resolved Board URL and any derived prefix collision | `--json` `--fleet` |
 | `start <target>` | Start or reuse a detached project server | `--port <n>` `--json` |
 | `stop <target>` | Ownership-verified stop of the listener and clear its recorded port | `--json` |
 
@@ -62,6 +62,26 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
   persisted row, or `unavailable (<error>)` on a db failure. Under `--json` each
   project gains `strategy` (`{ strategy, strategyVersion }`, `null` when
   unpersisted) and, on failure, `strategyError`.
+
+## Gateway prefix (feature K4, ADR-151)
+
+`add --prefix <slug>` sets the path a local project is routed under by the one-port gateway
+(`spur self serve --gateway`). The stored form always carries its leading slash (`/knowledge-kit`);
+input without one is normalized. Absent, the prefix is derived from the entry name
+(`resolveProjectPrefix`). A prefix that is not a slug, uses a reserved first segment (`api`, `board`,
+`modules`, `_astro`, `openapi.json`, `health`) or collides with another local entry's resolved prefix
+is refused with an actionable error; `--prefix` together with a remote `--host` is refused too.
+Omitting `--prefix` on a later upsert (path healing) preserves the stored value.
+
+Remote entries never get a prefix — `resolveProjectPrefix` returns `null` for them and their
+`host`+`port` behaviour is unchanged. Two local entries that *derive* the same prefix keep loading
+(no migration, no load error); `list` prints `Warning: prefix /x is claimed by "a" and "b"; set one
+with spur projects add <path> --prefix /<other>`, and the gateway answers that prefix with 409.
+
+`list` prints `url:` per project and adds `prefix` plus `url` under `--json`: the gateway URL
+(`http://127.0.0.1:<server.gateway.port>/<prefix>/board`) when a gateway actually answers
+`GET /api/health` on its fixed port (200 ms probe — listing never starts one), otherwise the per-port
+`http://<host>:<port>/board`.
 
 ## Server lifecycle
 

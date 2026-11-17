@@ -1,6 +1,7 @@
 import DOMPurify, { type Config } from 'dompurify';
 import { useEffect, useId, useRef, useState } from 'react';
 import { MDEditor } from '@/ui';
+import { withBase } from '../../lib/base-path';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
 
 /**
@@ -168,6 +169,19 @@ export interface MarkdownBodyProps {
     style?: React.CSSProperties;
 }
 
+/**
+ * Anchor override: a Markdown link to a root-relative Board path (`/board/tasks/123`) must resolve
+ * under the active base path, or it escapes to the origin root behind the gateway. External,
+ * protocol-relative and fragment links pass through untouched.
+ */
+export function renderAnchor({ href, children, ...props }: React.ComponentProps<'a'>) {
+    return (
+        <a {...props} href={href === undefined ? undefined : withBase(href)}>
+            {children}
+        </a>
+    );
+}
+
 export default function MarkdownBody({ source, className, style }: MarkdownBodyProps) {
     return (
         <MDEditor.Markdown
@@ -178,6 +192,7 @@ export default function MarkdownBody({ source, className, style }: MarkdownBodyP
             {...markdownPreviewSafety}
             components={{
                 code: renderCodeBlock,
+                a: renderAnchor,
             }}
         />
     );

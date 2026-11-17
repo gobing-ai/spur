@@ -1,5 +1,6 @@
 import type { SearchHit, SearchResponse, SearchStatus } from '@gobing-ai/spur-contracts';
 import { type ReactNode, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { Badge, Button, Input, Loading, Select } from '@/ui';
 import ModuleIcon from '../../components/ModuleIcon';
 import { api } from '../../lib/rpc-client';
@@ -125,9 +126,9 @@ function HitRow(props: { hit: SearchHit; query: string }) {
                 <div className="flex items-center gap-2 shrink-0">
                     {hit.matchedBy.length > 1 ? <Badge variant="info">{hit.matchedBy.join('+')}</Badge> : null}
                     {boardLink ? (
-                        <a href={boardLink.href} className="text-xs font-medium text-primary hover:underline">
+                        <Link to={boardLink.href} className="text-xs font-medium text-primary hover:underline">
                             Open {boardLink.label} →
-                        </a>
+                        </Link>
                     ) : null}
                 </div>
             </div>

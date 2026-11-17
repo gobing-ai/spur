@@ -262,3 +262,20 @@ the child owns its own navigation and state.
   did not load, or a catalog that could not be read (shown as a banner above the workspace).
 - **A frame stays blank.** The framed app refused framing. The always-available **Open externally**
   link is the supported fallback; the Board does not retry, proxy or relax the child's policy.
+
+### 6.9 Base path under the project gateway (feature K4)
+
+A Board module is loaded and rendered under whatever base path the Board itself is mounted at: `/`
+for a direct per-port `spur serve`, or `/<prefix>/` behind the one-port project gateway
+([project-gateway.md](project-gateway.md) §5). The Board learns the base from
+`<meta name="spur-base">`; **the module must never hard-code `'/api'`, `'/board/…'` or `'/modules/…'`.**
+
+- Build URLs with the kit's `withBase(path)` (root-relative → `/<prefix>/path`; absolute,
+  protocol-relative, `#fragment`, `?query` and relative paths pass through unchanged).
+- Call the API through the kit's `resolveApiUrl()` (returns `/<prefix>/api` at the root and under a
+  prefix) or the Board's typed `api` client, never a literal.
+- The host applies the base to catalog `entryUrl`/`styles` before importing them, so a module's own
+  assets resolve without module-side code.
+
+Checked mechanically by the K4 grep gate over `apps/web/src`
+(`['"\`]/(api|board|modules)/` must only appear inside router `to=`/`navigate(` paths or a `withBase(` call).

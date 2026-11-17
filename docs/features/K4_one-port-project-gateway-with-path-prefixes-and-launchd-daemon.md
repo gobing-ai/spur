@@ -2,11 +2,11 @@
 schema_version: 1
 id: "K4"
 name: "One-port project gateway with path prefixes and launchd daemon"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-17T00:02:35.082Z"
-updated_at: "2026-11-17T00:22:42.616Z"
+updated_at: "2026-11-17T01:11:13.400Z"
 ---
 
 # K4: One-port project gateway with path prefixes and launchd daemon
@@ -150,7 +150,7 @@ Feature: One-port project gateway with path prefixes and launchd daemon
 | 1358 | Runtime base path for the Board | todo |
 | 1359 | Gateway routes local prefixes on one fixed port | todo |
 | 1363 | Accept ADR-151 and sync gateway docs | todo |
-| 1357 | Registry prefix contract for local projects | todo |
+| 1357 | Registry prefix contract for local projects | testing |
 | 1361 | Switcher and project list resolve gateway URLs | todo |
 | 1362 | Gateway LaunchAgent install, uninstall and status | todo |
 | 1360 | Gateway origin, CSRF and forwarded-header trust | todo |
@@ -161,4 +161,5 @@ Feature: One-port project gateway with path prefixes and launchd daemon
 ## History
 
 - 2026-11-17T00:21:24.181Z moved Q → K4 (system)
+- 2026-11-17T01:11:13.400Z backlog → active (system)
 

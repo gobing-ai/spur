@@ -1,0 +1,471 @@
+import { findPrefixCollisions, isLocalHost, type ProjectEntry, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
+
+/**
+ * The one-port project gateway's request handler (feature K4, ADR-151 §4).
+ *
+ * Pure: no `Bun.serve`, no registry writes. `apps/server` owns the listener and the CLI composes
+ * the deps; every side effect arrives through {@link GatewayDeps}, so the routing contract is
+ * testable against real stub upstreams without binding the gateway port.
+ */
+
+/** What the gateway needs from the rest of the system. */
+export interface GatewayDeps {
+    /** Every registry entry — remote entries are filtered out by the handler. */
+    listProjects(): Promise<ProjectEntry[]>;
+    /** Start or adopt one project's `spur serve` and resolve its loopback port. */
+    ensureUpstream(entry: ProjectEntry): Promise<number>;
+    /** Test seam; defaults to the global `fetch`. */
+    fetchUpstream?: typeof fetch;
+    /** The gateway's own fixed port, echoed by `/api/health`. */
+    port: number;
+    /** Public-origin edge policy (host guard + CSRF). Omitted means loopback-only trust. */
+    edge?: GatewayEdgeOptions;
+}
+
+/** Public-origin policy the gateway enforces before any upstream contact. */
+export interface GatewayEdgeOptions {
+    /** The name the gateway binds — accepted besides `localhost` and IP literals. */
+    bindHost: string;
+    /** Tunnel hostnames the operator configured (`server.gateway.allowedHosts`). */
+    allowedHosts: readonly string[];
+}
+
+/** Hop-by-hop headers never forwarded in either direction (RFC 7230 §6.1). */
+const HOP_BY_HOP = new Set([
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailer',
+    'transfer-encoding',
+    'upgrade',
+]);
+
+/** Response headers the gateway must drop: Bun's fetch already decoded a compressed body. */
+const DECODED = ['content-encoding', 'content-length'];
+
+/**
+ * Answer true when a project gateway serves `GET /api/health` on `port`.
+ *
+ * Probes `localhost`, not `127.0.0.1`: the gateway binds `server.host` (default `localhost`), which
+ * Bun resolves to `::1` on macOS — an IPv4-only probe then reports a healthy gateway as down.
+ * A 200 ms bounded probe used by `spur projects list` to decide whether to print gateway URLs; it
+ * never starts a gateway, and any failure (refused, timeout, non-2xx, not a gateway) reads `false`.
+ */
+export async function isGatewayAnswering(port: number, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+    try {
+        const res = await fetchImpl(`http://localhost:${port}/api/health`, {
+            signal: AbortSignal.timeout(200),
+        });
+        if (!res.ok) return false;
+        const body = (await res.json()) as { gateway?: unknown };
+        return body.gateway === true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Classify a gateway port: `gateway` (our own `gateway: true` health answer), `foreign` (something
+ * else answers) or `free` (nothing reachable).
+ *
+ * Probes `localhost` for the same reason {@link isGatewayAnswering} does — the gateway binds
+ * `server.host`, not `127.0.0.1`.
+ */
+export async function probeGatewayPort(
+    port: number,
+    fetchImpl: typeof fetch = fetch,
+): Promise<'gateway' | 'foreign' | 'free'> {
+    try {
+        const res = await fetchImpl(`http://localhost:${port}/api/health`, { signal: AbortSignal.timeout(200) });
+        const body = res.ok ? ((await res.json()) as { gateway?: unknown }) : null;
+        return body?.gateway === true ? 'gateway' : 'foreign';
+    } catch {
+        return 'free';
+    }
+}
+
+/** Where a spawned serve writes its own log — named in the 502 so the operator knows where to look. */
+export const GATEWAY_START_LOG = '.spur/run/serve-spawn.log';
+
+/** Escape one HTML text/attribute value — project names come from directory basenames. */
+function escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
+/** Form/text content types a browser can send cross-site without a CORS preflight. */
+const SIMPLE_FORM_TYPES = ['application/x-www-form-urlencoded', 'multipart/form-data', 'text/plain'];
+
+/** Origin-bearing methods that reach a mutation; everything else is safe by definition. */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Public-origin guard: host allowlist (421), then same-origin CSRF (403) for non-safe methods.
+ *
+ * The browser talks to the tunnel origin while the upstream only ever sees loopback, so both checks
+ * happen here — no project serve is modified and no forwarded header is trusted. Returns `null` when
+ * the request may proceed. `/<prefix>/a2a/*` is exempt: those routes are bearer-authenticated, which
+ * a cross-site simple request cannot produce.
+ */
+export function gatewayGuard(req: Request, options: GatewayEdgeOptions): Response | null {
+    const allowed = allowedHostnames(
+        options.bindHost,
+        options.allowedHosts.map((host) => `https://${host}`),
+    );
+    if (!isAllowedHost(req, allowed)) {
+        return rejectHost();
+    }
+
+    const method = req.method.toUpperCase();
+    if (SAFE_METHODS.has(method)) return null;
+
+    const url = new URL(req.url);
+    const segments = url.pathname.split('/').filter((segment) => segment !== '');
+    if (segments[1] === 'a2a') return null;
+
+    const origin = req.headers.get('origin');
+    if (origin !== null) {
+        return origin === url.origin ? null : forbiddenOrigin();
+    }
+    const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
+    const plainFormPost = SIMPLE_FORM_TYPES.some((type) => contentType.startsWith(type));
+    return plainFormPost ? forbiddenOrigin() : null;
+}
+
+/** 403 for a cross-origin mutation — names the fix, never echoes the offending origin. */
+function forbiddenOrigin(): Response {
+    return new Response(
+        'Forbidden: cross-origin request refused. Open the Board on the gateway origin, or configure the host in server.gateway.allowedHosts.',
+        { status: 403, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+    );
+}
+
+/**
+ * Headers for the loopback upstream: `Host`/`Origin` become the upstream's own origin so the serve's
+ * host guard and `csrf()` see a plain same-origin request; `Referer` and hop-by-hop headers go.
+ */
+export function upstreamRequestHeaders(req: Request, upstreamPort: number): Headers {
+    const headers = stripHeaders(req.headers, ['host', 'origin', 'referer']);
+    headers.set('host', `127.0.0.1:${upstreamPort}`);
+    if (req.headers.get('origin') !== null) {
+        headers.set('origin', `http://127.0.0.1:${upstreamPort}`);
+    }
+    return headers;
+}
+
+/** Prefix one root-absolute URL (`/x` → `/<prefix>/x`); `//`, absolute and fragment URLs pass through. */
+function rebaseUrl(value: string, prefix: string): string {
+    if (!value.startsWith('/') || value.startsWith('//')) return value;
+    if (value === prefix || value.startsWith(`${prefix}/`)) return value;
+    return `${prefix}${value}`;
+}
+
+/** Attributes an HTML document uses to reference something the browser will fetch. */
+const URL_ATTRIBUTES = 'href|src|component-url|renderer-url|content|action';
+
+/**
+ * Rebase a served HTML document under `/<prefix>/` and declare the base for client code.
+ *
+ * Deliberately string-level and narrow: root-absolute attribute values plus import-map entries. Inline
+ * scripts are never touched — the Board's chunk URLs are already relative (task 1358). Idempotent, so
+ * a second pass over an already-rebased document is a no-op.
+ */
+export function rebaseHtml(html: string, prefix: string): string {
+    const attributes = new RegExp(`(\\s(?:${URL_ATTRIBUTES})=["'])([^"']*)`, 'g');
+    let out = html.replace(attributes, (_all, open: string, path: string) => `${open}${rebaseUrl(path, prefix)}`);
+
+    out = out.replace(/(<script[^>]+type=["']importmap["'][^>]*>)([\s\S]*?)(<\/script>)/, (_all, open, body, close) => {
+        try {
+            const parsed = JSON.parse(body) as Record<string, unknown>;
+            const rebased = rebaseImportMap(parsed, prefix);
+            return `${open}${JSON.stringify(rebased)}${close}`;
+        } catch {
+            return `${open}${body}${close}`;
+        }
+    });
+
+    if (out.includes('name="spur-base"')) return out;
+    const meta = `<meta name="spur-base" content="${prefix}/">`;
+    return /<head[^>]*>/i.test(out) ? out.replace(/<head([^>]*)>/i, `<head$1>${meta}`) : `${meta}${out}`;
+}
+
+/** Prefix every root-absolute string in an import map, recursing one level into `imports`/`scopes`. */
+function rebaseImportMap(map: Record<string, unknown>, prefix: string): Record<string, unknown> {
+    const rebased: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(map)) {
+        if (key === 'imports' && value !== null && typeof value === 'object') {
+            const entries = Object.fromEntries(
+                Object.entries(value as Record<string, unknown>).map(([spec, target]) => [
+                    rebaseUrl(spec, prefix),
+                    typeof target === 'string' ? rebaseUrl(target, prefix) : target,
+                ]),
+            );
+            rebased[key] = entries;
+            continue;
+        }
+        rebased[key] = typeof value === 'string' ? rebaseUrl(value, prefix) : value;
+    }
+    return rebased;
+}
+
+/** Rebase a `Location` header under the prefix; protocol-relative and absolute URLs pass through. */
+export function rebaseLocation(location: string, prefix: string): string {
+    return rebaseUrl(location, prefix);
+}
+
+/** Rebase a web app manifest's entry points so an installed Board opens under the prefix. */
+export function rebaseManifest(manifest: string, prefix: string): string {
+    const parsed = JSON.parse(manifest) as Record<string, unknown>;
+    for (const key of ['start_url', 'scope', 'id']) {
+        const value = parsed[key];
+        if (typeof value === 'string') parsed[key] = rebaseUrl(value, prefix);
+    }
+    if (Array.isArray(parsed.icons)) {
+        parsed.icons = parsed.icons.map((icon) => {
+            if (icon === null || typeof icon !== 'object') return icon;
+            const record = icon as Record<string, unknown>;
+            return typeof record.src === 'string' ? { ...record, src: rebaseUrl(record.src, prefix) } : record;
+        });
+    }
+    return JSON.stringify(parsed);
+}
+
+function stripHeaders(headers: Headers, extra: readonly string[] = []): Headers {
+    const out = new Headers();
+    for (const [key, value] of headers) {
+        const lower = key.toLowerCase();
+        if (HOP_BY_HOP.has(lower) || extra.includes(lower)) continue;
+        out.set(key, value);
+    }
+    return out;
+}
+
+/** True when an upstream fetch failed because nothing was listening on the loopback port. */
+function isConnectionRefused(err: unknown): boolean {
+    const asRecord = err as { code?: unknown; cause?: { code?: unknown } };
+    if (asRecord?.code === 'ECONNREFUSED' || asRecord?.cause?.code === 'ECONNREFUSED') return true;
+    const message = err instanceof Error ? err.message : String(err);
+    return /ECONNREFUSED|Unable to connect|ConnectionRefused/i.test(message);
+}
+
+/**
+ * Build the gateway's `fetch` handler.
+ *
+ * Composition mirrors the design's `guard → route → proxy → adapt` chain: this task ships the
+ * routing and proxy thirds; `guard` and `adapt` are identity here and task 1360 replaces them.
+ */
+/**
+ * Adapt one upstream response for the public origin: rebase `Location`, HTML and the web manifest.
+ *
+ * Only HTML (and the manifest) is buffered — every other body keeps streaming, so SSE latency is
+ * unchanged from the proxy itself.
+ */
+async function adaptResponse(upstreamRes: Response, prefix: string, rest: string, method: string): Promise<Response> {
+    const headers = stripHeaders(upstreamRes.headers, DECODED);
+    const location = headers.get('location');
+    if (location !== null) {
+        headers.set('location', rebaseLocation(location, prefix));
+    }
+    const contentType = (headers.get('content-type') ?? '').toLowerCase();
+    const isHtml = contentType.startsWith('text/html');
+    const isManifest = rest.endsWith('site.webmanifest');
+    const status = upstreamRes.status;
+    const statusText = upstreamRes.statusText;
+    if (!isHtml && !isManifest) {
+        return new Response(method === 'HEAD' ? null : upstreamRes.body, { status, statusText, headers });
+    }
+    const body = await upstreamRes.text();
+    return new Response(isHtml ? rebaseHtml(body, prefix) : rebaseManifest(body, prefix), {
+        status,
+        statusText,
+        headers,
+    });
+}
+
+/**
+ * Build the gateway's `fetch` handler.
+ *
+ * Composition mirrors the design's `guard → route → proxy → adapt` chain: `gatewayGuard` runs before
+ * any routing, `upstreamRequestHeaders` keeps the serve's own host guard and `csrf()` satisfied, and
+ * `adaptResponse` rebases what the browser resolves against the public origin.
+ */
+export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promise<Response> {
+    const fetchUpstream = deps.fetchUpstream ?? fetch;
+    const inFlight = new Map<string, Promise<number>>();
+
+    /** Coalesce concurrent first requests onto one start; drop the entry on settle so a later retry re-probes. */
+    function ensureUpstream(entry: ProjectEntry): Promise<number> {
+        const key = entry.path;
+        const running = inFlight.get(key);
+        if (running) return running;
+        const started = deps.ensureUpstream(entry).then(
+            (port) => {
+                inFlight.delete(key);
+                return port;
+            },
+            (err: unknown) => {
+                inFlight.delete(key);
+                throw err;
+            },
+        );
+        inFlight.set(key, started);
+        return started;
+    }
+
+    async function localEntries(): Promise<Array<{ entry: ProjectEntry; prefix: string }>> {
+        const projects = await deps.listProjects();
+        return projects.flatMap((entry) => {
+            const prefix = resolveProjectPrefix(entry);
+            return prefix === null || !isLocalHost(entry.host) ? [] : [{ entry, prefix }];
+        });
+    }
+
+    function health(known: Array<{ entry: ProjectEntry; prefix: string }>): Response {
+        return Response.json({
+            ok: true,
+            gateway: true,
+            port: deps.port,
+            projects: known.map(({ entry, prefix }) => ({
+                name: entry.name,
+                prefix,
+                running: entry.port > 0,
+            })),
+        });
+    }
+
+    function index(known: Array<{ entry: ProjectEntry; prefix: string }>): Response {
+        const rows = known
+            .map(({ entry, prefix }) => {
+                const state = entry.port > 0 ? 'running' : 'stopped';
+                return `<li><a href="${escapeHtml(prefix)}/board">${escapeHtml(entry.name)}</a> <code>${escapeHtml(prefix)}</code> (${state})</li>`;
+            })
+            .join('\n');
+        return new Response(
+            `<!doctype html><html><head><meta charset="utf-8"><title>Spur gateway</title></head>` +
+                `<body><h1>Spur gateway</h1><p>Port ${deps.port}</p><ul>\n${rows}\n</ul></body></html>`,
+            { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
+        );
+    }
+
+    async function proxy(
+        req: Request,
+        entry: ProjectEntry,
+        prefix: string,
+        rest: string,
+        search: string,
+    ): Promise<Response> {
+        const key = entry.path;
+        const attempt = async (port: number): Promise<Response> => {
+            const target = `http://127.0.0.1:${port}${rest === '' ? '/' : rest}${search}`;
+            const headers = upstreamRequestHeaders(req, port);
+            const init: RequestInit & { duplex?: 'half' } = {
+                method: req.method,
+                headers,
+                redirect: 'manual',
+                signal: req.signal,
+            };
+            if (req.method !== 'GET' && req.method !== 'HEAD') {
+                init.body = req.body;
+                init.duplex = 'half';
+            }
+            const upstreamRes = await fetchUpstream(target, init);
+            return adaptResponse(upstreamRes, prefix, rest, req.method);
+        };
+
+        let port: number;
+        try {
+            port = await ensureUpstream(entry);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return new Response(
+                `Gateway could not start project "${entry.name}": ${message}\nLog: ${entry.path}/${GATEWAY_START_LOG}\n`,
+                { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+            );
+        }
+
+        try {
+            return await attempt(port);
+        } catch (err) {
+            if (!isConnectionRefused(err)) throw err;
+            // A streamed request body is already consumed by the failed attempt, so a retry would
+            // send it empty — a wrong-but-successful write is worse than a clear 502.
+            const replayable = req.method === 'GET' || req.method === 'HEAD';
+            if (!replayable) {
+                const message = err instanceof Error ? err.message : String(err);
+                return new Response(
+                    `Gateway could not reach project "${entry.name}" at 127.0.0.1:${port}: ${message}\n` +
+                        `The request body cannot be replayed, so no restart was attempted.\n` +
+                        `Log: ${entry.path}/${GATEWAY_START_LOG}\n`,
+                    { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+                );
+            }
+            // The adopted port went away between adoption and the request: one fresh start, then give up.
+            inFlight.delete(key);
+            let retried: number;
+            try {
+                retried = await ensureUpstream(entry);
+            } catch (retryErr) {
+                const message = retryErr instanceof Error ? retryErr.message : String(retryErr);
+                return new Response(
+                    `Gateway could not restart project "${entry.name}": ${message}\nLog: ${entry.path}/${GATEWAY_START_LOG}\n`,
+                    { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+                );
+            }
+            try {
+                return await attempt(retried);
+            } catch (retryErr) {
+                const message = retryErr instanceof Error ? retryErr.message : String(retryErr);
+                return new Response(
+                    `Gateway could not reach project "${entry.name}" at 127.0.0.1:${retried}: ${message}\n` +
+                        `Log: ${entry.path}/${GATEWAY_START_LOG}\n`,
+                    { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+                );
+            }
+        }
+    }
+
+    return async (req: Request): Promise<Response> => {
+        if (deps.edge) {
+            const refused = gatewayGuard(req, deps.edge);
+            if (refused) return refused;
+        }
+        const url = new URL(req.url);
+        const known = await localEntries();
+
+        if (url.pathname === '/' || url.pathname === '') {
+            return index(known);
+        }
+        if (url.pathname === '/api/health') {
+            return health(known);
+        }
+
+        const segments = url.pathname.split('/');
+        const requested = `/${segments[1] ?? ''}`;
+        const match = known.find(({ prefix }) => prefix === requested);
+        if (!match) {
+            const prefixes = known.map(({ prefix }) => prefix).join(', ') || '(none registered)';
+            return new Response(`Unknown prefix ${requested}. Known prefixes: ${prefixes}\n`, {
+                status: 404,
+                headers: { 'content-type': 'text/plain; charset=utf-8' },
+            });
+        }
+
+        const collisions = findPrefixCollisions(await deps.listProjects());
+        const collidingNames = collisions.get(match.prefix);
+        if (collidingNames) {
+            return new Response(
+                `Prefix ${match.prefix} is claimed by "${collidingNames.join('" and "')}"; ` +
+                    `set one with spur projects add <path> --prefix /<other>\n`,
+                { status: 409, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+            );
+        }
+
+        if (url.pathname === match.prefix) {
+            return new Response(null, { status: 308, headers: { location: `${match.prefix}/${url.search}` } });
+        }
+
+        return proxy(req, match.entry, match.prefix, url.pathname.slice(match.prefix.length), url.search);
+    };
+}

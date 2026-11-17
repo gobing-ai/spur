@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Registry prefix contract for local projects
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.302Z
-updated_at: "2026-11-17T00:29:07.488Z"
+updated_at: "2026-11-17T01:11:14.065Z"
 feature_id: K4
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
   - cli
 estimate_hours: 4
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1357. Registry prefix contract for local projects
@@ -23,13 +25,13 @@ Feature K4 (ADR-151, `docs/design/project-gateway.md` §3). Local entries in `~/
 
 ### Requirements
 
-- [ ] R1. Local entries accept an optional `prefix`; absent → derived `/` + slug(name); invalid slug, reserved first segment (`api`, `board`, `modules`, `_astro`, `openapi.json`, `health`) or a collision with another local entry's explicit prefix is rejected with an actionable error; existing files load unchanged.
-- [ ] R2. Remote entries never get, require or accept a prefix; `resolveProjectPrefix` returns `null` for them and their host/port behavior is unchanged.
+- [x] R1. Local entries accept an optional `prefix`; absent → derived `/` + slug(name); invalid slug, reserved first segment (`api`, `board`, `modules`, `_astro`, `openapi.json`, `health`) or a collision with another local entry's explicit prefix is rejected with an actionable error; existing files load unchanged.
+- [x] R2. Remote entries never get, require or accept a prefix; `resolveProjectPrefix` returns `null` for them and their host/port behavior is unchanged.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Local entries accept an optional validated prefix (req: R1)
-- [ ] AC2 — Remote entries keep host and port semantics (req: R2)
+- [x] AC1 — Local entries accept an optional validated prefix (req: R1)
+- [x] AC2 — Remote entries keep host and port semantics (req: R2)
 
 Verification: `(cd packages/config && bun test tests/projects*.test.ts)` and `(cd packages/app && bun test tests/services/project-registry*.test.ts)` plus a CLI E2E `(cd apps/cli && bun test tests/commands/projects*.test.ts)` driving `spur projects add <tmpdir> --prefix /kk --json` against `SPUR_PROJECTS_FILE=<tmp>/projects.json`; artifact: the resulting projects.json fixture asserted byte-for-byte for untouched entries.
 
@@ -75,15 +77,54 @@ Rejected: storing the derived prefix on load (would rewrite every operator's fil
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `packages/config/src/projects.ts` | 17 | Optional `prefix` on `projectEntrySchema` — additive, no schema bump, so legacy files parse unchanged. |
+| `packages/config/src/projects.ts` | 21-95 | Registry prefix contract: `RESERVED_PREFIX_SEGMENTS`, `isLocalHost` (moved here from app so config never imports app), `slugifyProjectName`, `normalizePrefix`, `validatePrefix`, `resolveProjectPrefix`, `findPrefixCollisions`. |
+| `packages/app/src/services/project-process.ts` | 5, 192 | Re-exports `isLocalHost` from `@gobing-ai/spur-config`, keeping every existing app/CLI caller untouched. |
+| `packages/app/src/services/project-registry.ts` | 9-18, 47-80 | Imports the config helpers; `resolvePrefixWrite` enforces the write contract — remote refusal, normalize+validate, collision against another local entry's **resolved** prefix, and "omitted ⇒ preserve". |
+| `packages/app/src/services/project-registry.ts` | 353-390 | `upsert` accepts `prefix?`, stores it only when resolved, and never erases a stored prefix on path-healing re-upserts (`project-start.ts`). |
+| `apps/cli/src/commands/projects.ts` | 29-33, 50 | `spur projects add --prefix <slug>`; JSON response shape unchanged, `project.prefix` present when set. |
+| `packages/config/tests/projects-prefix.test.ts` | new | Slug/normalize/validate/resolve/collisions + legacy-load cases. |
+| `packages/app/tests/services/project-registry-prefix.test.ts` | new | Store-normalized, invalid, reserved, collision, remote refusal (registry untouched), preserve-on-omit, remote round-trip identity. |
+| `apps/cli/tests/commands/projects-prefix.test.ts` | new | CLI E2E: `add --prefix`, refused invalid prefix, refused remote prefix; untouched entry asserted byte-for-byte in the written `projects.json`. |
+
+Derived collisions (two names slugifying alike with no explicit prefix) stay a **load-success / report-only** state per the task Q&A: `findPrefixCollisions` exposes them for `projects list` and the gateway; only an explicit write is refused.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — local entries accept an optional validated prefix; absent derives `/` + slug(name); invalid slug, reserved segment or explicit collision refused with an actionable error; existing files load unchanged | MET | `packages/config/src/projects.ts:17,21,34-95` (schema field + slug/normalize/validate/resolve/collisions); `packages/app/src/services/project-registry.ts:41-72,353-390` (write contract); tests `packages/config/tests/projects-prefix.test.ts`, `packages/app/tests/services/project-registry-prefix.test.ts`, `apps/cli/tests/commands/projects-prefix.test.ts` |
+| R2 — remote entries never get, require or accept a prefix; `resolveProjectPrefix` returns `null` for them and their host/port behaviour is unchanged | MET | `packages/config/src/projects.ts:68-75`; remote refusal `packages/app/src/services/project-registry.ts:56-58`; remote round-trip test `packages/app/tests/services/project-registry-prefix.test.ts` ("keeps remote entries byte-identical"), CLI refusal `apps/cli/tests/commands/projects-prefix.test.ts` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Local entries accept an optional validated prefix (req: R1) | MET | test | `(cd packages/config && bun test)` 315 pass; `(cd packages/app && bun test tests/services/project-registry)` 52 pass; `(cd apps/cli && bun test tests/commands/projects)` 31 pass — slug/reserved/collision/derived/preserve cases |
+| AC2 — Remote entries keep host and port semantics (req: R2) | MET | test | probe `spur projects add /tmp/remote --host 192.168.87.27 --prefix kk --json` → exit 1, `Prefix is only valid for local projects…`; registry untouched; remote entry round-trip asserted in `packages/app/tests/services/project-registry-prefix.test.ts` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/config/src/projects.ts:17,21,34-95`; `packages/app/src/services/project-registry.ts:41-72,353-390`; config/app/cli prefix suites green |
+| R2 | MET | `packages/config/src/projects.ts:68-75`; remote refusal `packages/app/src/services/project-registry.ts:56-58`; remote byte-identical round-trip test |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test | `(cd packages/config && bun test)` 315 pass; `(cd packages/app && bun test tests/services/project-registry)` 52 pass; `(cd apps/cli && bun test tests/commands/projects)` 31 pass |
+| AC2 | MET | command + test | `spur projects add /tmp/remote --host 192.168.87.27 --prefix kk --json` → exit 1 "Prefix is only valid for local projects"; remote entry unchanged |
+
+Findings: no P1–P3. P4: `resolvePrefixWrite` re-derives `isLocalHost(host)` redundantly (`project-registry.ts:41-55`); the 63-char prefix bound is encoded twice (`projects.ts:32,62`).
+
+Residual risk: prefix is validated on write only — a hand-edited `/API` resolves verbatim until rewritten (gateway normalizes at request time, task 1359).
+
+**Disposition: PASS.**
 
 ### References
 
@@ -94,4 +135,7 @@ Rejected: storing the derived prefix on load (would rewrite every operator's fil
 ### History
 
 - 2026-11-17T00:21:24.181Z feature_id Q → K4 (system)
+- 2026-11-17T01:09:49.037Z todo → wip (system)
+- 2026-11-17T01:11:12.446Z wip → testing (system)
+- 2026-11-17T01:11:14.061Z testing → done (system)
 

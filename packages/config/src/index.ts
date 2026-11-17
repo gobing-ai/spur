@@ -1360,6 +1360,16 @@ export const configSchema = z.object({
                     authEnv: z.string().min(1).optional(),
                 })
                 .default({ enabled: false }),
+            /**
+             * One-port project gateway (feature K4, ADR-151): the fixed port every local project is
+             * routed under by path prefix, and the tunnel hostnames allowed through its host guard.
+             */
+            gateway: z
+                .object({
+                    port: z.coerce.number().int().positive().default(3000),
+                    allowedHosts: z.array(z.string().min(1)).default([]),
+                })
+                .default({ port: 3000, allowedHosts: [] }),
         })
         .default({
             port: 3000,
@@ -1367,6 +1377,7 @@ export const configSchema = z.object({
             openBrowser: true,
             webDistPath: null,
             a2a: { enabled: false },
+            gateway: { port: 3000, allowedHosts: [] },
         })
         .superRefine((server, ctx) => {
             // Fail the load, not the first request: an enabled endpoint with no token variable can

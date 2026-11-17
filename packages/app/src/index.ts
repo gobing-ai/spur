@@ -434,6 +434,20 @@ export type {
 } from './services/fleet-service';
 // Project fleet declaration (0835) + orchestrator binding (0836)
 export { FleetService, materializeRoster, mergeAgentSpecs, resolveMemberExecutor } from './services/fleet-service';
+export {
+    GATEWAY_LABEL,
+    type GatewayDaemonDeps,
+    type GatewayInstallResult,
+    type GatewayStatusResult,
+    type GatewayUninstallResult,
+    gatewayDaemonStatus,
+    gatewayLogPaths,
+    gatewayPlistPath,
+    installGatewayDaemon,
+    parsePrintOutput,
+    renderGatewayPlist,
+    uninstallGatewayDaemon,
+} from './services/gateway-daemon';
 export { type GitContext, gitContext } from './services/git-context';
 export {
     GLOBAL_CONFIG_DIR,
@@ -510,6 +524,7 @@ export {
     runHistoryReport,
     UnsafeHistoryImporterError,
 } from './services/history-service';
+export { allowedHostnames, isAllowedHost, normalizeHostname, rejectHost } from './services/host-guard';
 // G11 (ADR-143): the single inbox reader/writer and its delivery budget (replaces
 // MAX_INJECT_ATTEMPTS, which the reconciler now derives from the shared constant).
 export {
@@ -643,6 +658,14 @@ export type {
     SupervisorOverlayEntry,
 } from './services/process-inventory-service';
 export { ProcessInventoryService } from './services/process-inventory-service';
+export {
+    createGatewayHandler,
+    GATEWAY_START_LOG,
+    type GatewayDeps,
+    type GatewayEdgeOptions,
+    isGatewayAnswering,
+    probeGatewayPort,
+} from './services/project-gateway';
 export {
     type ProjectOutcome,
     type ProjectOutcomeDeps,

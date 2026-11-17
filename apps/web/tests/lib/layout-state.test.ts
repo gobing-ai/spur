@@ -14,8 +14,18 @@ const originalGetItem = globalThis.localStorage?.getItem;
 const originalSetItem = globalThis.localStorage?.setItem;
 const originalRemoveItem = globalThis.localStorage?.removeItem;
 
+/**
+ * Replace `localStorage` with a Map-backed stub.
+ *
+ * `defineProperty` rather than assignment: another test file in the same worker may have installed
+ * happy-dom's accessor-only `localStorage`, and a plain assignment then throws "readonly property".
+ */
+function setStorage(value: Storage): void {
+    Object.defineProperty(globalThis, 'localStorage', { value, configurable: true, writable: true });
+}
+
 function mockStorage() {
-    globalThis.localStorage = {
+    setStorage({
         getItem: (k: string) => store.get(k) ?? null,
         setItem: (k: string, v: string) => store.set(k, v),
         removeItem: (k: string) => store.delete(k),
@@ -24,11 +34,11 @@ function mockStorage() {
             return store.size;
         },
         key: () => null,
-    } as Storage;
+    } as Storage);
 }
 
 function restoreStorage() {
-    globalThis.localStorage = {
+    setStorage({
         getItem: originalGetItem as Storage['getItem'],
         setItem: originalSetItem as Storage['setItem'],
         removeItem: originalRemoveItem as Storage['removeItem'],
@@ -37,7 +47,7 @@ function restoreStorage() {
             return 0;
         },
         key: () => null,
-    } as Storage;
+    } as Storage);
 }
 
 describe('layout-state', () => {

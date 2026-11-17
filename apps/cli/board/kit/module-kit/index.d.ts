@@ -9,6 +9,11 @@
  * context, router, rpc or registry import — and the UI rules they implement live in root
  * `DESIGN.md` § Product UI — Module Shell.
  */
+/**
+ * Base-path helpers (feature K4, ADR-151 §5): a module must build URLs with these instead of
+ * `'/api'` / `'/board/…'` literals so the same build works under a gateway prefix and at the root.
+ */
+export { basePath, resolveApiUrl, withBase } from '../base-path';
 /** Badge re-exported unchanged. */
 export { Badge, type BadgeProps } from '../ui/Badge';
 /** Button re-exported unchanged. */

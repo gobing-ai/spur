@@ -21,6 +21,15 @@ export default defineConfig({
                 '@gobing-ai/spur/board/ui': '/src/components/module-kit/index.ts',
             },
         },
+        // B2 (feature K4): under the project gateway the Board is mounted at `/<prefix>/`, so chunk
+        // and preload URLs must stay relative instead of the default root-absolute `"/" + file`.
+        // HTML keeps root-absolute URLs — the gateway rebases those (task 1360); rewriting JS bytes
+        // at the edge is the alternative this avoids.
+        experimental: {
+            renderBuiltUrl(_filename, { hostType }) {
+                return hostType === 'html' ? undefined : { relative: true };
+            },
+        },
         plugins: [
             tailwindcss(),
             honoDevServer({

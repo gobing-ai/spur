@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Gateway origin, CSRF and forwarded-header trust
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.306Z
-updated_at: "2026-11-17T00:29:18.789Z"
+updated_at: "2026-11-17T01:31:21.913Z"
 feature_id: K4
 priority: P1
 tags:
@@ -14,6 +14,8 @@ tags:
 estimate_hours: 5
 
 dependencies: ["1359"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1360. Gateway origin, CSRF and forwarded-header trust
@@ -24,11 +26,11 @@ Feature K4 (ADR-151, `docs/design/project-gateway.md` §4.2 steps 1–2, 6–7, 
 
 ### Requirements
 
-- [ ] R8. Requests whose Host is not `localhost`, an IP literal, the `--host` name or in `server.gateway.allowedHosts` get 421; non-safe cross-origin requests (Origin ≠ public origin, `/a2a/` exempt) get 403 before upstream contact; accepted requests reach the serve with `Host`/`Origin` rewritten to `http://127.0.0.1:<port>` so the serve's own host guard and `csrf()` pass unchanged; `text/html` responses get root-absolute attribute URLs and import-map entries rebased to `/<prefix>/` plus `<meta name="spur-base" content="/<prefix>/">`; `Location: /x` → `/<prefix>/x`; `site.webmanifest` `start_url`/`scope`/icon `src` rebased.
+- [x] R8. Requests whose Host is not `localhost`, an IP literal, the `--host` name or in `server.gateway.allowedHosts` get 421; non-safe cross-origin requests (Origin ≠ public origin, `/a2a/` exempt) get 403 before upstream contact; accepted requests reach the serve with `Host`/`Origin` rewritten to `http://127.0.0.1:<port>` so the serve's own host guard and `csrf()` pass unchanged; `text/html` responses get root-absolute attribute URLs and import-map entries rebased to `/<prefix>/` plus `<meta name="spur-base" content="/<prefix>/">`; `Location: /x` → `/<prefix>/x`; `site.webmanifest` `start_url`/`scope`/icon `src` rebased.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Gateway serves the tunnel origin and adapts requests for the upstream (req: R8)
+- [x] AC1 — Gateway serves the tunnel origin and adapts requests for the upstream (req: R8)
 
 Verification: E2E in `apps/server/tests/gateway-edge.test.ts` running the real gateway handler (`createGatewayHandler` from `@gobing-ai/spur-app`) in front of a real `Bun.serve` over `createApp()` (`apps/server/src/bootstrap.ts:30`) with a temp web dist holding a copy of a freshly built `index.html` (follow `apps/server/tests/static-assets.test.ts` for the web-dist setup): (a) `Host: board.example.com` with `allowedHosts: ['board.example.com']` → 200 and HTML containing the meta and zero `="/_astro` / `"/_astro` occurrences outside the prefix; (b) `Host: evil.test` → 421; (c) POST with `Origin: https://board.example.com` → passes serve `csrf()`; (d) POST with `Origin: https://evil.test` → 403 and the upstream receives no request; (e) deep link `/<p>/board/tasks/1` (SPA fallback) is rebased too; (f) upstream 302 `Location: /api/health` → `/<p>/api/health`. Artifact: the rebased HTML snapshot and a request log.
 
@@ -76,15 +78,48 @@ Rejected: serve-side forwarded-header trust (N serves, version skew); `HTMLRewri
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `packages/app/src/services/host-guard.ts` | new (1-55) | The DNS-rebinding guard moved out of `apps/server` (unchanged behavior) so the gateway can enforce it without importing the server package: `allowedHostnames`, `isAllowedHost`, `rejectHost`, plus `normalizeHostname` now exported for reuse. `apps/server/src/middleware/host-guard.ts` is a two-line re-export, so `serve.ts:65` and the existing middleware tests are untouched. |
+| `packages/app/src/services/project-gateway.ts` | 23-33 | `GatewayDeps.edge?: GatewayEdgeOptions` — `{ bindHost, allowedHosts }`; omitted means loopback-only trust (unit/dev). |
+| `packages/app/src/services/project-gateway.ts` | 71-100 | `gatewayGuard`: host allowlist (421 via the shared `rejectHost`), then same-origin CSRF (403) for non-safe methods — Origin present and ≠ public origin, or no Origin with a form/text content type; `/<prefix>/a2a/*` exempt (bearer-authenticated). Runs before routing, so a refused request never reaches an upstream. |
+| `packages/app/src/services/project-gateway.ts` | 108-119 | `upstreamRequestHeaders`: `Host`/`Origin` rewritten to `http://127.0.0.1:<port>` (so the serve's own host guard and `csrf()` see a plain same-origin request), `Referer` and hop-by-hop headers dropped. No `X-Forwarded-*` trust anywhere. |
+| `packages/app/src/services/project-gateway.ts` | 121-190 | Response rebasing: `rebaseHtml` (root-absolute `href/src/component-url/renderer-url/content/action` values, import-map entries incl. specifier keys, `<meta name="spur-base">` injected once, idempotent), `rebaseLocation`, `rebaseManifest` (`start_url`/`scope`/`id`/icon `src`). `//`, absolute and fragment URLs pass through untouched. |
+| `packages/app/src/services/project-gateway.ts` | 224-259 | `adaptResponse`: `Location` rebased on any status; only `text/html` and `site.webmanifest` are buffered — everything else, SSE included, keeps streaming. |
+| `apps/cli/src/commands/serve.ts` | 108 | The gateway composition passes `server.gateway.allowedHosts` + the bind host into the edge. |
+| `packages/app/tests/services/project-gateway-edge.test.ts` | new | Guard matrix (localhost/IP/tunnel host, 421, same-origin pass, cross-origin 403, form-without-Origin 403, JSON-without-Origin pass, a2a exemption), header rewrite, rebaseHtml idempotence + `//`/absolute/`#` pass-through, `rebaseLocation`, `rebaseManifest`. |
+| `apps/server/tests/gateway-edge.test.ts` | new | Real `createApp()` serve (temp web dist) behind the real gateway handler: tunnel-host HTML rebased with the meta and zero unprefixed `/_astro`, SPA deep-link fallback rebased, upstream 302 `Location` rebased, 421 and 403 never touch the upstream, same-origin POST passes the serve's `csrf()` via the Origin rewrite. |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R8 — unlisted Host → 421; cross-origin non-safe request → 403 before upstream contact (`/a2a/` exempt); accepted requests reach the serve with `Host`/`Origin` rewritten to `http://127.0.0.1:<port>` so the serve's own host guard and `csrf()` pass; `text/html` responses get root-absolute attribute and import-map URLs rebased under `/<prefix>/` plus `<meta name="spur-base">`; `Location: /x` → `/<prefix>/x`; `site.webmanifest` `start_url`/`scope`/icon `src` rebased | MET | `packages/app/src/services/project-gateway.ts:71-100` (guard), `:108-119` (header rewrite), `:121-190` (rebases), `:224-259` (adaptation), `:250-260` (guard runs before routing); `packages/app/src/services/host-guard.ts:15-47`; tests `packages/app/tests/services/project-gateway-edge.test.ts` (14 pass), `packages/app/tests/services/host-guard.test.ts` (3 pass), `apps/server/tests/gateway-edge.test.ts` (6 pass against a real `createApp()` serve) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Gateway serves the tunnel origin and adapts requests for the upstream (req: R8) | MET | test | `(cd apps/server && bun test tests/gateway-edge.test.ts)` 6 pass: tunnel-host HTML carries the meta and zero unprefixed `/_astro`, SPA deep link rebased, upstream 302 `Location: /api/health` → `/p/api/health`, `Host: evil.test` → 421 with no upstream hit, cross-origin POST → 403 with no upstream hit, same-origin POST → 200 through the serve's own `csrf()`; `(cd packages/app && bun test tests/services/project-gateway-edge.test.ts)` 14 pass. Probe against the real built Board through a real gateway: `curl -H 'Host: localhost' …/p/board` returned `<meta name="spur-base" content="/p/">` and import-map entries `/p/_astro/board-facade-react.*.js`; `Host: evil.test` → 421; `Origin: https://evil.test` POST → 403; same-origin POST → 400 (oRPC body validation), identical to the direct-upstream control |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R8 | MET | guard `packages/app/src/services/project-gateway.ts:71-100`; header rewrite `:108-119`; rebases `:121-190`; adaptation `:224-259`; shared host-guard `packages/app/src/services/host-guard.ts:15-47`; 23 tests across the unit + real-serve E2E |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test + command | `apps/server/tests/gateway-edge.test.ts` 6 pass (meta + zero unprefixed `/_astro`, SPA fallback, Location rebase, 421/403 with no upstream hit, same-origin POST through the serve csrf); `packages/app/tests/services/project-gateway-edge.test.ts` 14 pass; live probe through the built Board rebased import-map entries to `/p/_astro/...` |
+
+Findings: no open P1–P3. P4: per-request allowlist rebuild; `Sec-Fetch-Site` not consulted (Origin rule is the task contract); the attribute regex also touches `<meta content>` (idempotent, harmless).
+
+Residual risk: access control stays at the tunnel; HTML is buffered for rebasing while everything else streams; string-level rebasing would need `HTMLRewriter` if inline scripts ever emit root-absolute URLs.
+
+**Disposition: PASS.**
 
 ### References
 
@@ -95,4 +130,7 @@ Rejected: serve-side forwarded-header trust (N serves, version skew); `HTMLRewri
 ### History
 
 - 2026-11-17T00:21:24.181Z feature_id Q → K4 (system)
+- 2026-11-17T01:26:25.433Z todo → wip (system)
+- 2026-11-17T01:31:20.189Z wip → testing (system)
+- 2026-11-17T01:31:21.908Z testing → done (system)
 

@@ -22,6 +22,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { fromHtml } from 'hast-util-from-html';
 import { toHtml } from 'hast-util-to-html';
 import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router';
 import { installDompurifyShims } from '../../dompurify-happy-dom';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 import { buildFullRpcMock } from '../../test-helpers/rpc-client-mock';
@@ -181,7 +182,12 @@ describe('AC1 — reproducing edge case is safe across real previews', () => {
             });
         }) as unknown as typeof fetch);
 
-        const { container, getByLabelText } = render(<FeatureDetail featureId="F" />);
+        // The panel navigates with the router (K4 base path), so a bare render needs a router.
+        const { container, getByLabelText } = render(
+            <MemoryRouter>
+                <FeatureDetail featureId="F" />
+            </MemoryRouter>,
+        );
         await waitFor(() => expect(getByLabelText('Edit body')).toBeDefined());
         fireEvent.click(getByLabelText('Edit body'));
         await waitFor(() => expect(container.querySelector('.w-md-editor-preview h1')).not.toBeNull(), {

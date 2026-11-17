@@ -1,6 +1,7 @@
 import type { ProjectWorkflowsResponse, WorkflowDefinitionDto } from '@gobing-ai/spur-contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/ui';
+import { scopedKey } from '../../components/base-path';
 import ResizeHandle from '../../components/ResizeHandle';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import MarkdownBody from '../task-kanban/MarkdownBody';
@@ -14,7 +15,7 @@ function getInitialDrawerWidth(): number {
     if (typeof window === 'undefined') return 1728;
     const maxAllowed = window.innerWidth * 0.8;
     try {
-        const stored = Number.parseFloat(window.localStorage.getItem(DETAIL_WIDTH_KEY) ?? '');
+        const stored = Number.parseFloat(window.localStorage.getItem(scopedKey(DETAIL_WIDTH_KEY)) ?? '');
         if (Number.isFinite(stored) && stored > 0) {
             return Math.min(stored, maxAllowed);
         }
@@ -512,7 +513,7 @@ export default function WorkflowsView() {
                                 const clamped = Math.max(576, Math.min(px, window.innerWidth * 0.8));
                                 setDrawerWidth(clamped);
                                 try {
-                                    window.localStorage.setItem(DETAIL_WIDTH_KEY, String(clamped));
+                                    window.localStorage.setItem(scopedKey(DETAIL_WIDTH_KEY), String(clamped));
                                 } catch {
                                     // localStorage unavailable
                                 }

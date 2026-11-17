@@ -7421,3 +7421,23 @@ Skipped: the pre-existing `changelog-confidence` red (already recorded for the G
   receipt path (`.spur/run/<runId>/receipts/<state>.json`, `outcome: done`), not prose; the guard
   refuses a malformed or missing receipt before mutating anything.
 
+
+## 2026-11-17 — feature K4 batch (one-port gateway, runall-k4-3fa3)
+
+- **Inspect the pipeline's own `wrapup-pipeline` var contract before chaining `--wrap`.** `--wrap`
+  resolves through `spur task wrapup resolve`, which needs `vars.__runId`; a host-executor run does not
+  seed it, so `task wrapup resolve` refuses with `__runId is empty` and the hop lands `skipped`/`failed`.
+  `--vars '{"tasks":"…"}'` does not help. Evidence: runs 27d9f7d9… (resolved `[]`), 6ee1af69…, 84603b12…,
+  674b6a2b… on this batch.
+- **A batch worktree must not touch dependency manifests.** Adding a `workspace:*` devDependency to
+  `apps/web/package.json` (for a browser E2E) resolves fine through root hoisting without it, and the
+  manifest change flipped `docs/reports/1311-migration-ownership.json`'s reproducibility to `no-go`
+  ("An upstream package manifest changed") in `packages/domain/tests/dao/migration-ownership.test.ts`.
+  Prefer the smaller manifest diff; verify `tsc` + the E2E still resolve.
+- **Probe `localhost`, not `127.0.0.1`, for anything that binds `server.host`.** Bun resolves
+  `localhost` to `::1` on macOS, so an IPv4-only health probe reported a healthy launchd-managed gateway
+  as down (caught by the 1362 manual proof). Same class as the pre-existing IPv4-only `allocatePort` band
+  probe, which can hand a serve a port another process holds on `::1` only.
+- **`emit-board-types` only mirrors declarations under `apps/web/src/components`.** A module-kit export
+  whose implementation lives in `src/lib` breaks `bun run build:bundle`; keep such implementations under
+  `src/components` and re-export from `lib` (1358).

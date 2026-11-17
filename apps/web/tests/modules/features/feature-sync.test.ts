@@ -3,10 +3,16 @@ registerHappyDom();
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
+import { MemoryRouter } from 'react-router';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import FeatureDetail from '../../../src/modules/features/FeatureDetail';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 import '../../test-helpers/rpc-client-mock';
+
+/** The panel navigates with the router (K4 base path), so a bare render needs a router. */
+function withRouter(element: ReturnType<typeof createElement>) {
+    return createElement(MemoryRouter, null, element);
+}
 
 afterAll(teardownHappyDom);
 afterEach(() => {
@@ -37,7 +43,7 @@ test('feature sync defaults to supported pull, disables push, and preserves an u
         });
     }) as typeof fetch);
 
-    const view = render(createElement(FeatureDetail, { featureId: 'F1' }));
+    const view = render(withRouter(createElement(FeatureDetail, { featureId: 'F1' })));
     const sync = await view.findByRole('button', { name: 'Sync' });
     fireEvent.click(view.getByLabelText('Edit body'));
     const editor = within(view.getByTestId('body-editor')).getByRole('textbox') as HTMLTextAreaElement;
@@ -82,7 +88,7 @@ test('feature action dialog omits the unsupported dependency control', async () 
             },
         })) as unknown as typeof fetch);
 
-    const view = render(createElement(FeatureDetail, { featureId: 'F2' }));
+    const view = render(withRouter(createElement(FeatureDetail, { featureId: 'F2' })));
     fireEvent.click(await view.findByRole('button', { name: 'Plan' }));
     const dialog = view.getByRole('dialog', { name: 'Configure plan action' });
 

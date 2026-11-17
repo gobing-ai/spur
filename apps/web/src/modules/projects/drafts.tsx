@@ -14,6 +14,7 @@
  * needs it.
  */
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { scopedKey } from '../../components/base-path';
 import { useProjectContext } from './useProjectContext';
 
 export const DRAFT_STORAGE_KEY = 'spur.board.projects.draft.v1';
@@ -63,7 +64,7 @@ function parseDraftRecord(parsed: unknown): DraftRecord | null {
  */
 export function loadDraft(servedPath: string): DraftRecord {
     try {
-        const raw = globalThis.localStorage?.getItem(DRAFT_STORAGE_KEY);
+        const raw = globalThis.localStorage?.getItem(scopedKey(DRAFT_STORAGE_KEY));
         if (raw === null || raw === undefined) return emptyDraft(servedPath);
         const rec = parseDraftRecord(JSON.parse(raw));
         if (rec === null || rec.path !== servedPath) {
@@ -79,7 +80,7 @@ export function loadDraft(servedPath: string): DraftRecord {
 /** Persist the draft; any storage failure is swallowed (R5 — storage is best-effort). */
 export function saveDraft(draft: DraftRecord): void {
     try {
-        globalThis.localStorage?.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+        globalThis.localStorage?.setItem(scopedKey(DRAFT_STORAGE_KEY), JSON.stringify(draft));
     } catch {
         // Unavailable/quota-exceeded storage degrades to an unsaved draft.
     }

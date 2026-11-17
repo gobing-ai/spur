@@ -3,6 +3,7 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     FleetService,
     type FleetServiceContext,
+    isGatewayAnswering,
     isLocalHost,
     isPortLive,
     type OrchestratorBinding,
@@ -10,6 +11,7 @@ import {
     startRegisteredProject,
     stopRegisteredProject,
 } from '@gobing-ai/spur-app';
+import { buildConfigFromEnv, findPrefixCollisions, getEnvVars, resolveProjectPrefix } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
@@ -26,6 +28,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .command('add')
         .argument('<path>', 'Project root directory path')
         .option('--host <host>', 'Host for local or remote project (default: "localhost")')
+        .option('--prefix <slug>', 'URL path prefix for a local project on the gateway (default: /<name slug>)')
         .option(...SHARED_OPTIONS.nameProjectDisplay)
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -43,7 +46,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 }
                 const name = options.name ?? basename(absolutePath);
                 const registry = new ProjectRegistry();
-                const entry = await registry.upsert({ path: absolutePath, name, host });
+                const entry = await registry.upsert({ path: absolutePath, name, host, prefix: options.prefix });
 
                 if (options.json) {
                     context.output.write(
@@ -51,7 +54,10 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     );
                 } else {
                     const hostLabel = !isLocalHost(entry.host) ? ` on host ${entry.host}` : '';
-                    context.output.write(`Registered project "${entry.name}" at ${entry.path}${hostLabel}`);
+                    const prefixLabel = entry.prefix ? ` (gateway /${entry.prefix.slice(1)})` : '';
+                    context.output.write(
+                        `Registered project "${entry.name}" at ${entry.path}${hostLabel}${prefixLabel}`,
+                    );
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
@@ -190,11 +196,25 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 const registry = new ProjectRegistry();
                 const rawProjects = await registry.list();
 
+                // K4 R7: the URL column reports the gateway URL when the gateway actually answers on
+                // its fixed port, and the per-port URL otherwise. Listing never starts a gateway.
+                const gatewayPort = buildConfigFromEnv(getEnvVars()).server.gateway.port;
+                const gatewayLive = await isGatewayAnswering(gatewayPort);
+
                 const projects = await Promise.all(
-                    rawProjects.map(async (p) => ({
-                        ...p,
-                        running: p.port > 0 ? await isPortLive(p.port, undefined, p.host) : false,
-                    })),
+                    rawProjects.map(async (p) => {
+                        const prefix = resolveProjectPrefix(p);
+                        const host = p.host ?? 'localhost';
+                        return {
+                            ...p,
+                            running: p.port > 0 ? await isPortLive(p.port, undefined, p.host) : false,
+                            prefix,
+                            url:
+                                gatewayLive && prefix !== null
+                                    ? `http://127.0.0.1:${gatewayPort}${prefix}/board`
+                                    : `http://${host}:${p.port}/board`,
+                        };
+                    }),
                 );
 
                 // --fleet (0835/0836/0858): resolve each project's agent.fleet section
@@ -296,11 +316,20 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                         context.output.write('No projects registered.');
                         return;
                     }
+                    // Derived prefix collisions are report-only at load (task 1357) — name the remedy
+                    // here so `projects list` is where an operator discovers them.
+                    for (const [prefix, names] of findPrefixCollisions(rawProjects)) {
+                        context.output.write(
+                            `Warning: prefix ${prefix} is claimed by "${names.join('" and "')}"; ` +
+                                'set one with spur projects add <path> --prefix /<other>',
+                        );
+                    }
                     context.output.write('Registered Projects:\n');
                     for (const [i, p] of projects.entries()) {
                         const hostLabel = !isLocalHost(p.host) ? ` (${p.host})` : '';
                         const status = p.running ? `[RUNNING: ${p.port}]` : '[STOPPED]';
                         context.output.write(`- ${p.name}${hostLabel} ${status} (${p.path})`);
+                        context.output.write(`    url: ${p.url}`);
                         const f = fleets?.[i];
                         if (f === undefined) continue;
                         if (f.fleet === null) {
