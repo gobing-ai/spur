@@ -30,7 +30,7 @@ another project.
 | Port semantics | `port == 0` ⇒ stopped; `port > 0` ⇒ claimed listen port | Matches operator mental model in the idea brief |
 | Switch UX | Top-left project name → popup menu with running/stopped icons | Reuses existing identity surface (`LeftSidebar` + `/api/project`) |
 | Auto-start | Selecting a stopped project starts `spur serve` for that path | Required by feature AC R2 / R9 |
-| Launchd | Out of scope; registry + start/stop APIs stay daemon-agnostic | Future swap of hub for launchd agent without web redesign |
+| Launchd | Out of scope; registry + start/stop APIs stay daemon-agnostic | Future swap of hub for launchd agent without web redesign — superseded by ADR-151 ([project gateway](project-gateway.md)) |
 
 **Rejected (this stage):** standalone daemon (Approach 2 — overbuilt); client-only localStorage
 (Approach 3 — no auto-start / no lifecycle).

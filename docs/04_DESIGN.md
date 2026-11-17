@@ -70,6 +70,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | History Refresh Process Isolation and Single-Flight Execution | [history-refresh-process-isolation.md](design/history-refresh-process-isolation.md) |
 | History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving | [history-incremental-materialization.md](design/history-incremental-materialization.md) |
 | Project switcher — system design (feature K1) | [project-switcher.md](design/project-switcher.md) |
+| Project gateway — one port, path prefixes, LaunchAgent (feature K4, ADR-151) | [project-gateway.md](design/project-gateway.md) |
 | Fleet declaration in spur config — `agent.fleet` + member session modes/observability (G65, G66) | [fleet-config-declaration.md](design/fleet-config-declaration.md) |
 | Workflow catalogue refactor — check receipts, `decide` action, fleet executor, measured candidates (feature D64) | [workflow-catalogue-refactor.md](design/workflow-catalogue-refactor.md) |
 | Workflow consolidation — feature-lifecycle owns verification, wrapup/idea on D65 primitives, three workflows removed (feature D66) | [workflow-consolidation.md](design/workflow-consolidation.md) |

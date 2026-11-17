@@ -184,6 +184,8 @@ subscription; commands are displayed without dispatch. Shape and failure behavio
 
 Server startup acquires an application-owned atomic project lifetime claim before database/runtime boot, retains it until runtime shutdown and the separately owned lazy server-context database close complete, and uses the registry guard to refuse an already-live older project server. CLI serve dispatch bypasses the CLI database/runtime boot.
 
+Local projects can also be reached through one gateway port (ADR-151): the gateway proxies `/<prefix>/*` to each project serve on its internal loopback port, adapts host, origin and HTML at the edge so serves stay unchanged, and owns no project runtime; see [project gateway](design/project-gateway.md).
+
 ## 3. CLI Architecture (`apps/cli`)
 
 No file inventory here — that rots (99 §6.4 lesson); boundaries only:

@@ -2912,3 +2912,31 @@ re-import pressure this entry already records).
   in addition to the React ABI; adding a kit component is a public promise. `contributionApiVersion`
   stays 1.
 - **Detail:** [Board module UI kit](design/board-module-ui-kit.md); [downstream Board module contract](design/downstream-board-modules.md).
+
+## ADR-151: Local Projects Share One Gateway Port by Path Prefix; the Gateway Runs as a User LaunchAgent
+
+- **Status:** Proposed (design; public surface pending operator consent) · **Date:** 2026-11-16 · **Feature:** K4 · **Amends:** ADR-037 (supersedes K1's "no daemon / launchd out of scope")
+- **Decision:** One long-lived gateway (`spur self serve --gateway`) listens on a fixed port and
+  reverse-proxies `/<prefix>/*` to each local project's own `spur serve` on an internal loopback
+  port, starting or adopting it on demand. The gateway alone adapts requests and responses (host
+  guard, CSRF against the public origin, `Host`/`Origin` rewrite, HTML/`Location` rebasing with a
+  `spur-base` meta), so project serves stay unchanged. Local registry entries gain an optional
+  `prefix` (default derived from `name`); remote entries keep `host`+`port` and are never proxied.
+  On macOS `spur self daemon install` keeps the gateway always on as a user LaunchAgent with
+  `KeepAlive` and `AbandonProcessGroup`, so project serves survive gateway restarts and are
+  re-adopted through the registry.
+- **Why:** Per-project dynamic ports break fixed-port tunnel ingress on every restart and tie serves
+  to terminals. A proxy keeps every project-scoped runtime (DB, fleet, scheduler, job worker, owner
+  lock) process-isolated and reuses the ADR-037 registry and the existing start/adopt path.
+  Gateway-side adaptation avoids changing N serves, version skew and a forwarded-header trust surface.
+- **Alternatives:** A single multi-tenant `spur serve` (XL refactor of process-scoped runtime, one
+  failure domain); host-based routing (no Board base-path work, but wildcard DNS and tunnel config —
+  the fallback if the runtime base regresses); serve-side `X-Forwarded-*` trust (N serves, skew);
+  pinned ports with one ingress rule per project (no daemon, N rules); an external Caddy/nginx
+  (non-Spur toolchain, still needs stable ports).
+- **Consequence:** The Board must be base-path aware at runtime (relative built chunks plus a
+  `basePath()` helper); all local projects share one browser origin, so per-project `localStorage`
+  keys are namespaced, each tab keeps one planning-event stream (HTTP/1.1 caps six connections per
+  origin), and module JS of one project can reach another project's API (accepted under local
+  operator trust). Access control for tunnel exposure lives at the Cloudflare tunnel, not in Spur.
+- **Detail:** [Project gateway](design/project-gateway.md); [project switcher](design/project-switcher.md).
