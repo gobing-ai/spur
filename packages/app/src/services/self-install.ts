@@ -1,4 +1,5 @@
-import { dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { createNodeFileSystem, type FileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
     globalRulesRoot,
@@ -111,13 +112,8 @@ export function defaultRunCommand(command: string, args: readonly string[]): Pro
 }
 
 /** Resolve an executable on PATH without running it. */
-async function which(fs: FileSystem, binary: string, env: Record<string, string | undefined>): Promise<string | null> {
-    for (const dir of (env.PATH ?? '').split(':').filter((entry) => entry.length > 0)) {
-        const candidate = join(dir, binary);
-        // Absence is a reported state, not an error — keep looking.
-        if ((await fs.stat(candidate))?.isFile() === true) return candidate;
-    }
-    return null;
+function which(binary: string, env: Record<string, string | undefined>): string | null {
+    return Bun.which(binary, { PATH: env.PATH ?? '' });
 }
 
 /**
@@ -213,7 +209,7 @@ async function toolStep(
                 message: 'bundled marketplace (.claude-plugin/marketplace.json) is missing from this install',
             };
         }
-        if ((await which(fs, 'superskill', ctx.env)) === null) {
+        if (which('superskill', ctx.env) === null) {
             return {
                 name: tool,
                 state: 'failed',
@@ -241,18 +237,48 @@ async function toolStep(
     }
 
     const recipe = RECIPES[tool];
-    const existing = await which(fs, recipe.binary, ctx.env);
+    const existing = which(recipe.binary, ctx.env);
     if (existing !== null) {
         return { name: tool, state: 'unchanged', required, message: `${recipe.binary} already on PATH` };
     }
     let route: ToolRecipe['managers'][number] | undefined;
     for (const entry of recipe.managers) {
-        if ((await which(fs, entry.manager, ctx.env)) !== null) {
+        if (which(entry.manager, ctx.env) !== null) {
             route = entry;
             break;
         }
     }
     if (route === undefined) {
+        if (tool === 'a2a' && which('curl', ctx.env) !== null && which('bash', ctx.env) !== null) {
+            const download = await run('curl', [
+                '-fsSL',
+                'https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh',
+            ]);
+            if (download.exitCode !== 0) {
+                return {
+                    name: tool,
+                    state: 'failed',
+                    required,
+                    message: `a2a installer download failed: ${lastLine(download)}`,
+                };
+            }
+            const script = join(tmpdir(), `spur-a2a-${crypto.randomUUID()}.sh`);
+            const target = resolve(ctx.cwd, ctx.env.SPUR_INSTALL ?? join(ctx.env.HOME ?? homedir(), '.local', 'bin'));
+            try {
+                await fs.writeFile(script, download.stdout);
+                const result = await run('env', [`A2A_INSTALL_DIR=${target}`, 'bash', script]);
+                return result.exitCode === 0 && which('a2a', ctx.env) !== null
+                    ? { name: tool, state: 'created', required, message: 'installed through the a2a installer' }
+                    : {
+                          name: tool,
+                          state: 'failed',
+                          required,
+                          message: `a2a installer failed or left a2a off PATH: ${lastLine(result)}`,
+                      };
+            } finally {
+                await fs.deleteFile(script);
+            }
+        }
         return {
             name: tool,
             state: 'failed',
@@ -271,7 +297,7 @@ async function toolStep(
             };
         }
     }
-    if ((await which(fs, recipe.binary, ctx.env)) === null) {
+    if (which(recipe.binary, ctx.env) === null) {
         // The package manager exited 0 but the binary is still not resolvable — report what is true.
         return {
             name: tool,
@@ -311,7 +337,16 @@ export async function installSelf(
         ),
     ];
     for (const tool of INSTALL_TOOLS) {
-        steps.push(await toolStep(tool, ctx, selected.has(tool), run, fs));
+        try {
+            steps.push(await toolStep(tool, ctx, selected.has(tool), run, fs));
+        } catch (error) {
+            steps.push({
+                name: tool,
+                state: 'failed',
+                required: false,
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
     }
 
     const ok = steps.every(

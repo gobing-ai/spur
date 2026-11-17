@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as ruleAssets from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
     globalRulesRoot,
@@ -35,6 +36,24 @@ describe('global seed resolution', () => {
 });
 
 describe('seed writers', () => {
+    test('packed dependency discovery falls back to shipped rules and preserves user edits', async () => {
+        const root = await tempRoot();
+        const ctx = { cwd: root, env: { SPUR_GLOBAL_RULES_DIR: join(root, 'global') } };
+        const discovery = spyOn(ruleAssets, 'bundledRulesRoot').mockResolvedValue(null);
+        try {
+            const first = await seedGlobalRules(fs, ctx);
+            expect(first.assetsFound).toBe(true);
+            expect(first.created.length).toBeGreaterThan(0);
+            const custom = first.created[0];
+            if (custom === undefined) throw new Error('No rule asset was seeded');
+            await writeFile(custom, 'user-owned bytes\n');
+            expect((await seedGlobalRules(fs, ctx)).created).toEqual([]);
+            expect(readFileSync(custom, 'utf-8')).toBe('user-owned bytes\n');
+        } finally {
+            discovery.mockRestore();
+        }
+    });
+
     test('seeds into the override root and never rewrites what already exists', async () => {
         const root = await tempRoot();
         const ctx = { cwd: root, env: { SPUR_GLOBAL_RULES_DIR: join(root, 'global') } };

@@ -66,18 +66,29 @@ export function globalRulesRoot(ctx: SeedContext): string {
  * directory. Existing files are never overwritten, so customizations survive every rerun.
  */
 export async function seedGlobalRules(fs: FileSystem, ctx: SeedContext): Promise<SeedOutcome> {
-    const source = await bundledRulesRoot();
+    let source = await bundledRulesRoot();
+    let files = source === null ? [] : await listBundledRuleFiles();
+    // Packed/standalone installs ship Spur's staged rules, not the dependency's source tree.
+    if (source === null) {
+        const configRoot = bundledConfigRoot();
+        if (configRoot !== null) {
+            source = join(configRoot, 'rules');
+            files = listBundledConfigFiles()
+                .filter((path) => path.startsWith('rules/'))
+                .map((path) => path.slice(6));
+        }
+    }
     if (source === null) return { created: [], assetsFound: false };
     const target = globalRulesRoot(ctx);
     const created: string[] = [];
-    for (const relPath of await listBundledRuleFiles()) {
+    for (const relPath of files) {
         const destination = join(target, relPath);
         if (await fs.exists(destination)) continue;
         await fs.ensureDir(join(target, ...relPath.split('/').slice(0, -1)));
         await fs.writeFile(destination, await fs.readFile(join(source, relPath)));
         created.push(destination);
     }
-    return { created, assetsFound: true };
+    return { created, assetsFound: files.length > 0 };
 }
 
 /**

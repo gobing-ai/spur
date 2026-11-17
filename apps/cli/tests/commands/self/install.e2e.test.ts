@@ -155,6 +155,40 @@ describe('spur self install — usage validation', () => {
 });
 
 describe('spur self install — selected optional tools', () => {
+    test('preserves the a2a curl/bash route when Homebrew is absent', async () => {
+        const fx = await fixture();
+        try {
+            await fixtureBin(fx.root, 'curl', "printf '#!/bin/sh\\nexit 0\\n'");
+            await fixtureBin(
+                fx.root,
+                'bash',
+                'printf "#!/bin/sh\\nexit 0\\n" > "$A2A_INSTALL_DIR/a2a"\n/bin/chmod +x "$A2A_INSTALL_DIR/a2a"',
+            );
+            const result = await runCli(['self', 'install', '--with', 'a2a', '--json'], fx.cwd, {
+                ...fx.env,
+                SPUR_INSTALL: fx.bin,
+            });
+            expect(result.code).toBe(0);
+            expect((result.json as InstallJson).steps.find((step) => step.name === 'a2a')?.state).toBe('created');
+            expect(existsSync(join(fx.bin, 'a2a'))).toBe(true);
+        } finally {
+            await fx.cleanup();
+        }
+    });
+
+    test('a non-executable tool file is not reported healthy', async () => {
+        const fx = await fixture();
+        try {
+            await writeFile(join(fx.bin, 'zg'), '#!/bin/sh\nexit 0\n', { mode: 0o644 });
+            await fixtureBin(fx.root, 'brew', 'exit 7');
+            const result = await runCli(['self', 'install', '--with', 'zg', '--json'], fx.cwd, fx.env);
+            expect(result.code).toBe(1);
+            expect((result.json as InstallJson).steps.find((step) => step.name === 'zg')?.state).toBe('failed');
+        } finally {
+            await fx.cleanup();
+        }
+    });
+
     test('an absent tool is installed through the fixture package manager', async () => {
         const fx = await fixture();
         try {

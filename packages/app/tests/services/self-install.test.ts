@@ -102,6 +102,58 @@ describe('installSelf — seeds', () => {
 });
 
 describe('installSelf — optional tools', () => {
+    // Integration failure cases: failed downloads, failed installers, missing executables,
+    // thrown process errors and retries must retain seeds and clean temporary scripts.
+    test('real fixture installers converge and report failures without dropping later steps', async () => {
+        const fx = fixture(['curl', 'bash']);
+        const scripts: string[] = [];
+        let mode = 'download-fails';
+        const run = async (command: string, args: readonly string[]): Promise<CommandResult> => {
+            if (mode === 'throws') throw new Error('fixture process unavailable');
+            if (command === 'curl') {
+                return defaultRunCommand('/bin/sh', [
+                    '-c',
+                    mode === 'download-fails' ? 'echo offline >&2; exit 4' : "printf '#!/bin/sh\\nexit 0\\n'",
+                ]);
+            }
+            const script = args.at(-1);
+            if (script === undefined) throw new Error('Installer script argument is missing');
+            scripts.push(script);
+            const source = await Bun.file(script).text();
+            expect(source).toContain('#!/bin/sh');
+            if (mode === 'success') writeFileSync(join(fx.bin, 'a2a'), source, { mode: 0o755 });
+            return defaultRunCommand('/bin/sh', [script]);
+        };
+        for (mode of ['download-fails', 'off-path', 'throws', 'success']) {
+            const report = await installSelf(
+                { cwd: fx.root, env: { ...fx.env, SPUR_INSTALL: fx.bin }, runCommand: run },
+                { tools: ['a2a'] },
+            );
+            expect(report.steps.find((step) => step.name === 'a2a')?.state).toBe(
+                mode === 'success' ? 'created' : 'failed',
+            );
+            expect(report.steps.at(-1)?.name).toBe('sp-plugin');
+        }
+        for (const script of scripts) expect(await Bun.file(script).exists()).toBe(false);
+        const installed = await installSelf({ cwd: fx.root, env: fx.env }, { tools: ['a2a'] });
+        expect(installed.ok).toBe(true);
+        expect(installed.changed).toBe(false);
+
+        const managed = fixture(['brew']);
+        const report = await installSelf(
+            {
+                cwd: managed.root,
+                env: managed.env,
+                runCommand: async () => {
+                    writeFileSync(join(managed.bin, 'zg'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+                    return defaultRunCommand('/bin/sh', ['-c', 'exit 0']);
+                },
+            },
+            { tools: ['zg'] },
+        );
+        expect(report.steps.find((step) => step.name === 'zg')?.state).toBe('created');
+    });
+
     test('a healthy binary is unchanged and no package manager runs', async () => {
         const fx = fixture(['zg']);
         const calls: string[][] = [];

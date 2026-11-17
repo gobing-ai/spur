@@ -4,7 +4,7 @@ name: Implement convergent self install and delegate post-bootstrap setup
 status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.456Z
-updated_at: "2026-11-17T00:35:35.676Z"
+updated_at: "2026-11-17T04:29:19.123Z"
 feature_id: A93
 priority: P2
 tags:
@@ -98,6 +98,13 @@ Install has a distinct owner and one implementation of each step:
 
 Receipt: `.spur/run/1353-install-e2e.json` (two isolated-home runs, per-step results, convergence statement).
 
+#### Forced verification corrections — 2026-11-16
+
+- `packages/app/src/services/self-install.ts:115` uses executable PATH lookup; a non-executable file no longer counts as a healthy installed tool.
+- `packages/app/src/services/self-install.ts:252` retains the no-Homebrew curl/bash A2A installer and SPUR_INSTALL destination, cleans the temporary script and reports selected-step exceptions without dropping other step results.
+- `packages/app/src/services/global-seed.ts:68` falls back to the shipped config/rules tree when dependency development assets are absent, fixing packed and standalone setup.
+- `apps/cli/tests/commands/self/install.e2e.test.ts:158` reproduced missing A2A fallback and false healthy-file detection before the repair. Fresh source/packed/standalone bare install and second-run unchanged results are recorded in .spur/run/A93-verifyall-20261116-golden-final.json.
+
 ### Testing
 
 **Pipeline verify results**
@@ -106,15 +113,15 @@ Receipt: `.spur/run/1353-install-e2e.json` (two isolated-home runs, per-step res
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/self/install.ts:24` registers the flat verb with repeatable `--with`, dedupe, `--json`/`--json-envelope`; an unknown value renders a usage error and exits 2 before any write (`install.ts:51`, covered by `apps/cli/tests/commands/self/install.test.ts` and the E2E "unknown tool exits 2 and mutates nothing"). Bare invocation seeds and reports `zg`/`a2a`/`sp-plugin` as `skipped` with the `--with` remedy. |
-| R2 | MET | `packages/app/src/services/global-seed.ts` is the extracted seed owner (`init.ts` now calls it); `{created, assetsFound}` lets install fail a required step on absent assets while init keeps its scaffold behaviour — 146 init/install CLI cases still pass. `apps/cli/src/index.ts:102` dispatches `self install` before project boot and registers only that verb, so no config is required and no project DB exists afterwards (E2E asserts `.spur` is never created). No shell-profile edit, no SQL migration, no cwd scaffold. |
-| R3 | MET | `scripts/install.sh` keeps OS/arch selection, download, `SHA256SUMS` verification and atomic rename, and delegates everything after the replace to `"${target}" self install` with `--with` requests translated from `SPUR_INSTALL_ZG`/`SPUR_INSTALL_A2A` (`scripts/install.sh:121`). `SPUR_VERSION`/`SPUR_INSTALL`/`SPUR_RELEASE_URL`/`SPUR_SKIP_VERIFY` are untouched; the old ` |
-| R4 | MET | `packages/app/src/services/self-install.ts:247` reports `{ok, changed, steps:[{name,state,required,message}]}`; exit policy is `ok ? 0 : 1` (`apps/cli/src/commands/self/install.ts:76`). Rerun convergence is measured, not asserted: the E2E compares the full seed tree before/after (`a rerun reports unchanged and rewrites nothing`) and `.spur/run/1353-install-e2e.json` records two isolated-home runs. A selected tool that fails keeps the seeds it wrote and exits 1, so the retry only redoes the failed step. Adapter state is explicitly delegated and never claimed. |
+| R1 | MET | `apps/cli/src/commands/self/install.ts:18`, `packages/app/src/services/self-install.ts:317`; repeatable choices/JSON/envelope and pre-mutation usage errors are exercised by the real CLI. |
+| R2 | MET | `packages/app/src/services/global-seed.ts:68`, `apps/cli/src/index.ts:140`; shared seed extraction preserves custom files. Packed/standalone rules fallback now works; fresh three-mode installs and no project DB were verified. |
+| R3 | MET | `scripts/install.sh:119`, `scripts/commands/install-sh.test.ts:19`; verified atomic acquisition delegates to the absolute installed binary, preserves environment controls and propagates setup errors. No-Homebrew A2A fallback was restored and tested with fixture tools. |
+| R4 | MET | `packages/app/src/services/self-install.ts:115`, `apps/cli/tests/commands/self/install.e2e.test.ts:158`; executable detection, selected failures, step reports, preserved seeds and retries pass. Three-mode second installs report unchanged; no real optional tool or adapter installation was performed. Fix-pass artifacts: `.spur/run/1353-verify-answer.txt:1-35` and `.spur/run/1353-verdict.json:1-78` (re-evaluated requirement/AC evidence); session-local batch report `.spur/run/A93-verifyall-20261116-report.md:1-60`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `apps/cli/tests/commands/self/install.e2e.test.ts:96` (seeds + no project state) and `scripts/commands/install-sh.test.ts` (bootstrap verifies then delegates; failure propagates) |
-| AC2 | MET | test | `install.e2e.test.ts:113` rerun identity, `:112` custom-config preservation, `:186` failing-tool partial success, `packages/app/tests/services/self-install.test.ts` package-manager-exit-0-without-binary case |
+| Installation has a distinct owner and verified bootstrap | MET | test | `apps/cli/tests/commands/self/install.e2e.test.ts:158`; fresh test output and real CLI receipts: batch artifact `.spur/run/A93-verifyall-20261116-golden-final.json` line 1. |
+| Repeated and interrupted installation converges safely | MET | test | `apps/cli/tests/commands/self/install.e2e.test.ts:158`; fresh test output and real CLI receipts: batch artifact `.spur/run/A93-verifyall-20261116-golden-final.json` line 1. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
