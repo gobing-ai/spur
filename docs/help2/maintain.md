@@ -41,7 +41,8 @@ Verified: every command, verb, and flag above matches the live snapshots.
 
 ## Gateway daemon
 
-`spur self daemon <install|uninstall|status> [--port <n>] [--json]` installs, inspects or removes the
-macOS user LaunchAgent that keeps the one-port project gateway (`spur self serve --gateway`) always
-on. Non-macOS, or a gateway port held by another process, exits 1 and writes nothing; re-installing
-identical bytes reports `unchanged`. See [serve](./serve.md) for gateway mode.
+`spur self install --daemon` installs the macOS user LaunchAgent that keeps the one-port project
+gateway (`spur self serve --gateway`) always on; `spur self uninstall [--daemon]` removes it and
+`spur self status` reports its state. Non-macOS, or a gateway port held by another process, exits 1
+and writes nothing; re-installing identical bytes reports `unchanged`. The deprecated `spur self
+daemon <action>` form still works but is hidden. See [serve](./serve.md) for gateway mode.

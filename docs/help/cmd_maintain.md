@@ -28,9 +28,18 @@ optimize or the checkpoint fails.
 
 ## Gateway daemon (feature K4)
 
-`spur self daemon <install|uninstall|status> [--port <n>] [--json]` keeps the one-port project
-gateway always on as a macOS user LaunchAgent (`~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`,
-logs under `~/Library/Logs/spur/`). `install` refuses a non-macOS platform and a port held by another
-process without writing anything; `status` reports loaded/pid/last exit plus `GET /api/health`;
-`uninstall` boots it out and removes the plist (absent = success). The agent runs
-`spur self serve --gateway`. See [cmd_serve](./cmd_serve.md) for gateway mode itself.
+The daemon lifecycle is flat — no `daemon` sub-noun:
+
+```
+spur self install --daemon [--port <n>] [--json]     # also install the LaunchAgent
+spur self uninstall [--daemon] [--port <n>] [--json] # boot it out and remove the plist
+spur self status                                     # reports the LaunchAgent beside readiness
+```
+
+It keeps the one-port project gateway always on as a macOS user LaunchAgent
+(`~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`, logs under `~/Library/Logs/spur/`).
+`install --daemon` refuses a non-macOS platform and a port held by another process without writing
+anything; `spur self status` reports loaded/pid/last exit plus `GET /api/health`; `spur self
+uninstall` boots it out and removes the plist (absent = success). The agent runs `spur self serve
+--gateway`. The deprecated `spur self daemon <action>` form still works but is hidden. See
+[cmd_serve](./cmd_serve.md) for gateway mode itself.

@@ -6,6 +6,7 @@ import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toEnvelopeJson, writeJsonError } from '../output';
+import { readDaemonStatus } from './self/daemon';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
@@ -48,7 +49,15 @@ async function runStatusCore(
         git: await gitContext(context.cwd),
         version: CLI_CONFIG.binaryVersion,
     });
-    const status = { ...aggregate, ...(target === undefined ? {} : { target }) };
+    // The gateway LaunchAgent is machine state, not project readiness: it is reported beside the
+    // aggregate (never inside its nine sections) so `spur self status` answers "is the gateway
+    // daemon on?" without a second command. Read-only; skipped off macOS where it cannot exist.
+    const daemon = process.platform === 'darwin' ? await readDaemonStatus().catch(() => null) : null;
+    const status = {
+        ...aggregate,
+        ...(target === undefined ? {} : { target }),
+        ...(daemon === null ? {} : { daemon }),
+    };
 
     if (options.json === true) {
         context.output.write(toEnvelopeJson(status, { enveloped: options.jsonEnvelope }));
@@ -69,6 +78,19 @@ async function runStatusCore(
         ...Object.entries(aggregate.sections).map(
             ([name, section]) => `  ${name}: ${section.state}${section.message === '' ? '' : ` — ${section.message}`}`,
         ),
+        ...(daemon === null
+            ? []
+            : [
+                  `Daemon: ${
+                      daemon.installed
+                          ? `installed${daemon.loaded ? ` (pid ${daemon.pid ?? 'unknown'})` : ' — not loaded'}`
+                          : 'not installed'
+                  }${
+                      daemon.health === null
+                          ? ''
+                          : ` — gateway ${(daemon.health as { gateway?: boolean }).gateway === true ? 'on' : 'answered by a project serve'}`
+                  }`,
+              ]),
         ...(target === undefined ? [] : [`Path: ${target.path}\t${target.size} bytes`]),
     ];
     context.output.write(lines.join('\n'));

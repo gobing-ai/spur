@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import type { Command } from '@commander-js/extra-typings';
 import {
     type GatewayDaemonDeps,
+    type GatewayStatusResult,
     gatewayDaemonStatus,
     installGatewayDaemon,
     probeGatewayPort,
@@ -14,13 +15,108 @@ import { toJson } from '../../output';
 import { resolveSpurArgv } from '../../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from '../shared-options';
 
+/** The three daemon operations, hosted by `install --daemon`, `uninstall` and `status`. */
+export type DaemonAction = 'install' | 'uninstall' | 'status';
+
 /**
- * Register `spur self daemon <install|uninstall|status>` (feature K4 R9/R10, ADR-151 §7).
+ * Resolve the host facts the daemon service needs (feature K4 R9/R10, ADR-151 §7).
  *
- * Thin transport over `packages/app`'s daemon service: the plist bytes, the launchctl argv, the
- * platform/port refusals and the "nothing written on failure" rule all live there and are tested
- * with injected seams. This module resolves the host facts (uid, home, PATH, spur argv, port) and
- * maps outcomes to exit codes.
+ * The plist bytes, the launchctl argv, the platform/port refusals and the "nothing written on
+ * failure" rule all live in `packages/app`; this module only supplies the machine facts.
+ */
+export function resolveDaemonDeps(
+    port: number | undefined,
+    overrides: Partial<GatewayDaemonDeps> = {},
+): GatewayDaemonDeps {
+    return {
+        platform: process.platform,
+        uid: typeof process.getuid === 'function' ? process.getuid() : 0,
+        home: homedir(),
+        path: getEnvVar('PATH') ?? '/usr/local/bin:/usr/bin:/bin',
+        spurArgv: resolveSpurArgv(),
+        port: port ?? buildConfigFromEnv(getEnvVars()).server.gateway.port,
+        exec: new NodeProcessExecutor(),
+        fs: createNodeFileSystem(process.cwd()),
+        probeGateway: probeGatewayPort,
+        ...overrides,
+    };
+}
+
+/**
+ * Read the daemon's machine state without rendering anything.
+ *
+ * `spur self status` embeds this value in its own aggregate, so the reader must not write — a
+ * second JSON document on stdout would corrupt that command's output.
+ */
+export async function readDaemonStatus(overrides: Partial<GatewayDaemonDeps> = {}): Promise<GatewayStatusResult> {
+    return gatewayDaemonStatus(resolveDaemonDeps(undefined, overrides));
+}
+
+/** Run one daemon operation and render it. Returns the exit code for the caller to set. */
+export async function runDaemonAction(
+    action: DaemonAction,
+    context: Pick<CliContext, 'output'>,
+    options: { port?: number; json?: boolean },
+    overrides: Partial<GatewayDaemonDeps> = {},
+): Promise<{ exitCode: number; result?: GatewayStatusResult }> {
+    const deps = resolveDaemonDeps(options.port, overrides);
+    try {
+        if (action === 'install') {
+            const result = await installGatewayDaemon(deps);
+            context.output.write(
+                options.json === true
+                    ? toJson({ ok: true, action, ...result })
+                    : `Gateway LaunchAgent ${result.status}: ${result.plistPath}`,
+            );
+            return { exitCode: 0 };
+        }
+        if (action === 'uninstall') {
+            const result = await uninstallGatewayDaemon(deps);
+            context.output.write(
+                options.json === true
+                    ? toJson({ ok: true, action, ...result })
+                    : result.status === 'removed'
+                      ? `Gateway LaunchAgent removed: ${result.plistPath}`
+                      : 'Gateway LaunchAgent was not installed.',
+            );
+            return { exitCode: 0 };
+        }
+        const result = await gatewayDaemonStatus(deps);
+        if (options.json === true) {
+            context.output.write(toJson({ ok: true, action, ...result }));
+            return { exitCode: 0, result };
+        }
+        if (!result.installed) {
+            context.output.write(`Gateway LaunchAgent is not installed (${result.plistPath}).`);
+            return { exitCode: 0, result };
+        }
+        context.output.write(`LaunchAgent: ${result.plistPath}`);
+        context.output.write(`loaded: ${result.loaded}${result.pid === null ? '' : ` (pid ${result.pid})`}`);
+        if (result.lastExit !== null) context.output.write(`last exit: ${result.lastExit}`);
+        context.output.write(`gateway health: ${result.health === null ? 'unreachable' : 'ok'}`);
+        if (!result.binaryExists) {
+            context.output.write(
+                'warning: the plist points at a binary that no longer exists — re-run `spur self install --daemon`',
+            );
+        }
+        return { exitCode: 0, result };
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (options.json === true) {
+            context.output.write(toJson({ ok: false, action, error: message }));
+        } else {
+            context.output.error(`Error: ${message}`);
+        }
+        return { exitCode: 1 };
+    }
+}
+
+/**
+ * Register the deprecated `spur self daemon <install|uninstall|status>` spelling.
+ *
+ * Hidden since the surface flattened to `spur self install --daemon` / `spur self uninstall` /
+ * `spur self status`: a positional `action` put a noun-shaped operand inside a verb slot. The
+ * alias keeps existing scripts working and names its replacement on use.
  */
 export function registerDaemonCommand(
     self: Command,
@@ -28,79 +124,26 @@ export function registerDaemonCommand(
     /** Test seam: override the resolved host facts (platform, home, fs, exec, probe…). */
     overrides: Partial<GatewayDaemonDeps> = {},
 ): void {
-    self.command('daemon')
-        .summary('install, remove or inspect the macOS LaunchAgent that keeps the project gateway on')
+    self.command('daemon', { hidden: true })
+        .summary('DEPRECATED — use `spur self install --daemon`, `spur self uninstall` or `spur self status`')
         .argument('<action>', 'install | uninstall | status')
         .option(...SHARED_OPTIONS.portServe, Number.parseInt)
         .option(...SHARED_OPTIONS.json)
         .action(async (action: string, opts) => {
-            const deps: GatewayDaemonDeps = {
-                platform: process.platform,
-                uid: typeof process.getuid === 'function' ? process.getuid() : 0,
-                home: homedir(),
-                path: getEnvVar('PATH') ?? '/usr/local/bin:/usr/bin:/bin',
-                spurArgv: resolveSpurArgv(),
-                port: opts.port ?? buildConfigFromEnv(getEnvVars()).server.gateway.port,
-                exec: new NodeProcessExecutor(),
-                fs: createNodeFileSystem(process.cwd()),
-                probeGateway: probeGatewayPort,
-                ...overrides,
-            };
-
-            try {
-                if (action === 'install') {
-                    const result = await installGatewayDaemon(deps);
-                    context.output.write(
-                        opts.json === true
-                            ? toJson({ ok: true, action, ...result })
-                            : `Gateway LaunchAgent ${result.status}: ${result.plistPath}`,
-                    );
-                    return;
-                }
-                if (action === 'uninstall') {
-                    const result = await uninstallGatewayDaemon(deps);
-                    context.output.write(
-                        opts.json === true
-                            ? toJson({ ok: true, action, ...result })
-                            : result.status === 'removed'
-                              ? `Gateway LaunchAgent removed: ${result.plistPath}`
-                              : 'Gateway LaunchAgent was not installed.',
-                    );
-                    return;
-                }
-                if (action === 'status') {
-                    const result = await gatewayDaemonStatus(deps);
-                    if (opts.json === true) {
-                        context.output.write(toJson({ ok: true, action, ...result }));
-                        return;
-                    }
-                    if (!result.installed) {
-                        context.output.write(`Gateway LaunchAgent is not installed (${result.plistPath}).`);
-                        return;
-                    }
-                    context.output.write(`LaunchAgent: ${result.plistPath}`);
-                    context.output.write(
-                        `loaded: ${result.loaded}${result.pid === null ? '' : ` (pid ${result.pid})`}`,
-                    );
-                    if (result.lastExit !== null) context.output.write(`last exit: ${result.lastExit}`);
-                    context.output.write(`gateway health: ${result.health === null ? 'unreachable' : 'ok'}`);
-                    if (!result.binaryExists) {
-                        context.output.write(
-                            'warning: the plist points at a binary that no longer exists — re-run `spur self daemon install`',
-                        );
-                    }
-                    return;
-                }
+            if (action !== 'install' && action !== 'uninstall' && action !== 'status') {
                 context.output.error(`Unknown daemon action "${action}": expected install, uninstall or status.`);
                 context.setExitCode(2);
-            } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
-                if (opts.json === true) {
-                    context.output.write(toJson({ ok: false, action, error: message }));
-                } else {
-                    context.output.error(`Error: ${message}`);
-                }
-                context.setExitCode(1);
+                return;
             }
+            context.output.error(
+                action === 'install'
+                    ? 'deprecated: use `spur self install --daemon`'
+                    : action === 'uninstall'
+                      ? 'deprecated: use `spur self uninstall`'
+                      : 'deprecated: use `spur self status`',
+            );
+            const { exitCode } = await runDaemonAction(action, context, opts, overrides);
+            // Success keeps the default exit code: only a failure needs to be recorded.
+            if (exitCode !== 0) context.setExitCode(exitCode);
         });
 }

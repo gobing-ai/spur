@@ -5,8 +5,8 @@
 ## Legend
 
 - **Compound nouns**: `spur <noun> <verb>`.
-- **`self`** — the noun hosting the self-management verbs (`daemon`, `exec`, `init`, `install`, `maintain`, `migrate`,
-  `search`, `serve`, `status`). `daemon` installs/removes/inspects the macOS LaunchAgent that keeps the project gateway
+- **`self`** — the noun hosting the self-management verbs (`exec`, `init`, `install`, `maintain`, `migrate`,
+  `search`, `serve`, `status`, `uninstall`). `install --daemon` installs the macOS LaunchAgent that keeps the project gateway
   on. Five of them mount the same command builders as the legacy standalone nouns; `exec` runs the
   project's `builder.actions` / `builder.preset` binding; `search` is the hybrid rg/zg search transport.
 - **Hidden legacy aliases** — the five former standalone nouns (`init`, `maintain`, `migrate`, `serve`, `status`)
@@ -19,7 +19,7 @@
 
 | Verb \ Noun | agent | builder | decision | feature | history | message | projects | rule | self | task | workflow |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| **Verb count** | **10** | **14** | **5** | **11** | **15** | **6** | **6** | **4** | **9** | **24** | **17** |
+| **Verb count** | **10** | **14** | **5** | **11** | **15** | **6** | **6** | **4** | **10** | **24** | **17** |
 | **add** |   |   |   |   |   |   | ✅ |   |   |   |   |
 | **advance** |   |   |   | ✅ |   |   |   |   |   |   |   |
 | **analyze** |   |   |   |   | ✅ |   |   |   |   |   |   |
@@ -41,7 +41,6 @@
 | **bundle-web** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **bump-ver** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **cancel** |   |   |   |   |   |   |   |   |   |   | ✅ |
-| **daemon** |   |   |   |   |   |   |   |   | ✅ |   |   |
 | **check** |   |   |   | ✅ |   |   |   |   |   | ✅ |   |
 | **clean** |   |   |   |   |   |   | ✅ |   |   |   | ✅ |
 | **commit-guard-check** |   |   |   |   |   |   |   |   |   |   | ✅ |
@@ -108,6 +107,7 @@
 | **sync** |   |   |   | ✅ |   |   |   |   |   |   |   |
 | **timeline** |   |   |   |   | ✅ |   |   |   |   |   |   |
 | **trace** | ✅ |   |   |   |   |   |   | ✅ |   |   | ✅ |
+| **uninstall** |   |   |   |   |   |   |   |   | ✅ |   |   |
 | **update** |   |   |   | ✅ |   |   |   |   |   | ✅ |   |
 | **usage** | ✅ |   |   |   |   |   |   |   |   |   |   |
 | **validate** |   |   |   |   |   |   |   | ✅ |   |   | ✅ |
@@ -144,4 +144,4 @@ from the top-level help listing, still fully functional for scripts and workflow
 | Total noun×verb cells | **121** |
 
 > [!NOTE]
-> `task` has the richest surface at 24 verbs, followed by `workflow` (17, including the flat `commit-guard-start`/`commit-guard-stage`/`commit-guard-check` transport, the flat WT-4 `persist-out`/`persist-check` landing verbs, the `summary`/`profile` measurements and `cost`), `history` (15, including the flat `anatomy-<op>` verbs), `agent` (10, including `dogfood-gate`/`dogfood-validate-report`; the four fleet plumbing verbs `join`/`leave`/`wait`/`report` are hidden from help per ADR-148) and `feature` (11). Their nested spellings (`workflow commit-guard <op>`, `agent dogfood <op>`, `history anatomy <op>`, `task batch-plan task-children`) were removed in task 1290. `builder` (14 verbs) hosts the release plumbing promoted from `spur-dev`, the flat PR-review verbs and — from A93 — the six artifact verbs `build-cli`, `build-server`, `build-binaries` (`--source-root <dir>`) plus `bundle-config`, `bundle-web` and `verify-pack`, which absorbed the repository build/staging scripts behind the shipped surface. `decision` (5 verbs: `list`, `outcome`, `run`, `show`, `status`) is the decision-catalog transport (task 1093; `outcome` by task 1263). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (9 verbs) hosts every self-management operation, including the `exec` action runner, the `search` hybrid rg/zg query verb, the `install` machine-setup verb (A93) and the `daemon` LaunchAgent control (K4).
+> `task` has the richest surface at 24 verbs, followed by `workflow` (17, including the flat `commit-guard-start`/`commit-guard-stage`/`commit-guard-check` transport, the flat WT-4 `persist-out`/`persist-check` landing verbs, the `summary`/`profile` measurements and `cost`), `history` (15, including the flat `anatomy-<op>` verbs), `agent` (10, including `dogfood-gate`/`dogfood-validate-report`; the four fleet plumbing verbs `join`/`leave`/`wait`/`report` are hidden from help per ADR-148) and `feature` (11). Their nested spellings (`workflow commit-guard <op>`, `agent dogfood <op>`, `history anatomy <op>`, `task batch-plan task-children`) were removed in task 1290. `builder` (14 verbs) hosts the release plumbing promoted from `spur-dev`, the flat PR-review verbs and — from A93 — the six artifact verbs `build-cli`, `build-server`, `build-binaries` (`--source-root <dir>`) plus `bundle-config`, `bundle-web` and `verify-pack`, which absorbed the repository build/staging scripts behind the shipped surface. `decision` (5 verbs: `list`, `outcome`, `run`, `show`, `status`) is the decision-catalog transport (task 1093; `outcome` by task 1263). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (10 verbs) hosts every self-management operation, including the `exec` action runner, the `search` hybrid rg/zg query verb, the `install` machine-setup verb (A93, which also installs the gateway LaunchAgent with `--daemon`), the `uninstall` remover and the `status` readiness aggregate that reports the LaunchAgent's state (K4).

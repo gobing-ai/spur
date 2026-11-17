@@ -290,7 +290,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // 81 → 80 (slim-harness: `task migrate-anchors` removed).
         // 80 → 84 (A93: `self install` plus `builder build-cli`, `build-server`, `build-binaries`;
         //          `builder bundle-config`/`bundle-web` declare it too and emit it through the seam).
-        expect(advertising.length).toBe(84);
+        // 84 → 85 (2026-11-17: `self uninstall` removed `self daemon`'s positional action and
+        //          declares `--json-envelope` for its own refusal path).
+        expect(advertising.length).toBe(85);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

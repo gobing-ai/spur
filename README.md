@@ -115,10 +115,67 @@ bun run apps/cli/src/index.ts rule run --preset recommended
 
 # Run the full quality gate (lint + typecheck + tests)
 bun run check
+
+# Build everything the CLI ships — server, web, then the bundled CLI
+# (web dist, config, board types, migration SQL, laya worker, plugins)
+bun run build:all
 ```
 
 > During development the CLI runs as `bun run apps/cli/src/index.ts <command>`. A standalone `spur`
 > binary is produced by `bun run build`.
+
+---
+
+## Project gateway daemon (macOS)
+
+Spur can keep one process serving every local project on a single port, each under its registry
+prefix (`/<prefix>/board`). The daemon is a **user LaunchAgent**
+(`~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`, label `ai.gobing.spur.gateway`, logs under
+`~/Library/Logs/spur/`) that runs `spur self serve --gateway` and is kept alive by `launchd`.
+
+The lifecycle is flat under `self` — there is no `daemon` sub-noun:
+
+```bash
+# install / enable (once per machine; refuses non-macOS or a port held by another process)
+spur self install --daemon                 # add --port <n> to override server.gateway.port
+
+# inspect: LaunchAgent state sits beside the readiness aggregate
+spur self status                           # add --json for { daemon: { installed, loaded, pid, … } }
+
+# open the Board — the index lists every registered project and its prefix
+open http://localhost:3000/                # e.g. /spur-new/board, /knowledge-kit/board
+
+# refresh a machine that runs Spur from this checkout
+bun run restart-daemon                     # rebuilds apps/cli/spur.js, then restarts the agent
+# or, after upgrading the installed package (no reinstall of the plist needed)
+launchctl kickstart -k gui/$(id -u)/ai.gobing.spur.gateway
+
+# disable / remove
+spur self uninstall                        # boots it out and deletes the plist; absent = success
+```
+
+Notes:
+
+- `bun run restart-daemon` runs `bun build apps/cli/src/index.ts --outfile apps/cli/spur.js` and then
+  `launchctl kickstart -k` — it refreshes **CLI source** only. When the change touches the Board UI,
+  workflows, rules or the bundled plugin surfaces, run `bun run build:all` first (that is what
+  `build:bundle` adds: web dist, config, board types, migration SQL, laya worker, plugins), then
+  `bun run restart-daemon`.
+- The port comes from `server.gateway.port` in `~/.config/spur/config.yaml` (default `3000`). A
+  project serve already bound to that port makes `install --daemon` refuse — stop it first.
+- Projects are registered and given prefixes with `spur projects add <path> [--prefix /<slug>]`;
+  `spur projects list` shows the resolved prefix per entry and never prints an unroutable URL.
+  `spur projects clean` reports stale entries (`--remove-suspects` removes the path-based ones).
+- A request to a stopped project's prefix starts it on demand (`spur projects start` binds
+  `127.0.0.1`); a serve you started by hand on `localhost` is reached over `::1` — both work.
+- `spur self status` prints the health probe's verdict, which distinguishes the gateway
+  (`"gateway": true`) from a project serve answering on the same port. `installed`/`loaded`/`pid`
+  are the authoritative fields for "is the daemon on?".
+- Uninstalling Spur itself is a package-manager action (`bun remove -g @gobing-ai/spur`); `spur self
+  uninstall` only removes the LaunchAgent.
+
+The deprecated `spur self daemon <install|uninstall|status>` spelling still works (hidden) and
+prints a replacement hint.
 
 ---
 
@@ -186,7 +243,9 @@ spur workflow   list [--json]
 spur history    import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]
 spur history    analyze [--since <iso-date>] [--json]
 spur history    report [--json]   # reserved; prints a TODO marker for now
-spur status     [path] [--json]
+spur status     [path] [--json]   # same as `spur self status`, which also reports the gateway daemon
+spur self       install [--with <tool>]... [--daemon] [--port <n>] [--json]
+spur self       uninstall [--daemon] [--port <n>] [--json]
 spur migrate    [--json]          # temporary helper: apply CLI-owned schema migrations
 ```
 

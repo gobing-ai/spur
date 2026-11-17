@@ -2922,7 +2922,7 @@ re-import pressure this entry already records).
   guard, CSRF against the public origin, `Host`/`Origin` rewrite, HTML/`Location` rebasing with a
   `spur-base` meta), so project serves stay unchanged. Local registry entries gain an optional
   `prefix` (default derived from `name`); remote entries keep `host`+`port` and are never proxied.
-  On macOS `spur self daemon install` keeps the gateway always on as a user LaunchAgent with
+  On macOS `spur self install --daemon` keeps the gateway always on as a user LaunchAgent with
   `KeepAlive` and `AbandonProcessGroup`, so project serves survive gateway restarts and are
   re-adopted through the registry.
 - **Why:** Per-project dynamic ports break fixed-port tunnel ingress on every restart and tie serves
@@ -2935,10 +2935,14 @@ re-import pressure this entry already records).
   pinned ports with one ingress rule per project (no daemon, N rules); an external Caddy/nginx
   (non-Spur toolchain, still needs stable ports).
 - **Shipped surface (2026-11-17):** `spur self serve --gateway [--port] [--host]`,
-  `spur self daemon <install|uninstall|status> [--port] [--json]`, `spur projects add --prefix <slug>`,
+  `spur self install --daemon [--port] [--json]`, `spur self uninstall [--daemon]`,
+  `spur self status` (reports the LaunchAgent), `spur projects add --prefix <slug>`,
   `spur projects list` URL column, `server.gateway.{port,allowedHosts}`, and the registry `prefix`
-  field with `resolveProjectPrefix`/`findPrefixCollisions`. `GET /api/projects` carries `prefix` and
-  `url`. The Board's module kit publishes `basePath`/`withBase`/`resolveApiUrl` (`BOARD_UI_KIT_VERSION`
+  field with `resolveProjectPrefix`/`findPrefixCollisions`. `GET /api/projects` carries `prefix`,
+  `url` and the registry `findings` (prefix collisions, duplicate paths). The daemon lifecycle is
+  flat — `spur self install --daemon` / `spur self uninstall` / `spur self status` — and
+  `spur self daemon <action>` remains as a hidden deprecated alias (amended 2026-11-17, operator
+  consent: a positional `action` put a noun-shaped operand in a verb slot). The Board's module kit publishes `basePath`/`withBase`/`resolveApiUrl` (`BOARD_UI_KIT_VERSION`
   1.1.0).
 - **Consequence:** The Board must be base-path aware at runtime (relative built chunks plus a
   `basePath()` helper); all local projects share one browser origin, so per-project `localStorage`
