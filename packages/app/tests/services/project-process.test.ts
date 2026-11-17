@@ -138,6 +138,21 @@ describe('real socket probes', () => {
         expect(await portBindingAvailable()).toBe(true);
     });
 
+    test('a port held only on ::1 is in-use to the bind probe, agreeing with isPortLive', async () => {
+        // Bun.serve({ hostname: 'localhost' }) binds IPv6-only on macOS. A 127.0.0.1-only bind probe
+        // called that port free, so the gateway's fresh start allocated it and dialed the other
+        // listener (serve-gateway.heavy: a 200 health without `service`).
+        const server: Server = createServer();
+        await new Promise<void>((r) => server.listen(0, '::1', r));
+        const port = (server.address() as { port: number }).port;
+        try {
+            expect(await isPortLive(port)).toBe(true);
+            expect(await probePort(port)).toBe('in-use');
+        } finally {
+            await new Promise<void>((r) => server.close(() => r()));
+        }
+    });
+
     test('portBindingAvailable honours the probe seam', async () => {
         setPortProbeForTests(async () => 'denied');
         expect(await portBindingAvailable()).toBe(false);

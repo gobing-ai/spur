@@ -258,7 +258,10 @@ export async function probePort(port: number): Promise<PortProbeResult> {
             resolve(classifyPortBindError(err));
         });
         server.listen({ port, host: '127.0.0.1' }, () => {
-            server.close(() => resolve('available'));
+            // A 127.0.0.1 bind succeeds beside an IPv6-only listener (Bun's `localhost` on macOS),
+            // which `isPortLive` reports live. Agree with it, or a fresh start is handed a port
+            // whose loopback dial reaches the other process.
+            server.close(async () => resolve((await isPortLiveOnHost(port, '::1', 200)) ? 'in-use' : 'available'));
         });
     });
 }
