@@ -1,6 +1,6 @@
 ---
 name: spur-cli-self
-description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), hybrid rg/zg search (`search`), local web server (`serve`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` and `search` have no top-level alias."
+description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), machine setup (`install`), database maintenance (`maintain`), schema migrations (`migrate`), hybrid rg/zg search (`search`), local web server (`serve`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` and `search` have no top-level alias."
 see_also:
   - spur-cli
 ---
@@ -23,6 +23,7 @@ is the second such verb: `spur self search` only.
 | ---- | ------- | --------- |
 | `exec` | Run (or list) a project SDLC action bound in `builder.actions` / `builder.preset` | `--list` `--dry-run` `--json` |
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--adopt-global-config` `--json` |
+| `install` | Converge machine-wide setup: global rules/config seeds, optional tools | `--with <zg\|a2a\|sp-plugin>` (repeatable) `--json` `--json-envelope` |
 | `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
 | `migrate` | Apply CLI-owned schema migrations (or `--check` the importer schema) | `--check` `--json` |
 | `search` | Hybrid exact (`rg`) and semantic (`zg`) search over project docs and code | `--mode` `--scope` `--glob` `--limit` `--regex` `--status` `--json` |
@@ -154,7 +155,31 @@ supervisor API (`/api/processes/*` + `/api/agents/*`). It is the local fallback 
 Flags: `--port <n>`, `--host <addr>`, `--no-open`, `--cwd <path>`, `--json` (a dry probe — reports
 the resolved port/url without starting the server). Full flag semantics: **[serve.md](serve.md)**.
 
-## `self status [path]` - project and git status
+## `self install [--with <tool>]...` - machine setup
+
+```bash
+spur self install                          # converge machine seeds, report optional tools
+spur self install --with zg                # also install the zg hybrid-search CLI
+spur self install --with zg --with a2a     # repeatable; one flag per tool
+spur self install --json                   # machine-readable report
+```
+
+Owns the machine layer only: it copies the shipped global rules and config into the machine config
+root (`SPUR_GLOBAL_RULES_DIR` when set, else `~/.config/spur`), never overwriting an existing file,
+and reports the optional tools (`zg`, `a2a`, `sp-plugin`) it did not touch. `--with <tool>` is what
+performs network or package-manager work; a tool already on PATH reports `unchanged` and nothing is
+installed. `sp-plugin` delegates to `superskill install sp --marketplace <dir>` — Superskill owns
+adapter state, so this verb never copies adapters itself.
+
+It never scaffolds the current directory (`spur self init`), migrates SQL (`spur self migrate`),
+edits a shell profile, or replaces a running binary (`scripts/install.sh` acquires the first
+binary). Unknown `--with` values exit 2 before any write. The report is
+`{ok, changed, steps: [{name, state, required, message}]}` with state
+`created` / `unchanged` / `skipped` / `failed`; exit 0 when every required and every explicitly
+selected step succeeded, 1 otherwise (the verified binary stays installed, and a rerun retries only
+the unfinished steps).
+
+## `self status [path]` - consolidated read-only readiness
 
 ```bash
 spur self status                      # current directory
@@ -162,13 +187,22 @@ spur self status /path/to/project     # specific project
 spur self status --json               # machine-readable
 ```
 
-Reports the project's Spur configuration state (init status, feature/task counts, rule preset
-health), git working-tree status, and DecisionMaker readiness (0911): the human output adds a
-`DecisionMaker:` line and `--json` exposes `decisionMaker: {enabled, provider,
-credentialPresent, state, connectivity, inlineSupport}` with states `disabled` / `missing-key` /
-`configured-not-probed`. Presence check only — never a live probe, never echoes the key.
-Optional `[path]` argument targets a different project
-directory. Only flag is `--json`.
+Reports project scaffold health, git working-tree status, and DecisionMaker readiness (0911) as
+before — the human output keeps its `Project:`/`Package:`/`Agents:`/`Git:`/`DecisionMaker:` lines
+and `--json` keeps `ok`, `packageJson`, `spurConfig`, `git`, `agentSpecs` and `decisionMaker:
+{enabled, provider, credentialPresent, state, connectivity, inlineSupport}`. Presence check only —
+never a live probe, never echoes the key.
+
+Since A93 it also adds `schemaVersion: 1`, `overallState: ready|degraded|missing`, and nine
+`sections` — `installation`, `configuration`, `schema`, `dependencies`, `projects`, `agents`,
+`decisions`, `corpus`, `workflows` — each `{state, scope, source, message, data?}` with state
+`ready` / `degraded` / `missing` / `unavailable` / `not-applicable` / `error` and scope
+`machine` / `project`. The aggregate is read-only: it never opens or migrates the project database
+(ledger sections report `unavailable` with the reason), never installs a tool, never starts a
+server, and shares one 5000 ms budget across its async probes. Exit status stays project-scaffold
+health: 0 when the project config exists, 1 when it is missing, unreadable, or the optional `[path]`
+argument fails. Optional `[path]` targets a file/dir to describe. Flags: `--json`,
+`--json-envelope`.
 
 ## What this skill is NOT
 

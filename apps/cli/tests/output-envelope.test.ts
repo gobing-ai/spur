@@ -390,6 +390,10 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
         'agent.ts:run': { helper: 'handleRunOutput', file: 'packages/app/src/services/agent-service.ts' },
         'message.ts:inbox': { helper: 'runMessageInbox', file: 'apps/cli/src/commands/message/inbox.ts' },
         'message.ts:reply': { helper: 'runMessageReply', file: 'apps/cli/src/commands/message/reply.ts' },
+        // A93: the artifact verbs share one `runVerb` body in the same module, so the emitter lives
+        // outside each verb's chunk.
+        'builder.ts:bundle-config': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:bundle-web': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
     };
 
     const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;

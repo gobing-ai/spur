@@ -1,6 +1,6 @@
 ---
 name: spur-cli-builder
-description: "spur-cli noun reference: operate `spur builder` as the release plumbing surface - bump a workspace package (or the `workspace:`-pinned release set) with `bump-ver`, delete release tags with `drop-tags`, with commit + annotated tag + optional push; publish a package to npm with `publish` (and guard version drift with `bump-ver --check`); run the `/sp:dev-pr-review` PR loop with the four flat verbs `pr-status` (read-only status), `pr-check` (submission gate), `pr-open` (push + ensure PR) and `pr-review` (Codex request + wait + collect); report base-relative branch topology with `show-branches`. Promoted from spur-dev (task 0617, ADR-051); frozen at exactly these eight verbs."
+description: "spur-cli noun reference: operate `spur builder` as the release plumbing surface - bump a workspace package (or the `workspace:`-pinned release set) with `bump-ver`, delete release tags with `drop-tags`, with commit + annotated tag + optional push; publish a package to npm with `publish` (and guard version drift with `bump-ver --check`); run the `/sp:dev-pr-review` PR loop with the four flat verbs `pr-status` (read-only status), `pr-check` (submission gate), `pr-open` (push + ensure PR) and `pr-review` (Codex request + wait + collect); report base-relative branch topology with `show-branches`. Promoted from spur-dev (task 0617, ADR-051); frozen at these eight verbs plus, since A93, the six artifact verbs `build-cli`, `build-server`, `build-binaries`, `bundle-config`, `bundle-web`, `verify-pack`."
 see_also:
   - spur-cli
 ---
@@ -16,16 +16,24 @@ the unscoped short names (`@gobing-ai/spur` → `spur`); the released set and th
 discovered from the repo's own workspace manifests, so the same code serves any git+semver
 monorepo.
 
-This noun is **frozen at exactly eight verbs** (`bump-ver`, `drop-tags`, `publish` from the 2026-10-15
+This noun is **frozen at exactly fourteen verbs** (`bump-ver`, `drop-tags`, `publish` from the 2026-10-15
 script-absorption entries; `show-branches` and the four flat PR verbs `pr-status`, `pr-check`,
-`pr-open`, `pr-review` from the 2026-10-16 feature-L1 entries) by operator consent
-(`docs/design/harness-surface-governance.md` §3) — do not invent additional `builder` subcommands.
+`pr-open`, `pr-review` from the 2026-10-16 feature-L1 entries; `build-cli`, `build-server`,
+`build-binaries`, `bundle-config`, `bundle-web`, `verify-pack` from the A93 2026-11-16 entry) by operator consent
+(`docs/design/harness-surface-governance.md` §3 and the A93 row in §4) — do not invent additional
+`builder` subcommands.
 The former `pr <op>` pass-through was removed by task 1290 (two-level `spur <noun> <verb>` rule).
 
 ## Verb map
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
+| `build-cli` | Compile `<source-root>/dist/cli/spur` | `--source-root` `--json` |
+| `build-server` | Compile `<source-root>/dist/server/spur-server` | `--source-root` `--json` |
+| `build-binaries` | Six release assets + `SHA256SUMS` | `--source-root` `--json` |
+| `bundle-config` | Stage `config/` with `$schema` injection | `--source-root` `--json` |
+| `bundle-web` | Stage built Board assets into the CLI package | `--source-root` `--json` |
+| `verify-pack` | Inspect a packed tarball | `--json` |
 | `bump-ver [package-id] [version]` | Bump one package (manifest + in-source `binaryVersion` + consumer `workspace:` pins), commit, tag, optionally push; `--check [package-id]` only verifies marketplace/plugin versions (exit 1 on drift) | `--all` `--push` `--check` `--json` |
 | `drop-tags [package-id] <version>` | Delete a package's release tag (local only by default) | `--all` `--remote` `--json` |
 | `publish <dir>` | CI npm publish: resolve `workspace:`/`catalog:` ranges, `build:bundle`, `npm publish --access public`, restore the manifest | `--otp` |
@@ -44,6 +52,38 @@ for deletion.
 HEAD, or an existing local/origin tag). Release preflight errors abort before mutation. `publish` temporarily rewrites dependency
 ranges for packaging and restores the original manifest in `finally`, including build/publish
 failures; npm publication itself is an external side effect.
+
+## `build-cli` / `build-server` / `build-binaries` - compiled artifacts
+
+```bash
+spur builder build-cli                       # this checkout -> dist/cli/spur
+spur builder build-server --source-root ../other-checkout
+spur builder build-binaries --json           # six targets + dist/cli/SHA256SUMS
+```
+
+The compile implementation lives in `@gobing-ai/spur-app/builder`; the repository's
+`scripts/commands/build-*.ts` are thin forwarders so package scripts and CI can build before the
+CLI's generated config bundle exists (a build must never depend on its own output). `--source-root`
+must be a Spur checkout and is validated before any lock or patch. Both compile patches are restored
+on every exit path, a second patch-acquisition failure still restores the first, and the single
+`.spur-compile.lock` refuses a concurrent build. Failures exit nonzero and never publish.
+
+## `bundle-config` / `bundle-web` / `verify-pack` - staging and inspection
+
+```bash
+spur builder bundle-config apps/cli/config
+spur builder bundle-web --source-root ../checkout
+spur builder verify-pack apps/cli/spur-0.4.36.tgz --json
+```
+
+`bundle-config` prunes authoring fixtures, injects `$schema` directives and refuses a target that
+physically overlaps its source (symlinks resolved) — the guard that once deleted a real `config/`.
+`bundle-web` stages `dist/web` into `apps/cli/web`, auto-building only the checkout's own missing
+`dist/web`, and refuses a board whose `board-runtime.json` or import map is missing, invalid, or
+maps a facade to an absent asset. `verify-pack` validates the archive listing (absolute, traversal,
+link and special members are refused) BEFORE extraction, extracts into a private temp dir that is
+always removed, and compares plugin/marketplace versions against the archive's own
+`package/package.json` — never the verifier's checkout.
 
 ## `bump-ver` - bump and tag a release
 

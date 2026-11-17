@@ -14,6 +14,12 @@
 
 | Subcommand | Description |
 |---|---|
+| `bundle-config <out-dir> [flags]` | Stage the checkout's `config/` tree with `$schema` injection |
+| `bundle-web [out-dir] [flags]` | Stage the built Board assets into the CLI package tree |
+| `verify-pack <tgz> [flags]` | Inspect a packed tarball (member safety, archive-owned versions) |
+| `build-binaries [flags]` | Cross-compile the six release binaries plus `SHA256SUMS` |
+| `build-cli [flags]` | Compile the checkout's `spur` binary |
+| `build-server [flags]` | Compile the checkout's standalone server |
 | `bump-ver <package-id> <version>` | Bump one package: manifest + in-source `binaryVersion`, commit, annotated tag |
 | `bump-ver --all <version>` | Bump every `workspace:`-pinned package, plus aggregate publish tag |
 | `drop-tags <package-id> <version>` | Delete one package's local release tag |
@@ -24,6 +30,71 @@
 | `pr-status [flags]` | Read-only PR/CI/Codex status with the current-HEAD review as `review` |
 | `publish <dir> [--otp code]` | Resolve workspace/catalog ranges, build, and `npm publish` a package (CI) |
 | `show-branches [flags]` | Read-only branch topology report against a base (`markdown` / `json` / `text`) |
+
+## spur builder build-cli
+
+```
+spur builder build-cli [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder build-server
+
+```
+spur builder build-server [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder build-binaries
+
+```
+spur builder build-binaries [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-config
+
+```
+spur builder bundle-config [options] <out-dir>
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-web
+
+```
+spur builder bundle-web [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder verify-pack
+
+```
+spur builder verify-pack [options] <tgz>
+```
+
+| Option | Description |
+|---|---|
+| `--json` | Machine-readable report |
 
 ## spur builder bump-ver
 

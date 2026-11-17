@@ -6,6 +6,7 @@ import { registerMigrateCommand } from '../migrate';
 import { registerServeCommand } from '../serve';
 import { registerStatusCommand } from '../status';
 import { registerExecCommand } from './exec';
+import { registerInstallCommand } from './install';
 import { registerSearchCommand } from './search';
 
 /**
@@ -16,6 +17,7 @@ import { registerSearchCommand } from './search';
 export function registerSelfCommand(self: Command, context: CliContext): void {
     registerExecCommand(self, context);
     registerInitCommand(self, context);
+    registerInstallCommand(self, context);
     registerMaintainCommand(self, context);
     registerMigrateCommand(self, context);
     registerSearchCommand(self, context);

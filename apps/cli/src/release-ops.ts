@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import type { BuilderBumpVerConfig, SpurConfig } from '@gobing-ai/spur-config';
 import { resolveBuilderBumpVerConfig } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import { bundlePlugins } from '../../../scripts/commands/bundle-plugins';
 import type { CommandOutput } from './output';
 import { consoleOutput } from './output';
 import {
@@ -148,6 +147,41 @@ async function verifyLockfile(ctx: ReleaseContext, output: CommandOutput): Promi
  * manifest mutation so a bad plugin can't be tagged. Skips with a visible note
  * when the gate script itself is absent (e.g. the throwaway bump-ver test repos).
  */
+/**
+ * Re-stage the plugin copy a publishable package ships, by running the retained generator.
+ *
+ * `scripts/commands/bundle-plugins.ts` owns the source/package layout knowledge; this only wires the
+ * roots. Absent generator ⇒ visible skip (release fixtures), non-zero exit ⇒ hard failure.
+ */
+async function stagePluginCopy(
+    ctx: ReleaseContext,
+    pkgDir: string,
+    packageDir: string,
+    output: CommandOutput,
+): Promise<void> {
+    const generator = join(ctx.repoRoot, 'scripts', 'commands', 'bundle-plugins.ts');
+    if (!existsSync(generator)) {
+        output.write(`  ↳ bundle-plugins: generator not present in this repo — ${packageDir} left as staged`);
+        return;
+    }
+    const result = await run(ctx.repoRoot, [
+        'bun',
+        generator,
+        join(pkgDir, 'plugins'),
+        join(pkgDir, '.claude-plugin'),
+        join(ctx.repoRoot, 'plugins'),
+        join(ctx.repoRoot, '.claude-plugin'),
+    ]);
+    if (!result.ok) {
+        if (result.stdout) output.write(result.stdout);
+        if (result.stderr) output.write(result.stderr);
+        throw new Error(
+            `bundle-plugins failed while refreshing ${packageDir}; refusing to release a stale plugin copy.`,
+        );
+    }
+    output.write(`Refreshed staged plugin copy in ${packageDir}`);
+}
+
 async function assertPluginInstallable(ctx: ReleaseContext, output: CommandOutput): Promise<void> {
     const smokePath = join(ctx.repoRoot, 'scripts', 'commands', 'plugin-install-smoke.ts');
     if (!existsSync(smokePath)) {
@@ -463,17 +497,16 @@ async function syncMarketplaceAndPlugins(
     // `bun link`ed global install resolves those staged copies. Skipping this left the 0.4.9
     // release serving 0.4.8 plugin manifests to consumers of the link (2026-10-15 incident).
     // Only a previously staged tree is refreshed; the release flow never creates one.
+    //
+    // A93 1355: the staging module stays a repository generator, so the release path DRIVES it as a
+    // subprocess instead of value-importing repository tooling into the app (ADR-130 boundary). A
+    // checkout without the generator (a throwaway bump-ver fixture repo) skips with a visible note,
+    // exactly like the plugin-install-smoke gate above.
     for (const config of ctx.packages.values()) {
         const pkgDir = join(ctx.repoRoot, config.packageDir);
         const stagedMarketplace = join(pkgDir, '.claude-plugin', 'marketplace.json');
         if (!existsSync(stagedMarketplace)) continue;
-        await bundlePlugins(
-            join(pkgDir, 'plugins'),
-            join(pkgDir, '.claude-plugin'),
-            join(ctx.repoRoot, 'plugins'),
-            join(ctx.repoRoot, '.claude-plugin'),
-        );
-        output.write(`Refreshed staged plugin copy in ${config.packageDir}`);
+        await stagePluginCopy(ctx, pkgDir, config.packageDir, output);
     }
 }
 

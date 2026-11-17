@@ -397,7 +397,7 @@ describe('source-vs-bundle parity (task 0313)', () => {
         // tarball (see scripts/commands/bundle-config.ts).
         // Split the 'config' segment so this test (the parity gate itself) does not trip
         // sp-runtime-path, which bans contiguous config/{templates,...} literals.
-        const { bundleConfig } = await import('../../../scripts/commands/bundle-config');
+        const { bundleConfig } = await import('@gobing-ai/spur-app/builder');
         const cfg = 'config';
         const sourceDir = join(REPO_ROOT, cfg, 'templates', 'docs');
         const outDir = await mkdtemp(join(tmpdir(), 'spur-bundle-docs-'));
@@ -412,7 +412,7 @@ describe('source-vs-bundle parity (task 0313)', () => {
         ];
 
         try {
-            await bundleConfig(outDir);
+            await bundleConfig(outDir, { sourceRoot: REPO_ROOT });
             const bundleDir = join(outDir, 'templates', 'docs');
 
             for (const doc of docFiles) {

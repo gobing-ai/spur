@@ -11,6 +11,21 @@
 > over the same command — it keeps working unchanged for existing scripts and workflow YAML but is
 > absent from `spur --help`.
 
+## Related: machine setup (`spur self install`)
+
+`spur self init` scaffolds a project. The machine layer has its own verb since A93:
+
+```
+spur self install [--with <tool>]... [--json] [--json-envelope]
+```
+
+It copies the shipped global rules and config into the machine config root (`SPUR_GLOBAL_RULES_DIR`
+when set, else `~/.config/spur`) without overwriting an existing file, and reports the optional
+tools. `--with zg`, `--with a2a` and `--with sp-plugin` are repeatable and perform that tool's
+package-manager or Superskill work only when selected; a tool already on PATH stays `unchanged`.
+Unknown `--with` values exit 2 before any write, and the command never scaffolds a project, migrates
+SQL, edits a shell profile or replaces a running binary.
+
 ## Usage
 
 ```

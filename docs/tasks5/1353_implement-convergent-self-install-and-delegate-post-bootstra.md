@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Implement convergent self install and delegate post-bootstrap setup
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.456Z
-updated_at: "2026-11-16T23:11:37.397Z"
+updated_at: "2026-11-17T00:35:35.676Z"
 feature_id: A93
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1351"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1353. Implement convergent self install and delegate post-bootstrap setup
@@ -31,15 +33,15 @@ Issue triage: the migration outcome remains valid. Already-recorded direction is
 
 ### Requirements
 
-- [ ] R1. Implement proposed self install with repeatable --with <tool> options for zg, a2a and sp-plugin, plus JSON/envelope. Unknown tool names exit 2 before mutation. Bare invocation seeds machine assets only and skips optional tools visibly.
-- [ ] R2. Extract shared machine seed services from init; preserve existing custom files and default init behavior. Install fails on missing required seed assets, bypasses project DB/config boot, and never scaffolds cwd, migrates SQL or edits shell profiles.
-- [ ] R3. Retain verified atomic first-binary acquisition in install.sh and delegate setup to the absolute installed binary. Preserve SPUR_VERSION/SPUR_INSTALL/SPUR_RELEASE_URL/verification controls and translate SPUR_INSTALL_ZG/A2A defaults to explicit requests; do not swallow setup failures.
-- [ ] R4. Report every attempted step as created/unchanged/skipped/failed with required/message and ok/changed summary; required or explicitly selected failure exits 1 while the verified binary remains installed. Retry only missing/failed work, preserve Spur seed bytes/mtimes on rerun, and delegate adapter convergence without promising Superskill timestamp identity.
+- [x] R1. Implement proposed self install with repeatable --with <tool> options for zg, a2a and sp-plugin, plus JSON/envelope. Unknown tool names exit 2 before mutation. Bare invocation seeds machine assets only and skips optional tools visibly.
+- [x] R2. Extract shared machine seed services from init; preserve existing custom files and default init behavior. Install fails on missing required seed assets, bypasses project DB/config boot, and never scaffolds cwd, migrates SQL or edits shell profiles.
+- [x] R3. Retain verified atomic first-binary acquisition in install.sh and delegate setup to the absolute installed binary. Preserve SPUR_VERSION/SPUR_INSTALL/SPUR_RELEASE_URL/verification controls and translate SPUR_INSTALL_ZG/A2A defaults to explicit requests; do not swallow setup failures.
+- [x] R4. Report every attempted step as created/unchanged/skipped/failed with required/message and ok/changed summary; required or explicitly selected failure exits 1 while the verified binary remains installed. Retry only missing/failed work, preserve Spur seed bytes/mtimes on rerun, and delegate adapter convergence without promising Superskill timestamp identity.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Installation has a distinct owner and verified bootstrap
-- [ ] AC2 — Repeated and interrupted installation converges safely
+- [x] AC1 — Installation has a distinct owner and verified bootstrap
+- [x] AC2 — Repeated and interrupted installation converges safely
 
 Requirement and verification mapping: AC1 covers R1/R2/R3; AC2 covers R4. Given local verified release fixtures and isolated homes, run actual source/packed/standalone install, then rerun and interrupt selected steps; assert seed identity, no cwd database/scaffold, selected failure exits and retry convergence.
 
@@ -55,6 +57,12 @@ Requirement and verification mapping: AC1 covers R1/R2/R3; AC2 covers R4. Given 
 - Closed: failed selected tool exits 1 while retaining the binary, matching the proposed documented compatibility change; shell defaults become explicit selections.
 - Closed: seed mtimes/bytes are Spur-owned invariants; Superskill owns semantic adapter convergence and may refresh timestamps.
 - Deferred to Robin before public implementation: new verb, flags and installer error-policy consent. Real host/tool installation remains outside task proof scope.
+
+#### Q&A entry — 2026-11-16T23:49:24Z
+
+- Grantee: Robin (operator). Granted scope: the additive `spur self status` output, `spur self install`, and the six `spur builder` verbs — exactly the scope recorded in `docs/design/concrete-spur-self.md` §7 and `docs/reports/A93-script-ownership.json` `deferredConsent`.
+- Basis: operator answered the A93 batch consent question in this run (2026-11-16) with "grant all three scopes"; the grant is recorded in design §7. Step 0 of this task is therefore satisfied.
+- Not granted: publishing, deployments, workflow/IAM edits, or any surface outside that list.
 
 ### Design
 
@@ -77,15 +85,47 @@ Keep scripts/install.sh checksum/download/atomicity test ownership at scripts/co
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Install has a distinct owner and one implementation of each step:
+
+- `packages/app/src/services/global-seed.ts` (new, extracted from `apps/cli/src/commands/init.ts`) — `resolveGlobalConfigDir`, `globalRulesRoot`, `seedGlobalRules`, `seedGlobalConfig`. They return `{created, assetsFound}` instead of a bare count, which is what lets install treat "no bundled assets" as a required failure while init keeps its silent-zero scaffold behaviour unchanged (`init.ts` now calls `seedGlobalRules(context.fs, context).created.length`).
+- `packages/app/src/services/self-install.ts` (new) — `installSelf(ctx, {tools})` → `{ok, changed, steps}`. Seeds first (rules, config), then each optional tool in a stable order: healthy binary → `unchanged` and no package manager runs; unselected → `skipped` with the `--with` remedy; selected → brew/npm recipe, then a **post-check** that the binary resolves (a package manager exiting 0 without installing anything is a failure, not `created`); `sp-plugin` delegates exactly `superskill install sp --marketplace <dir>` and reports the delegation instead of inventing an adapter stamp. Exports `INSTALL_TOOLS`, `defaultRunCommand` and `resolveBundledMarketplaceDir`.
+- `apps/cli/src/commands/self/install.ts` (new) — flat verb `spur self install [--with <tool>]... [--json] [--json-envelope]`; repeatable `--with`, dedupe, unknown value → exit 2 **before any write**, text/JSON renderers, exit 0/1.
+- `apps/cli/src/index.ts` — `self install` joins the boot-free dispatch set and registers only that verb, so machine setup never requires a project config or creates a project database.
+- `apps/cli/src/commands/self/index.ts` — registration.
+- `scripts/install.sh` — acquisition only (OS/arch, download, checksum, atomic rename) with `SPUR_VERSION`/`SPUR_INSTALL`/`SPUR_RELEASE_URL`/`SPUR_SKIP_VERIFY` preserved; `install_zg`/`install_a2a` and the swallowed `spur init` are gone. The legacy `SPUR_INSTALL_ZG`/`SPUR_INSTALL_A2A` defaults are translated into explicit `--with` requests, and a failing setup is propagated: the verified binary stays installed, the CLI's exit code is returned, and the retry line is printed.
+- Tests, written first: `apps/cli/tests/commands/self/install.e2e.test.ts` (11 cases — bare/rerun/custom-config/unknown-tool/fixture-install/healthy-binary/failing-tool/sp-plugin delegation/missing-superskill/unwritable-root/text), `apps/cli/tests/commands/self/install.test.ts` (transport: exit 2 before write, envelope, dedupe), `packages/app/tests/services/global-seed.test.ts` + `self-install.test.ts` (convergence, post-check failure, delegation argv, helpers), and `scripts/commands/install-sh.test.ts` rewritten for the delegation contract (`self install --with …`, opt-outs, non-zero propagation).
+- Docs: `plugins/sp/skills/spur-cli/references/self.md`, `docs/help/spur-cli-matrix.md`, `docs/help/cmd_init.md`, `docs/help2/init.md` (parity gates green).
+
+Receipt: `.spur/run/1353-install-e2e.json` (two isolated-home runs, per-step results, convergence statement).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/commands/self/install.ts:24` registers the flat verb with repeatable `--with`, dedupe, `--json`/`--json-envelope`; an unknown value renders a usage error and exits 2 before any write (`install.ts:51`, covered by `apps/cli/tests/commands/self/install.test.ts` and the E2E "unknown tool exits 2 and mutates nothing"). Bare invocation seeds and reports `zg`/`a2a`/`sp-plugin` as `skipped` with the `--with` remedy. |
+| R2 | MET | `packages/app/src/services/global-seed.ts` is the extracted seed owner (`init.ts` now calls it); `{created, assetsFound}` lets install fail a required step on absent assets while init keeps its scaffold behaviour — 146 init/install CLI cases still pass. `apps/cli/src/index.ts:102` dispatches `self install` before project boot and registers only that verb, so no config is required and no project DB exists afterwards (E2E asserts `.spur` is never created). No shell-profile edit, no SQL migration, no cwd scaffold. |
+| R3 | MET | `scripts/install.sh` keeps OS/arch selection, download, `SHA256SUMS` verification and atomic rename, and delegates everything after the replace to `"${target}" self install` with `--with` requests translated from `SPUR_INSTALL_ZG`/`SPUR_INSTALL_A2A` (`scripts/install.sh:121`). `SPUR_VERSION`/`SPUR_INSTALL`/`SPUR_RELEASE_URL`/`SPUR_SKIP_VERIFY` are untouched; the old ` |
+| R4 | MET | `packages/app/src/services/self-install.ts:247` reports `{ok, changed, steps:[{name,state,required,message}]}`; exit policy is `ok ? 0 : 1` (`apps/cli/src/commands/self/install.ts:76`). Rerun convergence is measured, not asserted: the E2E compares the full seed tree before/after (`a rerun reports unchanged and rewrites nothing`) and `.spur/run/1353-install-e2e.json` records two isolated-home runs. A selected tool that fails keeps the seeds it wrote and exits 1, so the retry only redoes the failed step. Adapter state is explicitly delegated and never claimed. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | `apps/cli/tests/commands/self/install.e2e.test.ts:96` (seeds + no project state) and `scripts/commands/install-sh.test.ts` (bootstrap verifies then delegates; failure propagates) |
+| AC2 | MET | test | `install.e2e.test.ts:113` rerun identity, `:112` custom-config preservation, `:186` failing-tool partial success, `packages/app/tests/services/self-install.test.ts` package-manager-exit-0-without-binary case |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -100,3 +140,8 @@ Keep scripts/install.sh checksum/download/atomicity test ownership at scripts/co
 - Refinement report: docs/reports/2026-11-16-A93-ready-refinement.md.
 
 ### History
+
+- 2026-11-17T00:26:29.030Z todo → wip (system)
+- 2026-11-17T00:35:34.301Z wip → testing (system)
+- 2026-11-17T00:35:35.672Z testing → done (system)
+

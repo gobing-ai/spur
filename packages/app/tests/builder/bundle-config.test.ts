@@ -9,13 +9,15 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { bundleConfig } from './bundle-config';
+import { fileURLToPath } from 'node:url';
+import { bundleConfig } from '../../src/builder/bundle-config';
 
 const SCHEMA_LINE = /^\s*(?:\$schema|"\$schema")\s*:/gm;
+/** Repo root: packages/app/tests/builder → repo. */
+const SOURCE_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
 async function collectYaml(dir: string): Promise<string[]> {
     const out: string[] = [];
@@ -36,7 +38,7 @@ describe('bundleConfig', () => {
 
     test('no bundled workflow YAML has a duplicate $schema directive', async () => {
         target = await mkdtemp(join(tmpdir(), 'spur-bundle-'));
-        await bundleConfig(target);
+        await bundleConfig(target, { sourceRoot: SOURCE_ROOT });
 
         const yamlFiles = await collectYaml(join(target, 'workflows'));
         expect(yamlFiles.length, 'expected bundled workflow files').toBeGreaterThan(0);
@@ -50,7 +52,7 @@ describe('bundleConfig', () => {
 
     test('every bundled workflow YAML has at least one $schema directive', async () => {
         target = await mkdtemp(join(tmpdir(), 'spur-bundle-'));
-        await bundleConfig(target);
+        await bundleConfig(target, { sourceRoot: SOURCE_ROOT });
 
         const yamlFiles = await collectYaml(join(target, 'workflows'));
         for (const file of yamlFiles) {
@@ -67,23 +69,17 @@ describe('bundleConfig target guard (1155 — physical overlap, not lexical)', (
     let repoOut: string;
 
     /**
-     * A disposable repo whose `scripts/commands/bundle-config.ts` is a byte-for-byte copy of the
-     * implementation. Importing the COPY binds the module's `SOURCE` to this fixture's `config/`,
-     * so the destructive safety cases never point at the live checkout (1155 R3). The repo sits
-     * under a `tests/…/fixtures/…` path so Bun's `coveragePathIgnorePatterns` does not instrument the
-     * copy as a measured source file (it would otherwise fail the per-file coverage gate from
-     * `$TMPDIR`).
+     * A disposable checkout: its own `config/` tree and explicit `sourceRoot`, so the destructive
+     * safety cases never point at the live checkout (1155 R3). A93 1355 removed the old
+     * copy-the-module trick — the service now takes the root as a parameter, so no module ancestry
+     * (and no fixture copy that Bun's coverage gate would instrument) is involved.
      */
     async function fixture(): Promise<{
         repo: string;
-        run: (target: string) => Promise<{ target: string; injected: number }>;
+        run: (target: string) => Promise<{ target: string; source: string; injected: number }>;
     }> {
         root = await mkdtemp(join(tmpdir(), 'spur-bundle-guard-'));
-        const repo = join(root, 'tests', 'unit', 'fixtures', 'repo');
-        await mkdir(join(repo, 'scripts', 'commands'), { recursive: true });
-        const impl = fileURLToPath(new URL('./bundle-config.ts', import.meta.url));
-        const copied = join(repo, 'scripts', 'commands', 'bundle-config.ts');
-        await copyFile(impl, copied);
+        const repo = join(root, 'checkout');
         await mkdir(join(repo, 'config', 'workflows'), { recursive: true });
         await mkdir(join(repo, 'config', 'fixtures', 'rule'), { recursive: true });
         await writeFile(join(repo, 'config', 'SENTINEL.txt'), SENTINEL);
@@ -91,8 +87,7 @@ describe('bundleConfig target guard (1155 — physical overlap, not lexical)', (
         await writeFile(join(repo, 'config', 'workflows', 'quoted.yaml'), '"$schema": "x"\nkind: state-machine\n');
         await writeFile(join(repo, 'config', 'fixtures', 'rule', 'junk.yaml'), 'junk: true\n');
         repoOut = join(root, 'repo-out');
-        const mod = (await import(`${pathToFileURL(copied).href}?v=${Date.now()}`)) as typeof import('./bundle-config');
-        return { repo, run: mod.bundleConfig };
+        return { repo, run: (target: string) => bundleConfig(target, { sourceRoot: repo }) };
     }
 
     /** Every path under `dir`, relative to it — the source inventory a rejection must leave intact. */

@@ -433,6 +433,19 @@ export type {
 } from './services/fleet-service';
 // Project fleet declaration (0835) + orchestrator binding (0836)
 export { FleetService, materializeRoster, mergeAgentSpecs, resolveMemberExecutor } from './services/fleet-service';
+export { type GitContext, gitContext } from './services/git-context';
+export {
+    GLOBAL_CONFIG_DIR,
+    GLOBAL_CONFIG_EXAMPLE,
+    GLOBAL_CONFIG_FILE,
+    GLOBAL_RULES_DIR,
+    globalRulesRoot,
+    resolveGlobalConfigDir,
+    type SeedContext,
+    type SeedOutcome,
+    seedGlobalConfig,
+    seedGlobalRules,
+} from './services/global-seed';
 export {
     DEFAULT_RENEWER_MAX_LIFETIME_MS,
     GuestLeaseRenewer,
@@ -762,6 +775,31 @@ export {
 export { buildZgArgs, parseZgQuery, parseZgStatus, ZgOutputError } from './services/search-zg';
 export type { LoadSectionMatrixOptions } from './services/section-matrix-loader';
 export { loadSectionMatrix } from './services/section-matrix-loader';
+export {
+    type CommandResult,
+    defaultRunCommand,
+    INSTALL_TOOLS,
+    type InstallReport,
+    type InstallStep,
+    type InstallStepState,
+    type InstallTool,
+    installSelf,
+    type RunCommand,
+    resolveBundledMarketplaceDir,
+    type SelfInstallContext,
+} from './services/self-install';
+export {
+    collectSelfStatus,
+    installationProvenance,
+    SELF_STATUS_DEADLINE_MS,
+    type SelfStatusAggregate,
+    type SelfStatusContext,
+    type SelfStatusOverallState,
+    type SelfStatusScope,
+    type SelfStatusSection,
+    type SelfStatusSections,
+    type SelfStatusState,
+} from './services/self-status';
 export { shQuote } from './services/shell-quote';
 export {
     BUILTIN_CLAUDE_COMMANDS,
@@ -1239,6 +1277,17 @@ export {
     type WorkflowStateProgress,
     type WorkflowTransitionProgress,
 } from './workflow/progress-projection';
+export {
+    type AgentRunMeasurement,
+    type AgentRunStat,
+    evaluateCandidate,
+    measureAgentRunHistory,
+    readAgentRunHistory,
+    type WorkflowCandidate,
+    type WorkflowCandidateDelta,
+    type WorkflowCandidateMeasurement,
+    type WorkflowCandidateVerdict,
+} from './workflow/promotion-evaluation';
 export {
     type ComputeProofInputOptions,
     canonicalizeCheckboxMarkers,

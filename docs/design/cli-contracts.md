@@ -335,6 +335,29 @@ flags, validation and exit codes (ADR-021).
 
 <a id="spur-builder-pr-status--spur-builder-pr-check--spur-builder-pr-open--spur-builder-pr-review"></a>
 
+#### `spur builder build-cli` · `spur builder build-server` · `spur builder build-binaries [--source-root <dir>] [--json] [--json-envelope]`
+
+Compiled artifacts, absorbed from the repository build scripts by A93 1354 (ADR-130 2026-11-16
+amendment; consent in `harness-surface-governance.md` §4). `--source-root` defaults to the invocation
+cwd and must be a Spur checkout, validated before a lock is taken or a file is patched. Outputs:
+`dist/cli/spur`, `dist/server/spur-server`, and the six `dist/cli/spur-<os>-<arch>` assets plus
+`dist/cli/SHA256SUMS`. `--json` returns `{ok, sourceRoot, artifacts, diagnostics}`; failures exit
+nonzero with `{error: {code: "build", message, sourceRoot}}`. One compile lock beside the patched
+dependency dist; both source patches restore on every exit path, including a second-acquisition
+failure. Never publishes and never mutates Git. Service:
+`packages/app/src/builder/{compile,binaries}.ts` behind `@gobing-ai/spur-app/builder`.
+
+#### `spur builder bundle-config` · `spur builder bundle-web` · `spur builder verify-pack`
+
+Staging and archive inspection, absorbed by A93 1355 (consent: `harness-surface-governance.md` §4).
+`bundle-config <out-dir>` and `bundle-web [out-dir]` take `--source-root`, validate the checkout, and
+refuse a physically overlapping source/destination; `bundle-web` auto-builds only the checkout's own
+missing `dist/web`. `verify-pack <tgz>` needs no checkout: it validates the archive listing before
+extraction (no absolute/traversal/link/special members) and takes the version authority from
+`package/package.json` inside the archive. Services:
+`packages/app/src/builder/{bundle-config,bundle-web,verify-pack}.ts`; the Board facade specifiers
+live in `@gobing-ai/spur-contracts` and are re-exported by the web manifest.
+
 #### `spur builder pr-status [--since <iso>] [--head <sha>]` · `spur builder pr-check [--base <branch>] [--scan-only]` · `spur builder pr-open [--base <branch>]` · `spur builder pr-review [--force] [--focus <text>] [--no-wait] [--timeout <s>] [--interval <s>]`
 
 **Four flat PR verbs replacing the `pr <op>` pass-through (task 1219, feature L1).** Each registers
@@ -1231,5 +1254,12 @@ gates, and the `decision-routing-example` fixture (retired from the catalogue by
 Offline readiness is projected by `spur self status` as `decisionMaker: {enabled, provider,
 credentialPresent, state, connectivity, inlineSupport}` with states `disabled`, `missing-key`,
 and `configured-not-probed` (presence check only — no live probe, never echoes the key value).
+The aggregate that carries it is additive (A93 1352): `schemaVersion: 1`,
+`overallState: ready|degraded|missing`, and nine `sections` (`installation`, `configuration`,
+`schema`, `dependencies`, `projects`, `agents`, `decisions`, `corpus`, `workflows`) each
+`{state, scope, source, message, data?}`. `spur self status` and the hidden `spur status` alias
+render the same app-owned collector and dispatch before database boot, so reporting readiness never
+creates the schema it reports on; ledger-backed sections report `unavailable` rather than empty
+counts while the installed ts-db facade has no proven non-mutating read.
 Known limitations: no hot reload (config is read at process start), no live connectivity probe,
 and provider probabilities are uncalibrated policy, not measured quality.

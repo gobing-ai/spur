@@ -1,104 +1,19 @@
 /**
- * Copy the repo-root `config/` tree into a package's bundled config dir for the
- * npm tarball, excluding test fixtures and OS junk, then inject `$schema`
- * directives so end users get IDE validation via the published schemas.
+ * Source-bundle entrypoint for the checkout's `config/` tree (A93 1355).
  *
- * Source config files MAY already carry a `$schema` directive — those are
- * left untouched. Files without one get an unquoted `$schema:` prepended so
- * end-user IDE validation resolves against the schemas shipped with the CLI.
+ * The implementation lives in `@gobing-ai/spur-app/builder`. This forwarder keeps the
+ * `scripts/spur-dev.ts bundle-config <out>` route and every package script working without
+ * importing the CLI (which needs the very generated output this step produces).
  */
-import { cp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bundleConfig } from '@gobing-ai/spur-app/builder';
 
-const SOURCE = fileURLToPath(new URL('../../config', import.meta.url));
+/** Repo root: scripts/commands → repo. The FORWARDER anchors the checkout; the service takes it. */
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-// Skip anything that is not a shippable config asset. `cp`'s filter runs per
-// entry: returning false prunes the entry (and, for a directory, its subtree).
-// `fixtures` = authoring smoke samples (spur-cli operations.md convention:
-// .spur/rules/fixtures/<rule-id>/should-{fire,pass}.*), never shipped.
-const EXCLUDE = /(^|\/)(\.DS_Store|fixtures)($|\/)/;
-
-/**
- * 1155 R1: resolve aliases even when the destination's final directories do not exist yet — only a
- * genuine ENOENT is walked up, so EACCES/ENOTDIR/ELOOP propagate instead of degrading to a lexical
- * answer. Same algorithm as `bundle-web`'s private helper, kept local (no shared abstraction).
- */
-async function canonicalPath(path: string): Promise<string> {
-    const absolute = resolve(path);
-    try {
-        return await realpath(absolute);
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        return join(await canonicalPath(dirname(absolute)), basename(absolute));
-    }
-}
-
-/** Empty relative path, `..` exactly, or a `..` segment — never a bare `startsWith('..')`. */
-function contains(parent: string, child: string): boolean {
-    const path = relative(parent, child);
-    return path === '' || (!isAbsolute(path) && path !== '..' && !path.startsWith(`..${sep}`));
-}
-
-/** Bundle `config/` into `target`, excluding authoring fixtures and OS junk, then inject `$schema`. */
-export async function bundleConfig(target: string | undefined): Promise<{ target: string; injected: number }> {
-    if (!target) {
-        throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
-    }
-    // The target is wiped first, so resolve BOTH sides physically before any removal and refuse
-    // overlap in either direction (1155 R1). A lexical check misses a symlinked parent that aliases
-    // the repo, which deleted the real `config/` before `cp` even failed.
-    const sourcePath = await canonicalPath(SOURCE);
-    const targetPath = await canonicalPath(target);
-    if (contains(sourcePath, targetPath) || contains(targetPath, sourcePath)) {
-        throw new Error(`bundle-config: refusing to replace ${resolve(target)} — it contains the source ${SOURCE}`);
-    }
-    await rm(target, { recursive: true, force: true });
-    await cp(SOURCE, target, {
-        recursive: true,
-        filter: (src) => !EXCLUDE.test(src.slice(SOURCE.length)),
-    });
-
-    // Inject $schema directives so end-user IDE validation resolves against
-    // the schemas shipped alongside the CLI in the npm package. Files that
-    // already carry a $schema directive are skipped to avoid duplicate keys.
-    const injected = await injectSchemas(target, '');
-
-    return { target, injected };
-}
-
-const SCHEMA_PREFIX = '@gobing-ai/spur/schemas/';
-
-/** Map a YAML file path (relative to config root) to its $schema specifier. */
-function schemaFor(relPath: string): string | null {
-    if (basename(relPath) === 'config.global.yaml') return null; // already has $schema
-    if (relPath.startsWith('workflows/')) return `${SCHEMA_PREFIX}state-machine-workflow.schema.json`;
-    if (relPath.startsWith('decisions/')) return `${SCHEMA_PREFIX}decision-catalog.schema.json`;
-    // Presets are at the rules/ root; rule files live in category subdirs.
-    if (dirname(relPath) === 'rules') return `${SCHEMA_PREFIX}preset.schema.json`;
-    if (relPath.startsWith('rules/')) return `${SCHEMA_PREFIX}rule-file.schema.json`;
-    return null;
-}
-
-async function injectSchemas(dir: string, relPrefix: string): Promise<number> {
-    let count = 0;
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-        const full = join(dir, entry.name);
-        const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) {
-            count += await injectSchemas(full, rel);
-        } else if (entry.name.endsWith('.yaml')) {
-            const schema = schemaFor(rel);
-            if (schema) {
-                const content = await readFile(full, 'utf-8');
-                // Skip files that already carry a $schema directive (quoted or
-                // unquoted) — duplicating it produces a "Map keys must be
-                // unique" YAMLParseError in every bundled workflow that has one.
-                if (/^\s*(?:\$schema|"\$schema")\s*:/m.test(content)) continue;
-                await writeFile(full, `$schema: "${schema}"\n${content}`);
-                count++;
-            }
-        }
-    }
-    return count;
+/** Stage `config/` into `target`, returning the destination and the injected-schema count. */
+export async function bundleConfigOutput(target: string | undefined): Promise<{ target: string; injected: number }> {
+    if (!target) throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
+    const result = await bundleConfig(target, { sourceRoot: REPO_ROOT });
+    return { target: result.target, injected: result.injected };
 }

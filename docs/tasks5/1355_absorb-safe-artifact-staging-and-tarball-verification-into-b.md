@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Absorb safe artifact staging and tarball verification into builder
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.457Z
-updated_at: "2026-11-16T23:11:41.606Z"
+updated_at: "2026-11-17T01:18:30.243Z"
 feature_id: A93
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 6
 
 dependencies: ["1351", "1354"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1355. Absorb safe artifact staging and tarball verification into builder
@@ -32,14 +34,14 @@ Issue triage: the migration outcome remains valid. Already-recorded direction is
 
 ### Requirements
 
-- [ ] R1. Move bundle-config/bundle-web/verify-pack into app builder services and proposed flat verbs with --source-root where defined, compatible positional inputs and structured JSON/envelope. Preserve default web auto-build only for the default source checkout and validate custom source fixtures without building.
-- [ ] R2. Preserve physical symlink-aware source/destination overlap rejection, config filters/schema injection and Board manifest/import-map checks. Move unchanged Board facade specifier constants to contracts and re-export from web so app has no web runtime import or copied list.
-- [ ] R3. Validate archive entry paths/types before extraction: reject absolute/traversal names, link/special entries and entries outside package. Read expected version from extracted package/package.json and compare plugin/marketplace versions; never depend on the verifier checkout version. Preserve missing/malformed/pruned-content failures.
-- [ ] R4. Rewire package/dispatcher/test callers and retain documented generator/CI forwarding routes; prove cold source bundle-config, valid source/packed/standalone artifacts, symlink/source protection, archive escape rejection and independent archive version checks with a machine receipt.
+- [x] R1. Move bundle-config/bundle-web/verify-pack into app builder services and proposed flat verbs with --source-root where defined, compatible positional inputs and structured JSON/envelope. Preserve default web auto-build only for the default source checkout and validate custom source fixtures without building.
+- [x] R2. Preserve physical symlink-aware source/destination overlap rejection, config filters/schema injection and Board manifest/import-map checks. Move unchanged Board facade specifier constants to contracts and re-export from web so app has no web runtime import or copied list.
+- [x] R3. Validate archive entry paths/types before extraction: reject absolute/traversal names, link/special entries and entries outside package. Read expected version from extracted package/package.json and compare plugin/marketplace versions; never depend on the verifier checkout version. Preserve missing/malformed/pruned-content failures.
+- [x] R4. Rewire package/dispatcher/test callers and retain documented generator/CI forwarding routes; prove cold source bundle-config, valid source/packed/standalone artifacts, symlink/source protection, archive escape rejection and independent archive version checks with a machine receipt.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Builder absorbs coherent reusable build and packaging operations
+- [x] AC1 — Builder absorbs coherent reusable build and packaging operations
 
 Requirement and verification mapping: AC1 covers R1–R4. Given real config/web/tarball fixtures, invoke actual builder verbs; assert preserved source snapshots on rejection, portable artifact content, archive-owned version comparisons, rejected unsafe members and default/custom web behavior.
 
@@ -55,6 +57,12 @@ Requirement and verification mapping: AC1 covers R1–R4. Given real config/web/
 - Closed: tarball manifest is version authority; unsafe archive members fail before extraction. Existing integrity gaps must not be called preserved protections.
 - Closed: Board constants move unchanged to the existing transport owner and retain the web export; no duplicated list or runtime app->web import.
 - Deferred to Robin before implementation: exact three artifact verbs/flags/output consent. No workflow/publish or new dependency authorization is inferred.
+
+#### Q&A entry — 2026-11-16T23:49:24Z
+
+- Grantee: Robin (operator). Granted scope: the additive `spur self status` output, `spur self install`, and the six `spur builder` verbs — exactly the scope recorded in `docs/design/concrete-spur-self.md` §7 and `docs/reports/A93-script-ownership.json` `deferredConsent`.
+- Basis: operator answered the A93 batch consent question in this run (2026-11-16) with "grant all three scopes"; the grant is recorded in design §7. Step 0 of this task is therefore satisfied.
+- Not granted: publishing, deployments, workflow/IAM edits, or any surface outside that list.
 
 ### Design
 
@@ -77,15 +85,46 @@ Owned: three original modules/adapters, app builder services, narrow exports, pa
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Staging and inspection joined the builder, with the safety rules the move required:
+
+- `packages/app/src/builder/bundle-config.ts` — `bundleConfig(target, { sourceRoot })`: source is `<sourceRoot>/config`, physical (realpath) overlap refusal in both directions kept, fixture/OS-junk prune and `$schema` injection unchanged.
+- `packages/app/src/builder/bundle-web.ts` — `bundleWeb({ target?, source?, sourceRoot, run? })`: defaults `<root>/dist/web` → `<root>/apps/cli/web`; auto-builds ONLY the checkout's default missing `dist/web` (custom sources must already be built), and keeps the board-runtime/import-map/facade-asset checks. `BOARD_UI_KIT_SPECIFIER` + `BOARD_FACADE_SPECIFIERS` moved **unchanged** to `packages/contracts/src/board.ts` and are re-exported by `apps/web/src/modules/runtime/manifest.ts`, so packaging has no runtime app→web import and no second list.
+- `packages/app/src/builder/verify-pack.ts` — `verifyPack(tarball)` / `verifyPackExtract(root)` / `parseArchiveListing` / `assertSafeMembers`. **Integrity changed, not just moved:** members are validated from the `tar -tvzf` type column paired with exact names from `tar -tzf` (portable across BSD/GNU padding, name-spaces included) before any extraction — absolute, drive-qualified, backslash, `..` traversal, outside-`package/`, link and special members are refused; the archive is then extracted into a private temp dir that is always removed; the version authority is `<extract>/package/package.json` instead of the verifier's checkout.
+- `packages/app/src/builder/index.ts` — re-exports; `apps/cli/src/commands/builder/build.ts` gains `bundle-config`, `bundle-web`, `verify-pack` (positional operand or `<out-dir>` + `--source-root`; `verify-pack` skips checkout validation because its subject is an artifact), registered in `builder/index.ts`.
+- `scripts/commands/{bundle-config,bundle-web,verify-pack}.ts` reduced to thin forwarders; `scripts/spur-dev.ts` imports them under new names so package scripts/CI keep working. `bundle-plugins.ts` gained an `import.meta.main` CLI entry so the release path can **drive** it.
+- Boundary edge closed: `apps/cli/src/release-ops.ts` no longer value-imports `scripts/commands/bundle-plugins`; `stagePluginCopy()` spawns the retained generator and skips visibly when it is absent (fixture repos) — the release-ops fixture test now copies the real generator in and exercises the spawn path.
+- Tests: `apps/cli/tests/commands/builder/artifacts.e2e.test.ts` (10 cases: staging + prune + overlap refusal, built-board staging, missing-manifest refusal, archive-owned version, link-member refusal, uninspectable archive, plugin-version mismatch, temp-dir cleanup, missing tarball); `packages/app/tests/builder/{verify-pack,bundle-config,bundle-web}.test.ts` moved with their subjects and extended (member classification, traversal/absolute/link/special refusal, version authority, pruned content, default-source auto-build via injected runner).
+- Docs/governance: `docs/design/harness-surface-governance.md` (§3 frozen list → fourteen verbs, §4 A93 row now lists all six builder verbs), `docs/design/cli-contracts.md`, `docs/help/cmd_builder.md`, `docs/help2/builder.md`, `docs/help/spur-cli-matrix.md` (builder 11→14), `plugins/sp/skills/spur-cli/references/builder.md`.
+
+Receipt: `.spur/run/1355-artifacts-e2e.json`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/commands/builder/build.ts:35` registers `bundle-config <out-dir>`, `bundle-web [out-dir]`, `verify-pack <tgz>` with `--source-root` on the two staging verbs, `--json`/`--json-envelope` on all three, and the shared `{ok, sourceRoot, artifacts, diagnostics}` / `{error:{code,message}}` shapes. Default web auto-build is limited to the checkout's own `dist/web` (`packages/app/src/builder/bundle-web.ts:132`); a custom source is never built. Services: `packages/app/src/builder/{bundle-config,bundle-web,verify-pack}.ts`. |
+| R2 | MET | Physical (realpath, ENOENT-walked) overlap refusal in both directions is preserved with the target wiped only after it (`bundle-config.ts:60`); fixture/OS-junk prune and `$schema` injection unchanged; board-runtime manifest, import-map ordering and facade-asset existence checks unchanged. `BOARD_UI_KIT_SPECIFIER`/`BOARD_FACADE_SPECIFIERS` moved unchanged to `packages/contracts/src/board.ts:143` and are re-exported by `apps/web/src/modules/runtime/manifest.ts:13` — the app has no web runtime import and no copied list (23 web manifest/distribution tests still pass). |
+| R3 | MET | `verify-pack.ts:78` refuses absolute/drive/backslash/traversal/outside-`package/`/link/special members from the listing (types from `tar -tvzf`, names from `tar -tzf` so BSD/GNU padding and spaces cannot confuse it) **before** extraction; extraction goes into a private temp dir that is removed in `finally`. Version authority is `<extract>/package/package.json` (`verify-pack.ts:120`) — the E2E verifies an archive at `123.456.789`, a version this checkout does not carry. An uninspectable archive fails rather than falling back. |
+| R4 | MET | Package/dispatcher callers rewired: `scripts/commands/{bundle-config,bundle-web,verify-pack}.ts` are thin forwarders behind the same names `scripts/spur-dev.ts` imports; `bundle-plugins.ts` gained an `import.meta.main` entry so `apps/cli/src/release-ops.ts` **drives** it instead of value-importing it (the A93 boundary edge is closed, exercised end to end by the release-ops fixture). Receipt `.spur/run/1355-artifacts-e2e.json` plus 10 artifact E2E cases and 68 app builder tests. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `apps/cli/tests/commands/builder/artifacts.e2e.test.ts` (10 cases: staging/prune/overlap, board staging + manifest refusal, archive-owned version, link refusal, uninspectable archive, version mismatch, temp cleanup) and `packages/app/tests/builder/` (68 cases incl. member classification and traversal/absolute refusal) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -99,3 +138,8 @@ Owned: three original modules/adapters, app builder services, narrow exports, pa
 - Refinement report: docs/reports/2026-11-16-A93-ready-refinement.md.
 
 ### History
+
+- 2026-11-17T01:04:48.883Z todo → wip (system)
+- 2026-11-17T01:18:28.701Z wip → testing (system)
+- 2026-11-17T01:18:30.237Z testing → done (system)
+

@@ -3,22 +3,24 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import {
     type AgentRunMeasurement,
+    evaluateCandidate,
+    measureAgentRunHistory,
+    type WorkflowCandidate,
+    type WorkflowCandidateVerdict,
+} from '@gobing-ai/spur-app';
+import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import {
     checkRetirementGuard,
     checkWorkflowPromotion,
     countAgentRunActions,
-    evaluateCandidate,
     findParallelDefinitions,
     isPastDeadline,
     loadCanonicalAgentRunCounts,
-    measureAgentRunHistory,
     runWorkflowPromotion,
     validateCandidate,
-    type WorkflowCandidate,
     type WorkflowCandidatesConfig,
-    type WorkflowCandidateVerdict,
 } from './workflow-promotion';
 
 /** A minimal valid candidate record. */

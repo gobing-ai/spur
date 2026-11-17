@@ -1,10 +1,14 @@
-/** Compile the standalone server through the shared native DB bundling facade. */
+/**
+ * Source-build entrypoint for the standalone server (A93 1354). Thin forwarder over the shared
+ * app-owned compile service; see `build-cli.ts` for why the repository keeps an entrypoint.
+ */
 import { fileURLToPath } from 'node:url';
-import { buildCompiledBinary } from './build-cli';
+import { buildServer } from '@gobing-ai/spur-app/builder';
 
-export async function buildServer(): Promise<void> {
-    await buildCompiledBinary(
-        fileURLToPath(new URL('../../apps/server/src/index.ts', import.meta.url)),
-        fileURLToPath(new URL('../../dist/server/spur-server', import.meta.url)),
-    );
+/** Repo root: scripts/commands → repo (package scripts run from a workspace cwd). */
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+
+/** Compile the standalone server from this checkout. */
+export async function buildServerBinary(): Promise<void> {
+    await buildServer({ sourceRoot: REPO_ROOT, cwd: REPO_ROOT });
 }

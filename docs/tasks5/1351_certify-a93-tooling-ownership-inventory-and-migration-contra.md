@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Certify A93 tooling ownership inventory and migration contract prerequisites
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.453Z
-updated_at: "2026-11-16T23:11:21.379Z"
+updated_at: "2026-11-16T23:44:49.313Z"
 feature_id: A93
 priority: P2
 tags:
   - A93
 estimate_hours: 3
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1351. Certify A93 tooling ownership inventory and migration contract prerequisites
@@ -30,15 +32,15 @@ Issue triage: the migration outcome remains valid. Already-recorded direction is
 
 ### Requirements
 
-- [ ] R1. Produce docs/reports/A93-script-ownership.json covering scripts/install.sh, scripts/spur-dev.ts and every tracked scripts/commands/**/*.ts candidate, including test-only files and nested fixtures. Record path, responsibility, destination, action, wave WBS, companion tests and path:line caller evidence; retained files require a reason.
-- [ ] R2. Verify the existing ADR-130 amendment against governance/AGENTS and source templates; change only a real mismatch and preserve dated history. No runtime implementation or checker-policy change.
-- [ ] R3. Persist the exact proposed self install/status and six builder surfaces, affected legacy behavior and consent scope in the owning design. Record Robin as the deferred consent owner; absent consent stops dependent public implementation, not inventory certification.
-- [ ] R4. Write the coverage assertion first at repo-wide-tests/a93-script-ownership.test.ts, then the report. Fail for duplicate/unclassified candidates, missing caller evidence without an explicit no-runtime-caller finding, invalid WBS ownership or an app-to-script runtime import. Leave build proofs to 1354/1355.
+- [x] R1. Produce docs/reports/A93-script-ownership.json covering scripts/install.sh, scripts/spur-dev.ts and every tracked scripts/commands/**/*.ts candidate, including test-only files and nested fixtures. Record path, responsibility, destination, action, wave WBS, companion tests and path:line caller evidence; retained files require a reason.
+- [x] R2. Verify the existing ADR-130 amendment against governance/AGENTS and source templates; change only a real mismatch and preserve dated history. No runtime implementation or checker-policy change.
+- [x] R3. Persist the exact proposed self install/status and six builder surfaces, affected legacy behavior and consent scope in the owning design. Record Robin as the deferred consent owner; absent consent stops dependent public implementation, not inventory certification.
+- [x] R4. Write the coverage assertion first at repo-wide-tests/a93-script-ownership.test.ts, then the report. Fail for duplicate/unclassified candidates, missing caller evidence without an explicit no-runtime-caller finding, invalid WBS ownership or an app-to-script runtime import. Leave build proofs to 1354/1355.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Architectural direction precedes script migration
-- [ ] AC2 — Every script has an evidenced migration disposition
+- [x] AC1 — Architectural direction precedes script migration
+- [x] AC2 — Every script has an evidenced migration disposition
 
 Requirement and verification mapping: AC1 covers R2/R3; AC2 covers R1/R4. Observe through the current ADR/governance text and repo-wide ownership assertion, with an inventory digest receipt.
 
@@ -73,15 +75,42 @@ Budget: one 3h session; mutationPolicy: docs-and-inventory-only; requireDiff: re
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Owned delta, all docs/inventory:
+
+- `docs/reports/A93-script-ownership.json` — the inventory artifact: 64 entries (regenerated candidate set, not a fixed count), each with responsibility, destination (`builder|self|app-workflow|scripts`), action (`absorb|extract|retain|slim|shrink`), owning A93 wave, companion tests, `path:line` callers, and a responsibility-based reason where the file stays in `scripts/`. Adds `deferredConsent` (owner Robin, exact scope) and `boundaryEdges` (one real app→script import).
+- `repo-wide-tests/a93-script-ownership.test.ts` — the coverage assertion, written first: report shape, exact candidate coverage (missing/duplicate/stray), classification consistency (a retained file must carry a reason; a moving action must name a wave), caller/test anchor resolution, "no callers ⇒ declared finding + named subject", the app→script import ledger, the ADR-130 amendment surviving beside its historical reading, and the proposed-contract/consent record.
+- `docs/design/concrete-spur-self.md` §6–7 — records the release-ops boundary defect and its owner (1355), and the explicit consent record (owner Robin, deferred, with the exact verb/output scope and the legacy behavior each change touches).
+
+No runtime, rule or workflow change: R2's verification found ADR-130, `docs/03_ARCHITECTURE.md`, `docs/design/harness-surface-governance.md` and `AGENTS.md` already consistent, and `config/templates/` carries no placement text to correct.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/reports/A93-script-ownership.json` holds 64 entries — `scripts/install.sh`, `scripts/spur-dev.ts` and every tracked `scripts/commands/**/*.ts`, including 29 companions and the nested `fixtures/fleet-host-fixture.ts`; each carries responsibility, destination, action, wave, companion tests, `path:line` callers and a reason where it stays. Candidate set is regenerated by `repo-wide-tests/a93-script-ownership.test.ts:78`. |
+| R2 | MET | ADR-130 keeps its dated amendment beside the historical reading (`docs/00_ADR.md:2223`, `docs/00_ADR.md:2241`); `docs/design/harness-surface-governance.md:85` and `AGENTS.md:219` carry the same split. `config/templates/` ships no placement text (portable project scaffolds only), so no template repair was needed — verified, not assumed. |
+| R3 | MET | `docs/design/concrete-spur-self.md:117` names Robin as the deferred consent owner with the exact verb/output scope and the legacy behavior each change touches; `docs/reports/A93-script-ownership.json` mirrors it in `deferredConsent` with `blocksPublicImplementation: true`. No public implementation is claimed. |
+| R4 | MET | The assertion was written before the report and fails without it (0 pass, 1 error); it now passes 12/12 and is failure-sensitive: duplicate entry, missing retained reason, out-of-range caller, invalid wave, unknown destination, dropped boundary edge and consent-owner drift each turn it red. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `repo-wide-tests/a93-script-ownership.test.ts:232` — ADR amendment + governance/entry projection assertions both pass |
+| AC2 | MET | test | `repo-wide-tests/a93-script-ownership.test.ts:90` — exact candidate coverage, classification consistency, anchor resolution and the app→script ledger all pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -93,3 +122,8 @@ Budget: one 3h session; mutationPolicy: docs-and-inventory-only; requireDiff: re
 - Refinement report: docs/reports/2026-11-16-A93-ready-refinement.md.
 
 ### History
+
+- 2026-11-16T23:44:05.970Z todo → wip (system)
+- 2026-11-16T23:44:47.795Z wip → testing (system)
+- 2026-11-16T23:44:49.309Z testing → done (system)
+

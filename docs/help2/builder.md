@@ -1,11 +1,17 @@
 # spur builder
 
-Release plumbing: version bumps, release tags, npm publish, the four flat PR-review verbs, and read-only branch topology.
+Release plumbing: compiled artifacts, version bumps, release tags, npm publish, the four flat PR-review verbs, and read-only branch topology.
 
 ## Subcommands
 
 | Subcommand | Description |
 | --- | --- |
+| `bundle-config <out-dir> [flags]` | Stage the checkout's `config/` tree with `$schema` injection |
+| `bundle-web [out-dir] [flags]` | Stage the built Board assets into the CLI package tree |
+| `verify-pack <tgz> [flags]` | Inspect a packed tarball (member safety, archive-owned versions) |
+| `build-binaries [flags]` | Cross-compile the six release binaries plus `SHA256SUMS` |
+| `build-cli [flags]` | Compile the checkout's `spur` binary |
+| `build-server [flags]` | Compile the checkout's standalone server |
 | `bump-ver [target] [version]` | Bump a package version, commit, tag, optionally push |
 | `drop-tags [target] [version]` | Delete release tags locally and optionally on origin |
 | `publish <dir> [--otp code]` | Resolve workspace/catalog ranges, build, and `npm publish` a package (CI) |
@@ -14,6 +20,71 @@ Release plumbing: version bumps, release tags, npm publish, the four flat PR-rev
 | `pr-open [flags]` | Publish the branch and reuse or create its PR (`FOUND` / `CREATED` / `FAIL`) |
 | `pr-review [flags]` | Request the GitHub Codex review and collect it (`CLEAN` / `FINDINGS` / `PENDING` / `FAIL`) |
 | `pr-status [flags]` | Read-only PR/CI/Codex status with the current-HEAD review as `review` |
+
+## spur builder build-cli
+
+```
+spur builder build-cli [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder build-server
+
+```
+spur builder build-server [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder build-binaries
+
+```
+spur builder build-binaries [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-config
+
+```
+spur builder bundle-config [options] <out-dir>
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-web
+
+```
+spur builder bundle-web [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder verify-pack
+
+```
+spur builder verify-pack [options] <tgz>
+```
+
+| Option | Description |
+|---|---|
+| `--json` | Machine-readable report |
 
 ## spur builder bump-ver
 

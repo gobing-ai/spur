@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { bumpVer as runBumpVer, dropTags as runDropTags } from '../src/release-ops';
 import { createCapturedOutput } from './helpers';
@@ -405,6 +406,14 @@ describe('builder edge paths', () => {
 
     test('refreshes a previously staged plugin copy in the shipping package', async () => {
         const { repo } = mkRepo();
+        // A93 1355: the staging generator stays in the repository, so the release path DRIVES it as a
+        // subprocess. Give the fixture repo the real generator (it resolves its roots from its own
+        // location) so this exercises the spawn contract end to end.
+        mkdirSync(join(repo, 'scripts', 'commands'), { recursive: true });
+        copyFileSync(
+            fileURLToPath(new URL('../../../scripts/commands/bundle-plugins.ts', import.meta.url)),
+            join(repo, 'scripts', 'commands', 'bundle-plugins.ts'),
+        );
         // Canonical root trees at the old version…
         mkdirSync(join(repo, 'plugins', 'sp'), { recursive: true });
         mkdirSync(join(repo, '.claude-plugin'), { recursive: true });

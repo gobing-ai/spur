@@ -16,9 +16,9 @@
  *   emit-board-types                            emit apps/cli/board/index.d.ts and the module-kit declarations from their authoring sources
  *   emit-migration-sql                          emit the 0037 migration SQL module from its released .sql
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
- *   build-binaries                              cross-compile per-platform spur
- *   build-cli                                  patch ts-runtime + compile local `spur` binary
- *   build-server                               compile standalone server with the same native DB facade
+ *   build-binaries                              forward to `spur builder build-binaries`
+ *   build-cli                                   forward to `spur builder build-cli`
+ *   build-server                                forward to `spur builder build-server`
  *   plugin-install-smoke                       prove the plugin surface is standalone and installs clean
  *
  *   L2 test runner / coverage
@@ -59,20 +59,20 @@ import { join } from 'node:path';
 import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
-import { buildBinaries } from './commands/build-binaries';
-import { buildCli } from './commands/build-cli';
-import { buildServer } from './commands/build-server';
-import { bundleConfig } from './commands/bundle-config';
+import { buildReleaseBinaries } from './commands/build-binaries';
+import { buildCliBinary } from './commands/build-cli';
+import { buildServerBinary } from './commands/build-server';
+import { bundleConfigOutput } from './commands/bundle-config';
 import { bundleLayaWorker } from './commands/bundle-laya-worker';
 import { bundlePlugins } from './commands/bundle-plugins';
-import { bundleWeb } from './commands/bundle-web';
+import { bundleWebOutput } from './commands/bundle-web';
 import { devAll } from './commands/dev-all';
 import { emitBoardDeclarations, emitKitDeclarations } from './commands/emit-board-types';
 import { emitMigrationSql } from './commands/emit-migration-sql';
 import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
 import { linkCheck } from './commands/link-check';
-import { verifyPack } from './commands/verify-pack';
+import { verifyPackTarball } from './commands/verify-pack';
 import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 /**
@@ -115,7 +115,7 @@ const [command, ...args] = process.argv.slice(2);
 try {
     switch (command) {
         case 'bundle-config': {
-            const result = await bundleConfig(args[0]);
+            const result = await bundleConfigOutput(args[0]);
             console.log(
                 `Bundled config -> ${result.target} (fixtures/OS junk excluded, ${result.injected} $schema directives injected)`,
             );
@@ -127,7 +127,7 @@ try {
             break;
         }
         case 'bundle-web': {
-            const result = await bundleWeb(args[0]);
+            const result = await bundleWebOutput(args[0]);
             console.log(`Bundled board assets ${result.source} -> ${result.target}`);
             break;
         }
@@ -153,17 +153,17 @@ try {
         case 'verify-pack': {
             const tarball = args[0];
             if (!tarball) throw new Error('Usage: spur-dev verify-pack <path-to-.tgz>');
-            process.exit(await verifyPack(tarball));
+            process.exit(await verifyPackTarball(tarball));
             break;
         }
         case 'build-cli':
-            await buildCli();
+            await buildCliBinary();
             break;
         case 'build-server':
-            await buildServer();
+            await buildServerBinary();
             break;
         case 'build-binaries':
-            await buildBinaries();
+            await buildReleaseBinaries();
             break;
         case 'dev-all':
             devAll();

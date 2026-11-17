@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Centralize workflow promotion evaluation and close the A93 script ownership audit
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.457Z
-updated_at: "2026-11-16T23:11:43.631Z"
+updated_at: "2026-11-17T01:32:35.041Z"
 feature_id: A93
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 4
 
 dependencies: ["1351", "1352", "1353", "1354", "1355"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1356. Centralize workflow promotion evaluation and close the A93 script ownership audit
@@ -31,14 +33,14 @@ Issue triage: the migration outcome remains valid. Already-recorded direction is
 
 ### Requirements
 
-- [ ] R1. Move reusable readAgentRunHistory/measureAgentRunHistory/evaluateCandidate and their measurement/verdict types into packages/app/src/workflow/promotion-evaluation.ts, reusing existing domain query functions; retain repository catalogue, deadlines, check/resolve policy and dispatcher grammar.
-- [ ] R2. Preserve zero-real-run delete, strictly-fewer-actions promotion, pinned baseline behavior, missing duration semantics, refusal diagnostics and evaluation timestamp. No public promotion verb or app runtime import from scripts/tests.
-- [ ] R3. Consume receipts/dispositions from 1351–1355 and regenerate the exhaustive caller report; classify each remaining dispatcher route as retained repository orchestration or forwarding to one shared owner. Missing approval/foreign-platform execution is explicit, not a completed removal.
-- [ ] R4. Prove evaluate/check/resolve via the actual existing dispatcher and isolated SQLite/candidate/workflow fixtures, plus final source/packed/host-native standalone ownership checks. Produce a repeatable final report and run the feature-owned verification pass only after all implementation tasks and their gates are complete.
+- [x] R1. Move reusable readAgentRunHistory/measureAgentRunHistory/evaluateCandidate and their measurement/verdict types into packages/app/src/workflow/promotion-evaluation.ts, reusing existing domain query functions; retain repository catalogue, deadlines, check/resolve policy and dispatcher grammar.
+- [x] R2. Preserve zero-real-run delete, strictly-fewer-actions promotion, pinned baseline behavior, missing duration semantics, refusal diagnostics and evaluation timestamp. No public promotion verb or app runtime import from scripts/tests.
+- [x] R3. Consume receipts/dispositions from 1351–1355 and regenerate the exhaustive caller report; classify each remaining dispatcher route as retained repository orchestration or forwarding to one shared owner. Missing approval/foreign-platform execution is explicit, not a completed removal.
+- [x] R4. Prove evaluate/check/resolve via the actual existing dispatcher and isolated SQLite/candidate/workflow fixtures, plus final source/packed/host-native standalone ownership checks. Produce a repeatable final report and run the feature-owned verification pass only after all implementation tasks and their gates are complete.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Noun-specific tooling and retained repository checks keep one owner
+- [x] AC1 — Noun-specific tooling and retained repository checks keep one owner
 
 Requirement and verification mapping: AC1 covers R1–R4. Given isolated candidate/DB/workflow fixtures, drive existing dispatcher evaluate/check/resolve; assert fixed-time verdict/error policy and final caller/disposition coverage using dependency receipts.
 
@@ -76,15 +78,44 @@ Current tree: only main, no wip task; sequential writing preserves the earlier A
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Promotion evaluation has one app owner; the audit is closed.
+
+- `packages/app/src/workflow/promotion-evaluation.ts` (new) — `readAgentRunHistory`, `measureAgentRunHistory`, `evaluateCandidate` plus `WorkflowCandidate`/`WorkflowCandidateDelta`/`WorkflowCandidateMeasurement`/`WorkflowCandidateVerdict`/`AgentRunMeasurement`/`AgentRunStat`, moved verbatim in behaviour from the script. Rows still come from `@gobing-ai/spur-domain` (`readAgentRunHistoryRows`) and `openExistingDb`; **no repository path defaults** live in the module (the caller passes `dbPath`).
+- `scripts/commands/workflow-promotion.ts` keeps what is repository policy: catalogue load/save/`validateCandidate`, deadline + parallel-definition + retirement checks, `check`/`evaluate`/`resolve` argument grammar and output. It imports the moved functions from `@gobing-ai/spur-app`, so there is exactly one verdict implementation.
+- Preserved semantics, each pinned by a test: zero recorded real runs can never promote; promotion needs strictly fewer `agent.run` actions; `delta.baselineAgentRunCount` pins the incumbent; a run with no `agent.run` rows has an unmeasured duration (`null`, never 0); `evaluatedAt` is the caller's `--now`.
+- Tests: `scripts/commands/workflow-promotion.e2e.test.ts` (9 cases) drives the **real dispatcher** (`bun scripts/spur-dev.ts promotion …`) with a candidate catalogue, a `config/workflows` fixture and an isolated SQLite history plane; `packages/app/tests/workflow/promotion-evaluation.test.ts` (11 cases) covers the history reading/summarizing against a temp DB and the verdict rules — 100 % funcs / 100 % lines for the new module. The 31 existing `workflow-promotion.test.ts` assertions still pass, importing the moved pieces from their new owner.
+- Final audit (R3): `docs/reports/A93-script-ownership.json` regenerated — 60 candidates (the four companions that moved to `packages/app/tests/builder/` left the script set), `tests` anchors remapped to their new paths, per-entry `disposition`, a `consentStatus` block recording Robin's 2026-11-16 grant, and `boundaryEdges: []`. `repo-wide-tests/a93-script-ownership.test.ts` gains two final-audit assertions (disposition consistency, empty boundary ledger) and now pins the recorded grant instead of the pre-consent state.
+- `docs/reports/A93-tooling-absorption.md` is the closing record: what changed per surface, what is deliberately retained and why, per-task receipts, and the explicit not-done list (no publishing/deployment/workflow edits, foreign targets not executed, no strict read-only DB reads upstream).
+
+Receipt: `.spur/run/1356-promotion-e2e.json`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/promotion-evaluation.ts` exports `readAgentRunHistory`, `measureAgentRunHistory`, `evaluateCandidate` and the measurement/verdict types, reusing domain rows (`readAgentRunHistoryRows`, `openExistingDb`) and carrying no repository path defaults — the caller passes `dbPath`. `scripts/commands/workflow-promotion.ts` imports them and keeps the catalogue (`load/save/validateCandidate`), deadline/parallel-definition/retirement policy and the `check |
+| R2 | MET | Behaviour is preserved and pinned: zero real runs never promotes (`promotion-evaluation.test.ts` + dispatcher E2E), strictly-fewer-actions bar, `baselineAgentRunCount` pins the incumbent, an `agent.run`-less run keeps `durationMs: null` (never 0), refusal messages still name the candidate and the contradiction, and `evaluatedAt` is the caller's `--now` (`evaluate` E2E asserts the literal timestamp). No public promotion verb was added and the app imports nothing from `scripts/`. |
+| R3 | MET | Receipts consumed from 1351–1355; `docs/reports/A93-script-ownership.json` regenerated (60 candidates — the four companions that moved with their subjects left the script set — remapped test anchors, per-entry `disposition`, `consentStatus`, `waves[]`, `boundaryEdges: []`). `docs/reports/A93-tooling-absorption.md` is the closing record with per-task receipts and an explicit not-done list. Every remaining dispatcher route is classified retained-or-forwarder in the report; nothing is claimed removed without evidence. |
+| R4 | MET | `scripts/commands/workflow-promotion.e2e.test.ts` drives the real dispatcher (`bun scripts/spur-dev.ts promotion …`) with catalogue/config/workflows fixtures and an isolated SQLite history plane (9 cases: promote, equal-count rejection, zero-history refusal, pinned baseline, missing candidate, contradicting resolve, matching resolve, expired check, fresh check). App-side unit tests cover the reading/summarizing path against a temp DB (11 cases, 100 % funcs/100 % lines). Feature-owned verification is requested below, not claimed here. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `scripts/commands/workflow-promotion.e2e.test.ts` (dispatcher) + `packages/app/tests/workflow/promotion-evaluation.test.ts` (owner) + `repo-wide-tests/a93-script-ownership.test.ts` (disposition consistency, empty boundary ledger) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -98,3 +129,8 @@ Current tree: only main, no wip task; sequential writing preserves the earlier A
 - Refinement report: docs/reports/2026-11-16-A93-ready-refinement.md.
 
 ### History
+
+- 2026-11-17T01:22:53.485Z todo → wip (system)
+- 2026-11-17T01:32:33.583Z wip → testing (system)
+- 2026-11-17T01:32:35.036Z testing → done (system)
+

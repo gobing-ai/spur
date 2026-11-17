@@ -31,6 +31,7 @@ import { registerMigrateCommand } from './commands/migrate';
 import { registerProjectsCommand } from './commands/projects';
 import { registerRuleCommand } from './commands/rule';
 import { registerSelfCommand } from './commands/self';
+import { registerInstallCommand } from './commands/self/install';
 
 import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
@@ -94,10 +95,16 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
         argv.includes('--check');
     const taskGate = commandTokens[0] === 'task' && commandTokens[1] === 'gate';
+    // `status` / `self status` report readiness (A93 1352): booting the adapter would create the very
+    // database and schema the aggregate inspects, so it joins the boot-free dispatch set.
+    const statusReport =
+        commandTokens[0] === 'status' || (commandTokens[0] === 'self' && commandTokens[1] === 'status');
+    // `self install` is machine setup: it must not require a project config or create a project DB.
+    const selfInstall = commandTokens[0] === 'self' && commandTokens[1] === 'install';
     // `workflow commit-guard-*|persist-*` are boot-free transports (script-absorption PR-4): like the
     // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
     // bypass boot, which would create or repair the database being checked.
-    if (isWorkflowTransportInvocation(argv) || migrationCheck || taskGate) {
+    if (isWorkflowTransportInvocation(argv) || migrationCheck || taskGate || statusReport || selfInstall) {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
         program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
@@ -118,6 +125,28 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 const migrationContext = createCliContext(context);
                 registerMigrateCommand(program, migrationContext, { hidden: true });
                 registerMigrateCommand(program.command('self'), migrationContext);
+            } else if (selfInstall) {
+                // Only the install verb is registered on this boot-free path; the other self verbs keep
+                // their full-boot registrations (serve and migrate-check already dispatch even earlier).
+                registerInstallCommand(program.command('self'), createCliContext(context));
+            } else if (statusReport) {
+                // A broken project layer is reported (exit 1, no project contents echoed) rather than
+                // being turned into a crash or a silent "no config" — the same contract as full boot.
+                let spurConfig: SpurConfig;
+                try {
+                    spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+                } catch (err) {
+                    const message = errorMessage(err);
+                    if (argv.includes('--json')) {
+                        output.write(toJson({ error: { code: 'config', message } }));
+                    } else {
+                        output.error(message);
+                    }
+                    return 1;
+                }
+                const statusContext = createCliContext({ ...context, spurConfig });
+                registerStatusCommand(program, statusContext, { hidden: true });
+                registerStatusCommand(program.command('self'), statusContext);
             } else {
                 registerWorkflowTransportCommands(program.command('workflow'), context);
             }

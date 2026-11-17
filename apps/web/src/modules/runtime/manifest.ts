@@ -1,5 +1,3 @@
-import type { BoardModuleContribution } from '../contribution';
-
 /**
  * The bare specifier a native contribution imports the module UI kit from (ADR-150).
  *
@@ -7,7 +5,13 @@ import type { BoardModuleContribution } from '../contribution';
  * emitted from the Board's own client build graph, so a contribution gets the host's kit
  * instance and the host stylesheet that already contains its classes.
  */
-export const BOARD_UI_KIT_SPECIFIER = '@gobing-ai/spur/board/ui';
+// A93 1355: the constants live in `@gobing-ai/spur-contracts` (the portable transport owner) so the
+// packaging path can validate an import map without importing this workspace. Re-exported here
+// unchanged — every existing web import keeps working.
+import { BOARD_FACADE_SPECIFIERS, BOARD_UI_KIT_SPECIFIER } from '@gobing-ai/spur-contracts';
+import type { BoardModuleContribution } from '../contribution';
+
+export { BOARD_FACADE_SPECIFIERS, BOARD_UI_KIT_SPECIFIER };
 
 /**
  * Board runtime distribution contract (task 0988 R2) — the frozen shape written to
@@ -64,16 +68,6 @@ export interface BoardRuntimeVersions {
  * subpaths are listed explicitly because the Board renders with those instances too. Add a
  * specifier only with a demonstrated need — each entry is a public resolution promise.
  */
-export const BOARD_FACADE_SPECIFIERS = [
-    'react',
-    'react/jsx-runtime',
-    'react/jsx-dev-runtime',
-    'react-dom',
-    'react-dom/client',
-    'react-router',
-    'react-router/dom',
-    BOARD_UI_KIT_SPECIFIER,
-] as const;
 
 /**
  * One bare specifier the Board guarantees to resolve.

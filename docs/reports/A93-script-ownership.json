@@ -1,0 +1,1089 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-11-16T17:22:00Z",
+    "sourceCommit": "efeb0471e233046591d1c086e53308f602cec346",
+    "deferredConsent": {
+        "owner": "Robin",
+        "scope": [
+            "self install",
+            "self status",
+            "build-cli",
+            "build-server",
+            "build-binaries",
+            "bundle-config",
+            "bundle-web",
+            "verify-pack"
+        ],
+        "blocksPublicImplementation": true
+    },
+    "entries": [
+        {
+            "path": "scripts/commands/a2a-member-e2e.ts",
+            "responsibility": "A2A member delivery E2E proof (cold, live, restart) executed through the real `a2a` CLI",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 101
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 180
+                }
+            ],
+            "retainedReason": "External multi-install E2E fixture with its own executables; not production orchestration",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/a2a-serve-e2e.ts",
+            "responsibility": "A2A serving E2E proof that `spur serve` speaks A2A, writing its receipt",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 100
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 177
+                }
+            ],
+            "retainedReason": "External E2E fixture against a separate executable; no shipped contract to own",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/a2a-two-install-e2e.ts",
+            "responsibility": "Two-install A2A dispatch E2E proof with write fencing, writing its receipt",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 102
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 183
+                }
+            ],
+            "retainedReason": "Two-install isolation fixture; runtime must never orchestrate a second install",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/build-binaries.ts",
+            "responsibility": "Cross-compile per-platform `spur` release assets with checksums",
+            "destination": "builder",
+            "action": "absorb",
+            "waveWbs": "1354",
+            "tests": ["packages/app/tests/builder/binaries.test.ts"],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 55
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 165
+                }
+            ],
+            "disposition": "moved-forwarder"
+        },
+        {
+            "path": "scripts/commands/build-cli.ts",
+            "responsibility": "Patch the ts-runtime import specifier, then compile the checkout's `spur` binary",
+            "destination": "builder",
+            "action": "absorb",
+            "waveWbs": "1354",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 54
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 159
+                }
+            ],
+            "disposition": "moved-forwarder"
+        },
+        {
+            "path": "scripts/commands/build-server.ts",
+            "responsibility": "Compile the standalone server against the same native DB facade",
+            "destination": "builder",
+            "action": "absorb",
+            "waveWbs": "1354",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "apps/server/package.json",
+                    "line": 9
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 162
+                }
+            ],
+            "disposition": "moved-forwarder"
+        },
+        {
+            "path": "scripts/commands/bundle-config.ts",
+            "responsibility": "Stage `config/` and schemas into an output directory with source/destination overlap guards",
+            "destination": "builder",
+            "action": "absorb",
+            "waveWbs": "1355",
+            "tests": ["packages/app/tests/builder/bundle-config.test.ts", "apps/cli/tests/init-templates.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 73
+                },
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 56
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 117
+                }
+            ],
+            "disposition": "moved-forwarder"
+        },
+        {
+            "path": "scripts/commands/bundle-laya-worker.test.ts",
+            "responsibility": "Companion tests for staging the laya-local Python worker beside the bundle",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/bundle-laya-worker.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained generator",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/bundle-laya-worker.ts",
+            "responsibility": "Copy the laya-local Python worker next to the CLI bundle for npm packaging",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/bundle-laya-worker.test.ts"],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 56
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 124
+                }
+            ],
+            "retainedReason": "Irreducible repository package asset staging for an optional Python dependency (design section 6)",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/bundle-plugins.test.ts",
+            "responsibility": "Companion tests for staging `plugins/` and `.claude-plugin` into the CLI package",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/bundle-plugins.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained staging module",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/bundle-plugins.ts",
+            "responsibility": "Stage `plugins/` and `.claude-plugin` into the CLI package for npm publishing",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/bundle-plugins.test.ts"],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 56
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 134
+                },
+                {
+                    "path": "apps/cli/src/release-ops.ts",
+                    "line": 6
+                }
+            ],
+            "retainedReason": "Irreducible repository package asset staging (plugins + marketplace); the release-ops value import is a recorded boundary edge closed by 1355",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/bundle-web.ts",
+            "responsibility": "Stage `dist/web` into `apps/cli/web` with Board runtime asset guards",
+            "destination": "builder",
+            "action": "absorb",
+            "waveWbs": "1355",
+            "tests": ["packages/app/tests/builder/bundle-web.test.ts"],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 56
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 129
+                }
+            ],
+            "disposition": "moved-forwarder"
+        },
+        {
+            "path": "scripts/commands/command-contract.test.ts",
+            "responsibility": "Thin-wrapper contract test over the authored `plugins/sp/commands/*.md` corpus",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "plugins/sp/commands",
+            "noRuntimeCaller": true,
+            "retainedReason": "Repository contract fixture over authored command files; it has no subject module to move",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/coverage-certification.test.ts",
+            "responsibility": "Companion tests for root LCOV certification and its recovery decision",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/coverage-certification.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained certification module",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/coverage-certification.ts",
+            "responsibility": "Certify a canonical coverage run so post-check judges current root LCOV data",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/coverage-certification.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/run-tests.ts",
+                    "line": 39
+                },
+                {
+                    "path": "scripts/commands/coverage-provenance-check.ts",
+                    "line": 21
+                }
+            ],
+            "retainedReason": "Root LCOV certification is repository quality policy, not a shipped noun service",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/coverage-provenance-check.ts",
+            "responsibility": "Refuse a post-check run whose LCOV tracefile is not certified for the current tree",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 78
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 84
+                }
+            ],
+            "retainedReason": "Guards this repository's own post-check gate; no reusable shipped contract",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/dependency-drift-check.test.ts",
+            "responsibility": "Companion tests for lockfile versus installed `@gobing-ai` version drift",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/dependency-drift-check.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained repository gate",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/dependency-drift-check.ts",
+            "responsibility": "Assert lockfile `@gobing-ai` versions match the installed dependency tree",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/dependency-drift-check.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 89
+                },
+                {
+                    "path": "package.json",
+                    "line": 103
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 88
+                }
+            ],
+            "retainedReason": "Monorepo lockfile/dist freshness gate; the reusable CLI services it exercises already live in the app",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/dev-all.heavy.test.ts",
+            "responsibility": "Heavy proof that the source dev supervisor starts and cleans up both processes",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/dev-all.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion heavy test travels with its retained supervisor",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/dev-all.ts",
+            "responsibility": "Run the source server and web together under one supervisor",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/dev-all.heavy.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 168
+                }
+            ],
+            "retainedReason": "Hardcoded source-tree development topology (design section 6); no shipped contract",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/emit-board-types.test.ts",
+            "responsibility": "Companion tests for emitted Board and module-kit declaration surfaces",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/emit-board-types.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained source generator",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/emit-board-types.ts",
+            "responsibility": "Emit `apps/cli/board/index.d.ts` and module-kit declarations from their authoring sources",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/emit-board-types.test.ts"],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 56
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 144
+                }
+            ],
+            "retainedReason": "Source generator: the authored Board sources are the SSOT and no generic installed contract is justified",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/emit-migration-sql.test.ts",
+            "responsibility": "Companion tests pinning the generated 0037 migration SQL module",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/emit-migration-sql.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained source generator",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/emit-migration-sql.ts",
+            "responsibility": "Emit the 0037 migration SQL module from its released `.sql` source",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/emit-migration-sql.test.ts"],
+            "callers": [
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 56
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 139
+                }
+            ],
+            "retainedReason": "Migration SQL source generator; schema evolution stays owned by `spur self migrate`",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/eval-pipeline.test.ts",
+            "responsibility": "Companion tests for the fixture task pipeline evaluation lane",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/eval-pipeline.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained fixture orchestration",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/eval-pipeline.ts",
+            "responsibility": "Run fixture tasks through a pipeline in disposable worktrees and record cost/outcome",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/eval-pipeline.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 171
+                }
+            ],
+            "retainedReason": "Fixture and worktree orchestration over test-only tasks; it reuses the existing workflow CLI",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/executor-selection-contract.test.ts",
+            "responsibility": "Cross-reference contract test for executor-selection and value-behavior tables",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/validate-flag-contracts.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Repository contract test over authored command/reference surfaces",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fixtures/fleet-host-fixture.ts",
+            "responsibility": "Host-capability probe test host used by the fleet E2E lane",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "line": 1503
+                },
+                {
+                    "path": "scripts/commands/fleet-e2e-host-probe.test.ts",
+                    "line": 180
+                }
+            ],
+            "retainedReason": "Nested test fixture owned by the fleet E2E lane; never shipped",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/flag-contract-parity.test.ts",
+            "responsibility": "Cross-surface flag parity fixture for the authored command corpus",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "packages/app/src/services/quality-gate.ts",
+                    "line": 686
+                }
+            ],
+            "subject": "plugins/sp/commands",
+            "retainedReason": "Repository parity fixture pinned by the quality-gate scope resolver",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-batch-perf.test.ts",
+            "responsibility": "Companion tests for the fleet batch benchmark arm's decision rows",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/fleet-e2e-batch-perf.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained benchmark arm",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-batch-perf.ts",
+            "responsibility": "Paired-stub batch benchmark trials per target agent with recorded receipts",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/fleet-e2e-batch-perf.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "line": 77
+                }
+            ],
+            "retainedReason": "Benchmark fixture producing receipts, not production orchestration",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-host-probe.test.ts",
+            "responsibility": "Decision-contract tests for the host-capability probe report",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/fleet-e2e.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with the retained fleet E2E lane",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-matrix.test.ts",
+            "responsibility": "Decision-contract tests for the executor matrix columns and receipts",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/fleet-e2e.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with the retained fleet E2E lane",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-perf.test.ts",
+            "responsibility": "Decision-contract tests for the perf lane's warm-row qualification",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/fleet-e2e.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with the retained fleet E2E lane",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-turn-perf.test.ts",
+            "responsibility": "Companion tests for paired turn-perf comparison rows",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/fleet-e2e-turn-perf.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained benchmark arm",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-turn-perf.ts",
+            "responsibility": "Paired turn-perf comparison trials and measured-row projection",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/fleet-e2e-turn-perf.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "line": 78
+                }
+            ],
+            "retainedReason": "Benchmark fixture producing receipts, not production orchestration",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e.ts",
+            "responsibility": "Inbox-only fleet integration proof including guest-join, matrix, perf and host-probe arms",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [
+                "scripts/commands/fleet-e2e-matrix.test.ts",
+                "scripts/commands/fleet-e2e-host-probe.test.ts",
+                "scripts/commands/fleet-e2e-perf.test.ts"
+            ],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 99
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 174
+                }
+            ],
+            "retainedReason": "Integration/benchmark lane with receipts; production fleet orchestration is engine-owned",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/install-sh.test.ts",
+            "responsibility": "Bootstrap fixture tests for checksum verification and atomic replacement",
+            "destination": "self",
+            "action": "slim",
+            "waveWbs": "1353",
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/install.sh",
+            "noRuntimeCaller": true,
+            "disposition": "pending"
+        },
+        {
+            "path": "scripts/commands/link-check.test.ts",
+            "responsibility": "Companion tests for linked package dist freshness checks",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/link-check.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained repository gate",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/link-check.ts",
+            "responsibility": "Fail when a linked `@gobing-ai` package serves a stale `dist/`",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/link-check.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 98
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 186
+                }
+            ],
+            "retainedReason": "Monorepo link/dist freshness gate",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/plugin-install-smoke.ts",
+            "responsibility": "Release gate proving the bundled plugin surface is standalone and installs clean",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 84
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 85
+                },
+                {
+                    "path": "apps/cli/src/release-ops.ts",
+                    "line": 152
+                }
+            ],
+            "retainedReason": "Repository release policy over the plugin tree; Superskill owns adapter installation",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/release-alias.test.ts",
+            "responsibility": "Contracts for root release aliases forwarding to the public `spur builder` noun",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "apps/cli/src/release-ops.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Repository alias-forwarding contract; it pins an already-absorbed surface",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/run-tests.ts",
+            "responsibility": "Hermetic test launcher owning the environment, coverage certification and child termination",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 81
+                },
+                {
+                    "path": "package.json",
+                    "line": 90
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 83
+                }
+            ],
+            "retainedReason": "Preload, workspace coverage and child termination are repository suite policy",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/script-contract-check.test.ts",
+            "responsibility": "Companion tests for the ADR-130 script and hook placement contract",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/script-contract-check.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained policy checker",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/script-contract-check.ts",
+            "responsibility": "Enforce the ADR-130 script and hook placement contract, including `--placement-only`",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/script-contract-check.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 95
+                },
+                {
+                    "path": "config/rules/boundary/sp-script-placement.yaml",
+                    "line": 18
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 86
+                }
+            ],
+            "retainedReason": "Repository placement policy; A93 narrows what it exempts rather than weakening the gate",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/skill-eval.test.ts",
+            "responsibility": "Companion tests for skill scenario eval fixtures and report rendering",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/skill-eval.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained eval fixtures",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/skill-eval.ts",
+            "responsibility": "Run skill eval scenarios and render their report",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/skill-eval.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 93
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 92
+                }
+            ],
+            "retainedReason": "Imports `plugins/sp/tests/evals`; the runtime must never import the test corpus",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/surface-drift-inventory.test.ts",
+            "responsibility": "Companion tests for plugin/workflow drift inventory extraction",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/surface-drift-inventory.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained inventory tool",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/surface-drift-inventory.ts",
+            "responsibility": "Re-runnable plugin/workflow drift inventory against the live source-local CLI",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/surface-drift-inventory.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 91
+                }
+            ],
+            "retainedReason": "Authored-source drift inventory; no reason to ship the test corpus",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/test-suite-termination.test.ts",
+            "responsibility": "Companion tests for Windows child-suite termination behavior",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/test-suite-termination.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained suite helper",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/test-suite-termination.ts",
+            "responsibility": "Terminate child test suites reliably on Windows",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/test-suite-termination.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/run-tests.ts",
+                    "line": 40
+                }
+            ],
+            "retainedReason": "Part of repository suite orchestration",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/transition-shim-check.test.ts",
+            "responsibility": "Companion two-sided tests for transition-shim manifest and source markers",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/transition-shim-check.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion test travels with its retained policy checker",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/transition-shim-check.ts",
+            "responsibility": "Keep the transition-shim manifest and its `@transition-shim` source markers in step",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/transition-shim-check.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 94
+                },
+                {
+                    "path": "config/transition-shims.json",
+                    "line": 2
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 87
+                }
+            ],
+            "retainedReason": "Repository migration ledger check",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/validate-commands.ts",
+            "responsibility": "Validate the authored `sp` command files against the thin-wrapper contract",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 97
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 89
+                }
+            ],
+            "retainedReason": "Authored-source contract gate over this plugin's command corpus",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/validate-flag-contracts.ts",
+            "responsibility": "Cross-surface flag parity gate for the `sp` contract surfaces",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": ["scripts/commands/executor-selection-contract.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 90
+                }
+            ],
+            "retainedReason": "Source skill/CLI parity gate; the command corpus it judges is repository content",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/verify-pack.ts",
+            "responsibility": "Extract and assert the packed tarball ships plugin and marketplace content",
+            "destination": "builder",
+            "action": "absorb",
+            "waveWbs": "1355",
+            "tests": ["packages/app/tests/builder/verify-pack.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 153
+                }
+            ],
+            "disposition": "moved-forwarder"
+        },
+        {
+            "path": "scripts/commands/workflow-promotion.e2e.test.ts",
+            "responsibility": "Dispatcher-driven promotion evaluate/check/resolve E2E against isolated catalogue, workflow and SQLite fixtures",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/workflow-promotion.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Fixture suite for the repository promotion policy (catalogue, deadlines, retirement ledger); it drives the dispatcher, not a shipped verb",
+            "disposition": "retained"
+        },
+        {
+            "path": "scripts/commands/workflow-promotion.test.ts",
+            "responsibility": "Companion tests for candidate promotion verdicts against recorded run history",
+            "destination": "app-workflow",
+            "action": "extract",
+            "waveWbs": "1356",
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/workflow-promotion.ts",
+            "noRuntimeCaller": true,
+            "disposition": "pending"
+        },
+        {
+            "path": "scripts/commands/workflow-promotion.ts",
+            "responsibility": "Promotion gate evaluating candidate workflow graphs against recorded real-run inputs",
+            "destination": "app-workflow",
+            "action": "extract",
+            "waveWbs": "1356",
+            "tests": ["scripts/commands/workflow-promotion.test.ts", "scripts/commands/workflow-promotion.e2e.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 96
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 189
+                }
+            ],
+            "retainedReason": "The repository catalogue check/resolve wiring stays local; the reusable evaluation moves to app/workflow",
+            "disposition": "pending"
+        },
+        {
+            "path": "scripts/install.sh",
+            "responsibility": "POSIX first-binary bootstrap: OS/arch selection, download, checksum verification, atomic rename",
+            "destination": "self",
+            "action": "slim",
+            "waveWbs": "1353",
+            "tests": ["scripts/commands/install-sh.test.ts"],
+            "callers": [
+                {
+                    "path": "README.md",
+                    "line": 81
+                },
+                {
+                    "path": "apps/cli/README.md",
+                    "line": 46
+                }
+            ],
+            "retainedReason": "Acquisition checks cannot be delegated before a binary exists; every post-download setup step moves to `spur self install`",
+            "disposition": "pending"
+        },
+        {
+            "path": "scripts/spur-dev.ts",
+            "responsibility": "Repository developer dispatcher: L1-L4 command registry and delegated child-process routing",
+            "destination": "scripts",
+            "action": "shrink",
+            "waveWbs": "1356",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 73
+                },
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 54
+                }
+            ],
+            "retainedReason": "Keeps only irreducible repository entrypoints; a registration is removed after its behavior is proven under the new owner",
+            "disposition": "retained-slimmed"
+        }
+    ],
+    "boundaryEdges": [],
+    "consentStatus": {
+        "state": "granted",
+        "at": "2026-11-16",
+        "by": "Robin",
+        "record": "docs/design/concrete-spur-self.md \u00a77"
+    },
+    "waves": [
+        {
+            "wbs": "1352",
+            "outcome": "done",
+            "disposition": "self status is app-owned (packages/app/src/services/self-status.ts); no script moved"
+        },
+        {
+            "wbs": "1353",
+            "outcome": "done",
+            "disposition": "self install shipped; scripts/install.sh slims to acquisition-only bootstrap"
+        },
+        {
+            "wbs": "1354",
+            "outcome": "done",
+            "disposition": "build-cli/build-server/build-binaries moved to packages/app/src/builder/{compile,binaries}.ts; scripts are forwarders"
+        },
+        {
+            "wbs": "1355",
+            "outcome": "done",
+            "disposition": "bundle-config/bundle-web/verify-pack moved to packages/app/src/builder/*; scripts are forwarders; release-ops boundary edge closed"
+        },
+        {
+            "wbs": "1356",
+            "outcome": "done",
+            "disposition": "promotion measurement/verdict moved to packages/app/src/workflow/promotion-evaluation.ts; catalogue/check/resolve stay repository policy"
+        }
+    ]
+}

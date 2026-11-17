@@ -112,11 +112,23 @@ All names below are relative to scripts/commands unless a full path is shown. Co
 
 Caller domains: root package.json (gates/dev/test aliases); apps/{cli,server,web}/package.json (build/package scripts); scripts/spur-dev.ts and script imports; apps/cli/tests, scripts/commands tests and repo-wide-tests (contract/path assertions); plugins/sp authored skills (documented invocations); .github/workflows (read-only migration audit). Workflow changes require explicit authorization if a future task discovers an essential rewrite; a temporary proven dispatcher forwarding route can preserve CI until then. Compatibility wrappers delegate one owner and have a task-bound retirement condition; no permanent duplicate.
 
+One app-to-script edge exists today and is a boundary defect, not a classification question: `apps/cli/src/release-ops.ts:6` value-imports `scripts/commands/bundle-plugins`. `bundle-plugins` stays retained, so the release path must stop importing it — the builder service drives the retained staging route, and the edge is closed by task 1355. `docs/reports/A93-script-ownership.json` records it as `boundaryEdges[0]` until then.
+
 ## 7. Proposed public-contract decision record
 
 Audience is local users/maintainers and installed agent workflows. The proposed new self install surface and six builder verbs above, plus additive self status output, are the exact scope to review before implementing. Rejected shapes: self init doing installs, self migrate doing non-SQL setup, self dev <command>, a new dev noun, promotion of all fixture runners and a raw dispatcher pass-through.
 
 Operator requested exploration of installation alternatives and builder absorption, and --auto accepts planning recommendations. Neither is treated as blanket consent for every newly specified public verb. Direction is recorded in ADR-130; these exact public contracts remain proposed until an implementation intake records explicit consent with this design context. This does not block producing a complete reviewable planning batch. No actual host installation or network side effect is authorized by this document.
+
+**Consent record (A93 R3, task 1351).** Owner: Robin. Status: **GRANTED 2026-11-16** (operator answer in the A93 `dev-runall` batch) for the three scopes listed below. The grant covers exactly these surfaces; it does not authorize publishing, deployments, workflow/IAM edits, or any verb outside the list.
+
+Scope granted, exactly:
+
+- `spur self install` with `--with zg|a2a|sp-plugin`, `--json`, `--json-envelope`;
+- the additive `spur self status` output (schemaVersion, section keys, overallState) and the boot-free dispatch path it needs;
+- `spur builder build-cli|build-server|build-binaries|bundle-config|bundle-web|verify-pack`, each with `--json`/`--json-envelope`.
+
+Legacy behavior each of those changes: `scripts/install.sh` stops performing setup itself and delegates it to the installed binary, keeping `SPUR_VERSION`, `SPUR_INSTALL`, `SPUR_RELEASE_URL` and the zero-argument shell defaults; `spur self status` keeps `ok` semantics and the optional path argument while adding sections; package scripts for `build`, `build:bundle` and `build:binaries` move their target from `scripts/spur-dev.ts` to the builder verbs without changing their inputs. Missing consent stops the dependent public implementation, not the inventory in `docs/reports/A93-script-ownership.json`.
 
 ## 8. Waves, acceptance and evidence
 

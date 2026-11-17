@@ -1,31 +1,32 @@
-import { homedir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { join, sep } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { searchStatus, ZG_INDEX_HINT, ZG_INSTALL_HINT, ZG_REFRESH_HINT } from '@gobing-ai/spur-app';
+import {
+    GLOBAL_CONFIG_DIR,
+    GLOBAL_RULES_DIR,
+    resolveGlobalConfigDir,
+    searchStatus,
+    seedGlobalConfig,
+    seedGlobalRules,
+    ZG_INDEX_HINT,
+    ZG_INSTALL_HINT,
+    ZG_REFRESH_HINT,
+} from '@gobing-ai/spur-app';
 import { resolveAction } from '@gobing-ai/spur-app/sdlc-actions';
 import { shQuote } from '@gobing-ai/spur-app/shell-quote';
 import { misplacedGlobalKeys, SDLC_ACTIONS, type SdlcAction } from '@gobing-ai/spur-config';
 import {
     BUNDLED_GLOBAL_CONFIG,
     bundledConfigRoot,
-    listBundledConfigFiles,
     listBundledProjectSeedFiles,
     parseConfigYaml,
 } from '@gobing-ai/spur-config/loader';
 import type { SearchStatus } from '@gobing-ai/spur-contracts';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
-import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engine';
 import { CLI_CONFIG } from '../config';
 import { SCAFFOLD_MANIFEST } from '../config/scaffold-manifest';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
-
-/** Global user config root, relative to the home directory. */
-const GLOBAL_CONFIG_DIR = join('.config', 'spur');
-
-/** Global user rules root, relative to the home directory (mirrors `rule.ts`). */
-const GLOBAL_RULES_DIR = join(GLOBAL_CONFIG_DIR, 'rules');
 
 /**
  * Bundled global-config filename, seeded as {@link GLOBAL_CONFIG_FILE} on first run.
@@ -347,15 +348,10 @@ interface ScaffoldResult {
     skipped: string[];
 }
 
-/** Resolve the global rules root, honoring `SPUR_GLOBAL_RULES_DIR` for test isolation. */
-function globalRulesRoot(context: CliContext): string {
-    const override = context.env.SPUR_GLOBAL_RULES_DIR;
-    return override !== undefined && override.length > 0
-        ? resolve(context.cwd, override)
-        : join(homedir(), GLOBAL_RULES_DIR);
-}
-
-/** Write `content` at `path` unless it already exists (or `force`); record the outcome. */
+/**
+ * Write one scaffold file unless it already exists (`--force` overrides), recording the outcome.
+ * Shared by every scaffold write so `created`/`skipped` stay the single source of the init report.
+ */
 async function writeIfNew(
     context: CliContext,
     path: string,
@@ -371,77 +367,6 @@ async function writeIfNew(
     result.created.push(path);
 }
 
-/**
- * Copy the rule presets bundled with `@gobing-ai/ts-rule-engine` into the user's
- * global rules directory on first run. Existing files are never overwritten, so a
- * user's customizations and `--force` re-inits leave the global layer intact. This
- * is what makes `spur rule run --preset recommended-pre-check` resolve to a real ruleset
- * from any project, independent of the bundled fallback. Returns files written.
- */
-async function seedGlobalRules(context: CliContext): Promise<number> {
-    const source = await bundledRulesRoot();
-    if (source === null) return 0;
-    const target = globalRulesRoot(context);
-    let written = 0;
-    for (const relPath of await listBundledRuleFiles()) {
-        const destination = join(target, relPath);
-        if (await context.fs.exists(destination)) continue;
-        await context.fs.ensureDir(join(target, ...relPath.split('/').slice(0, -1)));
-        await context.fs.writeFile(destination, await context.fs.readFile(join(source, relPath)));
-        written += 1;
-    }
-    return written;
-}
-
-/**
- * Resolve the user-global config directory `~/.config/spur`, honoring
- * `SPUR_GLOBAL_RULES_DIR` for test isolation — the same override `RuleService` and
- * `seedGlobalConfig` use, so tests can redirect the global layer.
- */
-function resolveGlobalConfigDir(context: CliContext): string {
-    const globalOverride = context.env.SPUR_GLOBAL_RULES_DIR;
-    return globalOverride !== undefined && globalOverride.length > 0
-        ? resolve(context.cwd, globalOverride)
-        : join(homedir(), GLOBAL_CONFIG_DIR);
-}
-
-/**
- * Copy the default config assets bundled with the CLI package (package-root
- * `config/`, or repo-root `config/` in dev) into the user's global config
- * directory on first run. Seeds `rules/`, `workflows/`, and other YAML/JSON
- * assets. Existing files are never overwritten, preserving user customizations.
- * Returns the number of files written.
- */
-async function seedGlobalConfig(context: CliContext): Promise<number> {
-    const source = bundledConfigRoot();
-    if (source === null) return 0;
-    // Target is ~/.config/spur/ (same parent as globalRulesRoot, one level up).
-    const target = resolveGlobalConfigDir(context);
-    // Only create subdirs that have files to seed (rules, workflows).
-    let written = 0;
-    for (const relPath of listBundledConfigFiles()) {
-        // The example is seeded under its canonical name `config.yaml` below, not
-        // verbatim — a user edits `config.yaml`, never a `.example` file.
-        if (relPath === GLOBAL_CONFIG_EXAMPLE) continue;
-        const destination = join(target, relPath);
-        if (await context.fs.exists(destination)) continue;
-        await context.fs.ensureDir(join(target, ...relPath.split('/').slice(0, -1)));
-        await context.fs.writeFile(destination, await context.fs.readFile(join(source, relPath)));
-        written += 1;
-    }
-
-    // Seed `config.example.yaml` as `~/.config/spur/config.yaml` on first run so a
-    // fresh install has a working global config without manual renaming. Never
-    // overwrite an existing config — the user owns it once it exists.
-    const examplePath = join(source, GLOBAL_CONFIG_EXAMPLE);
-    const globalConfigPath = join(target, GLOBAL_CONFIG_FILE);
-    if ((await context.fs.exists(examplePath)) && !(await context.fs.exists(globalConfigPath))) {
-        await context.fs.ensureDir(target);
-        await context.fs.writeFile(globalConfigPath, await context.fs.readFile(examplePath));
-        written += 1;
-    }
-    return written;
-}
 /** Register `spur init` command (optionally hidden from the top-level help listing). */
 export function registerInitCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
     program
@@ -537,8 +462,8 @@ export function registerInitCommand(program: Command, context: CliContext, optio
                     result.created.push(backupPath);
                 }
 
-                const rulesSeeded = await seedGlobalRules(context);
-                const configSeeded = await seedGlobalConfig(context);
+                const rulesSeeded = (await seedGlobalRules(context.fs, context)).created.length;
+                const configSeeded = (await seedGlobalConfig(context.fs, context)).created.length;
 
                 const payload = {
                     ok: true,
@@ -702,8 +627,8 @@ export function registerInitCommand(program: Command, context: CliContext, optio
             const db = await context.getDb();
             await new ArtifactDao(db).record({ path: configPath, kind: 'config' });
 
-            const rulesSeeded = await seedGlobalRules(context);
-            const configSeeded = await seedGlobalConfig(context);
+            const rulesSeeded = (await seedGlobalRules(context.fs, context)).created.length;
+            const configSeeded = (await seedGlobalConfig(context.fs, context)).created.length;
 
             // zg readiness probe (ADR-147 §4 Init): informational only — never installs, never
             // indexes, and a probe failure degrades to index 'unknown' without failing init.

@@ -61,3 +61,18 @@ export async function bundlePlugins(
 
     return { pluginTarget, marketplaceTarget };
 }
+
+// A93 1355: CLI entry so the release path (`spur builder bump-ver`) can DRIVE this retained
+// generator as a subprocess instead of value-importing repository tooling into the app.
+//   bun scripts/commands/bundle-plugins.ts [pluginTarget] [marketplaceTarget] [pluginSource] [marketplaceSource]
+// The dispatcher imports this module (`bundle-plugins` case), where `import.meta.main` is false.
+if (import.meta.main) {
+    const [pluginTarget, marketplaceTarget, pluginSource, marketplaceSource] = process.argv.slice(2);
+    const result = await bundlePlugins(
+        pluginTarget ?? PLUGIN_TARGET,
+        marketplaceTarget ?? MARKETPLACE_TARGET,
+        pluginSource ?? PLUGIN_SOURCE,
+        marketplaceSource ?? MARKETPLACE_SOURCE,
+    );
+    console.log(`bundle-plugins: ${result.pluginTarget} + ${result.marketplaceTarget}`);
+}

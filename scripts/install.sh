@@ -2,8 +2,14 @@
 # Spur standalone installer — for users without Bun on PATH.
 #
 # Downloads the compiled `spur` binary from a GitHub Release and installs it to a
-# directory on PATH, then seeds the global config via `spur init`. Users who have
-# Bun should prefer `npm i -g @gobing-ai/spur` (smaller, auto-updates via npm).
+# directory on PATH, then delegates ALL machine setup to the installed binary
+# (`spur self install`). Users who have Bun should prefer `npm i -g @gobing-ai/spur`
+# (smaller, auto-updates via npm).
+#
+# A93 (task 1353): this script owns exactly the acquisition boundary — OS/arch choice,
+# download, checksum verification, atomic replace. It cannot delegate that part because
+# the CLI does not exist yet. Seeding, optional tools and adapter convergence are the
+# installed binary's job, so there is one implementation of each.
 #
 #   curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install.sh | sh
 #
@@ -17,8 +23,10 @@
 #   SPUR_VERSION      release tag to install          (default: latest)
 #   SPUR_INSTALL      target bin dir                  (default: ~/.local/bin)
 #   SPUR_RELEASE_URL  mirror / test base URL          (default: the GitHub release download URL)
-#   SPUR_INSTALL_ZG   install zg when missing         (default: 1; set to 0 to skip)
-#   SPUR_INSTALL_A2A  install a2a when missing        (default: 1; set to 0 to skip)
+#   SPUR_INSTALL_ZG   request zg setup                 (default: 1; set to 0 to skip)
+#   SPUR_INSTALL_A2A  request a2a setup                (default: 1; set to 0 to skip)
+# Preserved shell compatibility: these two legacy defaults are translated into explicit
+# `--with` requests for the installed binary. A direct `spur self install` stays opt-in.
 #   SPUR_SKIP_VERIFY  set to 1 to install WITHOUT checksum verification
 set -eu
 
@@ -67,41 +75,19 @@ sha256_of() {
 
 command -v curl >/dev/null 2>&1 || err 'curl is required but not found'
 
-# Optional external CLIs used by hybrid search (zg) and A2A fleet transport. Each is
-# independent and best-effort: a missing package manager never undoes the verified Spur install.
-install_zg() {
-    [ "${SPUR_INSTALL_ZG:-1}" != '0' ] || {
-        printf 'spur-install: skipping zg (SPUR_INSTALL_ZG=0)\n'
-        return 0
-    }
-    if command -v zg >/dev/null 2>&1; then return 0; fi
-    if command -v brew >/dev/null 2>&1; then
-        brew install zvec-grep || printf 'spur-install: WARNING — zg install failed; install manually with: brew install zvec-grep\n' >&2
-    elif command -v npm >/dev/null 2>&1; then
-        npm install -g @zvec/zvec-grep --allow-scripts=@zvec/zvec-grep || printf 'spur-install: WARNING — zg install failed; install manually with: npm install -g @zvec/zvec-grep --allow-scripts=@zvec/zvec-grep\n' >&2
-    else
-        printf 'spur-install: WARNING — zg is optional but not installed; install with: brew install zvec-grep (or npm install -g @zvec/zvec-grep --allow-scripts=@zvec/zvec-grep)\n' >&2
-    fi
-}
-
-install_a2a() {
-    [ "${SPUR_INSTALL_A2A:-1}" != '0' ] || {
-        printf 'spur-install: skipping a2a (SPUR_INSTALL_A2A=0)\n'
-        return 0
-    }
-    if command -v a2a >/dev/null 2>&1; then return 0; fi
-    if command -v brew >/dev/null 2>&1; then
-        brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli || printf 'spur-install: WARNING — a2a tap failed; install manually with: brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli && brew install a2a\n' >&2
-        brew install a2a || printf 'spur-install: WARNING — a2a install failed; install manually with: brew install a2a\n' >&2
-    else
-        a2a_script=$(mktemp "${INSTALL_DIR}/.a2a-install.XXXXXX")
-        if curl -fsSL 'https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh' -o "${a2a_script}"; then
-            A2A_INSTALL_DIR="${INSTALL_DIR}" bash "${a2a_script}" || printf 'spur-install: WARNING — a2a install failed; install manually with: curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | bash\n' >&2
-        else
-            printf 'spur-install: WARNING — a2a download failed; install manually with: curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | bash\n' >&2
-        fi
-    fi
-}
+# Optional external CLIs used by hybrid search (zg) and A2A fleet transport. The shell
+# only decides WHICH tools the operator asked for; installing them is the CLI's job.
+setup_tools=''
+if [ "${SPUR_INSTALL_ZG:-1}" != '0' ]; then
+    setup_tools="${setup_tools} --with zg"
+else
+    printf 'spur-install: skipping zg (SPUR_INSTALL_ZG=0)\n'
+fi
+if [ "${SPUR_INSTALL_A2A:-1}" != '0' ]; then
+    setup_tools="${setup_tools} --with a2a"
+else
+    printf 'spur-install: skipping a2a (SPUR_INSTALL_A2A=0)\n'
+fi
 
 mkdir -p "${INSTALL_DIR}"
 target="${INSTALL_DIR}/spur"
@@ -127,14 +113,17 @@ fi
 chmod +x "${tmp}"
 mv -f "${tmp}" "${target}"
 
-# Seed global config (~/.config/spur/) on first install. `spur init` is idempotent
-# and never overwrites existing files, so re-running the installer is safe.
-"${target}" init >/dev/null 2>&1 || true
-
-# Optional dependencies are installed only when absent; a failure here is a warning,
-# never a rollback of the verified Spur binary above.
-install_zg
-install_a2a
+# Machine setup belongs to the installed binary (seeds + the requested optional tools).
+# The verified binary stays installed when a step fails; the exit code is the CLI's, so a
+# required failure is visible instead of being swallowed, and a rerun retries only what failed.
+setup_status=0
+# shellcheck disable=SC2086 # setup_tools is an intentional word list of --with requests
+"${target}" self install ${setup_tools} || setup_status=$?
+if [ "${setup_status}" -ne 0 ]; then
+    printf 'spur-install: the binary is installed at %s, but machine setup reported a failure (exit %s).\n' "${target}" "${setup_status}" >&2
+    printf 'spur-install: re-run `spur self install%s` to retry only the unfinished steps.\n' "${setup_tools}" >&2
+    exit "${setup_status}"
+fi
 
 printf '\nInstalled spur to %s\n' "${target}"
 case ":${PATH}:" in

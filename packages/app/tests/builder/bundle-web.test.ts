@@ -5,15 +5,20 @@
  * assets) — those cases are covered here too.
  */
 import { afterEach, describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     BOARD_FACADE_SPECIFIERS,
     buildRuntimeManifest,
     renderImportMapScript,
 } from '@gobing-ai/spur-web/runtime-manifest';
-import { bundleWeb } from './bundle-web';
+import { bundleWeb } from '../../src/builder/bundle-web';
+
+/** Repo root: packages/app/tests/builder → repo (the checkout whose `config/` the fixtures assume). */
+const SOURCE_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
 /** Minimal board distribution that satisfies the packaging contract. */
 async function writeBoardFixture(
@@ -74,7 +79,9 @@ describe('bundleWeb', () => {
                 await symlink(target, join(target, 'alias'));
                 destination = join(target, 'alias', 'source', 'nested', 'output');
             }
-            await expect(bundleWeb(destination, source)).rejects.toThrow(/overlap/);
+            await expect(bundleWeb({ target: destination, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+                /overlap/,
+            );
             expect(await Bun.file(join(source, 'index.html')).exists()).toBe(true);
         },
     );
@@ -94,7 +101,9 @@ describe('bundleWeb', () => {
         const manifest: Record<string, unknown> = await Bun.file(join(source, 'board-runtime.json')).json();
         manifest[field] = field.endsWith('Version') && !field.startsWith('react') ? 99 : null;
         await writeFile(join(source, 'board-runtime.json'), JSON.stringify(manifest));
-        await expect(bundleWeb(target, source)).rejects.toThrow(/board-runtime/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /board-runtime/,
+        );
         expect(await Bun.file(join(target, 'keep.txt')).text()).toBe('previous distribution');
     });
 
@@ -108,7 +117,9 @@ describe('bundleWeb', () => {
         if (kind === 'late') html = html.replace('<html>', '<html><script type="module" src="/early.js"></script>');
         if (kind === 'malformed') html = html.replace('{"imports":', '{invalid:');
         await writeFile(join(source, 'index.html'), html);
-        await expect(bundleWeb(target, source)).rejects.toThrow(/import map/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /import map/,
+        );
     });
 
     test('rejects a missing supported facade mapping', async () => {
@@ -118,7 +129,9 @@ describe('bundleWeb', () => {
         const manifest = await Bun.file(join(source, 'board-runtime.json')).json();
         delete manifest.imports['react-dom/client'];
         await writeFile(join(source, 'board-runtime.json'), JSON.stringify(manifest));
-        await expect(bundleWeb(target, source)).rejects.toThrow(/react-dom\/client/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /react-dom\/client/,
+        );
     });
 
     test('copies index.html and nested assets into the CLI package web/ dir', async () => {
@@ -128,7 +141,7 @@ describe('bundleWeb', () => {
         const dest = join(target, 'web');
         await writeBoardFixture(source);
 
-        const result = await bundleWeb(dest, source);
+        const result = await bundleWeb({ target: dest, source: source, sourceRoot: SOURCE_ROOT });
         expect(result.target).toBe(dest);
         expect(await Bun.file(join(dest, 'index.html')).exists()).toBe(true);
         expect(await Bun.file(join(dest, '_astro', 'app.js')).text()).toBe('console.log(1)');
@@ -138,7 +151,9 @@ describe('bundleWeb', () => {
     test('throws when a custom source has no board index.html', async () => {
         source = await mkdtemp(join(tmpdir(), 'spur-web-empty-'));
         target = join(await mkdtemp(join(tmpdir(), 'spur-web-dst-')), 'web');
-        await expect(bundleWeb(target, source)).rejects.toThrow(/index\.html is missing/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /index\.html is missing/,
+        );
     });
 
     test('refuses to package a board without the runtime manifest (task 0988 R2)', async () => {
@@ -146,18 +161,24 @@ describe('bundleWeb', () => {
         target = join(await mkdtemp(join(tmpdir(), 'spur-web-dst-')), 'web');
         await writeBoardFixture(source, { manifest: undefined });
         await rm(join(source, 'board-runtime.json'));
-        await expect(bundleWeb(target, source)).rejects.toThrow(/board-runtime\.json is missing/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /board-runtime\.json is missing/,
+        );
     });
 
     test('refuses a manifest whose protocol version or facade asset is wrong', async () => {
         source = await mkdtemp(join(tmpdir(), 'spur-web-badmanifest-'));
         target = join(await mkdtemp(join(tmpdir(), 'spur-web-dst-')), 'web');
         await writeBoardFixture(source, { manifest: { manifestVersion: 2, imports: {} } });
-        await expect(bundleWeb(target, source)).rejects.toThrow(/manifestVersion 2/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /manifestVersion 2/,
+        );
 
         await writeBoardFixture(source, {});
         await rm(join(source, '_astro', 'board-facade-react.js'));
-        await expect(bundleWeb(target, source)).rejects.toThrow(/facade asset for "react" is missing/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /facade asset for "react" is missing/,
+        );
     });
 
     test('refuses an unsupported facade URL shape', async () => {
@@ -173,6 +194,52 @@ describe('bundleWeb', () => {
                 },
             },
         });
-        await expect(bundleWeb(target, source)).rejects.toThrow(/unsupported URL/);
+        await expect(bundleWeb({ target: target, source: source, sourceRoot: SOURCE_ROOT })).rejects.toThrow(
+            /unsupported URL/,
+        );
     });
 });
+
+describe('bundleWeb — default source auto-builds, custom sources do not', () => {
+    test('the default missing dist/web is built through the injected runner', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-bundle-webbuild-'));
+        const target = join(root, 'apps', 'cli', 'web');
+        const calls: string[][] = [];
+        const result = await bundleWeb({
+            sourceRoot: root,
+            target,
+            run: async (command, args) => {
+                calls.push([command, ...args]);
+                // Simulate the web build producing a valid distribution (the fixture writer needs the dir).
+                await mkdir(join(root, 'dist', 'web'), { recursive: true });
+                await writeBoardFixture(join(root, 'dist', 'web'));
+                return { exitCode: 0, stdout: 'built', stderr: '' };
+            },
+        });
+        expect(calls[0]?.slice(0, 3)).toEqual(['bun', 'run', '--filter']);
+        expect(result.source).toBe(join(root, 'dist', 'web'));
+        expect(existsSyncWithIndex(target)).toBe(true);
+    });
+
+    test('a custom source is never auto-built: its missing index is reported', async () => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-bundle-custom-'));
+        let ran = false;
+        await expect(
+            bundleWeb({
+                sourceRoot: root,
+                source: join(root, 'elsewhere'),
+                target: join(root, 'out'),
+                run: async () => {
+                    ran = true;
+                    return { exitCode: 0, stdout: '', stderr: '' };
+                },
+            }),
+        ).rejects.toThrow('index.html is missing');
+        expect(ran).toBe(false);
+    });
+});
+
+/** True when the packaged target has its SPA entry (the copy contract). */
+function existsSyncWithIndex(dir: string): boolean {
+    return existsSync(join(dir, 'index.html'));
+}

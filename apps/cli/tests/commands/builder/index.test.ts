@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its eight verbs (the hidden pr alias was removed in 1290)', () => {
+    test('registers the noun with exactly its fourteen verbs (six artifact verbs added by A93)', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -40,6 +40,12 @@ describe('spur builder command wiring', () => {
         expect(builder).toBeDefined();
         const verbs = builder?.commands.map((c) => c.name()) ?? [];
         expect(verbs).toEqual([
+            'build-cli',
+            'bundle-config',
+            'bundle-web',
+            'verify-pack',
+            'build-server',
+            'build-binaries',
             'bump-ver',
             'drop-tags',
             'publish',

@@ -1,17 +1,25 @@
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { computeDecisionReadiness } from '@gobing-ai/spur-app/decision-readiness';
+import { collectSelfStatus } from '@gobing-ai/spur-app';
+import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { SHARED_OPTIONS } from './shared-options';
 
-/** Register `spur status` command (optionally hidden from the top-level help listing). */
+/**
+ * Register `spur status` / `spur self status` (optionally hidden from the top-level help listing).
+ *
+ * Since A93 1352 the aggregate is app-owned (`collectSelfStatus`) so the standalone command and the
+ * consolidated one cannot disagree: this module only reads the optional path target and renders.
+ * It also runs before the CLI's database boot — reporting readiness must never create the schema it
+ * reports on.
+ */
 export function registerStatusCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
     program
         .command('status', { hidden: options.hidden === true })
-        .summary('show project, Git, and optional path status')
+        .summary('show project, Git, machine readiness and optional path status')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .argument('[path]', 'Optional file/dir path to check')
@@ -26,65 +34,45 @@ export function registerStatusCommand(program: Command, context: CliContext, opt
         });
 }
 
-/** Report basic project and Git status. */
+/** Report consolidated read-only readiness, keeping the legacy fields and exit contract. */
 async function runStatusCore(
     path: string | undefined,
     options: { json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
 ): Promise<number> {
-    const [packageJsonExists, spurConfigExists, git, agentSpecs] = await Promise.all([
-        context.fs.exists(join(context.cwd, 'package.json')),
-        context.fs.exists(join(context.cwd, '.spur', 'config.yaml')),
-        gitContext(context.cwd),
-        listAgentSpecIds(context),
-    ]);
     const target = path === undefined ? undefined : await readTargetStatus(context, path);
-    const decisionMaker = computeDecisionReadiness(
-        context.spurConfig?.workflows?.hitlDecisionMaker === true,
-        isNonEmpty(context.env.TYPESAFE_API_KEY),
-    );
-
-    const status = {
-        ok: spurConfigExists,
-        packageJson: packageJsonExists,
-        spurConfig: spurConfigExists,
-        git,
-        agentSpecs,
-        decisionMaker,
-        ...(target === undefined ? {} : { target }),
-    };
+    const aggregate = await collectSelfStatus({
+        cwd: context.cwd,
+        env: context.env,
+        config: context.spurConfig ?? null,
+        git: await gitContext(context.cwd),
+        version: CLI_CONFIG.binaryVersion,
+    });
+    const status = { ...aggregate, ...(target === undefined ? {} : { target }) };
 
     if (options.json === true) {
         context.output.write(toEnvelopeJson(status, { enveloped: options.jsonEnvelope }));
-    } else {
-        context.output.write(
-            [
-                `Project: ${spurConfigExists ? 'ok' : 'missing .spur/config.yaml'}`,
-                `Package: ${packageJsonExists ? 'ok' : 'none'}`,
-                `Agents: ${agentSpecs.length === 0 ? 'none' : agentSpecs.join(', ')}`,
-                `Git: ${git.root === null ? 'none' : `${git.branch ?? 'detached'}${git.dirty ? ' dirty' : ' clean'}`}`,
-                `DecisionMaker: ${decisionMaker.state}${decisionMaker.credentialPresent ? ' (key present)' : ''}`,
-                ...(target === undefined ? [] : [`Path: ${target.path}\t${target.size} bytes`]),
-            ].join('\n'),
-        );
+        return aggregate.ok ? 0 : 1;
     }
 
-    return status.ok ? 0 : 1;
-}
-
-/**
- * List agent spec ids found under `.spur/agents/` (file stem of each `.yaml`/`.yml`).
- * Tolerant by design: a missing directory yields an empty list and `.gitkeep` is
- * ignored, so status never fails on an un-initialized or specless project.
- */
-async function listAgentSpecIds(context: CliContext): Promise<string[]> {
-    const dir = join(context.cwd, '.spur', 'agents');
-    if (!(await context.fs.exists(dir))) return [];
-    const entries = await context.fs.readDir(dir);
-    return entries
-        .filter((entry) => entry.endsWith('.yaml') || entry.endsWith('.yml'))
-        .map((entry) => entry.replace(/\.ya?ml$/, ''))
-        .sort();
+    const lines = [
+        `Project: ${aggregate.spurConfig ? 'ok' : 'missing .spur/config.yaml'}`,
+        `Package: ${aggregate.packageJson ? 'ok' : 'none'}`,
+        `Agents: ${aggregate.agentSpecs.length === 0 ? 'none' : aggregate.agentSpecs.join(', ')}`,
+        `Git: ${
+            aggregate.git.root === null
+                ? 'none'
+                : `${aggregate.git.branch ?? 'detached'}${aggregate.git.dirty ? ' dirty' : ' clean'}`
+        }`,
+        `DecisionMaker: ${aggregate.decisionMaker.state}${aggregate.decisionMaker.credentialPresent ? ' (key present)' : ''}`,
+        `Readiness: ${aggregate.overallState}`,
+        ...Object.entries(aggregate.sections).map(
+            ([name, section]) => `  ${name}: ${section.state}${section.message === '' ? '' : ` — ${section.message}`}`,
+        ),
+        ...(target === undefined ? [] : [`Path: ${target.path}\t${target.size} bytes`]),
+    ];
+    context.output.write(lines.join('\n'));
+    return aggregate.ok ? 0 : 1;
 }
 
 async function readTargetStatus(
@@ -100,9 +88,4 @@ async function readTargetStatus(
     const stat = await context.fs.stat(resolved);
     if (stat === null) throw new CommandError(`status failed: path does not exist at ${resolved}`);
     return { path: targetPath, size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory() };
-}
-
-/** Presence-only credential check: never echoes the value (0911 D6). */
-function isNonEmpty(value: string | undefined): boolean {
-    return typeof value === 'string' && value.length > 0;
 }

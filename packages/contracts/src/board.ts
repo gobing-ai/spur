@@ -104,3 +104,24 @@ export const boardContract = {
         })
         .output(boardCatalogSchema),
 };
+
+// ─── Board runtime distribution constants (A93 1355) ───
+//
+// Moved here UNCHANGED from `apps/web/src/modules/runtime/manifest.ts` so packaging code (which runs
+// inside the app/CLI, never inside the web workspace) can validate an import map without importing
+// the web build. The web manifest re-exports these; there is exactly one list.
+
+/** The Board UI kit facade specifier the packaged import map must provide. */
+export const BOARD_UI_KIT_SPECIFIER = '@gobing-ai/spur/board/ui';
+
+/** Every bare specifier the packaged Board distribution guarantees to resolve. */
+export const BOARD_FACADE_SPECIFIERS = [
+    'react',
+    'react/jsx-runtime',
+    'react/jsx-dev-runtime',
+    'react-dom',
+    'react-dom/client',
+    'react-router',
+    'react-router/dom',
+    BOARD_UI_KIT_SPECIFIER,
+] as const;

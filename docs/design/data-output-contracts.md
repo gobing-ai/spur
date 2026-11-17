@@ -222,6 +222,12 @@ Row-level deltas from the default rule:
 | agent | wait | 137, 775, 792, 802 | errors pseudo-envelope `{error:{code:'usage'\|'wait_stalled'\|…, message}}`; success flat-object `{satisfied, pin}` | near-miss error shape (no `ok`), CLI-local codes |
 | builder (4) | bump-ver | 38, 44 | `{ok:true, verb, target, version}` / `{ok:false, verb, error:"…"}` | top-level-`ok` conflict; string error |
 | builder | drop-tags | 74, 80 | same pattern | same |
+| builder | build-cli | `apps/cli/src/commands/builder/build.ts` `registerBuildVerb` (A93) | `{ok:true, sourceRoot, artifacts, diagnostics}` via `toEnvelopeJson`; errors `{error:{code:'build', message, sourceRoot}}` | adopted — honors the flag on both branches |
+| builder | build-server | same `registerBuildVerb` body | same | adopted |
+| builder | build-binaries | same `registerBuildVerb` body | same | adopted |
+| builder | bundle-config | delegated: `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact'\|'build', message}}` | adopted — the shared body emits for both branches |
+| builder | bundle-web | delegated: `runVerb` in the same module (A93) | same | adopted |
+| builder | verify-pack | `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact', message}}` | adopted — inspects an artifact, so `sourceRoot` is the invocation cwd |
 | rule (3) | run | service-side (`packages/app/src/services/rule-service.ts` `RuleService.evaluate`, JSON branch) | flat-object `{preset, ruleCount, …engine result}` | unwrapped; adopted 0697 — honors flag/env via threaded `enveloped` |
 | rule | validate | service-side (`RuleService.validate`, both JSON branches) | flat-object `{valid, kind, source, …}` (`valid: false` carries `errors`) | unwrapped; adopted 0697 — `valid` stays a payload field; envelope `ok` is command success |
 | rule | list | 98 | flat-object (`RuleListServiceResult`) via **raw `JSON.stringify`** | unwrapped; bypasses `toJson` helper |

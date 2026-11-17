@@ -29,6 +29,11 @@ rules:
             # ts-runtime resolve at runtime from the compiled binary's bunfs.
             # Spur-domain still owns all functional ts-db usage.
             - "apps/cli/src/index.ts"
+            # A93 1354: the compile service rewrites the VARIABLE specifier in ts-runtime's dependency
+            # dist back to a string literal so Bun `--compile` registers it in the bunfs module map.
+            # The path never imports ts-db and adds no persistence use; it edits a dependency file
+            # during a build. packages/domain remains the only functional consumer (ADR-011).
+            - "packages/app/src/builder/compile.ts"
 
   - id: drizzle-only-in-domain-schema
     description: >

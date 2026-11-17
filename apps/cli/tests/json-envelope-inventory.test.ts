@@ -288,7 +288,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // 78 → 80 (G11 1268: `message show` and `message read` declare `--json-envelope`).
         // 80 → 81 (A34 1286: `self search` declares `--json-envelope`).
         // 81 → 80 (slim-harness: `task migrate-anchors` removed).
-        expect(advertising.length).toBe(80);
+        // 80 → 84 (A93: `self install` plus `builder build-cli`, `build-server`, `build-binaries`;
+        //          `builder bundle-config`/`bundle-web` declare it too and emit it through the seam).
+        expect(advertising.length).toBe(84);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

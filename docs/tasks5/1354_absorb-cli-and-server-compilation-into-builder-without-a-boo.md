@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Absorb CLI and server compilation into builder without a bootstrap cycle
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.456Z
-updated_at: "2026-11-16T23:11:39.422Z"
+updated_at: "2026-11-17T00:53:06.624Z"
 feature_id: A93
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
 estimate_hours: 8
 
 dependencies: ["1351"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1354. Absorb CLI and server compilation into builder without a bootstrap cycle
@@ -31,14 +33,14 @@ Issue triage: the migration outcome remains valid. Already-recorded direction is
 
 ### Requirements
 
-- [ ] R1. Move build-cli/build-server/build-binaries into app builder services behind the proposed flat verbs with --source-root defaulting to cwd and structured JSON/envelope. Validate the source checkout and resolve patch targets within it before mutation.
-- [ ] R2. Preserve one compile lock, optional-platform import behavior, six release assets and SHA256SUMS. Enclose both patch acquisitions and both cleanup actions so acquisition, compilation or restoration failure cannot leave another patch/lock unhandled.
-- [ ] R3. Rewire apps/cli and apps/server package callers and dispatcher imports to one shared implementation. Keep a minimal source-build entrypoint or forwarding route only where needed for cold boot/unchanged CI; it must not carry duplicate compile logic or require the output it builds.
-- [ ] R4. Write failing end-to-end cases first for bad sourceRoot, cold generated-artifact absence, second patch-acquisition failure, compiler nonzero and concurrent lock refusal. Verify source/packed/host-native standalone execution against explicit checkout, restoration hashes, asset/checksum naming and no DB boot.
+- [x] R1. Move build-cli/build-server/build-binaries into app builder services behind the proposed flat verbs with --source-root defaulting to cwd and structured JSON/envelope. Validate the source checkout and resolve patch targets within it before mutation.
+- [x] R2. Preserve one compile lock, optional-platform import behavior, six release assets and SHA256SUMS. Enclose both patch acquisitions and both cleanup actions so acquisition, compilation or restoration failure cannot leave another patch/lock unhandled.
+- [x] R3. Rewire apps/cli and apps/server package callers and dispatcher imports to one shared implementation. Keep a minimal source-build entrypoint or forwarding route only where needed for cold boot/unchanged CI; it must not carry duplicate compile logic or require the output it builds.
+- [x] R4. Write failing end-to-end cases first for bad sourceRoot, cold generated-artifact absence, second patch-acquisition failure, compiler nonzero and concurrent lock refusal. Verify source/packed/host-native standalone execution against explicit checkout, restoration hashes, asset/checksum naming and no DB boot.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Builder absorbs coherent reusable build and packaging operations
+- [x] AC1 — Builder absorbs coherent reusable build and packaging operations
 
 Requirement and verification mapping: AC1 covers R1–R4. Given a disposable source checkout with absent generated output, invoke each compile entrypoint; assert actual artifact behavior, restored patch hashes/lock absence after forced failures and release checksum/name fixtures. Foreign target execution is not certified on the host.
 
@@ -54,6 +56,12 @@ Requirement and verification mapping: AC1 covers R1–R4. Given a disposable sou
 - Closed: source-root-resolved patches use one existing lock with nested cleanup; accidental failure during second acquisition is part of this task's preservation contract.
 - Closed: retain a direct source shared-service entrypoint only if necessary to avoid generated-import cycles. It is a transport, not duplicate compile logic.
 - Deferred to Robin before implementation: exact compile verb/flag/output consent. Workflow mutation, publishing and network toolchain acquisition remain outside scope.
+
+#### Q&A entry — 2026-11-16T23:49:24Z
+
+- Grantee: Robin (operator). Granted scope: the additive `spur self status` output, `spur self install`, and the six `spur builder` verbs — exactly the scope recorded in `docs/design/concrete-spur-self.md` §7 and `docs/reports/A93-script-ownership.json` `deferredConsent`.
+- Basis: operator answered the A93 batch consent question in this run (2026-11-16) with "grant all three scopes"; the grant is recorded in design §7. Step 0 of this task is therefore satisfied.
+- Not granted: publishing, deployments, workflow/IAM edits, or any surface outside that list.
 
 ### Design
 
@@ -76,15 +84,47 @@ Input from 1351: exact compile contracts and ownership; Robin grants their publi
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Compilation has one owner and one grammar:
+
+- `packages/app/src/builder/compile.ts` (new) — `resolveSourceRoot`, `patchTsRuntimeImport(sourceRoot)`, `patchLayaMlxSourceImport(sourceRoot)`, `layaMlxInstalled(sourceRoot)`, `buildCompiledBinary`, `buildCli`, `buildServer`, `BuildError`. Every path resolves from the **explicit** source root (`createRequire(<root>/apps/cli/package.json)`, `<root>/packages/app/src/decision/decision-service.ts`), never from `import.meta.url`, so building a checkout can never patch the running package.
+- `packages/app/src/builder/binaries.ts` (new) — `binaryAssetName`, `releaseAssetNames`, `writeSha256Sums`, `buildBinaries`: six targets, one invocation each, `SHA256SUMS` in GNU format.
+- `packages/app/src/builder/index.ts` + `packages/app/package.json` `"./builder"` export — a narrow subpath; CLI adapters never deep-import the app barrel.
+- Restoration contract: both patches are acquired **inside** one restoration scope, so a failing laya acquisition still restores the ts-runtime patch and releases `.spur-compile.lock`; `finally` attempts every restore and rethrows the first failure only after all were tried. A nonzero compiler exit is a `BuildError`.
+- `apps/cli/src/commands/builder/build.ts` (new) — the three flat verbs with `--source-root`, `--json`, `--json-envelope`; structured `{error:{code:'build',message,sourceRoot}}` and exit 1; registered in `builder/index.ts`.
+- `scripts/commands/build-{cli,server,binaries}.ts` — reduced to thin forwarders over `@gobing-ai/spur-app/builder` (no compile logic). They exist so package scripts and CI can build **before** the CLI's generated `apps/cli/config` bundle exists; the dispatcher (`scripts/spur-dev.ts`) imports the new names. Proven by importing all three forwarders with `apps/cli/config` moved away.
+- Tests, written first: `apps/cli/tests/commands/builder/compile.e2e.test.ts` (5 cases against a disposable checkout: bad source root, concurrent lock, second-acquisition failure, compiler nonzero, host-native cold build producing `dist/cli/spur`), `apps/cli/tests/commands/builder/build.test.ts` (transport/help/structured error), `packages/app/tests/builder/compile.test.ts` (patch acquisition/restore, checkout-scoped laya detection, per-target args, default runner), `packages/app/tests/builder/binaries.test.ts` (moved with its subject; six names + `SHA256SUMS`).
+- Docs/governance: `docs/design/harness-surface-governance.md` §3 frozen list + a new §4 consent row (A93, 2026-11-16), `docs/design/cli-contracts.md`, `docs/help/cmd_builder.md`, `docs/help2/builder.md`, `docs/help/spur-cli-matrix.md` (builder 8→11 verbs), `plugins/sp/skills/spur-cli/references/builder.md`.
+- Boundary-rule exemptions added with reasons: `ts-db-only-in-domain` for the patch writer (it writes the specifier into a dependency file, never imports it) and `no-direct-fs-io` for both builder modules (byte-exact patch/restore and binary hashing).
+
+Receipt: `.spur/run/1354-compile-e2e.json`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/commands/builder/build.ts:11` registers `build-cli`/`build-server`/`build-binaries` with `--source-root`, `--json`, `--json-envelope`; `resolveSourceRoot` validates `apps/cli/package.json` + `packages/app/package.json` before any lock or patch (`packages/app/src/builder/compile.ts:76`), proven by the E2E "a directory that is not a Spur checkout is refused before any mutation". Every patch/dependency path resolves from the given root (`compile.ts:91`, `:99`), never from `import.meta.url`. |
+| R2 | MET | One lock (`.spur-compile.lock`, created `wx`) beside the patched dependency dist; six release assets plus `SHA256SUMS` (`packages/app/src/builder/binaries.ts:20`). Both patches are acquired inside one restoration scope and restored in reverse order with every restore attempted; the verdict is decided **after** cleanup, so a restore failure only annotates the primary failure (`compile.ts:224`). Covered by "second patch acquisition failure restores the first patch and releases the lock", "compiler failure restores both patches", and the receipt's restored-hash lines. |
+| R3 | MET | `scripts/commands/build-{cli,server,binaries}.ts` are thin forwarders to `@gobing-ai/spur-app/builder` with no compile logic; `scripts/spur-dev.ts` imports them under their new names, so `package.json` callers (`apps/cli` `build`/`build:binaries`/`build:bundle`, `apps/server` `build`) still resolve through one implementation. The forwarders exist because the CLI's `apps/cli/config` bundle is generated — proven by importing all three with that directory absent. The narrow `./builder` subpath keeps the CLI from deep-importing the app barrel. |
+| R4 | MET | Tests were written before the implementation and are failure-shaped: bad source root, concurrent lock refusal, second-acquisition failure, compiler nonzero, and a real host-native `bun build --compile` producing `dist/cli/spur` (`apps/cli/tests/commands/builder/compile.e2e.test.ts`, 5 cases). `packages/app/tests/builder/{compile,binaries}.test.ts` pin patch/restore ordering, per-target invocation, the six asset names and the `SHA256SUMS` format. No DB boot: the verbs live under `builder` and touch no project runtime. Receipt: `.spur/run/1354-compile-e2e.json`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `apps/cli/tests/commands/builder/compile.e2e.test.ts` (5 cases incl. host-native artifact + restored hashes + absent lock) and `packages/app/tests/builder/binaries.test.ts` (six names, GNU checksum format verified by `shasum -c`) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -98,3 +138,8 @@ Input from 1351: exact compile contracts and ownership; Robin grants their publi
 - Refinement report: docs/reports/2026-11-16-A93-ready-refinement.md.
 
 ### History
+
+- 2026-11-17T00:44:03.933Z todo → wip (system)
+- 2026-11-17T00:53:05.300Z wip → testing (system)
+- 2026-11-17T00:53:06.620Z testing → done (system)
+
