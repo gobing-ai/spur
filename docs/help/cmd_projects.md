@@ -29,6 +29,7 @@ spur projects add [options] <path>
 |---|---|
 | `--name <name>` | Display name for the project |
 | `--host <host>` | Host for a local or remote project (default: `localhost`) |
+| `--prefix <slug>` | Gateway URL path prefix for a local project (default: `/<name slug>`); refused with a remote `--host` |
 | `--json` | Output JSON response |
 
 ## spur projects remove

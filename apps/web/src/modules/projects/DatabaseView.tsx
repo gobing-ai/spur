@@ -10,6 +10,7 @@ import type {
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Badge, Button, Card, CardBody, Checkbox, Input, Loading, Modal, Select, Tooltip } from '@/ui';
+import { scopedKey } from '../../components/base-path';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
 /**
@@ -313,7 +314,8 @@ export const DEFAULT_MAX_VISIBLE_COLUMNS = 7;
 export const DATABASE_COLUMNS_STORAGE_PREFIX = 'spur:database:columns:v1:';
 
 export function getTableStorageKey(tableName: string): string {
-    return `${DATABASE_COLUMNS_STORAGE_PREFIX}${tableName}`;
+    // Namespaced by base path: every local project shares the gateway origin's storage.
+    return scopedKey(`${DATABASE_COLUMNS_STORAGE_PREFIX}${tableName}`);
 }
 
 /**

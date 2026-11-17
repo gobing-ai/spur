@@ -108,3 +108,12 @@ given. Raw zg/rg passthrough flags are rejected by design.
 - [Command index](./index.md)
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §3 Initialization
 - `docs/04_DESIGN.md` — §1.2 supporting utilities
+
+## Gateway daemon (feature K4)
+
+`spur self daemon <install|uninstall|status> [--port <n>] [--json]` keeps the one-port project
+gateway always on as a macOS user LaunchAgent (`~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`,
+logs under `~/Library/Logs/spur/`). `install` refuses a non-macOS platform and a port held by another
+process without writing anything; `status` reports loaded/pid/last exit plus `GET /api/health`;
+`uninstall` boots it out and removes the plist (absent = success). The agent runs
+`spur self serve --gateway`. See [cmd_serve](./cmd_serve.md) for gateway mode itself.

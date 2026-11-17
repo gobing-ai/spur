@@ -3,6 +3,8 @@ import { buildConfigFromEnv, getEnvVars } from '@gobing-ai/spur-config';
 import { startServer } from './serve';
 
 export { createApp } from './bootstrap';
+export type { GatewayHandle, StartGatewayOptions } from './gateway';
+export { startGateway } from './gateway';
 export { generateOpenApiSpec } from './openapi';
 export type { AppRouter } from './router';
 export { createRouter } from './router';

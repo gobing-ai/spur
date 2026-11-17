@@ -1,6 +1,7 @@
 import { TASK_VARIANTS, type TaskVariant } from '@gobing-ai/spur-domain/schema';
 import { useEffect, useState } from 'react';
 import { Button, Input, MDEditor, Select } from '@/ui';
+import { scopedKey } from '../../components/base-path';
 import ResizeHandle from '../../components/ResizeHandle';
 import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import { api } from '../../lib/rpc-client';
@@ -108,7 +109,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder, feature
     const [panelWidth, setPanelWidth] = useState(() => {
         if (typeof window === 'undefined') return DEFAULT_PANEL_WIDTH;
         try {
-            const stored = Number.parseFloat(window.localStorage.getItem(PANEL_WIDTH_KEY) ?? '');
+            const stored = Number.parseFloat(window.localStorage.getItem(scopedKey(PANEL_WIDTH_KEY)) ?? '');
             if (Number.isFinite(stored) && stored > 0) {
                 return Math.max(MIN_PANEL_WIDTH, Math.min(stored, window.innerWidth * 0.9));
             }
@@ -208,7 +209,7 @@ export default function NewTaskPanel({ open, onClose, onCreated, folder, feature
                         const clamped = Math.max(MIN_PANEL_WIDTH, Math.min(px, max));
                         setPanelWidth(clamped);
                         try {
-                            window.localStorage.setItem(PANEL_WIDTH_KEY, String(clamped));
+                            window.localStorage.setItem(scopedKey(PANEL_WIDTH_KEY), String(clamped));
                         } catch {
                             // localStorage unavailable — width still applies for this session.
                         }

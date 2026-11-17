@@ -11,7 +11,14 @@ describe('config', () => {
     test('builds defaults for a development scaffold', () => {
         expect(configSchema.parse({})).toEqual({
             database: { url: '.spur/spur.db' },
-            server: { port: 3000, host: 'localhost', openBrowser: true, webDistPath: null, a2a: { enabled: false } },
+            server: {
+                port: 3000,
+                host: 'localhost',
+                openBrowser: true,
+                webDistPath: null,
+                a2a: { enabled: false },
+                gateway: { port: 3000, allowedHosts: [] },
+            },
             telemetry: { enabled: false },
             logging: { level: 'info' },
         });
@@ -28,7 +35,14 @@ describe('config', () => {
             }),
         ).toEqual({
             database: { url: 'file:local.db' },
-            server: { port: 4321, host: '0.0.0.0', openBrowser: true, webDistPath: null, a2a: { enabled: false } },
+            server: {
+                port: 4321,
+                host: '0.0.0.0',
+                openBrowser: true,
+                webDistPath: null,
+                a2a: { enabled: false },
+                gateway: { port: 3000, allowedHosts: [] },
+            },
             telemetry: { enabled: true },
             logging: { level: 'debug' },
         });

@@ -2915,7 +2915,7 @@ re-import pressure this entry already records).
 
 ## ADR-151: Local Projects Share One Gateway Port by Path Prefix; the Gateway Runs as a User LaunchAgent
 
-- **Status:** Proposed (design; public surface pending operator consent) · **Date:** 2026-11-16 · **Feature:** K4 · **Amends:** ADR-037 (supersedes K1's "no daemon / launchd out of scope")
+- **Status:** Accepted 2026-11-17 (operator consent for the three new surfaces; tasks 1357–1362 shipped) · **Date:** 2026-11-16 · **Feature:** K4 · **Amends:** ADR-037 (supersedes K1's "no daemon / launchd out of scope")
 - **Decision:** One long-lived gateway (`spur self serve --gateway`) listens on a fixed port and
   reverse-proxies `/<prefix>/*` to each local project's own `spur serve` on an internal loopback
   port, starting or adopting it on demand. The gateway alone adapts requests and responses (host
@@ -2934,9 +2934,17 @@ re-import pressure this entry already records).
   the fallback if the runtime base regresses); serve-side `X-Forwarded-*` trust (N serves, skew);
   pinned ports with one ingress rule per project (no daemon, N rules); an external Caddy/nginx
   (non-Spur toolchain, still needs stable ports).
+- **Shipped surface (2026-11-17):** `spur self serve --gateway [--port] [--host]`,
+  `spur self daemon <install|uninstall|status> [--port] [--json]`, `spur projects add --prefix <slug>`,
+  `spur projects list` URL column, `server.gateway.{port,allowedHosts}`, and the registry `prefix`
+  field with `resolveProjectPrefix`/`findPrefixCollisions`. `GET /api/projects` carries `prefix` and
+  `url`. The Board's module kit publishes `basePath`/`withBase`/`resolveApiUrl` (`BOARD_UI_KIT_VERSION`
+  1.1.0).
 - **Consequence:** The Board must be base-path aware at runtime (relative built chunks plus a
   `basePath()` helper); all local projects share one browser origin, so per-project `localStorage`
   keys are namespaced, each tab keeps one planning-event stream (HTTP/1.1 caps six connections per
   origin), and module JS of one project can reach another project's API (accepted under local
   operator trust). Access control for tunnel exposure lives at the Cloudflare tunnel, not in Spur.
+  The gateway is IPv6/IPv4 sensitive: it binds `server.host` (`localhost` → `::1` on macOS), so
+  gateway health probes target `localhost`, not `127.0.0.1`.
 - **Detail:** [Project gateway](design/project-gateway.md); [project switcher](design/project-switcher.md).

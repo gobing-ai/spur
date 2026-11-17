@@ -1,5 +1,6 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Textarea } from '@/ui';
+import { subscribePlanningEvents } from '../lib/planning-events';
 import { api, fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { useConversationDraft } from '../modules/projects/drafts';
 
@@ -314,17 +315,11 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
         };
     }, [lastMessageId, feedTick]);
     useEffect(() => {
-        if (typeof EventSource === 'undefined') return;
-        const stream = new EventSource(`${resolveApiUrl()}/events/planning`);
-        stream.onmessage = (message) => {
-            try {
-                const name = (JSON.parse(message.data) as { eventName?: unknown }).eventName;
-                if (typeof name === 'string' && name.startsWith('message.')) setFeedTick((tick) => tick + 1);
-            } catch {
-                // A malformed frame is not worth a state update.
-            }
-        };
-        return () => stream.close();
+        // One shared planning stream per tab (K4 R12): a per-component EventSource would burn the
+        // six-connections-per-origin budget as soon as a few project tabs share the gateway origin.
+        return subscribePlanningEvents((event) => {
+            if (event.eventName.startsWith('message.')) setFeedTick((tick) => tick + 1);
+        });
     }, []);
 
     const receiptState = receiptStateFor(receipt, inFlight);

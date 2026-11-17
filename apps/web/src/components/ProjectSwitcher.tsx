@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@/ui';
+import { basePath } from '../lib/base-path';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 
 export interface RegistryProject {
@@ -9,6 +10,10 @@ export interface RegistryProject {
     port: number;
     running: boolean;
     current: boolean;
+    /** Gateway path prefix for a local entry (`/kk`); `null` for remote entries (K4 R7). */
+    prefix?: string | null;
+    /** Server-resolved Board URL: `${prefix}/board` for locals, `http://host:port/board` for remotes. */
+    url?: string;
 }
 
 interface ProjectSwitcherProps {
@@ -36,7 +41,13 @@ function isRemoteHost(host?: string): boolean {
  * process, which can be denied LAN access (macOS Local Network privacy, firewall) while
  * the browser reaches the host fine — and a remote entry can never be started from here.
  */
-export function directBoardUrl(project: Pick<RegistryProject, 'host' | 'port' | 'running'>): string | null {
+export function directBoardUrl(
+    project: Pick<RegistryProject, 'host' | 'port' | 'running' | 'prefix'>,
+    base = basePath(),
+): string | null {
+    // Behind the gateway every local project shares this origin, so navigation is a path under the
+    // current base (`/<prefix>/board`) instead of another port on the loopback host (K4 R7).
+    if (project.prefix && base !== '/') return `${project.prefix}/board`;
     if (project.port <= 0) return null;
     if (!project.running && !isRemoteHost(project.host)) return null;
     return `http://${project.host?.trim() || 'localhost'}:${project.port}/board`;
@@ -288,7 +299,8 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
             return;
         }
 
-        const direct = directBoardUrl(project);
+        // The server resolves the entry's URL; use it when this origin is the gateway (K4 R7/R8).
+        const direct = directBoardUrl(project) ?? (basePath() !== '/' ? (project.url ?? null) : null);
         if (direct) {
             window.location.href = direct;
             return;
@@ -308,7 +320,8 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                 throw new Error('Failed to start project');
             }
             const body = (await res.json()) as { url: string; port: number };
-            window.location.href = body.url || `http://${project.host ?? 'localhost'}:${body.port}/board`;
+            const started = project.prefix && basePath() !== '/' ? `${project.prefix}/board` : null;
+            window.location.href = started || body.url || `http://${project.host ?? 'localhost'}:${body.port}/board`;
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Start failed');
             setLoadingProject(null);

@@ -20,6 +20,9 @@ export const MODULE_KIT_EXPORTS = [
     'CardBody',
     'Badge',
     'Button',
+    'basePath',
+    'withBase',
+    'resolveApiUrl',
 ] as const;
 
 /**
@@ -28,4 +31,4 @@ export const MODULE_KIT_EXPORTS = [
  * Breaking a prop is a major bump; removing the specifier is a contribution API change and out of
  * scope (ADR-150).
  */
-export const BOARD_UI_KIT_VERSION = '1.0.0';
+export const BOARD_UI_KIT_VERSION = '1.1.0';

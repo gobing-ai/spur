@@ -57,3 +57,13 @@ the supervisor API become available at `http://<host>:<port>`.
 - **`spur agent` (see [agent.md](agent.md))** - `start`/`stop`/`list --specs` require `spur self serve`
   for the supervisor API.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.
+
+## Gateway mode (`--gateway`, feature K4)
+
+`spur self serve --gateway [--port <n>] [--host <addr>]` runs **one** project gateway instead of one
+project's server: a fixed port (default `server.gateway.port` = 3000) routes `/<prefix>/*` to that
+local project's own `spur serve` on its internal loopback port, starting or adopting it on first
+request. `GET /` is an index of the registered projects and `GET /api/health` answers
+`{ ok, gateway: true, port, projects: [{ name, prefix, running }] }` (what `spur self daemon status`
+reads). `--json` stays a dry probe (`{ port, url, gateway: true, running: false }`). A port held by
+another process fails with `Gateway port <n> is already in use by another process`.

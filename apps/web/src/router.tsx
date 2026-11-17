@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router';
 import BoardLayout from './components/BoardLayout';
 import { ModuleErrorBoundary } from './components/ModuleErrorBoundary';
+import { basePath } from './lib/base-path';
 import { builtinRegistry, type Registry } from './modules/registry';
 import type { WebModule } from './modules/types';
 
@@ -103,5 +104,7 @@ export const routes = createBoardRoutes(builtinRegistry);
  * in the browser, exactly once.
  */
 export function createAppRouter(registry: Registry = builtinRegistry) {
-    return createBrowserRouter(createBoardRoutes(registry));
+    // `basename` is the gateway mount point; '/' at the root keeps every route identical.
+    const basename = basePath().replace(/\/$/, '') || '/';
+    return createBrowserRouter(createBoardRoutes(registry), { basename });
 }

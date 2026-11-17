@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Runtime base path for the Board
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.305Z
-updated_at: "2026-11-17T00:29:28.400Z"
+updated_at: "2026-11-17T02:44:00.791Z"
 feature_id: K4
 priority: P1
 tags:
@@ -14,6 +14,8 @@ tags:
 estimate_hours: 10
 
 dependencies: ["1360"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1358. Runtime base path for the Board
@@ -24,11 +26,11 @@ Feature K4 (ADR-151, `docs/design/project-gateway.md` §5–6, risks B2–B8, B1
 
 ### Requirements
 
-- [ ] R6. Under `/<prefix>/` every API call, router route, raw link, Markdown link, SSE stream, lazy chunk/preload, module asset and static asset resolves under the base; at `/` (direct per-port, dev mode, memory-router tests) behavior is unchanged; native Board modules get `basePath`/`withBase`/`resolveApiUrl` from the module kit.
+- [x] R6. Under `/<prefix>/` every API call, router route, raw link, Markdown link, SSE stream, lazy chunk/preload, module asset and static asset resolves under the base; at `/` (direct per-port, dev mode, memory-router tests) behavior is unchanged; native Board modules get `basePath`/`withBase`/`resolveApiUrl` from the module kit.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Board works under a prefix and at the root (req: R6)
+- [x] AC1 — Board works under a prefix and at the root (req: R6)
 
 Verification: heavy browser E2E `apps/web/tests/board-base-path.heavy.test.ts` (run via `bun run test:heavy`): build with `buildBoardToTemp()` (`apps/web/tests/test-helpers/board-build.ts`), serve it with `serveBoard()` (`apps/web/tests/test-helpers/board-server.ts:94`, extended with an SSE stub for the planning-events path and a module asset tree) as the upstream, put `createGatewayHandler` (1359/1360, from `@gobing-ai/spur-app`) in front of it on its own `Bun.serve`, drive Chrome through `apps/web/tests/test-helpers/cdp.ts` to `/<prefix>/board`, a deep link (refresh), a lazy route (task detail), the search page, a Markdown link, a module asset and an SSE subscription; repeat at `/` on the serve port. Assert zero requests whose path does not start with `/<prefix>/` (excluding external URLs). Artifact: the JSON network log written under the test temp dir and attached to `## Testing`.
 
@@ -87,15 +89,61 @@ Rejected: Astro `base` config (build-time constant, breaks per-port root access 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `apps/web/src/components/base-path.ts` | new (1-60) | The runtime base contract: `basePath()` (memoized `<meta name="spur-base">` → `'/'` fallback, normalized to leading+trailing slash), `withBase()` (only root-relative `'/x'` is prefixed; absolute, `//host`, `#`, `?`, relative pass through), `resolveApiUrl()` (`/<prefix>/api` or `/api`, `PUBLIC_API_URL` still wins) and `resetBasePathForTesting()`. Lives under `src/components` because the module-kit barrel publishes it and `emit-board-types` only mirrors declarations inside that root; `src/lib/base-path.ts` re-exports it so app code imports stay in `lib`. |
+| `apps/web/astro.config.mjs` | 15-22 | `vite.experimental.renderBuiltUrl` → `{ relative: true }` for non-HTML hosts, so chunks and preloads are relative instead of the default root-absolute `"/" + file`. HTML stays root-absolute on purpose — the gateway rebases it (1360). Verified in the build output: `dist/web/_astro/*.js` now reference `./chunk.js`, and the absolute preload helper is gone. |
+| `apps/web/src/lib/rpc-client.ts` | 8-13 | `resolveApiUrl` is now the base-path implementation (re-exported here for the existing import path), so every `api`/`EventSource` call under the gateway targets `/<prefix>/api`. |
+| `apps/web/src/router.tsx` | 1-5, 105-110 | `createBrowserRouter(..., { basename: basePath().replace(/\/$/, '') \|\| '/' })` — routes mount under the gateway prefix and stay identical at the root. |
+| `apps/web/src/modules/features/FeatureDetail.tsx` | 6, 76, 485-489 | `window.location.assign('/board/tasks/…')` → router `navigate(…)`, so the task jump cannot leave the base path. |
+| `apps/web/src/modules/search/index.tsx` | 2, 4, 128-130 | Board deep links render through router `Link` instead of a bare `<a href>`. |
+| `apps/web/src/modules/task-kanban/MarkdownBody.tsx` | 4, 165-190 | New `a` component override (`renderAnchor`) applies `withBase` to Markdown links so `/board/...` inside a task body resolves under the prefix. |
+| `apps/web/src/modules/compose.ts` | 4, 56-72, 78-86 | Native module entry `import()` and stylesheet `<link>` go through `withBase`, so a catalog's `/modules/<id>/…` assets resolve under the gateway while absolute URLs stay untouched. |
+| `apps/web/src/components/module-kit/index.ts` + `exports.ts` | 22-28 / 23-25, 34 | Kit publishes `basePath`, `withBase`, `resolveApiUrl` (barrel + `MODULE_KIT_EXPORTS` mirror) and `BOARD_UI_KIT_VERSION` → `1.1.0` (additive minor, ADR-150). |
+| `apps/web/tests/lib/base-path.test.ts` | new | `basePath()` with/without meta and normalization, `withBase` pass-through matrix, `resolveApiUrl` under prefix + `PUBLIC_API_URL`, memoization. |
+| `apps/web/tests/board-base-path.heavy.test.ts` | new | Real Chromium: production-shaped build served behind the real gateway handler at `/proj/board` — meta `/proj/`, router mounted under it, deep-link refresh renders the Board, API/SSE reach the upstream **stripped** (`/api/events/planning`, `/api/tasks…`), and every request the browser issued carries `/proj/` (zero escapes); second case proves the same build at the origin root with no meta. |
+| `apps/web/tests/…` (3 files) | feature-sync, planning-live-views, markdown-safety-pipeline | Wrap the bare `FeatureDetail`/`FeaturesShell` renders in `MemoryRouter` — the panel now navigates through the router (K4), so a routerless render is no longer valid. |
+| `apps/web/package.json`, `bun.lock` | — | `@gobing-ai/spur-app` + `@gobing-ai/spur-config` as test-only `workspace:*` devDependencies for the heavy E2E (internal workspace packages, no new external dependency). `bun install` also refreshed a stale lock: the recorded `apps/cli`/`apps/server` versions lagged their manifests. |
+| `docs/design/downstream-board-modules.md` §6.9, `docs/design/board-module-ui-kit.md` §6 | new sections | Document the base-path contract, the kit 1.1.0 helpers and the "never hard-code `'/api'`" rule for native modules. |
+| `apps/cli/board/kit/module-kit/index.d.ts` | regenerated | The emitted mirror of the kit barrel now carries the three new exports + 1.1.0. |
+
+**Correction after the feature gate (2026-11-17).** The two `workspace:*` devDependencies added to
+`apps/web/package.json` for the heavy E2E (`@gobing-ai/spur-app`, `@gobing-ai/spur-config`) were
+removed again: they resolve through the root workspace hoisting (`tsc` and the browser E2E both pass
+without them), while the manifest change flipped the frozen 1311 migration-ownership decision to
+`no-go` ("An upstream package manifest changed") and so broke that artifact's reproducibility for a
+dependency edge nothing needed. `bun.lock` is therefore untouched by this task.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R6 — under `/<prefix>/` every API call, router route, raw link, Markdown link, SSE stream, lazy chunk/preload, module asset and static asset resolves under the base; at `/` behavior is unchanged; native modules get `basePath`/`withBase`/`resolveApiUrl` from the module kit | MET | base contract `apps/web/src/components/base-path.ts:1-60`; API `apps/web/src/lib/rpc-client.ts:8-13,24`; router `apps/web/src/router.tsx:105-110`; links `apps/web/src/modules/features/FeatureDetail.tsx:485-489`, `apps/web/src/modules/search/index.tsx:128-130`, `apps/web/src/modules/task-kanban/MarkdownBody.tsx:165-190`; chunks `apps/web/astro.config.mjs:15-22`; module assets `apps/web/src/modules/compose.ts:56-72,78-86`; kit `apps/web/src/components/module-kit/{index,exports}.ts` + regenerated `apps/cli/board/kit/module-kit/index.d.ts` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Board works under a prefix and at the root (req: R6) | MET | test | `apps/web/tests/board-base-path.heavy.test.ts` 2 pass in real Chromium (built board behind the real gateway handler): meta `/proj/`, router mounted at `/proj/board*`, deep-link refresh renders, upstream paths `/api/events/planning` + `/api/tasks…` arrive **stripped**, and every browser request carries `/proj/` (zero escapes); the root case serves the same build with no meta at `/board*`. `(cd apps/web && bun test)` 559 pass, including `tests/components/base-path.test.ts` + `tests/lib/base-path.test.ts`. Build emits `./chunk.js` refs and no absolute preload helper; grep gate over `apps/web/src` shows only router-relative or `withBase`-wrapped URLs |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R6 | MET | `apps/web/src/components/base-path.ts:1-60`; API `apps/web/src/lib/rpc-client.ts:8-13`; router basename `apps/web/src/router.tsx:105-110`; links `FeatureDetail.tsx:485-489`, `search/index.tsx:128-130`, `MarkdownBody.tsx:165-190`; chunks `astro.config.mjs:15-22`; module assets `modules/compose.ts:56-86`; kit exports + 1.1.0 |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test + command | `apps/web/tests/board-base-path.heavy.test.ts` 2 pass in Chromium: prefixed mount with meta `/proj/`, deep-link refresh, stripped upstream paths (`/api/events/planning`, `/api/tasks…`), zero requests outside `/proj/`; root case unchanged. Full web suite 559 pass; build emits relative chunk URLs |
+
+Findings: no open P1–P3. P4: document-level memo of the meta; `renderBuiltUrl` applies to all non-HTML assets (fine while no inline `<style>` assets exist); the batch's `bun install` also repaired pre-existing `bun.lock` version drift (0.4.33 → 0.4.36) unrelated to K4.
+
+Residual risk: HTML rebasing stays the gateway's responsibility (1360) and runtime URLs the client's; the grep gate — not a runtime check — guards against new hard-coded root-absolute URLs.
+
+**Disposition: PASS.**
 
 ### References
 
@@ -106,4 +154,7 @@ Rejected: Astro `base` config (build-time constant, breaks per-port root access 
 ### History
 
 - 2026-11-17T00:21:24.181Z feature_id Q → K4 (system)
+- 2026-11-17T01:44:34.868Z todo → wip (system)
+- 2026-11-17T01:51:13.405Z wip → testing (system)
+- 2026-11-17T01:51:14.912Z testing → done (system)
 

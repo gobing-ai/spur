@@ -7,7 +7,8 @@
  * ledger, so a reply written by an agent CLI process shows up here without a reload.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, resolveApiUrl } from '../../lib/rpc-client';
+import { subscribePlanningEvents } from '../../lib/planning-events';
+import { api } from '../../lib/rpc-client';
 import { useProjectContext } from './useProjectContext';
 
 /** One inbox row as the contract returns it. */
@@ -17,7 +18,6 @@ type MemberRow = Awaited<ReturnType<typeof api.inbox.members>>[number];
 
 /** Operator identity: the human, in both the CLI and this global input. */
 const OPERATOR_ID = 'operator';
-const SSE_URL = () => `${resolveApiUrl()}/events/planning`;
 
 /** A member whose address belongs to the declared fleet sorts above ad-hoc/generated addresses. */
 export function memberRank(member: MemberRow, fleetIds: readonly string[]): number {
@@ -148,18 +148,12 @@ export default function InboxView({ client = INBOX_CLIENT }: { client?: InboxCli
     // instead of a timer that keeps the tab reading forever.
     useEffect(() => {
         if (project.path === null) return;
-        if (typeof EventSource === 'undefined') return;
-        const stream = new EventSource(SSE_URL());
-        stream.onmessage = (message) => {
-            try {
-                const targets = frameTargets(JSON.parse(message.data), selectedRef.current);
-                if (targets.members) setMembersTick((tick) => tick + 1);
-                if (targets.thread) setThreadTick((tick) => tick + 1);
-            } catch {
-                // A malformed frame is not worth a state update.
-            }
-        };
-        return () => stream.close();
+        // Shared planning stream (K4 R12): one EventSource per tab, not one per pane.
+        return subscribePlanningEvents((event) => {
+            const targets = frameTargets(event.frame, selectedRef.current);
+            if (targets.members) setMembersTick((tick) => tick + 1);
+            if (targets.thread) setThreadTick((tick) => tick + 1);
+        });
     }, [project.path]);
 
     // ── member list ────────────────────────────────────────────────────────

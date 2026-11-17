@@ -136,3 +136,18 @@ Resolved: the starter template ships as a plugin skill asset at
 `plugins/sp/skills/spur-composer/templates/board-module/` (ADR-130 placement; `sp-plugin-standalone`
 scopes hooks/scripts/lib, so the template's React imports are out of its scope). Still open: whether
 `uiKitVersion` also gates at preflight, deferred until a second kit major exists.
+
+## 6. Base-path helpers (kit 1.1.0)
+
+The kit publishes the Board's runtime base-path contract, because a native contribution renders
+inside the same document and must resolve URLs exactly like the host (feature K4, ADR-151 §5):
+
+| Export | Contract |
+| --- | --- |
+| `basePath()` | `'/<prefix>/'` from `<meta name="spur-base">`, `'/'` when absent (direct per-port serve, dev server, tests). Always leading + trailing slash, memoized per document. |
+| `withBase(path)` | `'/x'` → `basePath() + 'x'`; absolute URLs, `//host`, `#fragment`, `?query` and relative paths unchanged. |
+| `resolveApiUrl()` | The API base (`/<prefix>/api` or `/api`), honouring `PUBLIC_API_URL`. |
+
+`BOARD_UI_KIT_VERSION` is **1.1.0** (additive minor). A contribution that builds URLs with these
+helpers works unchanged behind the gateway and at the root; one that hard-codes `'/api'` keeps
+working only when the Board is served at the origin root.

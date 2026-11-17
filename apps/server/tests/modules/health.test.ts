@@ -151,11 +151,33 @@ describe('healthModule', () => {
 
         const res = await app.request('/api/projects');
         expect(res.status).toBe(200);
-        const body = (await res.json()) as { projects: Array<{ name: string; current: boolean; running: boolean }> };
+        const body = (await res.json()) as {
+            projects: Array<{ name: string; current: boolean; running: boolean; prefix: string | null; url: string }>;
+        };
         expect(body.projects.length).toBe(1);
         expect(body.projects[0]?.name).toBe('Project A');
         expect(body.projects[0]?.current).toBe(true);
         expect(body.projects[0]?.running).toBe(false);
+        // K4 R7: a local entry carries its gateway prefix and a prefix-relative Board URL.
+        expect(body.projects[0]?.prefix).toBe('/project-a');
+        expect(body.projects[0]?.url).toBe('/project-a/board');
+    });
+
+    test('/api/projects gives a remote entry a null prefix and its host:port URL (K4 R2/R7)', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'Remote', path: '/srv/remote', host: '192.168.87.27', port: 3003 });
+
+        const app = new Hono();
+        const ctx = { cwd: tempDir } as ServerContext;
+        healthModule.mount(app, ctx);
+
+        const res = await app.request('/api/projects');
+        const body = (await res.json()) as {
+            projects: Array<{ name: string; prefix: string | null; url: string; port: number }>;
+        };
+        expect(body.projects[0]?.prefix).toBeNull();
+        expect(body.projects[0]?.url).toBe('http://192.168.87.27:3003/board');
+        expect(body.projects[0]?.port).toBe(3003);
     });
 
     test('/api/projects returns empty projects list without ServerContext', async () => {

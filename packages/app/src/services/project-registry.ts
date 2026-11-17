@@ -10,10 +10,18 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { getProjectsFilePath, type ProjectEntry, type ProjectsFile, projectsFileSchema } from '@gobing-ai/spur-config';
+import {
+    getProjectsFilePath,
+    isLocalHost,
+    normalizePrefix,
+    type ProjectEntry,
+    type ProjectsFile,
+    projectsFileSchema,
+    resolveProjectPrefix,
+    validatePrefix,
+} from '@gobing-ai/spur-config';
 import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
-    isLocalHost,
     isPidAlive,
     isPortAvailable,
     isPortLive,
@@ -28,6 +36,39 @@ export * from './project-process';
 function entryHost(entry: { host?: string | null }): string {
     const host = entry.host?.trim();
     return host && host !== '' ? host : 'localhost';
+}
+
+/**
+ * Resolve the prefix an `upsert` should store, refusing the writes the registry contract forbids.
+ *
+ * Returns `undefined` when the caller omitted a prefix: path-healing callers re-upsert without one
+ * and must never erase a stored prefix nor trigger the collision check against themselves.
+ */
+function resolvePrefixWrite(
+    data: ProjectsFile,
+    entry: { name: string; prefix?: string },
+    host: string,
+    isLocal: boolean,
+    index: number,
+): string | undefined {
+    if (entry.prefix === undefined) {
+        return undefined;
+    }
+    if (!isLocal || !isLocalHost(host)) {
+        throw new Error('Prefix is only valid for local projects; remove --prefix or --host');
+    }
+    const prefix = normalizePrefix(entry.prefix);
+    const invalid = validatePrefix(prefix);
+    if (invalid) {
+        throw new Error(invalid);
+    }
+    const clash = data.projects.find(
+        (p, i) => i !== index && isLocalHost(p.host) && resolveProjectPrefix(p) === prefix,
+    );
+    if (clash) {
+        throw new Error(`Prefix ${prefix} is already used by "${clash.name}"; choose another with --prefix`);
+    }
+    return prefix;
 }
 
 /**
@@ -302,20 +343,34 @@ export class ProjectRegistry {
         );
     }
 
-    /** Upsert a project entry by path and optional host. */
-    async upsert(entry: { name: string; path: string; port?: number; host?: string }): Promise<ProjectEntry> {
+    /**
+     * Upsert a project entry by path and optional host.
+     *
+     * `prefix` is the gateway URL path for a local entry: supplied values are normalized, validated
+     * and collision-checked; omitting it preserves whatever the stored entry already has, because
+     * path-healing callers re-upsert without knowing about prefixes.
+     */
+    async upsert(entry: {
+        name: string;
+        path: string;
+        port?: number;
+        host?: string;
+        prefix?: string;
+    }): Promise<ProjectEntry> {
         return this.withLock(async () => {
             const currentData = this.readRaw();
             const host = entry.host && entry.host.trim() !== '' ? entry.host.trim() : 'localhost';
             const isLocal = isLocalHost(host);
             const normalizedPath = isLocal ? normalizeProjectPath(entry.path) : entry.path;
             const index = findProjectIndex(currentData.projects, normalizedPath, host);
+            const prefix = resolvePrefixWrite(currentData, entry, host, isLocal, index);
 
             const newEntry: ProjectEntry = {
                 name: entry.name,
                 path: normalizedPath,
                 host,
                 port: entry.port ?? 0,
+                ...(prefix ? { prefix } : {}),
             };
 
             if (index >= 0 && currentData.projects[index]) {
@@ -325,6 +380,7 @@ export class ProjectRegistry {
                     name: entry.name,
                     host: entry.host ?? existing.host ?? 'localhost',
                     port: entry.port ?? existing.port,
+                    ...(prefix ? { prefix } : {}),
                 };
             } else {
                 currentData.projects.push(newEntry);
@@ -396,9 +452,19 @@ export class ProjectRegistry {
         });
     }
 
-    /** Find an available free port in 3000–3999 band. */
-    async allocatePort(preferredPort?: number): Promise<number> {
-        if (preferredPort && preferredPort > 0 && (await isPortAvailable(preferredPort))) {
+    /**
+     * Find an available free port in the 3000–3999 band.
+     *
+     * `reserved` ports belong to something else on the machine (the project gateway owns one fixed
+     * port), so a project serve must never take one even when the band probe finds it bindable.
+     */
+    async allocatePort(preferredPort?: number, reserved: ReadonlySet<number> = new Set()): Promise<number> {
+        if (
+            preferredPort &&
+            preferredPort > 0 &&
+            !reserved.has(preferredPort) &&
+            (await isPortAvailable(preferredPort))
+        ) {
             return preferredPort;
         }
 
@@ -415,7 +481,7 @@ export class ProjectRegistry {
         let probedAny = false;
 
         for (let port = 3000; port <= 3999; port++) {
-            if (claimedPorts.has(port)) continue;
+            if (claimedPorts.has(port) || reserved.has(port)) continue;
             const probe = await probePort(port);
             probedAny = true;
             if (probe === 'available') {

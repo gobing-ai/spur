@@ -1,8 +1,9 @@
 import { statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
+import { ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
-import { startServer } from '@gobing-ai/spur-server';
+import { startGateway, startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
 import { toEnvelopeJson, writeJsonError } from '../output';
@@ -45,6 +46,8 @@ export interface RegisterServeOptions {
      * can be exercised with injected dependencies (task 0805 AC2).
      */
     startServer?: typeof startServer;
+    /** Injectable `startGateway` for tests (defaults to the real gateway listener). */
+    startGateway?: typeof startGateway;
 }
 
 /** Register `spur serve` command (optionally hidden from the top-level help listing). */
@@ -54,11 +57,13 @@ export function registerServeCommand(
     options: RegisterServeOptions = {},
 ): void {
     const launch = options.startServer ?? startServer;
+    const launchGateway = options.startGateway ?? startGateway;
     program
         .command('serve', { hidden: options.hidden === true })
         .summary('start the Spur web server (local fallback)')
         .option(...SHARED_OPTIONS.portServe, parseInt)
         .option('--host <addr>', 'Bind address (env: HOST, default: localhost)')
+        .option('--gateway', 'Run the one-port project gateway instead of a project server')
         .option('--no-open', 'Skip opening the browser')
         .option(...SHARED_OPTIONS.cwdServe, context.cwd)
         .option(...SHARED_OPTIONS.jsonServePortUrl)
@@ -67,6 +72,46 @@ export function registerServeCommand(
             try {
                 const env = getEnvVars();
                 const config = buildConfigFromEnv(env);
+
+                if (options.gateway) {
+                    const gatewayPort = options.port ?? config.server.gateway.port;
+                    const gatewayHost = options.host ?? config.server.host;
+                    if (options.json) {
+                        // Dry probe, like the project serve: nothing is bound, so nothing is running.
+                        context.output.write(
+                            toEnvelopeJson(
+                                {
+                                    port: gatewayPort,
+                                    url: `http://${gatewayHost}:${gatewayPort}`,
+                                    gateway: true,
+                                    running: false,
+                                },
+                                { enveloped: options.jsonEnvelope },
+                            ),
+                        );
+                        return;
+                    }
+                    const registry = new ProjectRegistry();
+                    const handle = launchGateway({
+                        port: gatewayPort,
+                        host: gatewayHost,
+                        deps: {
+                            // Read-only snapshot: routing must not heal, purge or probe on every request.
+                            listProjects: async () => registry.peek().projects,
+                            ensureUpstream: async (entry) =>
+                                (
+                                    await startRegisteredProject(registry, entry.path, {
+                                        reservedPorts: new Set([gatewayPort]),
+                                    })
+                                ).port,
+                            port: gatewayPort,
+                            edge: { bindHost: gatewayHost, allowedHosts: config.server.gateway.allowedHosts },
+                        },
+                    });
+                    context.output.write(`Spur gateway listening on ${handle.url}`);
+                    context.output.write('Local projects route at /<prefix>/ (Ctrl-C to stop).');
+                    return;
+                }
 
                 const port = options.port ?? config.server.port;
                 const host = options.host ?? config.server.host;

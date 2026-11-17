@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Loading, Tooltip } from '@/ui';
+import { scopedKey } from '../../components/base-path';
 import ResizeHandle from '../../components/ResizeHandle';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import MemberDetail from './MemberDetail';
@@ -186,7 +187,7 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
         const fallback = typeof window !== 'undefined' ? Math.min(1728, window.innerWidth * 0.8) : 1728;
         if (typeof window === 'undefined') return fallback;
         try {
-            const stored = Number.parseFloat(window.localStorage.getItem(DETAIL_WIDTH_KEY) ?? '');
+            const stored = Number.parseFloat(window.localStorage.getItem(scopedKey(DETAIL_WIDTH_KEY)) ?? '');
             if (Number.isFinite(stored) && stored > 0) {
                 return Math.min(stored, window.innerWidth * 0.8);
             }
@@ -547,7 +548,7 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                                 const clamped = Math.max(576, Math.min(px, window.innerWidth * 0.8));
                                 setDetailWidth(clamped);
                                 try {
-                                    window.localStorage.setItem(DETAIL_WIDTH_KEY, String(clamped));
+                                    window.localStorage.setItem(scopedKey(DETAIL_WIDTH_KEY), String(clamped));
                                 } catch {
                                     // localStorage unavailable — width still applies for this session.
                                 }

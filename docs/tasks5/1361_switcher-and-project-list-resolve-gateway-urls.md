@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Switcher and project list resolve gateway URLs
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.307Z
-updated_at: "2026-11-17T00:29:14.290Z"
+updated_at: "2026-11-17T02:16:29.028Z"
 feature_id: K4
 priority: P2
 tags:
@@ -14,6 +14,8 @@ tags:
 estimate_hours: 4
 
 dependencies: ["1357", "1358", "1359"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1361. Switcher and project list resolve gateway URLs
@@ -24,13 +26,13 @@ Feature K4 (ADR-151, `docs/design/project-gateway.md` §6 B9, B10, B13, §8). Th
 
 ### Requirements
 
-- [ ] R7. `/api/projects` returns `prefix` (null for remote) and `url` per entry; the switcher navigates local entries to `/<prefix>/board` on the current origin when `basePath() !== '/'` (else today's per-port URL) and remote entries to `http://<host>:<port>/board`; `spur projects list` shows a URL column (`--json` adds `prefix`, `url`).
-- [ ] R12. Per-project `localStorage` keys are namespaced by base path (unchanged keys at `/`), `spur-theme` stays global, and each Board tab holds one planning-event EventSource shared by GlobalAgentBar, InboxView, SystemEventsTab and the existing subscribers.
+- [x] R7. `/api/projects` returns `prefix` (null for remote) and `url` per entry; the switcher navigates local entries to `/<prefix>/board` on the current origin when `basePath() !== '/'` (else today's per-port URL) and remote entries to `http://<host>:<port>/board`; `spur projects list` shows a URL column (`--json` adds `prefix`, `url`).
+- [x] R12. Per-project `localStorage` keys are namespaced by base path (unchanged keys at `/`), `spur-theme` stays global, and each Board tab holds one planning-event EventSource shared by GlobalAgentBar, InboxView, SystemEventsTab and the existing subscribers.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Switcher navigates local by prefix and remote by host and port (req: R7)
-- [ ] AC2 — Projects sharing the gateway origin keep separate browser state and bounded connections (req: R12)
+- [x] AC1 — Switcher navigates local by prefix and remote by host and port (req: R7)
+- [x] AC2 — Projects sharing the gateway origin keep separate browser state and bounded connections (req: R12)
 
 Verification: (1) `(cd apps/server && bun test tests/modules/health*.test.ts)` for `/api/projects` shape; (2) `(cd apps/cli && bun test tests/commands/projects*.test.ts)` for the list URL column and JSON; (3) happy-dom tests `(cd apps/web && bun test tests/components/ProjectSwitcher*.test.tsx tests/lib/base-path*.test.ts)` asserting navigation targets with and without the meta; (4) extend the 1358 heavy browser E2E with two prefixes in two tabs: a draft typed in tab A is absent in tab B, and the network log shows exactly one `/events/planning` stream per tab (plus none from InboxView/SystemEventsTab). Artifact: the network log + localStorage dump per tab.
 
@@ -73,15 +75,60 @@ Rejected: `sessionStorage` (loses drafts across tab close); per-project cookies;
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `apps/web/src/components/base-path.ts` | 55-72 | `scopedKey(key)`: `'/'` returns the key unchanged (no operator loses drafts/layout on upgrade), a prefix namespaces it as `` `${key}@${base}` `` so two projects on the shared gateway origin cannot read each other's state. |
+| `apps/web/src/lib/layout-state.ts` | 1, 31-100 | All three layout keys (v3 + v2/legacy migration reads/writes) go through `scopedKey`, so migration stays per project. |
+| `apps/web/src/modules/projects/drafts.tsx` | 19, 66, 82 | Conversation draft storage scoped — the exact collision R12 names (draft typed in project A visible in project B). |
+| `apps/web/src/modules/task-kanban/KanbanBoard.tsx`, `settings/WorkflowsView.tsx`, `projects/ProcessesView.tsx` | `DETAIL_WIDTH_KEY` sites | `spur:detail-width` scoped, so panel geometry is per project. |
+| `apps/web/src/modules/task-kanban/NewTaskPanel.tsx` | 8, 111, 211 | `spur:new-task-panel-width` scoped. |
+| `apps/web/src/modules/projects/DatabaseView.tsx` | 313-318 | `getTableStorageKey` wraps the per-table columns key in `scopedKey`. |
+| `apps/web/src/lib/theme.ts` | 1-22 | Unchanged on purpose: `spur-theme` stays global (one operator, one theme). |
+| `apps/web/src/lib/planning-events.ts` | 1-45 | Shared subscriber now forwards `message.*` frames and carries the whole parsed `frame`, so every planning consumer (tasks, features, queue, inbox, agent bar, system events) reads one stream. |
+| `apps/web/src/components/GlobalAgentBar.tsx`, `modules/projects/InboxView.tsx`, `modules/observability/SystemEventsTab.tsx` | effect blocks | The three per-component `new EventSource('/api/events/planning')` instances are replaced by `subscribePlanningEvents` (SystemEventsTab also uses `subscribePlanningConnection` for its live/error badge). MemberTerminal's per-agent process stream is untouched (on-demand). |
+| `apps/server/src/modules/health/index.ts` | 445-460 | `/api/projects` adds `prefix` (`resolveProjectPrefix`, `null` for remote) and `url` (`${prefix}/board` for local, `http://host:port/board` for remote). |
+| `apps/cli/src/commands/projects.ts` | 12-13, 199-215, 318-325, 525-535 | `projects list` gains a `url:` line and JSON `prefix`/`url`; the URL is the gateway URL only when a gateway actually answers `GET /api/health` on `server.gateway.port` (200 ms probe, never starts one); derived prefix collisions print the remedy (`spur projects add <path> --prefix /<other>`). |
+| `apps/web/src/components/ProjectSwitcher.tsx` | 5-13, 44-56, 296-312 | `RegistryProject` carries `prefix`/`url`; `directBoardUrl(project, base)` returns `/<prefix>/board` (same origin) when a base path is active and keeps the per-port URL at the root; the stopped-project start path prefers the prefix URL under the gateway. |
+| Tests | `apps/web/tests/components/base-path.test.ts` (+scopedKey), `tests/components/project-switcher.test.ts` (+gateway cases), `tests/lib/planning-events.test.ts` (+`message.*`/frame), `tests/lib/planning-stream-single.test.ts` (static guard: only the shared module opens a planning `EventSource`), `apps/server/tests/modules/health.test.ts` (+prefix/url shape), `apps/cli/tests/commands/projects-list-url.test.ts` (JSON + human URL column + collision warning) | Cover R7 and R12 failure cases the task's Plan names. |
+
+Deviation, stated: the Plan's item (4) proposed extending the browser E2E with a second tab on a second prefix. Driving a draft/layout write needs a live API (the browser fixture's `/api/*` is a 404 stub), so the two-tab browser check was replaced by the deterministic happy-dom `scopedKey` isolation tests plus the static single-stream guard, and the prefix browser proof remains the 1358 heavy E2E.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R7 — `/api/projects` returns `prefix` (`null` for remote) and `url`; the switcher navigates local entries to `/<prefix>/board` on the current origin when `basePath() !== '/'` (else the per-port URL) and remote entries to `http://<host>:<port>/board`; `spur projects list` shows a URL and `--json` adds `prefix`/`url` | MET | server `apps/server/src/modules/health/index.ts:445-460`; switcher `apps/web/src/components/ProjectSwitcher.tsx:5-13,44-56,296-312`; CLI `apps/cli/src/commands/projects.ts:199-215,318-325` + probe `packages/app/src/services/project-gateway.ts:46-63`; tests `apps/server/tests/modules/health.test.ts` (prefix/url for local + remote), `apps/web/tests/components/project-switcher.test.ts` (gateway/root/remote navigation), `apps/cli/tests/commands/projects-list-url.test.ts` (JSON rows, URL line, collision warning) |
+| R12 — per-project `localStorage` keys are namespaced by base path (unchanged at `/`), `spur-theme` stays global, and each tab holds one planning-event EventSource shared by GlobalAgentBar, InboxView, SystemEventsTab and the existing subscribers | MET | `apps/web/src/components/base-path.ts:55-72` (`scopedKey`); scoped sites `lib/layout-state.ts`, `modules/projects/drafts.tsx:66,82`, `task-kanban/KanbanBoard.tsx`, `settings/WorkflowsView.tsx`, `projects/ProcessesView.tsx`, `task-kanban/NewTaskPanel.tsx`, `projects/DatabaseView.tsx:313-318`; shared stream `lib/planning-events.ts:1-45` consumed by `GlobalAgentBar.tsx`, `projects/InboxView.tsx`, `observability/SystemEventsTab.tsx`; tests `tests/components/base-path.test.ts` (scopedKey isolation, legacy key at `/`), `tests/lib/planning-events.test.ts` (`message.*` + full frame), `tests/lib/planning-stream-single.test.ts` (only the shared module opens a planning EventSource) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Switcher navigates local by prefix and remote by host and port (req: R7) | MET | test | `(cd apps/server && bun test tests/modules/health.test.ts)` 37 pass (`prefix: '/project-a'`, `url: '/project-a/board'`; remote `prefix: null`, `url: 'http://192.168.87.27:3003/board'`); `(cd apps/web && bun test tests/components/project-switcher.test.ts)` — local→`/kk/board` with a base, per-port at `/`, remote unchanged; `(cd apps/cli && bun test tests/commands/projects-list-url.test.ts)` 2 pass (JSON + `url:` line + `--prefix` remedy warning) |
+| AC2 — Projects sharing the gateway origin keep separate browser state and bounded connections (req: R12) | MET | test | `tests/components/base-path.test.ts` scopedKey cases (`@/a/` vs `@/b/` never equal, legacy key at `/`); `tests/lib/planning-stream-single.test.ts` asserts no module except `lib/planning-events.ts` (and MemberTerminal's on-demand process stream) constructs an `EventSource`; full web suite 568 pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R7 | MET | `apps/server/src/modules/health/index.ts:445-460`; `apps/web/src/components/ProjectSwitcher.tsx:44-56,296-312`; `apps/cli/src/commands/projects.ts:199-215,318-325`; `packages/app/src/services/project-gateway.ts:46-63` (200 ms gateway probe); server/web/CLI tests |
+| R12 | MET | `apps/web/src/components/base-path.ts:55-72`; scoped layout/draft/width/database keys; `apps/web/src/lib/planning-events.ts:1-45` + the three consumers; scopedKey isolation, `message.` frame and single-stream guard tests |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test | health 37 pass (local prefix/url, remote null/absolute); switcher tests (prefix, root, remote); CLI list JSON + `url:` line + collision remedy |
+| AC2 | MET | test | scopedKey per-base isolation + legacy key at `/`; `planning-stream-single` guard (only the shared module opens a planning EventSource); web suite 568 pass |
+
+Findings: no open P1–P3. P4: 200 ms probe bound; local `url` is prefix-relative by convention; SystemEventsTab's badge now tracks the shared connection.
+
+Residual risk: one planning stream per tab (~4 local tabs fit HTTP/1.1's cap); MemberTerminal keeps its on-demand per-agent stream.
+
+Deviation: the Plan's two-tab browser check was replaced by deterministic scopedKey + single-stream tests (the browser fixture has no live API to write a draft against).
+
+**Disposition: PASS.**
 
 ### References
 
@@ -92,4 +139,7 @@ Rejected: `sessionStorage` (loses drafts across tab close); per-project cookies;
 ### History
 
 - 2026-11-17T00:21:24.181Z feature_id Q → K4 (system)
+- 2026-11-17T01:57:44.645Z todo → wip (system)
+- 2026-11-17T02:16:27.618Z wip → testing (system)
+- 2026-11-17T02:16:29.023Z testing → done (system)
 

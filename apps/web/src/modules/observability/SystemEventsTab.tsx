@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loading } from '@/ui';
+import { subscribePlanningConnection, subscribePlanningEvents } from '../../lib/planning-events';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import ColumnCustomizer, {
     ALL_COLUMNS,
@@ -113,7 +114,6 @@ interface SseEnvelope {
     sequence?: number | null;
 }
 
-const sseUrl = () => `${resolveApiUrl()}/events/planning`;
 const HISTORY_LIMIT = 100;
 
 /**
@@ -919,20 +919,14 @@ export default function SystemEventsTab({ onLivenessChange, timeRange, navIntent
     useEffect(() => {
         if (!liveEnabled) return;
         if (typeof EventSource === 'undefined') return;
+        // One shared planning stream for the whole tab (K4 R12); this pane only renders what it gets.
         setSseStatus('connecting');
-        const es = new EventSource(sseUrl());
-        es.onopen = () => {
-            setSseStatus('live');
-        };
-        es.onerror = () => {
-            // EventSource auto-reconnects after transient errors, so an
-            // errored state is shown briefly while the browser retries.
-            setSseStatus('errored');
-        };
-        es.onmessage = (msg) => {
+        const releaseConnection = subscribePlanningConnection((connected) => {
+            setSseStatus(connected ? 'live' : 'errored');
+        });
+        const releaseEvents = subscribePlanningEvents((event) => {
             try {
-                const raw: unknown = JSON.parse(msg.data);
-                const envelope = parseSseEnvelope(raw);
+                const envelope = parseSseEnvelope(event.frame);
                 if (!envelope) return; // malformed frame - drop silently
                 if (envelope.eventName === 'connected') return;
                 // R5: gate SSE prepend by the active filter so a non-matching
@@ -973,8 +967,11 @@ export default function SystemEventsTab({ onLivenessChange, timeRange, navIntent
             } catch {
                 // Drop malformed frames silently - a bad row must not break the live tail.
             }
+        });
+        return () => {
+            releaseEvents();
+            releaseConnection();
         };
-        return () => es.close();
     }, [liveEnabled, recordEvent]);
 
     const prefixOptions = useMemo(

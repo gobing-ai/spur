@@ -21,6 +21,7 @@ spur self serve [options]
 |---|---|---|
 | `--port <n>` | `3000` (env: `PORT`) | Server port |
 | `--host <addr>` | `localhost` (env: `HOST`) | Bind address |
+| `--gateway` | — | Run the one-port project gateway instead of a project server (routes `/<prefix>/` per local project; port from `server.gateway.port`) |
 | `--no-open` | — | Skip opening the browser |
 | `--cwd <path>` | Current directory | Working directory |
 | `--json` | — | Output `{ port, url, pid }` and exit (no server started) |
@@ -59,3 +60,12 @@ module touches one directory and zero wiring — see
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §5.7 Serving
 - [How to Add a UI Module](./how_to_add_a_new_ui_module.md) — the board module contract
 - `docs/04_DESIGN.md` — §1.2 `spur self serve` and `docs/design/server-side-adjustment-design.md`
+
+## Gateway daemon (feature K4)
+
+`spur self daemon <install|uninstall|status> [--port <n>] [--json]` keeps the one-port project
+gateway always on as a macOS user LaunchAgent (`~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`,
+logs under `~/Library/Logs/spur/`). `install` refuses a non-macOS platform and a port held by another
+process without writing anything; `status` reports loaded/pid/last exit plus `GET /api/health`;
+`uninstall` boots it out and removes the plist (absent = success). The agent runs
+`spur self serve --gateway`. See [cmd_serve](./cmd_serve.md) for gateway mode itself.

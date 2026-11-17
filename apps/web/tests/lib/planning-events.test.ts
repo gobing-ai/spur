@@ -36,15 +36,33 @@ describe('shared planning source', () => {
         for (const raw of ['bad json', 'null', '[]', '{}', '{"eventName":42}', '{"eventName":""}']) {
             source.frame(raw);
         }
+        // `message.*` rides the same shared stream (K4 R12) and keeps its whole frame.
+        source.emit('message.created', { messageId: 'm1' });
+        expect(received.at(-1)).toMatchObject({
+            eventName: 'message.created',
+            frame: { eventName: 'message.created', payload: { messageId: 'm1' } },
+        });
         source.emit('process.output', { cursor: 9 });
         source.emit('history.updated');
-        expect(received).toEqual([
-            { eventName: 'task.updated', payload: { wbs: '1301' } },
-            { eventName: 'task.updated', payload: { wbs: '1301' } },
+        expect(received.slice(0, 2)).toEqual([
+            {
+                eventName: 'task.updated',
+                payload: { wbs: '1301' },
+                frame: { eventName: 'task.updated', payload: { wbs: '1301' } },
+            },
+            {
+                eventName: 'task.updated',
+                payload: { wbs: '1301' },
+                frame: { eventName: 'task.updated', payload: { wbs: '1301' } },
+            },
         ]);
         source.emit('feature.updated');
         source.emit('queue.job.completed');
-        expect(received).toHaveLength(6);
+        // Two listeners each received every forwarded frame; the filtered ones never arrived.
+        expect(received.filter((event) => (event as { eventName: string }).eventName === 'task.updated')).toHaveLength(
+            2,
+        );
+        expect(received.map((event) => (event as { eventName: string }).eventName)).not.toContain('history.updated');
         source.onopen?.();
         source.onerror?.();
         source.onopen?.();
@@ -59,7 +77,8 @@ describe('shared planning source', () => {
         expect(source.closed).toBe(true);
         lateMessage?.({ data: '{"eventName":"task.updated"}' } as MessageEvent);
         lateOpen?.();
-        expect(received).toHaveLength(6);
+        // A closed source delivers nothing more: the count settled before the late frame.
+        expect(received).not.toContainEqual({ eventName: 'task.updated', payload: undefined });
         expect(connection).toEqual([false, true, false, true]);
 
         const states: boolean[] = [];

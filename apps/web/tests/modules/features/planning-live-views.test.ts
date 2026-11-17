@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import type { TaskReadinessResponse } from '@gobing-ai/spur-contracts';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
+import { MemoryRouter } from 'react-router';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import FeaturesShell from '../../../src/modules/features/FeaturesShell';
 import { useFeatureActionProgress } from '../../../src/modules/features/useFeatureActionProgress';
@@ -71,7 +72,7 @@ test('rendered task, feature and action views share one stream, coalesce 100 eve
     }
     const taskView = render(createElement(TaskView));
     interval.mockRestore();
-    const featureView = render(createElement(FeaturesShell));
+    const featureView = render(createElement(MemoryRouter, null, createElement(FeaturesShell)));
     const actionView = render(createElement(ActionView));
     fireEvent.click(actionView.getByRole('button', { name: 'idle' }));
     expect(FakePlanningSource.instances).toHaveLength(1);
@@ -166,7 +167,7 @@ test('a selected feature detail refresh is coalesced with the final list reload 
         detailReads++;
         return Response.json({ ok: true, data });
     }) as typeof fetch);
-    const view = render(createElement(FeaturesShell));
+    const view = render(createElement(MemoryRouter, null, createElement(FeaturesShell)));
     fireEvent.click(await view.findByText('Selected feature'));
     await waitFor(() => expect(detailReads).toBe(1));
     const source = FakePlanningSource.latest;
@@ -192,7 +193,7 @@ test('feature unmount aborts in-flight reload and discards its trailing work whi
         signal = (input as Request).signal;
         return response.promise;
     }) as typeof fetch);
-    const view = render(createElement(FeaturesShell));
+    const view = render(createElement(MemoryRouter, null, createElement(FeaturesShell)));
     const source = FakePlanningSource.latest;
     act(() => source.emit('feature.updated'));
     expect(reads).toBe(1);

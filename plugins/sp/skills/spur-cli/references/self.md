@@ -1,6 +1,6 @@
 ---
 name: spur-cli-self
-description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), hybrid rg/zg search (`search`), local web server (`serve`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` and `search` have no top-level alias."
+description: "spur-cli noun reference for `spur self`: self-management verbs — SDLC action runner (`exec`), scaffold (`init`), database maintenance (`maintain`), schema migrations (`migrate`), hybrid rg/zg search (`search`), local web server (`serve`), the gateway LaunchAgent (`daemon`), and status overview (`status`). The five legacy verbs (`init`, `maintain`, `migrate`, `serve`, `status`) each mount the same command builder as their legacy top-level noun, which remains a hidden alias; `exec` and `search` have no top-level alias."
 see_also:
   - spur-cli
 ---
@@ -21,18 +21,33 @@ is the second such verb: `spur self search` only.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
+| `daemon` | Install, remove or inspect the macOS LaunchAgent that keeps the project gateway on | `--port <n>` `--json` |
 | `exec` | Run (or list) a project SDLC action bound in `builder.actions` / `builder.preset` | `--list` `--dry-run` `--json` |
 | `init` | Scaffold a new Spur project in the current directory | `--name <name>` `--force` `--minimal` `--adopt-global-config` `--json` |
 | `maintain` | Run database maintenance: PRAGMA optimize, WAL truncation, optional VACUUM | `--vacuum` `--json` |
 | `migrate` | Apply CLI-owned schema migrations (or `--check` the importer schema) | `--check` `--json` |
 | `search` | Hybrid exact (`rg`) and semantic (`zg`) search over project docs and code | `--mode` `--scope` `--glob` `--limit` `--regex` `--status` `--json` |
-| `serve` | Start the Spur web server (local fallback) | `--port <n>` `--host <addr>` `--no-open` `--cwd <path>` `--json` |
+| `serve` | Start the Spur web server (local fallback), or the one-port project gateway with `--gateway` | `--port <n>` `--host <addr>` `--gateway` `--no-open` `--cwd <path>` `--json` |
 | `status [path]` | Show project and git status for a Spur project | `--json` |
 
 **Deep detail lives in the verb-owner references** — **[init.md](init.md)** owns the `init` and
 `status` verbs (scaffold semantics + the Phase 1.5 / 1.6 post-scaffold validation probes),
 **[serve.md](serve.md)** owns the `serve` verb (server flags and dry-probe semantics). `migrate`
 has no reference of its own and is documented inline below.
+
+## `self daemon` - keep the project gateway on (macOS)
+
+```
+spur self daemon <install|uninstall|status> [--port <n>] [--json]
+```
+
+Installs, inspects or removes the user LaunchAgent `ai.gobing.spur.gateway`
+(`~/Library/LaunchAgents/`) that runs `spur self serve --gateway` with `RunAtLoad`, `KeepAlive`,
+`AbandonProcessGroup`, `ThrottleInterval 10`, the captured `PATH` and logs under
+`~/Library/Logs/spur/`. `install` is idempotent (`unchanged` when the bytes match) and refuses a
+non-macOS platform or a port held by another process **without writing anything**; `status` reports
+installed/loaded/pid/last-exit plus `GET /api/health`; `uninstall` boots the agent out and removes the
+plist (absent = success, exit 0). Unknown action → exit 2.
 
 ## `self exec` - run a project SDLC action
 

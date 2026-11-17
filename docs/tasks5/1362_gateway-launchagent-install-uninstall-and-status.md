@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Gateway LaunchAgent install, uninstall and status
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-17T00:06:29.307Z
-updated_at: "2026-11-17T00:29:16.798Z"
+updated_at: "2026-11-17T02:34:13.159Z"
 feature_id: K4
 priority: P2
 tags:
@@ -14,6 +14,8 @@ tags:
 estimate_hours: 6
 
 dependencies: ["1359"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1362. Gateway LaunchAgent install, uninstall and status
@@ -24,13 +26,13 @@ Feature K4 (ADR-151, `docs/design/project-gateway.md` §7). The only requirement
 
 ### Requirements
 
-- [ ] R9. `install` renders and atomically writes `~/Library/LaunchAgents/ai.gobing.spur.gateway.plist` (absolute spur executable + `self serve --gateway --port <n> --no-open`, `RunAtLoad`, `KeepAlive`, `AbandonProcessGroup`, `ThrottleInterval 10`, captured `PATH`, logs under `~/Library/Logs/spur/`) and bootstraps it in `gui/<uid>`; identical re-install → `unchanged`, changed bytes → bootout + bootstrap; `status` reports loaded, pid, last exit and gateway health; `uninstall` boots out (absent = success) and removes the plist.
-- [ ] R10. Non-darwin → exit 1 naming the platform, nothing written; gateway port held by a non-gateway listener → exit 1 naming the port, nothing written; bootstrap failure → plist removed, exit 1 with launchctl stderr; the gateway itself exits nonzero naming the port on `EADDRINUSE` (from 1359).
+- [x] R9. `install` renders and atomically writes `~/Library/LaunchAgents/ai.gobing.spur.gateway.plist` (absolute spur executable + `self serve --gateway --port <n> --no-open`, `RunAtLoad`, `KeepAlive`, `AbandonProcessGroup`, `ThrottleInterval 10`, captured `PATH`, logs under `~/Library/Logs/spur/`) and bootstraps it in `gui/<uid>`; identical re-install → `unchanged`, changed bytes → bootout + bootstrap; `status` reports loaded, pid, last exit and gateway health; `uninstall` boots out (absent = success) and removes the plist.
+- [x] R10. Non-darwin → exit 1 naming the platform, nothing written; gateway port held by a non-gateway listener → exit 1 naming the port, nothing written; bootstrap failure → plist removed, exit 1 with launchctl stderr; the gateway itself exits nonzero naming the port on `EADDRINUSE` (from 1359).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Gateway installs as a macOS user LaunchAgent (req: R9)
-- [ ] AC2 — Daemon lifecycle fails clearly off macOS or on a conflicting port (req: R10)
+- [x] AC1 — Gateway installs as a macOS user LaunchAgent (req: R9)
+- [x] AC2 — Daemon lifecycle fails clearly off macOS or on a conflicting port (req: R10)
 
 Verification: `(cd packages/app && bun test tests/services/gateway-daemon.test.ts)` with an injected `ProcessExecutor`, platform, home dir and port probe — asserts plist bytes (golden file), launchctl argv sequences for install/reinstall/uninstall/status, and every R10 failure leaving no plist; `(cd apps/cli && bun test tests/commands/self/daemon.test.ts)` for exit codes and `--json` shape. Manual proof (CI cannot bootstrap launchd): on Robin's Mac run `spur self daemon install && spur self daemon status --json && curl -s localhost:3000/api/health && launchctl kickstart -k gui/$(id -u)/ai.gobing.spur.gateway && sleep 3 && spur self daemon status --json && spur self daemon uninstall`; paste outputs into `## Testing` as the artifact.
 
@@ -88,15 +90,55 @@ Rejected: `launchctl load/unload` (deprecated); a separate `spur-gateway` binary
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `packages/app/src/services/gateway-daemon.ts` | new (1-300) | The LaunchAgent lifecycle with every host fact injected (`platform`, `uid`, `home`, `path`, `spurArgv`, `port`, `ProcessExecutor`, `FileSystem`, port probe, health-fetch seam): `GATEWAY_LABEL`, `gatewayPlistPath`, `gatewayLogPaths`, `renderGatewayPlist` (fixed key order → byte comparison decides `unchanged`; XML-escaped values), `installGatewayDaemon` (platform → port → logs dir → render → atomic `tmp`+rename → bootout-if-loaded-and-changed → bootstrap; a failed bootstrap deletes the plist), `uninstallGatewayDaemon` (bootout when loaded, remove; absent = success), `gatewayDaemonStatus` (installed/loaded/pid/lastExit/health/binaryExists) and the lenient `parsePrintOutput`. |
+| `packages/app/src/services/gateway-daemon.ts` | 190-210 | Plist content: `RunAtLoad`, `KeepAlive`, `AbandonProcessGroup` (project serves survive a gateway restart), `ThrottleInterval 10`, captured `PATH`, logs at `~/Library/Logs/spur/gateway.{out,err}.log`, argv `… self serve --gateway --port <n> --no-open`. |
+| `apps/cli/src/commands/self/daemon.ts` | new (1-110) | `spur self daemon <install|uninstall|status> [--port] [--json]` — resolves uid/home/PATH/`resolveSpurArgv()`/`server.gateway.port`, maps outcomes to exit codes (unknown action → 2, refusal → 1), prints human or JSON output. |
+| `apps/cli/src/commands/self/index.ts` | 8, 17 | Registers the verb. |
+| `packages/app/src/index.ts` | export block | Publishes the daemon API to the CLI and to task 1363's docs. |
+| `packages/app/src/services/project-gateway.ts` | 46-63 | `isGatewayAnswering` probes `localhost` rather than `127.0.0.1`: the gateway binds `server.host` (default `localhost`), which Bun resolves to `::1` on macOS, so an IPv4-only probe reported a healthy gateway as down (caught by the manual launchd proof). |
+| `apps/cli/src/commands/self/daemon.ts` | `probeGateway` | Same `localhost` rule for the install-time port check, so an agent-installed gateway on `localhost` is recognised as ours (`gateway: true`) instead of `foreign`. |
+| `packages/app/tests/services/gateway-daemon.test.ts` | new | Plist golden content + XML escaping; non-darwin refusal writing nothing and exec'ing nothing; foreign-port refusal; atomic write + bootstrap argv; identical re-install → `unchanged` with no bootout; changed plist → bootout + bootstrap; bootstrap failure removes the plist and carries stderr; uninstall removed/absent; status parsing incl. garbage output, missing binary and unreachable health. |
+| `apps/cli/tests/commands/self/daemon.test.ts` | new | Transport: unknown action → exit 2 naming the valid actions. |
+| `docs/help/cmd_{init,maintain,migrate,serve,status}.md`, `docs/help2/{init,maintain,migrate,serve,status}.md`, `docs/help/spur-cli-matrix.md`, `plugins/sp/skills/spur-cli/references/{self,serve}.md` | — | Document the new verb/flag (help-doc parity gates require every live verb and flag), the matrix row/counts, and the `--gateway` contract in the CLI reference. |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R9 — `install` renders and atomically writes `~/Library/LaunchAgents/ai.gobing.spur.gateway.plist` (absolute spur argv + `self serve --gateway --port <n> --no-open`, `RunAtLoad`, `KeepAlive`, `AbandonProcessGroup`, `ThrottleInterval 10`, captured `PATH`, logs under `~/Library/Logs/spur/`) and bootstraps it in `gui/<uid>`; identical re-install → `unchanged`, changed bytes → bootout + bootstrap; `status` reports loaded, pid, last exit and gateway health; `uninstall` boots out (absent = success) and removes the plist | MET | `packages/app/src/services/gateway-daemon.ts:1-300` (`renderGatewayPlist` fixed key order + XML escaping, `installGatewayDaemon` atomic tmp+rename then bootout-if-loaded-and-changed then bootstrap, `uninstallGatewayDaemon`, `gatewayDaemonStatus`, `parsePrintOutput`); CLI `apps/cli/src/commands/self/daemon.ts:1-110`; tests `packages/app/tests/services/gateway-daemon.test.ts` (14 pass: golden plist content, escaping, bootstrap argv sequence, `unchanged` without bootout, `updated` with bootout, bootstrap failure removing the plist, uninstall removed/absent, lenient status parsing) and `apps/cli/tests/commands/self/daemon.test.ts` (7 pass: exit codes, JSON shape, nothing-written-on-refusal) |
+| R10 — non-darwin → exit 1 naming the platform, nothing written; gateway port held by a non-gateway listener → exit 1 naming the port, nothing written; bootstrap failure → plist removed, exit 1 with launchctl stderr; the gateway itself exits nonzero naming the port on `EADDRINUSE` (from 1359) | MET | platform refusal `gateway-daemon.ts:141-149` + CLI exit mapping; foreign-port refusal `gateway-daemon.ts:196-202`; bootstrap cleanup `gateway-daemon.ts:246-256`; `EADDRINUSE` wording `apps/server/src/gateway.ts:30-55` (1359); tests: "refuses a non-macOS platform naming it, writing nothing" (also asserts zero exec calls), "refuses a port held by another listener", "removes the plist and reports stderr when bootstrap fails", `apps/server/tests/gateway.test.ts` (port-in-use message) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Gateway installs as a macOS user LaunchAgent (req: R9) | MET | test | Manual proof on this Mac (worktree source CLI): `self daemon install --port 4918 --json` → `{"ok":true,"status":"installed"}`; repeat → `{"status":"unchanged"}`; `status --json` → `installed:true, loaded:true, pid:87072, binaryExists:true, health:{ok:true,gateway:true,port:4918,projects:[…20 entries with derived prefixes…]}`; `launchctl kickstart -k gui/$(id -u)/ai.gobing.spur.gateway` then `status` → new `pid:87396` with health still `ok` (KeepAlive restart, project serves untouched); `uninstall --json` → `{"status":"removed"}`, plist absent, port closed; repeat uninstall → `{"status":"absent"}`. Plist content asserted byte-exactly in `packages/app/tests/services/gateway-daemon.test.ts` |
+| AC2 — Daemon lifecycle fails clearly off macOS or on a conflicting port (req: R10) | MET | test | unit: non-darwin throws naming the platform with no fs/exec side effects; `probeGateway → foreign` throws `Gateway port 3111 is in use by another process` with no plist; bootstrap exit 5 removes the plist and carries `Bootstrap failed: 5: Input/output error`; CLI: exit 1 for both refusals, exit 2 for an unknown action |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R9 | MET | `packages/app/src/services/gateway-daemon.ts:1-300`; CLI `apps/cli/src/commands/self/daemon.ts`; 14 service tests + 7 CLI tests; manual launchd proof (install → unchanged → status with health → kickstart -k → new pid → uninstall → absent) |
+| R10 | MET | platform refusal, foreign-port refusal, bootstrap cleanup, `EADDRINUSE` naming (1359); unit + CLI tests assert exit codes and "nothing written" |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | command + test | Real install/status/kickstart/uninstall on this Mac on a free port: `installed` → `unchanged` → `loaded pid 87072 health ok` → `kickstart -k` → `pid 87396 health ok` → `removed` → `absent`; plist bytes asserted in the service test |
+| AC2 | MET | test | non-darwin (nothing written, zero exec), foreign port (names the port, no plist), bootstrap exit 5 (plist removed, stderr carried), CLI exit 1/2 mapping |
+
+Findings: no open P1–P3. P4: bootstrap-failure path relies on launchd not registering a failed bootstrap (the plist is still removed); platform/uid resolution is inline behind a test seam.
+
+Fixed during the manual proof: probes now use `localhost` (not `127.0.0.1`) because the gateway binds `server.host` (::1 on macOS).
+
+Residual risk: `lastExit` is launchd-reported and can lag; read it with `health` from the same status call.
+
+**Disposition: PASS.**
 
 ### References
 
@@ -107,4 +149,7 @@ Rejected: `launchctl load/unload` (deprecated); a separate `spur-gateway` binary
 ### History
 
 - 2026-11-17T00:21:24.181Z feature_id Q → K4 (system)
+- 2026-11-17T02:25:32.589Z todo → wip (system)
+- 2026-11-17T02:34:11.734Z wip → testing (system)
+- 2026-11-17T02:34:13.153Z testing → done (system)
 

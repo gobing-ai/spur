@@ -1,9 +1,11 @@
 import { resolveApiUrl } from './rpc-client';
 
-/** Planning event parsed from the shared stream for task, feature, and queue consumers. */
+/** Planning event parsed from the shared stream for task, feature, queue, message and system consumers. */
 export interface PlanningEvent {
     eventName: string;
     payload: unknown;
+    /** The whole parsed frame (occurredAt, actor, view, runId…) for consumers that render envelopes. */
+    frame: Record<string, unknown>;
 }
 
 const eventListeners = new Set<(event: PlanningEvent) => void>();
@@ -39,10 +41,10 @@ function connect(): void {
         const { eventName, payload } = raw as Record<string, unknown>;
         if (
             typeof eventName !== 'string' ||
-            !['task.', 'feature.', 'queue.job.'].some((prefix) => eventName.startsWith(prefix))
+            !['task.', 'feature.', 'queue.job.', 'message.'].some((prefix) => eventName.startsWith(prefix))
         )
             return;
-        const event: PlanningEvent = { eventName, payload };
+        const event: PlanningEvent = { eventName, payload, frame: raw as Record<string, unknown> };
         for (const listener of eventListeners) listener(event);
     };
 }

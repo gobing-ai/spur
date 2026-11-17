@@ -30,7 +30,7 @@ another project.
 | Port semantics | `port == 0` ⇒ stopped; `port > 0` ⇒ claimed listen port | Matches operator mental model in the idea brief |
 | Switch UX | Top-left project name → popup menu with running/stopped icons | Reuses existing identity surface (`LeftSidebar` + `/api/project`) |
 | Auto-start | Selecting a stopped project starts `spur serve` for that path | Required by feature AC R2 / R9 |
-| Launchd | Out of scope; registry + start/stop APIs stay daemon-agnostic | Future swap of hub for launchd agent without web redesign — superseded by ADR-151 ([project gateway](project-gateway.md)) |
+| Launchd | Out of scope; registry + start/stop APIs stay daemon-agnostic | Future swap of hub for launchd agent without web redesign — **superseded by ADR-151**: `spur self daemon install` now keeps the one-port [project gateway](project-gateway.md) alive as a user LaunchAgent |
 
 **Rejected (this stage):** standalone daemon (Approach 2 — overbuilt); client-only localStorage
 (Approach 3 — no auto-start / no lifecycle).
@@ -218,6 +218,13 @@ request by `list` / `/api/projects`, which probe the entry's own host.
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur serve` as the low-level launcher.
+
+**Gateway navigation (K4, ADR-151).** Through the gateway every local project shares one browser
+origin, so the switcher navigates a local entry to `/<prefix>/board` on the current origin when
+`basePath() !== '/'` and keeps the per-port URL at the root; a remote entry always goes to
+`http://<host>:<port>/board`. `GET /api/projects` supplies `prefix` (`null` for remote) and `url`, and
+`spur projects list` prints the same URL (`--json` adds both fields) plus a warning naming the remedy
+when two local entries resolve to one derived prefix.
 
 **Future launchd:** `start`/`stop` become thin clients of a daemon; `ProjectRegistry` file contract
 unchanged.

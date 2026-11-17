@@ -17,6 +17,7 @@ spur self serve [options]
 | --- | --- |
 | `--port <n>` | Server port (env: `PORT`, default: 3000) |
 | `--host <addr>` | Bind address (env: `HOST`, default: localhost) |
+| `--gateway` | Run the one-port project gateway instead of a project server |
 | `--no-open` | Skip opening the browser |
 | `--cwd <path>` | Project root for server config and project-scoped work (default: the invocation directory) |
 | `--json` | Output `{ port, url, pid }` and exit |
@@ -55,3 +56,10 @@ References: live spur CLI --help output (authoritative; snapshots: serve.txt) >
 docs/help carry-over (accuracy) > DeepWiki TOC (structure signal only).
 Verified: every command, verb, and flag above matches the live snapshots.
 -->
+
+## Gateway daemon
+
+`spur self daemon <install|uninstall|status> [--port <n>] [--json]` installs, inspects or removes the
+macOS user LaunchAgent that keeps the one-port project gateway (`spur self serve --gateway`) always
+on. Non-macOS, or a gateway port held by another process, exits 1 and writes nothing; re-installing
+identical bytes reports `unchanged`. See [serve](./serve.md) for gateway mode.

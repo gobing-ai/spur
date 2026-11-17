@@ -1,3 +1,5 @@
+import { scopedKey } from '../components/base-path';
+
 /** localStorage key for the current (v3) persisted board layout state. */
 export const STORAGE_KEY = 'spur-board-layout-v3';
 
@@ -28,7 +30,7 @@ export const DEFAULTS: LayoutState = {
 /** Load layout state from localStorage with safe defaults. */
 export function loadLayoutState(): LayoutState {
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(scopedKey(STORAGE_KEY));
         if (raw) {
             const parsed = JSON.parse(raw);
             return {
@@ -48,8 +50,8 @@ export function loadLayoutState(): LayoutState {
         // Migrate v2 or legacy unversioned storage key if present.
         // Preserves custom panel widths, but enforces sidebarCollapsed: true (folded by default,
         // fulfilling Feature A7 requirement 1.2 for users whose prior session left the rail open).
-        const v2Raw = localStorage.getItem(V2_STORAGE_KEY);
-        const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+        const v2Raw = localStorage.getItem(scopedKey(V2_STORAGE_KEY));
+        const legacyRaw = localStorage.getItem(scopedKey(LEGACY_STORAGE_KEY));
         const prevRaw = v2Raw || legacyRaw;
         if (prevRaw) {
             const prevParsed = JSON.parse(prevRaw);
@@ -68,9 +70,9 @@ export function loadLayoutState(): LayoutState {
                         : DEFAULTS.rightPanelCollapsed,
             };
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-                localStorage.removeItem(V2_STORAGE_KEY);
-                localStorage.removeItem(LEGACY_STORAGE_KEY);
+                localStorage.setItem(scopedKey(STORAGE_KEY), JSON.stringify(migrated));
+                localStorage.removeItem(scopedKey(V2_STORAGE_KEY));
+                localStorage.removeItem(scopedKey(LEGACY_STORAGE_KEY));
             } catch {
                 // storage full or disabled — silently ignore
             }
@@ -86,7 +88,7 @@ export function loadLayoutState(): LayoutState {
 /** Persist layout state to localStorage. No-ops if storage is unavailable. */
 export function saveLayoutState(state: LayoutState): void {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, version: 3 }));
+        localStorage.setItem(scopedKey(STORAGE_KEY), JSON.stringify({ ...state, version: 3 }));
     } catch {
         // localStorage full or unavailable — silently skip
     }
@@ -95,9 +97,9 @@ export function saveLayoutState(state: LayoutState): void {
 /** Remove persisted layout state, resetting to defaults on next load. */
 export function resetLayoutState(): void {
     try {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(V2_STORAGE_KEY);
-        localStorage.removeItem(LEGACY_STORAGE_KEY);
+        localStorage.removeItem(scopedKey(STORAGE_KEY));
+        localStorage.removeItem(scopedKey(V2_STORAGE_KEY));
+        localStorage.removeItem(scopedKey(LEGACY_STORAGE_KEY));
     } catch {
         // localStorage unavailable — silently skip
     }

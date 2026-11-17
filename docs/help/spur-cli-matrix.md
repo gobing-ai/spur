@@ -5,8 +5,8 @@
 ## Legend
 
 - **Compound nouns**: `spur <noun> <verb>`.
-- **`self`** — the noun hosting the self-management verbs (`exec`, `init`, `maintain`, `migrate`, `search`,
-  `serve`, `status`). Five of them mount the same command builders as the legacy standalone nouns; `exec` runs the
+- **`self`** — the noun hosting the self-management verbs (`daemon`, `exec`, `init`, `maintain`, `migrate`, `search`,
+  `serve`, `status`). `daemon` installs/removes/inspects the macOS LaunchAgent that keeps the project gateway on. Five of them mount the same command builders as the legacy standalone nouns; `exec` runs the
   project's `builder.actions` / `builder.preset` binding; `search` is the hybrid rg/zg search transport.
 - **Hidden legacy aliases** — the five former standalone nouns (`init`, `maintain`, `migrate`, `serve`, `status`)
   remain registered at the top level as hidden aliases over `spur self <verb>`. They keep working
@@ -18,7 +18,7 @@
 
 | Verb \ Noun | agent | builder | decision | feature | history | message | projects | rule | self | task | workflow |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| **Verb count** | **10** | **8** | **5** | **11** | **15** | **6** | **6** | **4** | **7** | **24** | **17** |
+| **Verb count** | **10** | **8** | **5** | **11** | **15** | **6** | **6** | **4** | **8** | **24** | **17** |
 | **add** |   |   |   |   |   |   | ✅ |   |   |   |   |
 | **advance** |   |   |   | ✅ |   |   |   |   |   |   |   |
 | **analyze** |   |   |   |   | ✅ |   |   |   |   |   |   |
@@ -35,6 +35,7 @@
 | **batch-plan-children** |   |   |   |   |   |   |   |   |   | ✅ |   |
 | **bump-ver** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **cancel** |   |   |   |   |   |   |   |   |   |   | ✅ |
+| **daemon** |   |   |   |   |   |   |   |   | ✅ |   |   |
 | **check** |   |   |   | ✅ |   |   |   |   |   | ✅ |   |
 | **clean** |   |   |   |   |   |   | ✅ |   |   |   | ✅ |
 | **commit-guard-check** |   |   |   |   |   |   |   |   |   |   | ✅ |
@@ -109,7 +110,7 @@
 | **wait** |   |   |   |   |   |   |   |   |   |   |   |
 | **watch** |   |   |   |   |   | ✅ |   |   |   |   |   |
 | **wrapup** |   |   |   |   |   |   |   |   |   | ✅ |   |
-| **Verb count** | **10** | **8** | **5** | **11** | **15** | **6** | **6** | **4** | **7** | **24** | **17** |
+| **Verb count** | **10** | **8** | **5** | **11** | **15** | **6** | **6** | **4** | **8** | **24** | **17** |
 
 ## Hidden Legacy Aliases
 
@@ -131,8 +132,8 @@ from the top-level help listing, still fully functional for scripts and workflow
 | Total nouns | **16** |
 | Compound nouns (with verbs) | **11** |
 | Hidden legacy aliases | **5** |
-| Unique verbs | **86** |
-| Total noun×verb cells | **113** |
+| Unique verbs | **87** |
+| Total noun×verb cells | **114** |
 
 > [!NOTE]
 > `task` has the richest surface at 24 verbs, followed by `workflow` (17, including the flat `commit-guard-start`/`commit-guard-stage`/`commit-guard-check` transport, the flat WT-4 `persist-out`/`persist-check` landing verbs, the `summary`/`profile` measurements and `cost`), `history` (15, including the flat `anatomy-<op>` verbs), `agent` (10, including `dogfood-gate`/`dogfood-validate-report`; the four fleet plumbing verbs `join`/`leave`/`wait`/`report` are hidden from help per ADR-148) and `feature` (11). Their nested spellings (`workflow commit-guard <op>`, `agent dogfood <op>`, `history anatomy <op>`, `task batch-plan task-children`) were removed in task 1290. `builder` (8 verbs: `bump-ver`, `drop-tags`, `publish`, `show-branches`, `pr-check`, `pr-open`, `pr-review`, `pr-status`) hosts the release plumbing promoted from `spur-dev` and the flat PR-review verbs. `decision` (5 verbs: `list`, `outcome`, `run`, `show`, `status`) is the decision-catalog transport (task 1093; `outcome` by task 1263). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (7 verbs) hosts every self-management operation, including the `exec` action runner and the `search` hybrid rg/zg query verb.

@@ -81,3 +81,25 @@ describe('markRemoteLiveness', () => {
         expect(out.map((p) => p.running)).toEqual([false, false, false]);
     });
 });
+
+describe('directBoardUrl behind the gateway (K4 R7)', () => {
+    it('navigates a local entry by prefix on the current origin', () => {
+        expect(directBoardUrl({ host: 'localhost', port: 3001, running: false, prefix: '/kk' }, '/kk/')).toBe(
+            '/kk/board',
+        );
+        // A stopped entry still navigates: the gateway starts it on the first request.
+        expect(directBoardUrl({ host: 'localhost', port: 0, running: false, prefix: '/kk' }, '/kk/')).toBe('/kk/board');
+    });
+
+    it('keeps the per-port URL at the origin root', () => {
+        expect(directBoardUrl({ host: 'localhost', port: 3001, running: true, prefix: '/kk' }, '/')).toBe(
+            'http://localhost:3001/board',
+        );
+    });
+
+    it('sends a remote entry to its own host and port even behind the gateway', () => {
+        expect(directBoardUrl({ host: '192.168.87.27', port: 3003, running: false, prefix: null }, '/kk/')).toBe(
+            'http://192.168.87.27:3003/board',
+        );
+    });
+});

@@ -2,6 +2,7 @@ import type { BoardCatalog, BoardModuleDescriptor } from '@gobing-ai/spur-contra
 import { createElement } from 'react';
 import { FramedResource } from '../components/FramedResource';
 import { ModuleDiagnostic } from '../components/ModuleErrorBoundary';
+import { withBase } from '../lib/base-path';
 import type { BoardModuleContribution } from './contribution';
 import type { WebModule } from './types';
 
@@ -56,9 +57,15 @@ export interface ComposeBoardModulesOptions {
     readonly loadStyle?: (url: string) => Promise<void>;
 }
 
-/** Default entry importer: a runtime, same-origin ESM import the host import map resolves. */
+/**
+ * Default entry importer: a runtime, same-origin ESM import the host import map resolves.
+ *
+ * A catalog publishes root-absolute asset URLs (`/modules/<id>/entry.js`); under the gateway the
+ * module tree lives at `/<prefix>/modules/…`, so the base path is applied here rather than in every
+ * module. Absolute and protocol-relative URLs pass through `withBase` unchanged.
+ */
 function importEntryDefault(url: string): Promise<unknown> {
-    return import(/* @vite-ignore */ url);
+    return import(/* @vite-ignore */ withBase(url));
 }
 
 /** Stylesheets already applied in this document — CSS must land before a module is displayed. */
@@ -66,7 +73,8 @@ const appliedStyles = new Set<string>();
 const pendingStyles = new Map<string, Promise<void>>();
 
 /** Default stylesheet loader: `<link rel="stylesheet">`, awaited through load/error. */
-function loadStyleDefault(url: string): Promise<void> {
+function loadStyleDefault(rawUrl: string): Promise<void> {
+    const url = withBase(rawUrl);
     if (appliedStyles.has(url)) return Promise.resolve();
     const pending = pendingStyles.get(url);
     if (pending) return pending;

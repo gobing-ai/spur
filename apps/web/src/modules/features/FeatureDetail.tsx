@@ -1,6 +1,7 @@
 import { taskStatusIcon } from '@gobing-ai/spur-domain/schema';
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router';
 import { Badge, Button, Loading, MDEditor, Select } from '@/ui';
 import {
     createChildFeature,
@@ -18,6 +19,7 @@ import { markdownPreviewSafety } from '../../lib/markdown-safety';
 import MarkdownBody from '../task-kanban/MarkdownBody';
 import NewTaskPanel from '../task-kanban/NewTaskPanel';
 import type { TaskSummary } from '../task-kanban/types';
+
 import { useTasks } from '../task-kanban/useTasks';
 import FloatingActionProgress from './FloatingActionProgress';
 import type { FeatureActionTier } from './feature-actions';
@@ -73,6 +75,7 @@ export default function FeatureDetail({
     onSelectFeature,
     metadataDockRef,
 }: FeatureDetailProps) {
+    const navigate = useNavigate();
     const [data, setData] = useState<FeatureShowData | null>(null);
     const [serverBody, setServerBody] = useState('');
     const [draftBody, setDraftBody] = useState('');
@@ -483,7 +486,8 @@ export default function FeatureDetail({
     const updatedRel = relativeDays(frontmatter.updated_at);
 
     const navigateToTask = (wbs: string) => {
-        window.location.assign(`/board/tasks/${wbs}`);
+        // Router-relative: `window.location.assign('/board/…')` leaves the gateway base path.
+        navigate(`/board/tasks/${wbs}`);
     };
 
     const statusActions = FEATURE_STATUS_ACTIONS[data.status] ?? [];

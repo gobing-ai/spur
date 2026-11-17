@@ -17,7 +17,7 @@ import {
     StrategyRuntime,
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
-import { normalizeExecutorAvailability } from '@gobing-ai/spur-config';
+import { normalizeExecutorAvailability, resolveProjectPrefix } from '@gobing-ai/spur-config';
 import {
     declaresExecutor,
     ExecutorUpdateError,
@@ -439,13 +439,20 @@ export const healthModule: ServerModule = {
                     // Probe the entry's own host — a remote entry (e.g. 192.168.87.27)
                     // must not be liveness-checked against localhost.
                     const running = p.port > 0 ? await isPortLive(p.port, undefined, p.host) : false;
+                    // K4 R7: the prefix routes a local entry through the gateway; `url` is what a
+                    // switcher navigates to. A local entry answers a prefix-relative path (the Board
+                    // decides whether its own origin is the gateway), a remote entry stays host:port.
+                    const prefix = resolveProjectPrefix(p);
+                    const host = p.host ?? 'localhost';
                     return {
                         name: p.name,
                         path: p.path,
-                        host: p.host ?? 'localhost',
+                        host,
                         port: p.port,
                         running,
                         current: normPath === currentNorm,
+                        prefix,
+                        url: prefix === null ? `http://${host}:${p.port}/board` : `${prefix}/board`,
                     };
                 }),
             );
