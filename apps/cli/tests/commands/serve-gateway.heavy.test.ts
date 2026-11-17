@@ -1,7 +1,7 @@
 /**
  * Process-level proof for feature K4 R3 (and R4's adoption half): one gateway port routes each
- * local prefix to that project's own real `spur serve`, and a dead upstream fails closed on its own
- * prefix without disturbing the others.
+ * local prefix to that project's own real `spur serve`, and a dead upstream is isolated to its own
+ * prefix — alpha keeps answering while beta restarts or fails closed (502) under its own name.
  *
  * Heavy tier: binds real listeners and runs real serve + gateway processes.
  * The lazy-*start* half of R4 (coalescing, exactly-once, 502 with log path) is covered with an
@@ -134,18 +134,27 @@ describe('spur self serve --gateway (heavy)', () => {
             });
             expect(stripped.status).toBe(404);
 
-            // Kill beta's serve: only beta's prefix degrades, and the gateway names the project.
+            // Kill beta's serve: alpha keeps answering (isolation), and beta's own prefix
+            // resolves to exactly one of the two documented outcomes (`project-gateway.md` §4
+            // step 8): a single fresh start that succeeds, or a 502 naming the project. Which
+            // one happens depends on the host (a free port in the band, `spur` resolvable), so
+            // asserting only the 502 made this test environment-dependent.
             children[1]?.kill();
             await Bun.sleep(500);
             const alphaStillUp = await fetch(`http://127.0.0.1:${gatewayPort}/alpha/api/health`, {
                 signal: AbortSignal.timeout(20_000),
             });
             expect(alphaStillUp.status).toBe(200);
-            const betaDown = await fetch(`http://127.0.0.1:${gatewayPort}/beta/api/health`, {
+            const betaAfterKill = await fetch(`http://127.0.0.1:${gatewayPort}/beta/api/health`, {
                 signal: AbortSignal.timeout(60_000),
             });
-            expect(betaDown.status).toBe(502);
-            expect(await betaDown.text()).toContain('beta');
+            if (betaAfterKill.status === 200) {
+                // Self-healed: the restarted serve answers on beta's prefix, not another project's.
+                expect(((await betaAfterKill.json()) as { service: string }).service).toBe('spur');
+            } else {
+                expect(betaAfterKill.status).toBe(502);
+                expect(await betaAfterKill.text()).toContain('beta');
+            }
         },
         { timeout: 180_000 },
     );

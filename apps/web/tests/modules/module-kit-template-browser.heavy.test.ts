@@ -165,7 +165,9 @@ async function screenshot(name: string): Promise<string> {
 }
 
 beforeAll(async () => {
-    if (!browserReady) return;
+    // The fixture chain (pack → install → Vite build) needs no browser, and the R1/R2 build proof
+    // below only reads its output: preparing it behind the browser gate left `moduleDist` undefined
+    // on a runner without an engine (CI), so the build test crashed on a joined path instead.
     const prepared = await prepareFixture();
     fixtureDir = prepared.dir;
     moduleDist = prepared.dist;
@@ -197,6 +199,8 @@ beforeAll(async () => {
         ],
     };
     await mkdir(ARTIFACT_DIR, { recursive: true });
+    // Everything past this point renders in a real engine; the build proof above already ran.
+    if (!browserReady) return;
     server = serveBoard(boardDir, { catalog, moduleAssets: { [MODULE_ID]: moduleDist } });
     browser = await launchBrowser();
     report.browser = browser.version;
