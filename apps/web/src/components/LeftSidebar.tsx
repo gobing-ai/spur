@@ -1,3 +1,4 @@
+import { LayoutGrid } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router';
 import { Button, Tooltip } from '@/ui';
@@ -113,6 +114,31 @@ function SettingsButton({ collapsed }: { collapsed?: boolean }) {
     return link;
 }
 
+/** Link to the Spur Gateway project switcher root (`/`) in the sidebar footer. */
+function GatewayButton({ collapsed }: { collapsed?: boolean }) {
+    const link = (
+        <a
+            href="/"
+            aria-label="Spur Gateway"
+            title="Spur Gateway"
+            data-testid="sidebar-gateway"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-spur-text-muted transition-colors hover:bg-spur-accent/20 hover:text-spur-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-spur-accent"
+        >
+            <LayoutGrid className="h-4 w-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+        </a>
+    );
+
+    if (collapsed) {
+        return (
+            <Tooltip position="right" tip="Spur Gateway" className="block">
+                {link}
+            </Tooltip>
+        );
+    }
+
+    return link;
+}
+
 interface Props {
     collapsed: boolean;
     onToggle: () => void;
@@ -205,6 +231,7 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                     <>
                         <ThemeToggle />
                         <SettingsButton collapsed />
+                        <GatewayButton collapsed />
                         <SidebarFoldButton collapsed onToggle={onToggle} />
                     </>
                 ) : (
@@ -212,6 +239,7 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                         <div className="flex items-center gap-2">
                             <ThemeToggle />
                             <SettingsButton />
+                            <GatewayButton />
                         </div>
                         <SidebarFoldButton collapsed={false} onToggle={onToggle} />
                     </>
