@@ -1,5 +1,6 @@
 import { findPrefixCollisions, isLocalHost, type ProjectEntry, resolveProjectPrefix } from '@gobing-ai/spur-config';
 import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
+import { type GatewayIndexProject, renderGatewayIndex } from './project-gateway-html';
 
 /**
  * The one-port project gateway's request handler (feature K4, ADR-151 §4).
@@ -15,6 +16,8 @@ export interface GatewayDeps {
     listProjects(): Promise<ProjectEntry[]>;
     /** Start or adopt one project's `spur serve` and resolve its loopback port. */
     ensureUpstream(entry: ProjectEntry): Promise<number>;
+    /** Remove a registered project entry from `projects.json`. */
+    removeProject?: (path: string, host?: string) => Promise<boolean>;
     /** Test seam; defaults to the global `fetch`. */
     fetchUpstream?: typeof fetch;
     /** The gateway's own fixed port, echoed by `/api/health`. */
@@ -46,6 +49,14 @@ const HOP_BY_HOP = new Set([
 /** Response headers the gateway must drop: Bun's fetch already decoded a compressed body. */
 const DECODED = ['content-encoding', 'content-length'];
 
+/** Test seam for {@link isGatewayAnswering}: the CLI's gateway URL column must not depend on a live port. */
+let gatewayProbeOverride: ((port: number) => Promise<boolean>) | undefined;
+
+/** Replace the gateway probe in tests (pass `undefined` to restore the real HTTP probe). */
+export function setGatewayProbeForTests(probe: ((port: number) => Promise<boolean>) | undefined): void {
+    gatewayProbeOverride = probe;
+}
+
 /**
  * Answer true when a project gateway serves `GET /api/health` on `port`.
  *
@@ -55,6 +66,7 @@ const DECODED = ['content-encoding', 'content-length'];
  * never starts a gateway, and any failure (refused, timeout, non-2xx, not a gateway) reads `false`.
  */
 export async function isGatewayAnswering(port: number, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+    if (gatewayProbeOverride !== undefined) return gatewayProbeOverride(port);
     try {
         const res = await fetchImpl(`http://localhost:${port}/api/health`, {
             signal: AbortSignal.timeout(200),
@@ -89,11 +101,6 @@ export async function probeGatewayPort(
 
 /** Where a spawned serve writes its own log — named in the 502 so the operator knows where to look. */
 export const GATEWAY_START_LOG = '.spur/run/serve-spawn.log';
-
-/** Escape one HTML text/attribute value — project names come from directory basenames. */
-function escapeHtml(value: string): string {
-    return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
-}
 
 /** Form/text content types a browser can send cross-site without a CORS preflight. */
 const SIMPLE_FORM_TYPES = ['application/x-www-form-urlencoded', 'multipart/form-data', 'text/plain'];
@@ -153,14 +160,27 @@ function forbiddenOrigin(): Response {
 }
 
 /**
+ * Loopback families the gateway dials for a local upstream, IPv4 first: a registry-spawned serve
+ * binds `127.0.0.1` (`project-start.ts:466`), while a hand-started `spur serve` binds `localhost`,
+ * which Bun resolves to `::1` on macOS. Same both-families rule as `isPortLive`.
+ */
+const LOOPBACK_FAMILIES = ['127.0.0.1', '::1'] as const;
+
+/** `host:port` authority for a loopback family — an IPv6 literal must be bracketed in URL and Host. */
+export function loopbackAuthority(family: string, port: number): string {
+    return `${family.includes(':') ? `[${family}]` : family}:${port}`;
+}
+
+/**
  * Headers for the loopback upstream: `Host`/`Origin` become the upstream's own origin so the serve's
  * host guard and `csrf()` see a plain same-origin request; `Referer` and hop-by-hop headers go.
+ * `authority` is the `host:port` the request is actually sent to, never a fixed family.
  */
-export function upstreamRequestHeaders(req: Request, upstreamPort: number): Headers {
+export function upstreamRequestHeaders(req: Request, authority: string): Headers {
     const headers = stripHeaders(req.headers, ['host', 'origin', 'referer']);
-    headers.set('host', `127.0.0.1:${upstreamPort}`);
+    headers.set('host', authority);
     if (req.headers.get('origin') !== null) {
-        headers.set('origin', `http://127.0.0.1:${upstreamPort}`);
+        headers.set('origin', `http://${authority}`);
     }
     return headers;
 }
@@ -260,6 +280,17 @@ function isConnectionRefused(err: unknown): boolean {
     return /ECONNREFUSED|Unable to connect|ConnectionRefused/i.test(message);
 }
 
+/** A local upstream that answered on no loopback family, carrying every address the gateway dialed. */
+class UnreachableUpstream extends Error {
+    constructor(
+        readonly dialed: string[],
+        readonly reason: string,
+    ) {
+        super(`no loopback family answered (${dialed.join(', ')}): ${reason}`);
+        this.name = 'UnreachableUpstream';
+    }
+}
+
 /**
  * Build the gateway's `fetch` handler.
  *
@@ -304,10 +335,17 @@ async function adaptResponse(upstreamRes: Response, prefix: string, rest: string
 export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promise<Response> {
     const fetchUpstream = deps.fetchUpstream ?? fetch;
     const inFlight = new Map<string, Promise<number>>();
+    /** Answering loopback family per entry, so a later request does not re-probe a known-dead one. */
+    const familyByEntry = new Map<string, string>();
+
+    /** Registry identity of an entry: path *and* host, so two hosts never share gateway state. */
+    function identityKey(entry: ProjectEntry): string {
+        return `${entry.host ?? 'localhost'}|${entry.path}`;
+    }
 
     /** Coalesce concurrent first requests onto one start; drop the entry on settle so a later retry re-probes. */
     function ensureUpstream(entry: ProjectEntry): Promise<number> {
-        const key = entry.path;
+        const key = identityKey(entry);
         const running = inFlight.get(key);
         if (running) return running;
         const started = deps.ensureUpstream(entry).then(
@@ -345,18 +383,17 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         });
     }
 
-    function index(known: Array<{ entry: ProjectEntry; prefix: string }>): Response {
-        const rows = known
-            .map(({ entry, prefix }) => {
-                const state = entry.port > 0 ? 'running' : 'stopped';
-                return `<li><a href="${escapeHtml(prefix)}/board">${escapeHtml(entry.name)}</a> <code>${escapeHtml(prefix)}</code> (${state})</li>`;
-            })
-            .join('\n');
-        return new Response(
-            `<!doctype html><html><head><meta charset="utf-8"><title>Spur gateway</title></head>` +
-                `<body><h1>Spur gateway</h1><p>Port ${deps.port}</p><ul>\n${rows}\n</ul></body></html>`,
-            { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
-        );
+    async function index(): Promise<Response> {
+        const entries = await deps.listProjects();
+        const projects = entries.flatMap<GatewayIndexProject>((entry) => {
+            if (!isLocalHost(entry.host)) return [{ entry, prefix: null }];
+            const prefix = resolveProjectPrefix(entry);
+            return prefix === null ? [] : [{ entry, prefix }];
+        });
+        return new Response(renderGatewayIndex({ port: deps.port, edge: deps.edge, projects }), {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
     }
 
     async function proxy(
@@ -366,23 +403,46 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         rest: string,
         search: string,
     ): Promise<Response> {
-        const key = entry.path;
-        const attempt = async (port: number): Promise<Response> => {
-            const target = `http://127.0.0.1:${port}${rest === '' ? '/' : rest}${search}`;
-            const headers = upstreamRequestHeaders(req, port);
-            const init: RequestInit & { duplex?: 'half' } = {
+        const key = identityKey(entry);
+        // Buffered once so a body survives the family fallback: a streamed body is consumed by the
+        // first attempt, and re-sending it empty would be a wrong-but-successful write.
+        const body = req.method === 'GET' || req.method === 'HEAD' ? null : new Uint8Array(await req.arrayBuffer());
+
+        const attempt = async (family: string, port: number): Promise<Response> => {
+            const authority = loopbackAuthority(family, port);
+            const target = `http://${authority}${rest === '' ? '/' : rest}${search}`;
+            const init: RequestInit = {
                 method: req.method,
-                headers,
+                headers: upstreamRequestHeaders(req, authority),
                 redirect: 'manual',
                 signal: req.signal,
             };
-            if (req.method !== 'GET' && req.method !== 'HEAD') {
-                init.body = req.body;
-                init.duplex = 'half';
-            }
+            if (body !== null) init.body = body;
             const upstreamRes = await fetchUpstream(target, init);
             return adaptResponse(upstreamRes, prefix, rest, req.method);
         };
+
+        /** Dial each candidate family in turn, remembering whichever one answers. */
+        async function dial(port: number): Promise<Response> {
+            const cached = familyByEntry.get(key);
+            const families = cached === undefined ? LOOPBACK_FAMILIES : [cached];
+            const dialed: string[] = [];
+            let lastError: unknown = null;
+            for (const family of families) {
+                const authority = loopbackAuthority(family, port);
+                dialed.push(authority);
+                try {
+                    const res = await attempt(family, port);
+                    familyByEntry.set(key, family);
+                    return res;
+                } catch (err) {
+                    if (!isConnectionRefused(err)) throw err;
+                    lastError = err;
+                }
+            }
+            const message = lastError instanceof Error ? lastError.message : String(lastError);
+            throw new UnreachableUpstream(dialed, message);
+        }
 
         let port: number;
         try {
@@ -396,23 +456,16 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         }
 
         try {
-            return await attempt(port);
+            return await dial(port);
         } catch (err) {
-            if (!isConnectionRefused(err)) throw err;
-            // A streamed request body is already consumed by the failed attempt, so a retry would
-            // send it empty — a wrong-but-successful write is worse than a clear 502.
+            if (!(err instanceof UnreachableUpstream)) throw err;
             const replayable = req.method === 'GET' || req.method === 'HEAD';
             if (!replayable) {
-                const message = err instanceof Error ? err.message : String(err);
-                return new Response(
-                    `Gateway could not reach project "${entry.name}" at 127.0.0.1:${port}: ${message}\n` +
-                        `The request body cannot be replayed, so no restart was attempted.\n` +
-                        `Log: ${entry.path}/${GATEWAY_START_LOG}\n`,
-                    { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
-                );
+                return unreachable(entry, err, 'the request body cannot be replayed, so no restart was attempted.');
             }
             // The adopted port went away between adoption and the request: one fresh start, then give up.
             inFlight.delete(key);
+            familyByEntry.delete(key);
             let retried: number;
             try {
                 retried = await ensureUpstream(entry);
@@ -424,16 +477,47 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 );
             }
             try {
-                return await attempt(retried);
+                return await dial(retried);
             } catch (retryErr) {
-                const message = retryErr instanceof Error ? retryErr.message : String(retryErr);
-                return new Response(
-                    `Gateway could not reach project "${entry.name}" at 127.0.0.1:${retried}: ${message}\n` +
-                        `Log: ${entry.path}/${GATEWAY_START_LOG}\n`,
-                    { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
-                );
+                if (!(retryErr instanceof UnreachableUpstream)) throw retryErr;
+                return unreachable(entry, retryErr);
             }
         }
+    }
+
+    /** 502 naming the entry identity, every dialed loopback address, and the serve spawn log. */
+    function unreachable(entry: ProjectEntry, err: UnreachableUpstream, note?: string): Response {
+        const host = entry.host ?? 'localhost';
+        return new Response(
+            `Gateway could not reach project "${entry.name}" (${host}) at ${err.dialed.join(', ')}: ${err.reason}\n` +
+                (note === undefined ? '' : `${note}\n`) +
+                `Log: ${entry.path}/${GATEWAY_START_LOG}\n`,
+            { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+        );
+    }
+
+    async function removeProject(req: Request): Promise<Response> {
+        if (req.method.toUpperCase() !== 'POST') {
+            return new Response('Method Not Allowed\n', { status: 405, headers: { allow: 'POST' } });
+        }
+        if (!deps.removeProject) {
+            return Response.json({ ok: false, error: 'Project removal is not configured' }, { status: 501 });
+        }
+        let body: { path?: unknown; host?: unknown };
+        try {
+            body = (await req.json()) as { path?: unknown; host?: unknown };
+        } catch {
+            return Response.json({ ok: false, error: 'Invalid JSON body' }, { status: 400 });
+        }
+        if (typeof body.path !== 'string' || body.path.trim() === '') {
+            return Response.json({ ok: false, error: 'Project path is required' }, { status: 400 });
+        }
+        const host = typeof body.host === 'string' && body.host.trim() !== '' ? body.host.trim() : undefined;
+        const removed = await deps.removeProject(body.path, host);
+        if (!removed) {
+            return Response.json({ ok: false, error: 'Project not found' }, { status: 404 });
+        }
+        return Response.json({ ok: true });
     }
 
     return async (req: Request): Promise<Response> => {
@@ -442,11 +526,13 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             if (refused) return refused;
         }
         const url = new URL(req.url);
-        const known = await localEntries();
-
         if (url.pathname === '/' || url.pathname === '') {
-            return index(known);
+            return index();
         }
+        if (url.pathname === '/api/projects/remove') {
+            return removeProject(req);
+        }
+        const known = await localEntries();
         if (url.pathname === '/api/health') {
             return health(known);
         }

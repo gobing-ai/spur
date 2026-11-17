@@ -70,6 +70,19 @@ export async function markRemoteLiveness(
     );
 }
 
+/**
+ * Registry findings the server derived (`findRegistryFindings`): an ambiguous prefix or a path
+ * registered for two hosts. Messages are rendered verbatim so the Board and `spur projects list`
+ * cannot disagree about the same finding.
+ */
+export function registryFindingMessages(raw: unknown): string[] {
+    if (!Array.isArray(raw)) return [];
+    return raw.flatMap((item) => {
+        const message = (item as { message?: unknown } | null)?.message;
+        return typeof message === 'string' && message !== '' ? [message] : [];
+    });
+}
+
 /** Reachability only: a `no-cors` fetch resolves (opaque) on any HTTP answer, rejects on network failure. */
 async function browserProbe(url: string): Promise<boolean> {
     try {
@@ -251,6 +264,7 @@ function ProjectGlyph({ name }: { name: string }) {
 export default function ProjectSwitcher({ currentName, collapsed = false }: ProjectSwitcherProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [projects, setProjects] = useState<RegistryProject[]>([]);
+    const [findings, setFindings] = useState<string[]>([]);
     const [loadingProject, setLoadingProject] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -262,8 +276,9 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
         fetchWithTimeout(new Request(`${resolveApiUrl()}/projects`, { signal: controller.signal }))
             .then(async (res) => {
                 if (!res.ok) return;
-                const body = (await res.json()) as { projects: RegistryProject[] };
+                const body = (await res.json()) as { projects: RegistryProject[]; findings?: unknown };
                 const list = body.projects ?? [];
+                setFindings(registryFindingMessages(body.findings));
                 setProjects(list);
                 const checked = await markRemoteLiveness(list, browserProbe);
                 if (!controller.signal.aborted) setProjects(checked);
@@ -420,6 +435,18 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                     <div className="px-2 py-1 text-xs font-medium text-spur-text-muted border-b border-spur-border/50 mb-1">
                         Projects
                     </div>
+
+                    {findings.length > 0 && (
+                        <div
+                            role="status"
+                            data-testid="project-switcher-findings"
+                            className="mb-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-300"
+                        >
+                            {findings.map((message) => (
+                                <div key={message}>{message}</div>
+                            ))}
+                        </div>
+                    )}
 
                     {projects.length === 0 ? (
                         <div className="px-2 py-1.5 text-xs text-spur-text-muted">

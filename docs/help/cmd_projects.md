@@ -11,7 +11,7 @@
 | `list` | List registered projects |
 | `start <target>` | Start a project's server (`--port <n>` to bind explicitly) |
 | `stop <target>` | Stop a project's server (local entries only; remote entries are refused) |
-| `clean` | Purge missing project directories and terminate lingering processes |
+| `clean` | Purge missing project directories, report stale entries and terminate lingering processes |
 
 All verbs accept `--json` for machine-readable output.
 
@@ -99,7 +99,8 @@ spur projects clean [options]
 | Flag | Description |
 |---|---|
 | `--no-terminate-processes` | Skip process termination on occupied ports |
-| `--json` | Output JSON response |
+| `--remove-suspects` | Also remove entries whose directory exists but whose path is ephemeral (`/tmp`, `$TMPDIR`) or registered more than once; without it the suspects are reported only |
+| `--json` | Output JSON response (`suspects`, and `removedSuspects` with `--remove-suspects`) |
 
 ## Example
 

@@ -86,7 +86,8 @@ describe('spur self serve --gateway (K4 R3)', () => {
         expect(options.deps.port).toBe(3312);
         expect(writes.join('\n')).toContain('Spur gateway listening on http://127.0.0.1:3312');
 
-        // The upstream seam goes through the real start path: an unregistered path fails fast.
+        // The upstream seam goes through the real start path, adopting THIS entry: a path that does
+        // not exist fails fast and names the path (Q R3 — the entry is no longer re-resolved by path).
         await expect(
             options.deps.ensureUpstream({
                 name: 'ghost',
@@ -94,6 +95,6 @@ describe('spur self serve --gateway (K4 R3)', () => {
                 host: 'localhost',
                 port: 0,
             }),
-        ).rejects.toThrow(/Project not found in registry/);
+        ).rejects.toThrow(/Project path does not exist/);
     });
 });

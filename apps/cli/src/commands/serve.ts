@@ -98,9 +98,13 @@ export function registerServeCommand(
                         deps: {
                             // Read-only snapshot: routing must not heal, purge or probe on every request.
                             listProjects: async () => registry.peek().projects,
+                            removeProject: async (path, host) => registry.remove(path, host),
                             ensureUpstream: async (entry) =>
+                                // Pass the entry the prefix resolved to: adopting by path alone
+                                // let a same-path entry on another host supply this port (Q R3).
                                 (
                                     await startRegisteredProject(registry, entry.path, {
+                                        entry,
                                         reservedPorts: new Set([gatewayPort]),
                                     })
                                 ).port,

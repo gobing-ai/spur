@@ -61,7 +61,7 @@ projectEntrySchema = z.object({
 | Command | Change |
 | --- | --- |
 | `spur self serve --gateway [--port <n>] [--host <name>]` | New flag on the existing `self serve`; no new noun or verb |
-| `spur self daemon <install\|uninstall\|status> [--json]` | New `self` verb with a positional action (same shape as `self exec [action]`) |
+| `spur self install --daemon [--port <n>] [--json]` · `spur self uninstall [--daemon]` · `spur self status` | Flat verbs, no `daemon` sub-noun (amended 2026-11-17); `spur self daemon <action>` stays hidden and deprecated |
 | `spur projects add --prefix <slug>` | New flag |
 
 Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**)
@@ -79,16 +79,26 @@ skips the gateway port; spawned serves already bind `127.0.0.1` (`project-start.
    terminates TLS — the browser sends `https://…` while the loopback listener's `req.url` is `http://…`.
    Same `/<prefix>/a2a/*` exemption (bearer-authenticated); refusal is 403 before any upstream contact.
 3. `GET /` → gateway index (name, prefix, running) linking to `/<prefix>/board`. `GET /api/health`
-   → `{ ok, gateway: true, port, projects: [{name, prefix, running}] }` (used by `self daemon status`).
+   → `{ ok, gateway: true, port, projects: [{name, prefix, running}] }` (used by `spur self status`).
 4. `/<prefix>` (no slash) → 308 to `/<prefix>/`. `/<prefix>/<rest>` → resolve the local entry by
    prefix; unknown → 404 naming the known prefixes.
-5. **Ensure upstream** — `startRegisteredProject(registry, entry.path)` (`project-start.ts:362`;
-   it already adopts live and owner-claimed serves). Concurrent first requests share one in-flight
-   promise per normalized path; the promise is dropped on settle so a later failure retries.
-6. **Proxy** — `fetch('http://127.0.0.1:<port>/<rest>?<query>', { method, headers, body,
+5. **Ensure upstream** — `startRegisteredProject(...)` adopts the entry the *prefix* belongs to,
+   keyed by normalized path **and host**, never path alone (`project-start.ts:362`; it already adopts
+   live and owner-claimed serves). A second entry for the same path on another host must not supply
+   the port for a local prefix — that mismatch is a real observed failure: remote `192.168.87.27:3003`
+   adopted for `/knowledge-kit` while the local serve listened on 3007. Concurrent first requests
+   share one in-flight promise per entry identity; the promise is dropped on settle so a later
+   failure retries.
+6. **Proxy** — dial the adopted port on **both loopback families**, `127.0.0.1` first and `::1` on a
+   connection error, because a serve started outside the registry binds `localhost` → `::1` on
+   macOS while a registry-spawned serve binds `127.0.0.1` (`project-start.ts:466`). Reachability
+   follows the same both-families rule `isPortLive` already implements
+   (`project-process.ts:226-238`); a family that answers is remembered for the entry so the retry
+   path does not re-probe a known-dead family on every request.
+   `fetch('<family>:<port>/<rest>?<query>', { method, headers, body,
    signal, redirect: 'manual', duplex: 'half' })` with:
-   - `Host` set to `127.0.0.1:<port>`; `Origin` (when present) rewritten to
-     `http://127.0.0.1:<port>` so the serve's own `csrf()` sees same-origin;
+   - `Host` set to `<family>:<port>`; `Origin` (when present) rewritten to
+     `http://<family>:<port>` so the serve's own `csrf()` sees same-origin;
    - hop-by-hop headers stripped (`connection`, `keep-alive`, `transfer-encoding`, `upgrade`,
      `proxy-*`, `te`, `trailer`);
    - the serve runs `compress()` (`pipeline.ts:85`) and Bun `fetch` decodes the body, so the
@@ -100,8 +110,10 @@ skips the gateway port; spawned serves already bind `127.0.0.1` (`project-start.
    - `content-type: text/html` → body read as text and rebased (§5.1), `content-length` dropped.
    - `site.webmanifest` → `start_url`, `scope` and icon `src` prefixed.
    - everything else streams untouched.
-8. Upstream connection refused after adoption → one fresh `startRegisteredProject` attempt, then
-   502 naming the project and its log path.
+8. Upstream connection refused on **both** families after adoption → one fresh
+   `startRegisteredProject` attempt, then 502 naming the project, every dialed `family:port` and its
+   log path. A down upstream must stay distinguishable from a cross-entry mix-up: the message names
+   the entry identity (name + host) that owned the prefix.
 
 The gateway owns no project database, fleet or scheduler; it holds only the registry read path and
 the start path, and never writes `port` except through `startRegisteredProject`.
@@ -197,7 +209,7 @@ details moved during implementation:
 
 ## 7. LaunchAgent lifecycle
 
-Requirement: the gateway is always on. Surface: `spur self daemon <install|uninstall|status> [--json]`
+Requirement: the gateway is always on. Surface: `spur self install --daemon`, `spur self uninstall`, `spur self status`
 (macOS only; other platforms exit 1 naming the platform).
 
 - Label `ai.gobing.spur.gateway`; plist `~/Library/LaunchAgents/ai.gobing.spur.gateway.plist`.
@@ -223,8 +235,13 @@ Requirement: the gateway is always on. Surface: `spur self daemon <install|unins
 - `directBoardUrl()` (`ProjectSwitcher.tsx:39`): local → `/<prefix>/board` on the current origin when
   `basePath() !== '/'`, else today's per-port URL; remote → unchanged.
 - `/api/projects` (`apps/server/src/modules/health/index.ts:428`) adds `prefix` (null for remote) and
-  `url`; `spur projects list` shows `URL` (gateway URL for local entries when `server.gateway.port`
-  answers, else per-port).
+  `url`; `spur projects list` shows `PREFIX` as its own field and `URL` (gateway URL for local
+  entries when `server.gateway.port` answers, else per-port). A stopped entry prints the prefix
+  route instead of an unroutable `http://localhost:0/board`.
+- Misconfiguration is surfaced, never silent: `findPrefixCollisions()` already reports derived
+  collisions in `spur projects list`; the Board renders the same finding (colliding prefix, both
+  entry names, duplicate-path entries) from `/api/projects` so an operator sees why a route fails
+  instead of reading a bare 502.
 - CLI agent server resolution (`apps/cli/src/commands/agent/shared.ts:111`) keeps the internal
   loopback port — unchanged.
 
@@ -236,3 +253,24 @@ Requirement: the gateway is always on. Surface: `spur self daemon <install|unins
 | Gateway routing, start coalescing, proxy, HTML/Location rebasing | `packages/app/src/services/project-gateway.ts` (pure `Request → Response` handler); `apps/server` Bun listener; `apps/cli/src/commands/serve.ts` `--gateway` |
 | Board `basePath()` / `withBase()` / `scopedKey()` | `apps/web/src/lib/base-path.ts` |
 | LaunchAgent render/install/status | `packages/app/src/services/gateway-daemon.ts` over `ProcessExecutor`; `apps/cli/src/commands/self/daemon.ts` |
+
+## 10. Registry hygiene
+
+`spur projects clean` purges an entry only when its directory is gone
+(`apps/cli/src/commands/projects.ts:116`). An ephemeral project root that still exists — a test
+fixture under `/private/tmp` or a `TMPDIR` e2e folder — therefore survives every sweep and keeps
+occupying a switcher row and a prefix.
+
+The staleness surface reports instead of guessing:
+
+- **Suspect classification, not deletion.** An entry is *suspect* when a local entry's path is
+  ephemeral (`/tmp`, `/private/tmp`, `/var/folders`, `$TMPDIR`) or when its path is registered more
+  than once (compared as a canonical real path, so `/private/var/...` and `/var/...` match). Both
+  reasons are path facts — `findRegistrySuspects()` never treats a liveness artifact as staleness,
+  and a remote entry is never judged by this machine's tmp roots. `spur projects clean` reports the
+  class and the reason; nothing is removed implicitly.
+- **Explicit removal only.** `--remove-suspects` removes exactly the flagged entries, one at a time,
+  through `ProjectRegistry.remove` under the existing lock; every other entry keeps its prefix and
+  port untouched.
+- **Board parity.** The projects module shows the same suspect list from `/api/projects`, so the CLI
+  and the Board never disagree about which rows are stale.

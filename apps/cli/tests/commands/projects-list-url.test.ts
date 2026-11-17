@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { setGatewayProbeForTests } from '@gobing-ai/spur-app';
 import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { main } from '../../src/index';
 
@@ -15,10 +16,13 @@ describe('spur projects list --url (K4 R7)', () => {
         tempDir = mkdtempSync(join(tmpdir(), 'spur-projects-url-'));
         projectsFile = join(tempDir, 'projects.json');
         setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
+        // A gateway running on this machine must not decide the URL column.
+        setGatewayProbeForTests(async () => false);
         out = [];
     });
 
     afterEach(() => {
+        setGatewayProbeForTests(undefined);
         removeEnvVar('SPUR_PROJECTS_FILE');
         if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
     });
@@ -65,15 +69,17 @@ describe('spur projects list --url (K4 R7)', () => {
         expect(remote?.url).toBe('http://192.168.87.27:3003/board');
     });
 
-    it('prints a url line and a collision warning naming the remedy', async () => {
+    it('names the route instead of a port-0 url, and the collision remedy (Q R5/R6)', async () => {
         await seed([
             { name: 'kk', path: join(tempDir, 'a'), host: 'localhost', port: 0 },
             { name: 'KK', path: join(tempDir, 'b'), host: 'localhost', port: 0 },
         ]);
         expect(await list()).toBe(0);
         const text = out.join('');
-        expect(text).toContain('url: http://localhost:0/board');
-        expect(text).toContain('prefix /kk is claimed by "kk" and "KK"');
+        // No gateway answers in this test, so a stopped entry has no URL at all.
+        expect(text).not.toContain(':0/board');
+        expect(text).toContain('url: none (stopped; start it with spur projects start kk)');
+        expect(text).toContain('Prefix /kk is claimed by "kk" and "KK"');
         expect(text).toContain('--prefix /<other>');
     });
 });

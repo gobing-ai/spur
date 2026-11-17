@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVar, getEnvVars, type ProjectEntry } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { isLocalHost, isPidAlive, isPortLive, normalizeProjectPath, ProjectRegistry } from './project-registry';
 
@@ -47,6 +47,12 @@ export type DetachedServeSpawn = (
 
 /** Options for starting a registered project serve instance. */
 export interface ProjectStartOptions {
+    /**
+     * The exact registry entry to adopt or start, when the caller already resolved it (the gateway
+     * resolves an entry from its prefix). Skips the host-blind name/path lookup, so a second entry
+     * for the same path on another host can never supply the port for this one.
+     */
+    entry?: ProjectEntry;
     /** Explicit bind port; otherwise allocate from the registry free-port band. */
     port?: number;
     /** Health-poll attempts (default 100 ≈ 10s at 100ms). */
@@ -369,7 +375,7 @@ export async function startRegisteredProject(
     target: string,
     options: ProjectStartOptions = {},
 ): Promise<ProjectStartResult> {
-    let entry = (await registry.getByName(target)) ?? (await registry.getByPath(target));
+    let entry = options.entry ?? (await registry.getByName(target)) ?? (await registry.getByPath(target));
 
     if (!entry) {
         const absPath = normalizeProjectPath(target);
@@ -436,7 +442,7 @@ export async function startRegisteredProject(
     // refused, and heal the entry to the port the owner actually serves.
     const ownerPort = await (options.resolveOwnerPort ?? defaultResolveOwnerPort)(projectPath);
     if (ownerPort !== null) {
-        await registry.setPort(projectPath, ownerPort);
+        await registry.setPort(projectPath, ownerPort, entry.host);
         return {
             name: entry.name,
             path: projectPath,
@@ -500,7 +506,7 @@ export async function startRegisteredProject(
         );
     }
 
-    await registry.setPort(projectPath, allocatedPort);
+    await registry.setPort(projectPath, allocatedPort, entry.host);
     return {
         name: entry.name,
         path: projectPath,

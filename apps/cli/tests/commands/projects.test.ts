@@ -690,7 +690,8 @@ describe('spur projects CLI command', () => {
 
     it('should support refresh alias and text output when clean', async () => {
         const registry = new ProjectRegistry(projectsFile);
-        await registry.upsert({ name: 'Existing', path: projectPath, port: 0 });
+        // A long-lived root: a tmp-dir project is a suspect now, so "clean" needs a real path.
+        await registry.upsert({ name: 'Existing', path: process.cwd(), port: 0 });
 
         const mockText = createMockOutput();
         const exit = await main(['projects', 'refresh'], {

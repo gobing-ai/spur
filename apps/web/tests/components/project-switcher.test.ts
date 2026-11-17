@@ -4,6 +4,7 @@ import {
     markRemoteLiveness,
     projectDisplayName,
     type RegistryProject,
+    registryFindingMessages,
 } from '@/components/ProjectSwitcher';
 
 describe('projectDisplayName', () => {
@@ -101,5 +102,33 @@ describe('directBoardUrl behind the gateway (K4 R7)', () => {
         expect(directBoardUrl({ host: '192.168.87.27', port: 3003, running: false, prefix: null }, '/kk/')).toBe(
             'http://192.168.87.27:3003/board',
         );
+    });
+});
+
+describe('registryFindingMessages (Q R6)', () => {
+    it('renders every server-derived finding verbatim', () => {
+        expect(
+            registryFindingMessages([
+                {
+                    kind: 'prefix-collision',
+                    prefix: '/b',
+                    names: ['b', 'b'],
+                    message: 'Prefix /b is claimed by "b" and "b"',
+                },
+                {
+                    kind: 'duplicate-path',
+                    path: '/tmp/kk',
+                    names: ['kk', 'kk'],
+                    message: 'Path /tmp/kk is registered 2 times',
+                },
+            ]),
+        ).toEqual(['Prefix /b is claimed by "b" and "b"', 'Path /tmp/kk is registered 2 times']);
+    });
+
+    it('renders nothing for a clean registry or a malformed payload', () => {
+        expect(registryFindingMessages([])).toEqual([]);
+        expect(registryFindingMessages(undefined)).toEqual([]);
+        expect(registryFindingMessages([{ kind: 'prefix-collision' }])).toEqual([]);
+        expect(registryFindingMessages('nope')).toEqual([]);
     });
 });

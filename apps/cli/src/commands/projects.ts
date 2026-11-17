@@ -1,6 +1,8 @@
+import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    defaultResolveOwnerPort,
     FleetService,
     type FleetServiceContext,
     isGatewayAnswering,
@@ -11,7 +13,13 @@ import {
     startRegisteredProject,
     stopRegisteredProject,
 } from '@gobing-ai/spur-app';
-import { buildConfigFromEnv, findPrefixCollisions, getEnvVars, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import {
+    buildConfigFromEnv,
+    findRegistryFindings,
+    findRegistrySuspects,
+    getEnvVars,
+    resolveProjectPrefix,
+} from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
@@ -21,6 +29,7 @@ import { SHARED_OPTIONS } from './shared-options';
 /**
  * Registers the `spur projects` CLI command group (add, remove, list, start, stop).
  */
+
 export function registerProjectsCommand(program: Command, context: CliContext): void {
     const projectsCmd = program.command('projects').summary('manage the Spur multi-project registry');
 
@@ -115,13 +124,37 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('clean')
         .alias('refresh')
-        .description('purge missing project directories and terminate lingering processes')
+        .description('purge missing project directories, report stale entries and terminate lingering processes')
         .option('--no-terminate-processes', 'Skip process termination on occupied ports')
+        .option(
+            '--remove-suspects',
+            'Also remove entries whose directory exists but whose path is ephemeral or registered more than once',
+        )
         .option(...SHARED_OPTIONS.jsonProjectsResponse)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
                 const registry = new ProjectRegistry();
+                // Suspects first: `refreshProjects` only purges missing directories, so an entry whose
+                // ephemeral root still exists survived every sweep (Q R7).
+                const registered = await registry.peek().projects;
+                // The owner claim is the only authority on which port a path actually serves; a
+                // stored number that disagrees is reported, never used to remove the entry.
+                const portOwners = new Map<string, number>();
+                for (const project of registered) {
+                    if (project.port <= 0 || !isLocalHost(project.host)) continue;
+                    const owner = await defaultResolveOwnerPort(project.path);
+                    if (owner !== null) portOwners.set(project.path, owner);
+                }
+                const suspects = findRegistrySuspects(registered, { tmpdir: tmpdir(), portOwners });
+                const removedSuspects: string[] = [];
+                if (options.removeSuspects === true) {
+                    for (const suspect of suspects) {
+                        // A port mismatch alone never justifies deleting a registration.
+                        if (suspect.reasons.every((reason) => reason === 'foreign-port')) continue;
+                        if (await registry.remove(suspect.path, suspect.host)) removedSuspects.push(suspect.name);
+                    }
+                }
                 const result = await registry.refreshProjects({
                     terminateProcesses: options.terminateProcesses !== false,
                 });
@@ -133,6 +166,8 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                                 ok: true,
                                 purgedCount: result.purgedProjects.length,
                                 purgedProjects: result.purgedProjects,
+                                suspects,
+                                ...(options.removeSuspects === true ? { removedSuspects } : {}),
                                 terminatedProcesses: result.terminatedProcesses,
                                 ...(result.resetPorts && result.resetPorts.length > 0
                                     ? { resetPorts: result.resetPorts }
@@ -143,10 +178,24 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     );
                 } else if (
                     result.purgedProjects.length === 0 &&
-                    (!result.resetPorts || result.resetPorts.length === 0)
+                    (!result.resetPorts || result.resetPorts.length === 0) &&
+                    suspects.length === 0
                 ) {
                     context.output.write('Registry is clean. No stale project entries found.');
                 } else {
+                    if (suspects.length > 0) {
+                        context.output.write(
+                            `Found ${suspects.length} suspect project entr${suspects.length === 1 ? 'y' : 'ies'}:`,
+                        );
+                        for (const suspect of suspects) {
+                            context.output.write(`- ${suspect.message}`);
+                        }
+                        context.output.write(
+                            options.removeSuspects === true
+                                ? `Removed ${removedSuspects.length} suspect entr${removedSuspects.length === 1 ? 'y' : 'ies'}.`
+                                : 'Nothing removed; re-run with --remove-suspects to delete them.',
+                        );
+                    }
                     if (result.purgedProjects.length > 0) {
                         context.output.write(`Purged ${result.purgedProjects.length} stale project(s):`);
                         for (const project of result.purgedProjects) {
@@ -316,20 +365,27 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                         context.output.write('No projects registered.');
                         return;
                     }
-                    // Derived prefix collisions are report-only at load (task 1357) — name the remedy
-                    // here so `projects list` is where an operator discovers them.
-                    for (const [prefix, names] of findPrefixCollisions(rawProjects)) {
-                        context.output.write(
-                            `Warning: prefix ${prefix} is claimed by "${names.join('" and "')}"; ` +
-                                'set one with spur projects add <path> --prefix /<other>',
-                        );
+                    // Derived findings are report-only at load (task 1357) — the same derivation the
+                    // Board renders, so both surfaces name the same remedy (Q R6).
+                    for (const finding of findRegistryFindings(rawProjects)) {
+                        context.output.write(`Warning: ${finding.message}`);
                     }
                     context.output.write('Registered Projects:\n');
                     for (const [i, p] of projects.entries()) {
                         const hostLabel = !isLocalHost(p.host) ? ` (${p.host})` : '';
                         const status = p.running ? `[RUNNING: ${p.port}]` : '[STOPPED]';
                         context.output.write(`- ${p.name}${hostLabel} ${status} (${p.path})`);
-                        context.output.write(`    url: ${p.url}`);
+                        // The route an operator needs is the prefix; a remote entry has none.
+                        context.output.write(`    prefix: ${p.prefix ?? 'none (remote)'}`);
+                        // A stopped project has no per-port URL, and a routed one is only reachable
+                        // while the gateway answers — never print `http://localhost:0/board`.
+                        if (p.running || (gatewayLive && p.prefix !== null)) {
+                            context.output.write(`    url: ${p.url}`);
+                        } else {
+                            context.output.write(
+                                `    url: none (stopped; start it with spur projects start ${p.name})`,
+                            );
+                        }
                         const f = fleets?.[i];
                         if (f === undefined) continue;
                         if (f.fleet === null) {

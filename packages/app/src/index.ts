@@ -665,6 +665,7 @@ export {
     type GatewayEdgeOptions,
     isGatewayAnswering,
     probeGatewayPort,
+    setGatewayProbeForTests,
 } from './services/project-gateway';
 export {
     type ProjectOutcome,
@@ -699,6 +700,7 @@ export {
     type DetachedServeChild,
     type DetachedServeSpawn,
     type DetachedServeSpawnOptions,
+    defaultResolveOwnerPort,
     type ProjectStartOptions,
     type ProjectStartResult,
     resolveSpurServeCommand,

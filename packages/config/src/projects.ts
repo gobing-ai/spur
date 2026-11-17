@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
 import { getEnvVar } from '@gobing-ai/ts-utils';
 import { z } from 'zod';
 
@@ -118,4 +118,140 @@ export function getProjectsFilePath(): string {
         return override;
     }
     return join(homedir(), '.config', 'spur', 'projects.json');
+}
+
+/** One actionable registry finding, formatted by the CLI and rendered by the Board. */
+export interface RegistryFinding {
+    /** `prefix-collision` blocks gateway routing; `duplicate-path` blocks host-keyed resolution. */
+    kind: 'prefix-collision' | 'duplicate-path';
+    /** Prefix claimed by more than one local entry (`prefix-collision` only). */
+    prefix?: string;
+    /** Entry names involved, in registry order. */
+    names: string[];
+    /** Project path shared by the entries (`duplicate-path` only). */
+    path?: string;
+    /** One-line operator-facing message including the remedy. */
+    message: string;
+}
+
+/**
+ * Derive the registry findings an operator must act on: a prefix two local entries claim, and a
+ * path registered for more than one host. Both make a route ambiguous, so both are reported by
+ * `spur projects list` and the Board from this single derivation.
+ */
+export function findRegistryFindings(entries: ProjectEntry[]): RegistryFinding[] {
+    const canonicalize = canonicalPath;
+    const findings: RegistryFinding[] = [];
+    for (const [prefix, names] of findPrefixCollisions(entries)) {
+        findings.push({
+            kind: 'prefix-collision',
+            prefix,
+            names,
+            message: `Prefix ${prefix} is claimed by "${names.join('" and "')}"; set one with spur projects add <path> --prefix /<other>`,
+        });
+    }
+    const byPath = new Map<string, { display: string; names: string[] }>();
+    for (const entry of entries) {
+        // Compare canonical paths: a remote entry keeps the path as typed while a local one is
+        // normalized, so `/private/var/...` and `/var/...` are the same project on macOS.
+        const key = canonicalize(entry.path);
+        const bucket = byPath.get(key) ?? { display: entry.path, names: [] };
+        bucket.names.push(entry.name);
+        byPath.set(key, bucket);
+    }
+    for (const [, { display, names }] of byPath) {
+        if (names.length < 2) continue;
+        findings.push({
+            kind: 'duplicate-path',
+            path: display,
+            names,
+            message: `Path ${display} is registered ${names.length} times; make sure the host you intend is the one serving it`,
+        });
+    }
+    return findings;
+}
+
+/**
+ * Path identity: expand `~` and normalize separators/segments.
+ *
+ * shortcut: symlink-level identity (`/private/tmp` vs `/tmp`) needs the filesystem, which this
+ * package may not touch (`no-direct-fs-io`); both root spellings are listed in EPHEMERAL_ROOTS so
+ * the classification still holds, upgrade if a duplicate pair ever appears in only one spelling.
+ */
+function canonicalPath(path: string): string {
+    return normalize(path.startsWith('~') ? join(homedir(), path.slice(1)) : path);
+}
+
+/** Why a registry entry looks stale: two path facts, plus one live-port mismatch. */
+export type SuspectReason = 'ephemeral-path' | 'duplicate-path' | 'foreign-port';
+
+/** One registry entry the operator should review, with the reasons that flagged it. */
+export interface RegistrySuspect {
+    name: string;
+    path: string;
+    host?: string;
+    reasons: SuspectReason[];
+    /** One-line operator-facing message naming every reason. */
+    message: string;
+}
+
+/** Directories whose projects are scaffolding, not long-lived registrations. */
+const EPHEMERAL_ROOTS = ['/tmp', '/private/tmp', '/var/folders', '/private/var/folders'];
+
+/** Test-visible override for the ephemeral roots (`TMPDIR` is machine-specific). */
+function ephemeralRoots(tmpdir?: string): string[] {
+    return tmpdir && tmpdir !== '' ? [...EPHEMERAL_ROOTS, tmpdir] : EPHEMERAL_ROOTS;
+}
+
+/**
+ * Classify registry entries that `spur projects clean` cannot purge, because their directory still
+ * exists: an ephemeral project root (a test fixture under `/tmp` or `$TMPDIR`) or a path registered
+ * for more than one host. Classification is read-only — removal is always an explicit operator act.
+ */
+export function findRegistrySuspects(
+    entries: ProjectEntry[],
+    options: {
+        tmpdir?: string;
+        /** Canonical path → the port that path's live owner actually serves, when known. */
+        portOwners?: ReadonlyMap<string, number>;
+    } = {},
+): RegistrySuspect[] {
+    const roots = ephemeralRoots(options.tmpdir);
+    const canonicalize = canonicalPath;
+    const portOwners = options.portOwners;
+    const byPath = new Map<string, number>();
+    for (const entry of entries) {
+        const key = canonicalize(entry.path);
+        byPath.set(key, (byPath.get(key) ?? 0) + 1);
+    }
+    const suspects: RegistrySuspect[] = [];
+    for (const entry of entries) {
+        const reasons: SuspectReason[] = [];
+        // A remote entry's path is a path on THAT host; this machine's roots say nothing about it.
+        if (isLocalHost(entry.host)) {
+            const canonical = canonicalize(entry.path);
+            if (roots.some((root) => canonical === root || canonical.startsWith(`${root}/`))) {
+                reasons.push('ephemeral-path');
+            }
+            if ((byPath.get(canonical) ?? 0) > 1) reasons.push('duplicate-path');
+            // A stored port that disagrees with the port the path's live owner serves is a stale
+            // number, reported only: removing an entry over a liveness artifact would be destructive.
+            const ownerPort = portOwners?.get(canonical);
+            if (entry.port > 0 && ownerPort !== undefined && ownerPort !== entry.port) reasons.push('foreign-port');
+        }
+        if (reasons.length === 0) continue;
+        const parts = reasons.map((reason) => {
+            if (reason === 'ephemeral-path') return 'path is an ephemeral directory';
+            if (reason === 'duplicate-path') return 'path is registered more than once';
+            return 'stored port is not the port its owner serves';
+        });
+        suspects.push({
+            name: entry.name,
+            path: entry.path,
+            ...(entry.host === undefined ? {} : { host: entry.host }),
+            reasons,
+            message: `${entry.name} (${entry.path}): ${parts.join('; ')}`,
+        });
+    }
+    return suspects;
 }

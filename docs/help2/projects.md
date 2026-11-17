@@ -12,7 +12,7 @@ workflow can address and start/stop them.
 | `list` | List registered projects |
 | `start <target>` | Start a registered project's server |
 | `stop <target>` | Stop a registered project's server |
-| `clean` | Purge missing project directories and terminate lingering processes |
+| `clean` | Purge missing project directories, report stale entries and terminate lingering processes |
 
 All verbs accept `--json` (and `--json-envelope`).
 
@@ -22,7 +22,7 @@ All verbs accept `--json` (and `--json-envelope`).
 spur projects add ../other-repo --name "Other Repo"
 spur projects list [--fleet]
 spur projects remove other-repo
-spur projects clean [--no-terminate-processes]
+spur projects clean [--no-terminate-processes] [--remove-suspects]
 ```
 
 `add` registers a project root directory; `--name` sets a display name, `--host` targets a local or
@@ -30,8 +30,10 @@ remote host (default `localhost`), and `--prefix <slug>` sets the gateway URL pa
 routed under (default `/<name slug>`; refused with a remote `--host`). `remove` and `start` /
 `stop` accept either the registered path or the project name as `<target>`. `list --fleet` also
 resolves each project's `agent.fleet` declaration and orchestrator binding. `clean` drops registry
-entries whose directory is gone and terminates processes lingering on occupied ports
-(`--no-terminate-processes` skips the termination).
+entries whose directory is gone, reports entries whose directory still exists but whose path is
+ephemeral (`/tmp`, `$TMPDIR`) or registered more than once, and terminates processes lingering on
+occupied ports (`--no-terminate-processes` skips the termination; `--remove-suspects` also removes
+the reported entries).
 
 ## Start and stop
 

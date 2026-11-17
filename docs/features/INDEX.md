@@ -211,4 +211,5 @@
 [done] **P**: Decision catalogs and the spur decision noun ([P_decision-catalogs-and-the-spur-decision-noun.md](./P_decision-catalogs-and-the-spur-decision-noun.md))
     └── [done] **P1**: Spur decision production readiness: events and workflow adoption ([P1_workflow-decision-points-adopt-spur-decision-catalogs.md](./P1_workflow-decision-points-adopt-spur-decision-catalogs.md))
         └── [done] **P11**: Decision status readiness surface: maker registration, configuration and proof of work ([P11_decision-status-readiness-surface-maker-registration-configuration-and-proof-of-work.md](./P11_decision-status-readiness-surface-maker-registration-configuration-and-proof-of-work.md))
+[backlog] **Q**: Gateway and Board surfaces honor the project switcher registry ([Q_gateway-and-board-surfaces-honor-the-project-switcher-registry.md](./Q_gateway-and-board-surfaces-honor-the-project-switcher-registry.md))
 <!-- END AUTO-GENERATED -->

@@ -180,6 +180,28 @@ describe('healthModule', () => {
         expect(body.projects[0]?.port).toBe(3003);
     });
 
+    test('/api/projects reports a prefix collision and a duplicate path as findings (Q R6)', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        // Duplicate detection compares normalized paths: seed the remote entry with the same
+        // normalized path the local entry heals to.
+        await registry.upsert({ name: 'kk', path: normalizeProjectPath(tempDir), host: '192.168.87.27', port: 3003 });
+        await registry.upsert({ name: 'kk', path: tempDir, port: 0, prefix: '/kk' });
+
+        const app = new Hono();
+        const ctx = { cwd: tempDir } as ServerContext;
+        healthModule.mount(app, ctx);
+
+        const res = await app.request('/api/projects');
+        const body = (await res.json()) as {
+            findings: Array<{ kind: string; message: string; prefix?: string; path?: string }>;
+        };
+        const duplicate = body.findings.find((f) => f.kind === 'duplicate-path');
+        expect(duplicate?.path).toBe(normalizeProjectPath(tempDir));
+        // A single prefix claim is not a collision: only the local entry carries the prefix.
+        expect(body.findings.some((f) => f.kind === 'prefix-collision')).toBe(false);
+        expect(duplicate?.message).toContain(normalizeProjectPath(tempDir));
+    });
+
     test('/api/projects returns empty projects list without ServerContext', async () => {
         const app = new Hono();
         healthModule.mount(app, undefined);

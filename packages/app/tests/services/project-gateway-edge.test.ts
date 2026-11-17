@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
     createGatewayHandler,
     gatewayGuard,
+    loopbackAuthority,
     rebaseHtml,
     rebaseLocation,
     rebaseManifest,
@@ -120,7 +121,7 @@ describe('gateway host guard and CSRF (K4 R8)', () => {
                     'x-trace': 'abc',
                 },
             }),
-            3901,
+            loopbackAuthority('127.0.0.1', 3901),
         );
         expect(headers.get('host')).toBe('127.0.0.1:3901');
         expect(headers.get('origin')).toBe('http://127.0.0.1:3901');

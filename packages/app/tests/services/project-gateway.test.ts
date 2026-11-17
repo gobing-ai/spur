@@ -280,6 +280,52 @@ describe('gateway handler (K4 R3/R4/R5)', () => {
         expect(html).not.toContain('<script>x');
         expect(html).toContain('&#60;script&#62;');
     });
+
+    it('removes a registered project on POST /api/projects/remove and validates input', async () => {
+        const removed: Array<{ path: string; host?: string }> = [];
+        const handler = createGatewayHandler(
+            deps({
+                listProjects: async () => [],
+                ensureUpstream: async () => 0,
+                removeProject: async (path, host) => {
+                    removed.push({ path, host });
+                    return path === '/tmp/alpha';
+                },
+            }),
+        );
+
+        const getRes = await handler(new Request('http://gw.test/api/projects/remove'));
+        expect(getRes.status).toBe(405);
+
+        const badRes = await handler(
+            new Request('http://gw.test/api/projects/remove', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ path: '' }),
+            }),
+        );
+        expect(badRes.status).toBe(400);
+
+        const okRes = await handler(
+            new Request('http://gw.test/api/projects/remove', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ path: '/tmp/alpha', host: '192.168.1.50' }),
+            }),
+        );
+        expect(okRes.status).toBe(200);
+        expect(await okRes.json()).toEqual({ ok: true });
+        expect(removed).toEqual([{ path: '/tmp/alpha', host: '192.168.1.50' }]);
+
+        const missingRes = await handler(
+            new Request('http://gw.test/api/projects/remove', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ path: '/tmp/missing' }),
+            }),
+        );
+        expect(missingRes.status).toBe(404);
+    });
 });
 
 describe('allocatePort reserved ports (K4 R3)', () => {

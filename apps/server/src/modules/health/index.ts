@@ -1,4 +1,4 @@
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import {
     FleetService,
@@ -17,7 +17,12 @@ import {
     StrategyRuntime,
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
-import { normalizeExecutorAvailability, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import {
+    findRegistryFindings,
+    findRegistrySuspects,
+    normalizeExecutorAvailability,
+    resolveProjectPrefix,
+} from '@gobing-ai/spur-config';
 import {
     declaresExecutor,
     ExecutorUpdateError,
@@ -457,7 +462,15 @@ export const healthModule: ServerModule = {
                 }),
             );
 
-            return c.json({ projects });
+            // Same derivation the CLI warns from: an ambiguous prefix or a path registered for two
+            // hosts explains a route failure the Board would otherwise surface as a bare 502.
+            return c.json({
+                projects,
+                findings: [
+                    ...findRegistryFindings(rawProjects),
+                    ...findRegistrySuspects(rawProjects, { tmpdir: tmpdir() }),
+                ],
+            });
         });
 
         // ── Multi-project start ──
