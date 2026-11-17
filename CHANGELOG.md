@@ -8,6 +8,43 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: scripts/commands/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.37] - 2026-11-16
+
+### Added
+- reach every local project through one gateway port under its own path prefix, with the Board served under that prefix and a macOS user LaunchAgent keeping the gateway on (a4a9fa38b)
+  <!-- src: packages/app/src/services/project-gateway.ts:304 · confidence: HIGH -->
+- move machine setup into `spur self install`, whose per-step states make a rerun convergent instead of repeating work (b6d922605)
+  <!-- src: packages/app/src/services/self-install.ts:35 · confidence: HIGH -->
+- share the Board module UI kit with native contributions through the CLI package's `./board/ui` export (bf7e0b1ae)
+  <!-- src: apps/cli/package.json:31 · confidence: HIGH -->
+
+### Fixed
+- report self readiness from truthful collectors, mapping agent process states in one place (a31c0fe9e)
+  <!-- src: packages/app/src/services/agent-process-status.ts:11 · confidence: HIGH -->
+- restore convergent install assets and the optional `zg`, `a2a` and `sp-plugin` tools (e1abdc0e1)
+  <!-- src: packages/app/src/services/self-install.ts:29 · confidence: HIGH -->
+- embed the standalone build assets a compiled binary needs instead of assuming a builder boot (6dbc14038)
+  <!-- src: packages/app/src/builder/compile.ts:230 · confidence: HIGH -->
+
+### Changed
+- merge the K4 gateway branch into `main` (d7fa1e46f)
+
+### Other
+- reverify A93 ownership prerequisites (8851fc4be)
+- reverify builder artifact safety (39adbe228)
+- reverify promotion and tooling ownership (d0f301dc4)
+- type-check the module kit from the installed fixture and link the composer UI reference (f7955c372)
+- keep the A81 gates green on the landed tree (886e33bdc)
+- record module-kit proof screenshots by file name (31feb3e25)
+- record ADR-150 for a shared Board module UI kit (91b09f849)
+- plan the A81 Board module UI kit (b15952d32)
+- record the shared UI kit as built and capture A81 learnings (01900b9b8)
+- plan the one-port project gateway and its launch agent (8114839d6)
+- plan concrete self installation and tooling absorption (efeb0471e)
+- record K4 batch learnings and metrics (336b28b6d)
+- mark feature A81 done after the L4 gate passed (7b93e67dc)
+- update memory (134ea68a1)
+
 ## [0.4.36] - 2026-11-16
 
 ### Added
