@@ -4,7 +4,7 @@ name: Embedded mcpModule in apps/server with core task, workflow, and context to
 status: done
 template: feature-impl
 created_at: 2026-11-17T18:57:28.329Z
-updated_at: "2026-11-17T20:15:37.979Z"
+updated_at: "2026-11-17T21:47:57.380Z"
 feature_id: B9
 priority: P1
 tags:
@@ -97,14 +97,14 @@ Exposing Spur's task, workflow, and indexed-context operations in-process inside
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `mcpModule` created and registered: `apps/server/src/modules/mcp/index.ts:254-303` (module + `app.post('/mcp')` at `:296`), gated by `server.mcp.enabled` (`mcpSettings` `:223`, early return `:262`) and `server.mcp.authEnv` bearer auth (`authorize` `:273-294`, 401 + `WWW-Authenticate: Bearer realm="spur-mcp"`); registered in `apps/server/src/modules/registry.ts:12,46-47`; default-off/401 tests `apps/server/tests/modules/mcp-module.test.ts:134-185`; registry test `apps/server/tests/modules/registry.test.ts:6-24`; gate `test:apps/server` PASS (`.spur/run/1372-check-receipt.json`) + fresh `bun test` 59 pass; live probe default-off → `POST /mcp` 404 (task Solution record). |
-| R2 | MET | Five frozen tools `TOOL_DESCRIPTORS` `apps/server/src/modules/mcp/index.ts:31-87`; `McpDispatcher.callTool` `:116-137` delegates directly to `@gobing-ai/spur-app` services — signatures verified against `packages/app/src/services/task-service.ts:305,575` and `packages/app/src/services/workflow-service.ts:389,520,556-557`; recorder-stub delegation tests `apps/server/tests/modules/mcp-module.test.ts:188-365` (discover 5+3 at `:191`, per-tool call-sequence asserts, refuse-paths at `:228,309,344,354`). |
-| R3 | MET | Three `spur://` resources `RESOURCE_DESCRIPTORS` `apps/server/src/modules/mcp/index.ts:89-93`; `readResource` `:151-176` (single-path-segment confinement, traversal refused); tests `apps/server/tests/modules/mcp-module.test.ts:367-446` (task/feature/context reads, unknown feature → error not null `:394`, traversal `:421`, unknown scheme `:436`). |
+| R1 | MET | `apps/server/src/modules/mcp/index.ts:257-305` (mount gated by enabled, bearer authorize, 401 challenge), `apps/server/src/modules/registry.ts:47`; tests `apps/server/tests/modules/mcp-module.test.ts:134-186` (pass this run) |
+| R2 | MET | `apps/server/src/modules/mcp/index.ts:116-148` (five tools -> taskService/workflowService); tests `apps/server/tests/modules/mcp-module.test.ts:188-365` |
+| R3 | MET | `apps/server/src/modules/mcp/index.ts:151-177` (spur://tasks, features, context; `.`/`..` refused — fix pass this run); tests `apps/server/tests/modules/mcp-module.test.ts:367-445` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Embedded mcpModule mounts on spur serve only when enabled and enforces bearer auth (req: R1) | MET | test | Mount gating tests `apps/server/tests/modules/mcp-module.test.ts:134-152` (no mcp key → 404, `enabled:false` → 404, `enabled:true` → 200) and bearer-auth tests `:154-185` (missing header 401 + challenge, wrong token 401, non-bearer 401, unset token var → fail-closed 500, challenge-free); fresh command `bun test` 3 files → 59 pass, 0 fail; source `apps/server/src/modules/mcp/index.ts:262,273-294`; light gate `test:apps/server` PASS (`.spur/run/1372-check-receipt.json`, all 10 checks PASS at digest `a3d344ac`). |
-| AC2 — Harness tools and resources delegate to @gobing-ai/spur-app (req: R2, R3) | MET | test | Delegation tests `apps/server/tests/modules/mcp-module.test.ts:188-446` (9 tool tests + 6 resource tests asserting exact service-call sequences against recorder stubs) and the direct-handler seam `:447-462`; real delegation surface verified statically: `apps/server/src/modules/mcp/index.ts:104-176` against `packages/app/src/services/task-service.ts:305,575`, `feature-service.ts:342`, `workflow-service.ts:389,520,556-557` (no CLI spawn, no second workflow state machine — anti-pattern respected). |
+| AC1 — Embedded mcpModule mounts on spur serve only when enabled and enforces bearer auth (req: R1) | MET | test | `apps/server/tests/modules/mcp-module.test.ts:134-186`, `apps/server/tests/mcp-e2e.test.ts:169`; 34 pass this run |
+| AC2 — Harness tools and resources delegate to @gobing-ai/spur-app (req: R2, R3) | MET | test | `apps/server/tests/modules/mcp-module.test.ts:188-445`, `apps/server/tests/mcp-e2e.test.ts:148-157` (real corpus) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -132,7 +132,7 @@ No P1–P3 findings.
 | R2 | MET | Five frozen tools `TOOL_DESCRIPTORS` `apps/server/src/modules/mcp/index.ts:31-87`; `McpDispatcher.callTool` `:116-137` delegates directly to `@gobing-ai/spur-app` services — signatures verified against `packages/app/src/services/task-service.ts:305,575` and `packages/app/src/services/workflow-service.ts:389,520,556-557`; recorder-stub delegation tests `apps/server/tests/modules/mcp-module.test.ts:188-365` (discover 5+3 at `:191`, per-tool call-sequence asserts, refuse-paths at `:228,309,344,354`). |
 | R3 | MET | Three `spur://` resources `RESOURCE_DESCRIPTORS` `apps/server/src/modules/mcp/index.ts:89-93`; `readResource` `:151-176` (single-path-segment confinement, traversal refused); tests `apps/server/tests/modules/mcp-module.test.ts:367-446` (task/feature/context reads, unknown feature → error not null `:394`, traversal `:421`, unknown scheme `:436`). |
 
-##### Acceptance Criteria
+##### Acceptance Criteria Coverage
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |

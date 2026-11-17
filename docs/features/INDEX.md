@@ -34,7 +34,7 @@
         └── [done] **B61**: Usage availability decision correctness and bounded capture ([B61_usage-availability-decision-correctness-and-bounded-capture.md](./B61_usage-availability-decision-correctness-and-bounded-capture.md))
     ├── [done] **B7**: Run-scoped executor session: resolve once per run, pin across stages, per-stage fresh-session policy ([B7_run-scoped-executor-session-resolve-once-per-run-pin-across-stages-per-stage-fresh-session-policy.md](./B7_run-scoped-executor-session-resolve-once-per-run-pin-across-stages-per-stage-fresh-session-policy.md))
     ├── [done] **B8**: Runner capability matrix: per-agent session and stdin capabilities declared upstream and consumed by Spur ([B8_runner-capability-matrix-per-agent-session-and-stdin-capabilities-declared-upstream-and-consumed-by-spur.md](./B8_runner-capability-matrix-per-agent-session-and-stdin-capabilities-declared-upstream-and-consumed-by-spur.md))
-    └── [active] **B9**: Embedded MCP 2.0+ server in spur serve ([B9_embedded-mcp-2-0-server-in-spur-serve.md](./B9_embedded-mcp-2-0-server-in-spur-serve.md))
+    └── [done] **B9**: Embedded MCP 2.0+ server in spur serve ([B9_embedded-mcp-2-0-server-in-spur-serve.md](./B9_embedded-mcp-2-0-server-in-spur-serve.md))
 [verifying] **C**: Rules ([C_rules.md](./C_rules.md))
     ├── [done] **C1**: Rule surface contract and catalog integrity ([C1_rule-surface-contract-and-catalog-integrity.md](./C1_rule-surface-contract-and-catalog-integrity.md))
     ├── [cancelled] **C2**: Lockstep dependency catalog integrity ([C2_lockstep-dependency-catalog-integrity.md](./C2_lockstep-dependency-catalog-integrity.md))

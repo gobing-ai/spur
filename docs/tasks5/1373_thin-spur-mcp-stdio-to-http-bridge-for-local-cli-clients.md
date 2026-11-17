@@ -4,7 +4,7 @@ name: Thin spur mcp stdio-to-HTTP bridge for local CLI clients
 status: done
 template: feature-impl
 created_at: 2026-11-17T18:57:28.330Z
-updated_at: "2026-11-17T20:43:46.704Z"
+updated_at: "2026-11-17T21:47:58.065Z"
 feature_id: B9
 priority: P2
 tags:
@@ -100,12 +100,12 @@ Thin stdio-to-HTTP bridge (feature B9, task 1373) so stdio-only MCP clients reac
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/mcp.ts:47-69` (`runMcpStdioBridge`: readline over stdin, one `POST url` per non-blank NDJSON line, body echoed to stdout), `:82-95` (`resolveMcpUrl`: `--url` → gateway prefix `http://127.0.0.1:<gateway.port><prefix>/mcp` when the registry entry is local and the gateway answers → registry live port → `server.port` fallback), `:120-141` (`registerMcpCommand`, frozen names `spur mcp [--cwd] [--url]`), wiring `apps/cli/src/index.ts:29,113,124,170-173,377` (boot-free dispatch + banner suppression); tests `apps/cli/tests/commands/mcp.test.ts:47-77,154-172,211-240` (NDJSON forwarding + blank-line skip, URL precedence incl. gateway/live-port/server.port, real-CLI-entry probe) |
-| R2 | MET | `apps/cli/src/commands/mcp.ts:22-24` (`MCP_PROTOCOL_VERSION = '2026-07-28'`, mirrors `apps/server/src/modules/mcp/protocol.ts:20`), `:58-60` (`Mcp-Protocol-Version` always; `Authorization: Bearer` only when a token exists), `:108-117` (`bearerToken` reads the variable `server.mcp.authEnv` names from env; unset/empty is a loud `CommandError`), config source parity with `spur serve` (`packages/config/src/index.ts:1454-1456` env funnel, `:1362-1374` `server.mcp.authEnv` contract); tests `apps/cli/tests/commands/mcp.test.ts:47-77` (headers on the wire), `:79-91` (no Authorization without token), `:176-206` (loud authEnv failure, zero stdout) |
+| R1 | MET | `apps/cli/src/commands/mcp.ts:47-74` (NDJSON stdin -> POST), `apps/cli/src/commands/mcp.ts:82-95` (gateway prefix / direct port), `apps/cli/src/index.ts:110-113`; tests `apps/cli/tests/commands/mcp.test.ts:46-172` (9 pass this run) |
+| R2 | MET | `apps/cli/src/commands/mcp.ts:57-61` (Mcp-Protocol-Version 2026-07-28 + Bearer), `apps/cli/src/commands/mcp.ts:108-117` (authEnv token, loud on unset); tests `apps/cli/tests/commands/mcp.test.ts:47-92`, `apps/cli/tests/commands/mcp.test.ts:176` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Thin spur mcp stdio bridge forwards to the embedded /mcp server (req: R1, R2) | MET | test | End-to-end probe spawning the real CLI entry `bun apps/cli/src/index.ts mcp --url … --cwd …` against a live mock `/mcp` upstream: exit 0, every stdout line parses as the forwarded JSON-RPC response with no banner, protocol + no-auth headers verified on the wire, no `.spur/spur.db` created (`apps/cli/tests/commands/mcp.test.ts:211-240`, fresh run 9 pass / 0 fail); bridge + URL-resolution units `apps/cli/tests/commands/mcp.test.ts:47-172`; static forwarding path `apps/cli/src/commands/mcp.ts:47-141` |
+| AC1 — Thin spur mcp stdio bridge forwards to the embedded /mcp server (req: R1, R2) | MET | test | `apps/cli/tests/commands/mcp.test.ts:211` (real CLI dispatch), `apps/server/tests/mcp-e2e.test.ts:192` (real bridge through gateway, id round-trip); pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -134,7 +134,7 @@ Gate evidence: named checks `format-lint:changed`, `rules:pre`, `rules:post`, `t
 | R1 | MET | `apps/cli/src/commands/mcp.ts:47-69` (`runMcpStdioBridge`: readline over stdin, one `POST url` per non-blank NDJSON line, body echoed to stdout), `:82-95` (`resolveMcpUrl`: `--url` → gateway prefix `http://127.0.0.1:<gateway.port><prefix>/mcp` when the registry entry is local and the gateway answers → registry live port → `server.port` fallback), `:120-141` (`registerMcpCommand`, frozen names `spur mcp [--cwd] [--url]`), wiring `apps/cli/src/index.ts:29,113,124,170-173,377` (boot-free dispatch + banner suppression); tests `apps/cli/tests/commands/mcp.test.ts:47-77,154-172,211-240` (NDJSON forwarding + blank-line skip, URL precedence incl. gateway/live-port/server.port, real-CLI-entry probe) |
 | R2 | MET | `apps/cli/src/commands/mcp.ts:22-24` (`MCP_PROTOCOL_VERSION = '2026-07-28'`, mirrors `apps/server/src/modules/mcp/protocol.ts:20`), `:58-60` (`Mcp-Protocol-Version` always; `Authorization: Bearer` only when a token exists), `:108-117` (`bearerToken` reads the variable `server.mcp.authEnv` names from env; unset/empty is a loud `CommandError`), config source parity with `spur serve` (`packages/config/src/index.ts:1454-1456` env funnel, `:1362-1374` `server.mcp.authEnv` contract); tests `apps/cli/tests/commands/mcp.test.ts:47-77` (headers on the wire), `:79-91` (no Authorization without token), `:176-206` (loud authEnv failure, zero stdout) |
 
-##### Acceptance Criteria
+##### Acceptance Criteria Coverage
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |

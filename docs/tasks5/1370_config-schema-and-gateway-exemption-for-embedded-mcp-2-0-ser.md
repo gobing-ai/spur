@@ -4,7 +4,7 @@ name: Config schema and gateway exemption for embedded MCP 2.0+ server
 status: done
 template: feature-impl
 created_at: 2026-11-17T18:57:28.326Z
-updated_at: "2026-11-17T19:36:46.039Z"
+updated_at: "2026-11-17T21:47:56.674Z"
 feature_id: B9
 priority: P1
 tags:
@@ -33,7 +33,7 @@ Feature B9 embeds a stateless MCP 2.0+ (`2026-07-28`+) server inside `spur serve
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Embedded mcpModule mounts on spur serve only when enabled and enforces bearer auth (req: R1)
+- [x] AC1 — Embedded mcpModule mounts on spur serve only when enabled and enforces bearer auth (req: R1)
 - [x] AC2 — Gateway proxies /<prefix>/mcp with bearer-auth CSRF exemption (req: R2)
 
 ### Q&A
@@ -107,13 +107,13 @@ Feature B9 embeds a stateless MCP 2.0+ (`2026-07-28`+) server inside `spur serve
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/config/src/index.ts:21-22` (`SPUR_MCP_ENABLED`/`SPUR_MCP_AUTH_ENV`), `:1365-1374` (`server.mcp` Zod object, default `{ enabled: false }`), `:1392` (server-level default), `:1405-1412` (`superRefine` requires `authEnv` when enabled — fails the load), `:1453-1456` (`buildConfigFromEnv` env funnel); `apps/server/src/server-config.ts:27` (`ServerBootConfig.mcp` frozen shape), `:68-71` (boot mapping, `authEnv ?? null`); tests `packages/config/tests/config.test.ts:93-113` (default off / env read / enabled-without-`authEnv` throws / malformed boolean throws) |
-| R2 | MET | `packages/app/src/services/project-gateway.ts:133` (exempt `segments[1] === 'mcp'` alongside `'a2a'`), `:124-126` (host allowlist still first for every path), `:116-117` (doc comment names the `/<prefix>/mcp/*` exemption); tests `packages/app/tests/services/project-gateway-edge.test.ts:112-129` (form POST on `/alpha/mcp/tools/list` CSRF-exempt; `evil.test` host on `/mcp` → 421) |
+| R1 | MET | `packages/config/src/index.ts:1369-1374` (`server.mcp` Zod object, default off), `packages/config/src/index.ts:1405-1411` (superRefine requires authEnv when enabled), `packages/config/src/index.ts:1453-1456` (env funnel); `apps/server/src/server-config.ts:27`, `apps/server/src/server-config.ts:68-71`; tests `packages/config/tests/config.test.ts:95-107` (15 pass this run) |
+| R2 | MET | `packages/app/src/services/project-gateway.ts:133` (`segments[1] === 'mcp'` exempt after host allowlist); tests `packages/app/tests/services/project-gateway-edge.test.ts:112-129` (18 pass this run) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Embedded mcpModule mounts on spur serve only when enabled and enforces bearer auth (req: R1) | N/A | n/a | Criterion's module-mount clause is owned by sibling tasks 1371–1374 (status `todo`) per the task's approved Dependencies & Handoff `docs/tasks5/1370_config-schema-and-gateway-exemption-for-embedded-mcp-2-0-ser.md:58,94` — out of this task's scope, so not assessable against this diff (grep: no `mcpModule` under `apps/`/`packages/`). This task's delivered config-gate half (req R1) is MET and traced under R1: tests `packages/config/tests/config.test.ts:93-113`; boot mapping `apps/server/src/server-config.ts:68-71` |
-| AC2 — Gateway proxies /<prefix>/mcp with bearer-auth CSRF exemption (req: R2) | MET | test | Exemption at `packages/app/src/services/project-gateway.ts:133` with host allowlist preserved first (`:124-126`); CSRF-exempt and host-allowlist tests `packages/app/tests/services/project-gateway-edge.test.ts:112-129`; generic prefix proxying unchanged (gateway is a pass-through for prefixed paths) |
+| AC1 — Embedded mcpModule mounts on spur serve only when enabled and enforces bearer auth (req: R1) | MET | test | Config gate (this task) consumed by `apps/server/src/modules/mcp/index.ts:265` (sibling 1372 now done); `apps/server/tests/modules/mcp-module.test.ts:134-186` default-off + bearer tests pass this run |
+| AC2 — Gateway proxies /<prefix>/mcp with bearer-auth CSRF exemption (req: R2) | MET | test | `packages/app/tests/services/project-gateway-edge.test.ts:112-129`; `apps/server/tests/mcp-e2e.test.ts:135` (gateway E2E, pass this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -142,7 +142,7 @@ Gate evidence: named checks `format-lint:changed`, `rules:pre`, `rules:post`, `t
 | R1 | MET | `packages/config/src/index.ts:21-22` (`SPUR_MCP_ENABLED`/`SPUR_MCP_AUTH_ENV`), `:1365-1374` (`server.mcp` Zod object, default `{ enabled: false }`), `:1392` (server-level default), `:1405-1412` (`superRefine` requires `authEnv` when enabled — fails the load), `:1453-1456` (`buildConfigFromEnv` env funnel); `apps/server/src/server-config.ts:27` (`ServerBootConfig.mcp` frozen shape), `:68-71` (boot mapping, `authEnv ?? null`); tests `packages/config/tests/config.test.ts:93-113` (default off / env read / enabled-without-`authEnv` throws / malformed boolean throws) |
 | R2 | MET | `packages/app/src/services/project-gateway.ts:133` (exempt `segments[1] === 'mcp'` alongside `'a2a'`), `:124-126` (host allowlist still first for every path), `:116-117` (doc comment names the `/<prefix>/mcp/*` exemption); tests `packages/app/tests/services/project-gateway-edge.test.ts:112-129` (form POST on `/alpha/mcp/tools/list` CSRF-exempt; `evil.test` host on `/mcp` → 421) |
 
-##### Acceptance Criteria
+##### Acceptance Criteria Coverage
 
 | AC | Status | Evidence Type | Evidence |
 | --- | --- | --- | --- |

@@ -4,7 +4,7 @@ name: Stateless MCP 2.0+ Streamable HTTP protocol adapter and server/discover
 status: done
 template: feature-impl
 created_at: 2026-11-17T18:57:28.329Z
-updated_at: "2026-11-17T19:53:25.315Z"
+updated_at: "2026-11-17T21:33:46.205Z"
 feature_id: B9
 priority: P1
 tags:
@@ -96,13 +96,13 @@ MCP 2.0+ (`2026-07-28`+) removes legacy `initialize` handshakes, sticky sessions
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/server/src/modules/mcp/protocol.ts:126-156` (parseCall: bare or JSON-RPC body, method from `Mcp-Method` header or envelope) and `:232-247` + `:260-303` (handleMcpHttpRequest: JSON or request-scoped one-frame SSE response); tests `apps/server/tests/modules/mcp/protocol.test.ts:104-209` (dispatch group) and `:254-271` (SSE group); fresh `bun test` run 25 pass / 0 fail |
-| R2 | MET | `apps/server/src/modules/mcp/protocol.ts:138` (`Mcp-Method`), `:161-169` (`server/discover` returns negotiated version + tools/resources), `:172`/`:186` (`Mcp-Name` header for tools/call and resources/read); tests `protocol.test.ts:106-127` (discover/list) and `:128-146` (header-form tool call) |
-| R3 | MET | `apps/server/src/modules/mcp/protocol.ts:101-123` (version gate: missing/malformed/`< 2026-07-28` → 400 `PROTOCOL_VERSION_UNSUPPORTED`) and `:260-283` (non-POST → 405 `STATEFUL_TRANSPORT_UNSUPPORTED` + `Allow: POST`; `Mcp-Session-Id` → 400 `SESSIONS_UNSUPPORTED`); tests `protocol.test.ts:56-87` (version gate incl. legacy trio `2024-11-05`/`2025-03-26`/`2025-11-25`) and `:89-102` (transport gate) |
+| R1 | MET | `apps/server/src/modules/mcp/protocol.ts:126-156` (parse), `apps/server/src/modules/mcp/protocol.ts:207-249` (JSON / request-scoped SSE), `apps/server/src/modules/mcp/protocol.ts:260-304` (handler); tests `apps/server/tests/modules/mcp/protocol.test.ts:104-268` (pass this run) |
+| R2 | MET | `apps/server/src/modules/mcp/protocol.ts:161-168` (server/discover), `apps/server/src/modules/mcp/protocol.ts:101-123` (Mcp-Protocol-Version), `apps/server/src/modules/mcp/protocol.ts:138-140` (Mcp-Method), `apps/server/src/modules/mcp/protocol.ts:172,186` (Mcp-Name); tests `apps/server/tests/modules/mcp/protocol.test.ts:105-192` |
+| R3 | MET | `apps/server/src/modules/mcp/protocol.ts:114-121` (below-minimum rejected), `apps/server/src/modules/mcp/protocol.ts:261-283` (GET 405, Mcp-Session-Id 400); tests `apps/server/tests/modules/mcp/protocol.test.ts:56-102` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Stateless MCP 2.0+ Streamable HTTP rejects legacy protocol versions (req: R1, R2, R3) | MET | test | `apps/server/tests/modules/mcp/protocol.test.ts:65-72` (legacy trio rejected with `PROTOCOL_VERSION_UNSUPPORTED`), `:56-63` (missing header), `:73-87` (malformed vs newer-future accepted); command: gate receipt `.spur/run/1371-check-receipt.json` check `test:apps/server` PASS; fresh review run `cd apps/server && bun test tests/modules/mcp/protocol.test.ts` → 25 pass / 0 fail |
+| AC1 — Stateless MCP 2.0+ Streamable HTTP rejects legacy protocol versions (req: R1, R2, R3) | MET | test | `apps/server/tests/modules/mcp/protocol.test.ts:66` (2024-11-05/2025-03-26/2025-11-25 rejected), `apps/server/tests/mcp-e2e.test.ts:180` (through gateway); pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

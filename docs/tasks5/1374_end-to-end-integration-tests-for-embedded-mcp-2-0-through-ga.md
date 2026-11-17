@@ -4,7 +4,7 @@ name: End-to-end integration tests for embedded MCP 2.0+ through gateway
 status: done
 template: feature-impl
 created_at: 2026-11-17T18:57:28.330Z
-updated_at: "2026-11-17T20:58:33.029Z"
+updated_at: "2026-11-17T21:33:46.871Z"
 feature_id: B9
 priority: P2
 tags:
@@ -84,12 +84,12 @@ Verify the full path from gateway `/<prefix>/mcp` to `spur serve` `mcpModule` an
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/server/tests/mcp-e2e.test.ts:123` (server/discover through gateway), `:148` (tools/call task_show), `:157` (spur:// resources/read), `:169` (missing/wrong bearer 401 + WWW-Authenticate), `:180` (legacy version rejection), `:192` (stdio bridge round-trip) — all through `createGatewayHandler`; fresh run 7 pass / 0 fail / 30 expects / 454 ms (`cd apps/server && bun test tests/mcp-e2e.test.ts`) |
+| R1 | MET | `apps/server/tests/mcp-e2e.test.ts:122-215` — discover, task_show, spur:// resources, 401 bearer, legacy rejection, stdio bridge round-trip; real Hono + createGatewayHandler (no mocks of mcpModule/gatewayGuard); 7 pass this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Gateway proxies /<prefix>/mcp with bearer-auth CSRF exemption | MET | test | `apps/server/tests/mcp-e2e.test.ts:123-133` (proxy 200 with capability surface), `:135-146` (text/plain simple request 200 through both hops; same shape 403 from gateway guard on ordinary path — negative control at `packages/app/src/services/project-gateway.ts:106,119`); gate receipt `test:apps/server` PASS (`.spur/run/1374-check-receipt.json`) |
-| AC2 — Stateless MCP 2.0+ Streamable HTTP rejects legacy protocol versions | MET | test | `apps/server/tests/mcp-e2e.test.ts:180-190` (2024-11-05/2025-03-26/2025-11-25 → 400 `PROTOCOL_VERSION_UNSUPPORTED`, gate before body parse at `apps/server/src/modules/mcp/protocol.ts:114-119`); gate receipt `test:apps/server` PASS (`.spur/run/1374-check-receipt.json`) |
+| AC1 — Gateway proxies /<prefix>/mcp with bearer-auth CSRF exemption (req: R1) | MET | test | `apps/server/tests/mcp-e2e.test.ts:123`, `apps/server/tests/mcp-e2e.test.ts:135` |
+| AC2 — Stateless MCP 2.0+ Streamable HTTP rejects legacy protocol versions (req: R1) | MET | test | `apps/server/tests/mcp-e2e.test.ts:180` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
