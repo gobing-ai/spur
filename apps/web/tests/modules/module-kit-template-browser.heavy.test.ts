@@ -165,9 +165,11 @@ async function screenshot(name: string): Promise<string> {
 }
 
 beforeAll(async () => {
-    // The fixture chain (pack → install → Vite build) needs no browser, and the R1/R2 build proof
-    // below only reads its output: preparing it behind the browser gate left `moduleDist` undefined
-    // on a runner without an engine (CI), so the build test crashed on a joined path instead.
+    // Gated as a whole, build proof included: the fixture packs the CLI, and its `prepack` bundle
+    // fails on Linux because `@gobing-ai/ts-laya-mlx` is a darwin-only optional dependency
+    // (ADR-041). So the whole chain is runnable where this file is runnable — a host with an
+    // engine — and every test states that precondition instead of crashing on an undefined path.
+    if (!browserReady) return;
     const prepared = await prepareFixture();
     fixtureDir = prepared.dir;
     moduleDist = prepared.dist;
@@ -199,8 +201,6 @@ beforeAll(async () => {
         ],
     };
     await mkdir(ARTIFACT_DIR, { recursive: true });
-    // Everything past this point renders in a real engine; the build proof above already ran.
-    if (!browserReady) return;
     server = serveBoard(boardDir, { catalog, moduleAssets: { [MODULE_ID]: moduleDist } });
     browser = await launchBrowser();
     report.browser = browser.version;
@@ -215,6 +215,7 @@ afterAll(async () => {
 
 describe('starter template build (R1/R2)', () => {
     test('externalizes exactly the advertised specifiers and ships no host CSS', async () => {
+        if (!browserReady) return;
         const entry = await readFile(join(moduleDist, 'entry.js'), 'utf-8');
         const style = await readFile(join(moduleDist, 'style.css'), 'utf-8');
         const advertised = Object.keys(host.imports);
