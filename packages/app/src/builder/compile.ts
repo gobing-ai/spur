@@ -1,7 +1,10 @@
-import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { bundleConfig } from './bundle-config';
 
 /**
  * Compiled-binary build owner (A93 1354, design §5).
@@ -220,14 +223,21 @@ export async function buildCompiledBinary(request: CompileRequest): Promise<Buil
     const restoreFailures: Error[] = [];
     let outcome: BuildResult | undefined;
     let failure: unknown;
+    let assetRoot: string | undefined;
 
     try {
+        if (existsSync(join(sourceRoot, 'config'))) {
+            assetRoot = await mkdtemp(join(tmpdir(), 'spur-build-assets-'));
+            await bundleConfig(join(assetRoot, 'config'), { sourceRoot });
+        }
         restores.push(patchTsRuntimeImport(sourceRoot));
         const restoreLaya = layaMlxInstalled(sourceRoot) ? patchLayaMlxSourceImport(sourceRoot) : undefined;
         if (restoreLaya !== undefined) restores.push(restoreLaya);
 
         for (const target of request.targets ?? [null]) {
             const args = ['build', entry, '--compile'];
+            // The first install must find its seeds inside the single-file release binary.
+            if (assetRoot !== undefined) args.push('--asset', join(assetRoot, 'config'));
             if (target !== null) args.push(`--target=${target}`);
             args.push('--external', UNUSED_LAYA_PEER);
             // Homebrew-less hosts without the darwin-only package (Linux CI) must externalize it:
@@ -254,6 +264,13 @@ export async function buildCompiledBinary(request: CompileRequest): Promise<Buil
         for (const restore of restores.slice().reverse()) {
             try {
                 restore();
+            } catch (err) {
+                restoreFailures.push(err instanceof Error ? err : new Error(String(err)));
+            }
+        }
+        if (assetRoot !== undefined) {
+            try {
+                await rm(assetRoot, { recursive: true, force: true });
             } catch (err) {
                 restoreFailures.push(err instanceof Error ? err : new Error(String(err)));
             }

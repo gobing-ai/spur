@@ -4,7 +4,7 @@ name: Absorb CLI and server compilation into builder without a bootstrap cycle
 status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.456Z
-updated_at: "2026-11-17T00:53:06.624Z"
+updated_at: "2026-11-17T04:29:20.051Z"
 feature_id: A93
 priority: P2
 tags:
@@ -98,6 +98,13 @@ Compilation has one owner and one grammar:
 
 Receipt: `.spur/run/1354-compile-e2e.json`.
 
+#### Forced verification corrections — 2026-11-16
+
+- `apps/cli/src/index.ts:104` routes the six build/staging verbs before project DB/config boot; a malformed unrelated project config no longer masks source-root validation.
+- `packages/app/src/builder/compile.ts:217` reuses bundleConfig to stage filtered assets, embeds that config directory in the executable and removes its owned staging directory after compilation/restoration.
+- `apps/cli/tests/commands/builder/compile.e2e.test.ts:8` reproduced absent standalone seeds before the repair, then executed the generated binary away from source/sibling assets. Compile restoration/lock proofs remain intact.
+- The compiler asset option was checked against the installed CLI help and Bun's official executable documentation: https://bun.sh/docs/compiler/executables . No dependency/toolchain was added.
+
 ### Testing
 
 **Pipeline verify results**
@@ -106,14 +113,14 @@ Receipt: `.spur/run/1354-compile-e2e.json`.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/builder/build.ts:11` registers `build-cli`/`build-server`/`build-binaries` with `--source-root`, `--json`, `--json-envelope`; `resolveSourceRoot` validates `apps/cli/package.json` + `packages/app/package.json` before any lock or patch (`packages/app/src/builder/compile.ts:76`), proven by the E2E "a directory that is not a Spur checkout is refused before any mutation". Every patch/dependency path resolves from the given root (`compile.ts:91`, `:99`), never from `import.meta.url`. |
-| R2 | MET | One lock (`.spur-compile.lock`, created `wx`) beside the patched dependency dist; six release assets plus `SHA256SUMS` (`packages/app/src/builder/binaries.ts:20`). Both patches are acquired inside one restoration scope and restored in reverse order with every restore attempted; the verdict is decided **after** cleanup, so a restore failure only annotates the primary failure (`compile.ts:224`). Covered by "second patch acquisition failure restores the first patch and releases the lock", "compiler failure restores both patches", and the receipt's restored-hash lines. |
-| R3 | MET | `scripts/commands/build-{cli,server,binaries}.ts` are thin forwarders to `@gobing-ai/spur-app/builder` with no compile logic; `scripts/spur-dev.ts` imports them under their new names, so `package.json` callers (`apps/cli` `build`/`build:binaries`/`build:bundle`, `apps/server` `build`) still resolve through one implementation. The forwarders exist because the CLI's `apps/cli/config` bundle is generated — proven by importing all three with that directory absent. The narrow `./builder` subpath keeps the CLI from deep-importing the app barrel. |
-| R4 | MET | Tests were written before the implementation and are failure-shaped: bad source root, concurrent lock refusal, second-acquisition failure, compiler nonzero, and a real host-native `bun build --compile` producing `dist/cli/spur` (`apps/cli/tests/commands/builder/compile.e2e.test.ts`, 5 cases). `packages/app/tests/builder/{compile,binaries}.test.ts` pin patch/restore ordering, per-target invocation, the six asset names and the `SHA256SUMS` format. No DB boot: the verbs live under `builder` and touch no project runtime. Receipt: `.spur/run/1354-compile-e2e.json`. |
+| R1 | MET | `packages/app/src/builder/compile.ts:217`, `apps/cli/src/commands/builder/build.ts:24`; three flat build verbs use source-root-resolved app services and structured output. |
+| R2 | MET | `packages/app/src/builder/compile.ts:217`, `packages/app/src/builder/binaries.ts:36`; nested acquisition/cleanup, exclusive lock, asset names and SHA256SUMS assertions pass. Filtered embedded config staging is cleaned after compilation. |
+| R3 | MET | `scripts/commands/build-cli.ts:1`, `scripts/commands/build-server.ts:1`, `scripts/spur-dev.ts:1`; retained source entrypoints forward to one app implementation; no second compiler implementation was added. |
+| R4 | MET | `apps/cli/tests/commands/builder/compile.e2e.test.ts:8`, `apps/cli/src/index.ts:104`; bad root/cold build/patch failure/compiler failure/lock refusal plus no-DB boot and embedded-asset proofs passed. The actual checkout's host-native CLI was compiled and executed. Fix-pass artifacts: `.spur/run/1354-verify-answer.txt:1-34` and `.spur/run/1354-verdict.json:1-72` (re-evaluated requirement/AC evidence); session-local batch report `.spur/run/A93-verifyall-20261116-report.md:1-60`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/cli/tests/commands/builder/compile.e2e.test.ts` (5 cases incl. host-native artifact + restored hashes + absent lock) and `packages/app/tests/builder/binaries.test.ts` (six names, GNU checksum format verified by `shasum -c`) |
+| Builder absorbs coherent reusable build and packaging operations | MET | test | `apps/cli/tests/commands/builder/compile.e2e.test.ts:8`; fresh test output and real CLI receipts: batch artifact `.spur/run/A93-verifyall-20261116-compile-real.json` line 1. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

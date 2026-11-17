@@ -101,10 +101,22 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         commandTokens[0] === 'status' || (commandTokens[0] === 'self' && commandTokens[1] === 'status');
     // `self install` is machine setup: it must not require a project config or create a project DB.
     const selfInstall = commandTokens[0] === 'self' && commandTokens[1] === 'install';
+    const builderArtifact =
+        commandTokens[0] === 'builder' &&
+        ['build-cli', 'build-server', 'build-binaries', 'bundle-config', 'bundle-web', 'verify-pack'].includes(
+            commandTokens[1] ?? '',
+        );
     // `workflow commit-guard-*|persist-*` are boot-free transports (script-absorption PR-4): like the
     // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
     // bypass boot, which would create or repair the database being checked.
-    if (isWorkflowTransportInvocation(argv) || migrationCheck || taskGate || statusReport || selfInstall) {
+    if (
+        isWorkflowTransportInvocation(argv) ||
+        migrationCheck ||
+        taskGate ||
+        statusReport ||
+        selfInstall ||
+        builderArtifact
+    ) {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
         program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
@@ -125,6 +137,8 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 const migrationContext = createCliContext(context);
                 registerMigrateCommand(program, migrationContext, { hidden: true });
                 registerMigrateCommand(program.command('self'), migrationContext);
+            } else if (builderArtifact) {
+                registerBuilderCommand(program, createCliContext(context));
             } else if (selfInstall) {
                 // Only the install verb is registered on this boot-free path; the other self verbs keep
                 // their full-boot registrations (serve and migrate-check already dispatch even earlier).

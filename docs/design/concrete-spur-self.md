@@ -64,6 +64,11 @@ The POSIX installer remains the unavoidable first-binary bootstrap: OS/arch sele
 
 Source, npm and standalone invocations must converge on identical setup services and resolve shipped assets independently of source-tree-relative paths.
 
+Standalone compilation stages the same filtered config tree as package bundling and embeds it with
+Bun's `--asset` option. Rule seeding falls back to that shipped `config/rules` tree when the rule
+engine's development assets are absent. No generated asset copy or post-install download is needed.
+The no-Homebrew A2A route retains the existing curl/bash installer and `SPUR_INSTALL` destination.
+
 ## 5. Builder target and source bootstrap
 
 First wave exposes only six flat verbs, avoiding a different grammar selected by a mode operand:
