@@ -53,7 +53,12 @@ const PLIST = '/Users/tester/Library/LaunchAgents/ai.gobing.spur.gateway.plist';
  * Register the verb and drive it. The host facts (home, platform, exec, fs) are injected through the
  * module-level seam that `runDaemonAction` resolves, so nothing here calls real `launchctl`.
  */
-function capture(overrides: { fs: FileSystem; exec: ProcessExecutor; plistExists: boolean }): {
+function capture(overrides: {
+    fs: FileSystem;
+    exec: ProcessExecutor;
+    plistExists: boolean;
+    platform?: NodeJS.Platform;
+}): {
     action: ActionFn;
     out: string[];
     exit: number[];
@@ -87,7 +92,7 @@ function capture(overrides: { fs: FileSystem; exec: ProcessExecutor; plistExists
     const fs = overrides.fs;
     if (!overrides.plistExists) fs.deleteFile(PLIST);
     registerUninstallCommand({ command: () => chain } as never, context, {
-        platform: 'darwin',
+        platform: overrides.platform ?? 'darwin',
         uid: 501,
         home: '/Users/tester',
         path: '/opt/homebrew/bin:/usr/bin',
@@ -124,6 +129,40 @@ describe('spur self uninstall (K4 R9/R10 flatter surface)', () => {
         const { action, out } = capture({ fs, exec: fakeExec([0, 0]), plistExists: true });
         await action({ daemon: true });
         expect(out.join('\n')).toContain('removed');
+    });
+
+    test('--json reports the removal as a machine-readable result', async () => {
+        const fs = memoryFs({ [PLIST]: '<plist/>' });
+        const { action, out, exit } = capture({ fs, exec: fakeExec([0, 0]), plistExists: true });
+        await action({ json: true });
+        expect(exit).toEqual([]);
+        expect(JSON.parse(out.at(-1) ?? '{}')).toMatchObject({ ok: true, action: 'uninstall', status: 'removed' });
+    });
+
+    test('a failure exits 1 and names the cause on the error channel', async () => {
+        const { action, out, exit } = capture({
+            fs: memoryFs(),
+            exec: fakeExec(),
+            plistExists: false,
+            platform: 'linux',
+        });
+        await action({});
+        expect(exit).toEqual([1]);
+        expect(out.join('\n')).toMatch(/^Error: /);
+    });
+
+    test('a failure under --json is an ok:false result, not a crash', async () => {
+        const { action, out, exit } = capture({
+            fs: memoryFs(),
+            exec: fakeExec(),
+            plistExists: false,
+            platform: 'linux',
+        });
+        await action({ json: true });
+        expect(exit).toEqual([1]);
+        const payload = JSON.parse(out.at(-1) ?? '{}') as { ok: boolean; action: string; error: string };
+        expect(payload).toMatchObject({ ok: false, action: 'uninstall' });
+        expect(payload.error).not.toBe('');
     });
 });
 

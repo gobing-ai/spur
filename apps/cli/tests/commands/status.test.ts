@@ -132,4 +132,37 @@ describe('status command', () => {
             await rm(cwd, { recursive: true, force: true });
         }
     });
+
+    test('a [path] target reports its size, and a missing path exits 1 with the resolved location', async () => {
+        const cwd = await mkdtemp(join(tmpdir(), 'spur-status-path-'));
+        try {
+            await mkdir(join(cwd, '.spur'), { recursive: true });
+            await writeFile(join(cwd, '.spur', 'config.yaml'), 'project: test\n');
+            await writeFile(join(cwd, 'note.txt'), 'hello');
+            const out: string[] = [];
+            const ok = await main(['status', 'note.txt', '--json'], {
+                cwd,
+                output: { write: (m) => out.push(m), error: () => {} },
+                dbUrl: ':memory:',
+            });
+            expect(ok).toBe(0);
+            expect(JSON.parse(out.at(-1) ?? '{}').target).toEqual({
+                path: 'note.txt',
+                size: 5,
+                isFile: true,
+                isDirectory: false,
+            });
+
+            const errors: string[] = [];
+            const missing = await main(['status', 'absent.txt'], {
+                cwd,
+                output: { write: (m) => errors.push(m), error: (m) => errors.push(m) },
+                dbUrl: ':memory:',
+            });
+            expect(missing).toBe(1);
+            expect(errors.join('\n')).toContain(`path does not exist at ${join(cwd, 'absent.txt')}`);
+        } finally {
+            await rm(cwd, { recursive: true, force: true });
+        }
+    });
 });
