@@ -4,7 +4,7 @@ name: Absorb safe artifact staging and tarball verification into builder
 status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.457Z
-updated_at: "2026-11-17T01:18:30.243Z"
+updated_at: "2026-11-17T04:29:20.977Z"
 feature_id: A93
 priority: P2
 tags:
@@ -106,14 +106,14 @@ Receipt: `.spur/run/1355-artifacts-e2e.json`.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/builder/build.ts:35` registers `bundle-config <out-dir>`, `bundle-web [out-dir]`, `verify-pack <tgz>` with `--source-root` on the two staging verbs, `--json`/`--json-envelope` on all three, and the shared `{ok, sourceRoot, artifacts, diagnostics}` / `{error:{code,message}}` shapes. Default web auto-build is limited to the checkout's own `dist/web` (`packages/app/src/builder/bundle-web.ts:132`); a custom source is never built. Services: `packages/app/src/builder/{bundle-config,bundle-web,verify-pack}.ts`. |
-| R2 | MET | Physical (realpath, ENOENT-walked) overlap refusal in both directions is preserved with the target wiped only after it (`bundle-config.ts:60`); fixture/OS-junk prune and `$schema` injection unchanged; board-runtime manifest, import-map ordering and facade-asset existence checks unchanged. `BOARD_UI_KIT_SPECIFIER`/`BOARD_FACADE_SPECIFIERS` moved unchanged to `packages/contracts/src/board.ts:143` and are re-exported by `apps/web/src/modules/runtime/manifest.ts:13` — the app has no web runtime import and no copied list (23 web manifest/distribution tests still pass). |
-| R3 | MET | `verify-pack.ts:78` refuses absolute/drive/backslash/traversal/outside-`package/`/link/special members from the listing (types from `tar -tvzf`, names from `tar -tzf` so BSD/GNU padding and spaces cannot confuse it) **before** extraction; extraction goes into a private temp dir that is removed in `finally`. Version authority is `<extract>/package/package.json` (`verify-pack.ts:120`) — the E2E verifies an archive at `123.456.789`, a version this checkout does not carry. An uninspectable archive fails rather than falling back. |
-| R4 | MET | Package/dispatcher callers rewired: `scripts/commands/{bundle-config,bundle-web,verify-pack}.ts` are thin forwarders behind the same names `scripts/spur-dev.ts` imports; `bundle-plugins.ts` gained an `import.meta.main` entry so `apps/cli/src/release-ops.ts` **drives** it instead of value-importing it (the A93 boundary edge is closed, exercised end to end by the release-ops fixture). Receipt `.spur/run/1355-artifacts-e2e.json` plus 10 artifact E2E cases and 68 app builder tests. |
+| R1 | MET | `packages/app/src/builder/bundle-config.ts:41`, `packages/app/src/builder/bundle-web.ts:161`, `packages/app/src/builder/verify-pack.ts:178`; source, packed and standalone artifact commands all exited zero on valid real fixtures. |
+| R2 | MET | `packages/app/src/builder/bundle-config.ts:41`, `packages/contracts/src/board.ts:118`; physical-overlap guards, config filtering/schema injection and unchanged portable facade constants are covered by current builder tests. |
+| R3 | MET | `packages/app/src/builder/verify-pack.ts:178`; pre-extraction member inspection and archive-owned manifest version are exercised by artifact E2E, including rejected link/uninspectable/mismatched archives. |
+| R4 | MET | `apps/cli/tests/commands/builder/artifacts.e2e.test.ts:10`; fresh protected-source/fixture checks and nine actual source/packed/standalone artifact invocations passed, using an archive version different from the verifier checkout. Fix-pass artifacts: `.spur/run/1355-verify-answer.txt:1-34` and `.spur/run/1355-verdict.json:1-72` (re-evaluated requirement/AC evidence); session-local batch report `.spur/run/A93-verifyall-20261116-report.md:1-60`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/cli/tests/commands/builder/artifacts.e2e.test.ts` (10 cases: staging/prune/overlap, board staging + manifest refusal, archive-owned version, link refusal, uninspectable archive, version mismatch, temp cleanup) and `packages/app/tests/builder/` (68 cases incl. member classification and traversal/absolute refusal) |
+| Builder absorbs coherent reusable build and packaging operations | MET | test | `apps/cli/tests/commands/builder/artifacts.e2e.test.ts:10`; fresh test output and real CLI receipts: batch artifact `.spur/run/A93-verifyall-20261116-artifact-golden.json` line 1. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
