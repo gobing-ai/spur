@@ -4,7 +4,7 @@ name: Thin spur mcp stdio-to-HTTP bridge for local CLI clients
 status: todo
 template: feature-impl
 created_at: 2026-11-17T18:57:28.330Z
-updated_at: "2026-11-17T19:03:10.068Z"
+updated_at: "2026-11-17T19:09:13.947Z"
 feature_id: B9
 priority: P2
 tags:
@@ -39,7 +39,21 @@ Some local coding agents only configure MCP servers over stdio. A thin `spur mcp
 
 ### Design
 
-Keep `spur mcp` strictly a transport shim over stdin/stdout and `fetch` to the embedded `/mcp` endpoint.
+**WHAT / WHY / WHERE**
+- Add a thin `spur mcp` CLI stdio-to-HTTP bridge (`apps/cli/src/commands/mcp.ts`, registered in `apps/cli/src/index.ts`) so stdio-only coding agents can reach the embedded `/mcp` server without duplicating tool/resource handlers.
+
+**Frozen Names**
+- Command: `spur mcp [--cwd <path>] [--url <mcpUrl>]`
+- Export: `registerMcpCommand(program, context)` in `apps/cli/src/commands/mcp.ts`
+- Headers forwarded: `Mcp-Protocol-Version: 2026-07-28`, `Content-Type: application/json`, and `Authorization: Bearer <token>` from `server.mcp.authEnv` when set.
+
+**Anti-patterns**
+- Do NOT duplicate tool/resource execution inside `apps/cli`—`spur mcp` is strictly a stdio↔HTTP transport shim.
+
+**Dependencies & Handoff**
+- Assumes from `1370`: `server.mcp.authEnv` config and gateway prefix resolution.
+- Assumes from `1372`: embedded `POST /mcp` endpoint on `spur serve`.
+- Leaves for `1374`: `spur mcp` CLI entrypoint for end-to-end stdio verification.
 
 ### Plan
 
@@ -48,15 +62,12 @@ Keep `spur mcp` strictly a transport shim over stdin/stdout and `fetch` to the e
 
 ### Solution
 
-#### Dependencies
-- Depends on `1370` (`server.mcp` config) and `1372` (embedded `mcpModule` at `/mcp`).
-
-#### Target Files
-- `apps/cli/src/commands/mcp.ts` (new) — Thin `spur mcp` command (`--cwd`, `--url`) that resolves the project's `/mcp` endpoint (gateway `/<prefix>/mcp` or direct `spur serve` port), reads newline-delimited JSON-RPC from `stdin`, sends stateless `POST /mcp` with `Mcp-Protocol-Version: 2026-07-28` and the `server.mcp.authEnv` Bearer token, and writes responses to `stdout`.
+**Target Files**
+- `apps/cli/src/commands/mcp.ts` (new) — `registerMcpCommand` implementing newline-delimited JSON-RPC stdin→`POST /mcp`→stdout forwarding.
 - [apps/cli/src/index.ts](file:///Users/robin/xprojects/spur-new/apps/cli/src/index.ts) — Register `registerMcpCommand`.
 
-#### Verification
-- Unit tests in `apps/cli/tests/commands/mcp.test.ts` using a mock `/mcp` HTTP upstream to verify stdin-to-HTTP forwarding, header injection, and error propagation.
+**Verification**
+- CLI tests in `apps/cli/tests/commands/mcp.test.ts` using a mock `/mcp` HTTP upstream to verify stdin forwarding, `Mcp-Protocol-Version: 2026-07-28` + Bearer headers, and error propagation.
 
 ### Testing
 

@@ -4,7 +4,7 @@ name: End-to-end integration tests for embedded MCP 2.0+ through gateway
 status: todo
 template: feature-impl
 created_at: 2026-11-17T18:57:28.330Z
-updated_at: "2026-11-17T19:03:10.441Z"
+updated_at: "2026-11-17T19:09:14.549Z"
 feature_id: B9
 priority: P2
 tags:
@@ -39,7 +39,18 @@ Verify the full path from gateway `/<prefix>/mcp` to `spur serve` `mcpModule` an
 
 ### Design
 
-Model after `a2a-serve-e2e` / `project-gateway.test.ts` using in-process `Bun.serve` upstreams and `createGatewayHandler`.
+**WHAT / WHY / WHERE**
+- Add end-to-end integration tests (`apps/server/tests/mcp-e2e.test.ts`) verifying the full path from `createGatewayHandler` (`/<prefix>/mcp`) through `spur serve` (`mcpModule`) and `spur mcp`.
+
+**Frozen Names**
+- Test file: `apps/server/tests/mcp-e2e.test.ts`
+- Scenarios: `POST /<prefix>/mcp` (`server/discover`, `task_show`, `spur://` resource read), `401` on missing/bad Bearer token, rejection of legacy pre-`2026-07-28` protocol versions, and `spur mcp` stdio bridge round-trip.
+
+**Anti-patterns**
+- Do NOT mock `mcpModule` or `gatewayGuard` in the E2E suite—exercise real Hono + `createGatewayHandler` request/response flow.
+
+**Dependencies & Handoff**
+- Assumes `1370`, `1371`, `1372`, and `1373` are complete.
 
 ### Plan
 
@@ -48,16 +59,10 @@ Model after `a2a-serve-e2e` / `project-gateway.test.ts` using in-process `Bun.se
 
 ### Solution
 
-#### Dependencies
-- Depends on `1370`, `1371`, `1372`, and `1373`.
+**Target Files**
+- `apps/server/tests/mcp-e2e.test.ts` (new) — End-to-end tests covering gateway `/<prefix>/mcp` proxying, Bearer auth, MCP 2.0+ `server/discover` + tool/resource calls, legacy version rejection, and `spur mcp` stdio bridge.
 
-#### Target Files
-- `packages/app/tests/services/mcp-gateway-e2e.test.ts` or `apps/server/tests/mcp-e2e.test.ts` (new) — End-to-end integration test spinning up `createGatewayHandler` + `spur serve` Hono app with `mcpModule` enabled:
-  - Verify `POST /<prefix>/mcp` (`server/discover`, `task_show`, `spur://` resource read) succeeds with Bearer auth and `Mcp-Protocol-Version: 2026-07-28`.
-  - Verify unauthenticated requests return `401` and legacy pre-2.0 protocol versions are rejected.
-  - Verify `spur mcp` stdio bridge works end-to-end against the gateway URL.
-
-#### Verification
+**Verification**
 - Run `bun run spur-check` (lint, typecheck, unit & E2E tests) and verify all pass.
 
 ### Testing
