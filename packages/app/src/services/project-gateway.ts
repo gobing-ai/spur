@@ -127,7 +127,17 @@ export function gatewayGuard(req: Request, options: GatewayEdgeOptions): Respons
 
     const origin = req.headers.get('origin');
     if (origin !== null) {
-        return origin === url.origin ? null : forbiddenOrigin();
+        // Compare host only: the tunnel terminates TLS, so the browser's Origin is https:// while the
+        // loopback listener's req.url is http://. The Host itself was just allowlisted above.
+        let originHost: string;
+        try {
+            const parsed = new URL(origin);
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return forbiddenOrigin();
+            originHost = parsed.host;
+        } catch {
+            return forbiddenOrigin();
+        }
+        return originHost === url.host ? null : forbiddenOrigin();
     }
     const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
     const plainFormPost = SIMPLE_FORM_TYPES.some((type) => contentType.startsWith(type));

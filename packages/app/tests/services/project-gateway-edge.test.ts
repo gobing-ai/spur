@@ -53,6 +53,34 @@ describe('gateway host guard and CSRF (K4 R8)', () => {
         expect(res).toBeNull();
     });
 
+    it('accepts the https tunnel Origin although the loopback listener sees an http request URL', () => {
+        // cloudflared terminates TLS and forwards plain HTTP with the public Host, so Bun's req.url is
+        // http://board.example.com/... while the browser's Origin is https://board.example.com.
+        const res = gatewayGuard(
+            req('/alpha/api/tasks', {
+                method: 'POST',
+                host: 'board.example.com',
+                headers: { origin: 'https://board.example.com', 'content-type': 'application/json' },
+            }),
+            edge,
+        );
+        expect(res).toBeNull();
+    });
+
+    it('refuses an opaque or malformed Origin', () => {
+        for (const origin of ['null', 'not a url', 'https://board.example.com.evil.test']) {
+            const res = gatewayGuard(
+                req('/alpha/api/tasks', {
+                    method: 'POST',
+                    host: 'board.example.com',
+                    headers: { origin, 'content-type': 'application/json' },
+                }),
+                edge,
+            );
+            expect(res?.status).toBe(403);
+        }
+    });
+
     it('rejects a form POST without Origin, and passes a JSON POST without Origin', () => {
         const form = gatewayGuard(
             req('/alpha/api/tasks', {

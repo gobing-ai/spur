@@ -110,6 +110,17 @@ describe('gateway edge in front of a real serve (K4 R8)', () => {
         expect(await res.json()).toEqual({ ok: true });
     });
 
+    test('passes a POST carrying the https tunnel Origin (TLS terminated by the tunnel)', async () => {
+        const res = await gateway('/p/echo', {
+            method: 'POST',
+            host: 'board.example.com',
+            headers: { origin: 'https://board.example.com', 'content-type': 'application/json' },
+            body: JSON.stringify({ hello: 'world' }),
+        });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true });
+    });
+
     test('refuses a cross-origin POST with 403 before any upstream contact', async () => {
         const before = upstreamRequests.length;
         const res = await gateway('/p/echo', {
