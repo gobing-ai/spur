@@ -26,6 +26,7 @@ import { registerFeatureCommand } from './commands/feature';
 import { registerHistoryCommand } from './commands/history';
 import { registerInitCommand } from './commands/init';
 import { registerMaintainCommand } from './commands/maintain';
+import { registerMcpCommand } from './commands/mcp';
 import { registerMessageCommand } from './commands/message';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerProjectsCommand } from './commands/projects';
@@ -106,6 +107,10 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         ['build-cli', 'build-server', 'build-binaries', 'bundle-config', 'bundle-web', 'verify-pack'].includes(
             commandTokens[1] ?? '',
         );
+    // `spur mcp` is a stdio transport shim (feature B9, task 1373): boot-free like the other
+    // transports — it never touches the project DB and reads the target project's config
+    // through the strict per-project loader (ADR-082 composition-root wiring below).
+    const mcpBridge = commandTokens[0] === 'mcp';
     // `workflow commit-guard-*|persist-*` are boot-free transports (script-absorption PR-4): like the
     // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
     // bypass boot, which would create or repair the database being checked.
@@ -115,7 +120,8 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         taskGate ||
         statusReport ||
         selfInstall ||
-        builderArtifact
+        builderArtifact ||
+        mcpBridge
     ) {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
@@ -161,6 +167,10 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 const statusContext = createCliContext({ ...context, spurConfig });
                 registerStatusCommand(program, statusContext, { hidden: true });
                 registerStatusCommand(program.command('self'), statusContext);
+            } else if (mcpBridge) {
+                // Server settings come from the app-layer env config (like `spur serve`), so the
+                // bridge needs no project-config loader wiring.
+                registerMcpCommand(program, createCliContext(context));
             } else {
                 registerWorkflowTransportCommands(program.command('workflow'), context);
             }
@@ -362,6 +372,9 @@ export function shouldRenderBanner(argv: readonly string[]): boolean {
     if (isWorkflowTransportInvocation(argv)) return false;
     // JSON-only output with no --json flag; sp:session-review pipes it to jq.
     if (argv[0] === 'history' && argv[1] === 'timeline') return false;
+    // `spur mcp` (feature B9, task 1373): stdout is the NDJSON JSON-RPC channel — a banner
+    // would corrupt the stream the client parses.
+    if (argv[0] === 'mcp') return false;
     // 1218: `builder show-branches --format json` is the same JSON-only surface as `--json`.
     if (argv[0] === 'builder' && argv[1] === 'show-branches' && requestsJsonFormat(argv)) return false;
     return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');

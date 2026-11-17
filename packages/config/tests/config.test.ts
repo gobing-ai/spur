@@ -17,6 +17,7 @@ describe('config', () => {
                 openBrowser: true,
                 webDistPath: null,
                 a2a: { enabled: false },
+                mcp: { enabled: false },
                 gateway: { port: 3000, allowedHosts: [] },
             },
             telemetry: { enabled: false },
@@ -41,6 +42,7 @@ describe('config', () => {
                 openBrowser: true,
                 webDistPath: null,
                 a2a: { enabled: false },
+                mcp: { enabled: false },
                 gateway: { port: 3000, allowedHosts: [] },
             },
             telemetry: { enabled: true },
@@ -85,6 +87,28 @@ describe('config — A2A listener (feature G9)', () => {
 
     test('a malformed switch value is rejected, not silently treated as true', () => {
         expect(() => buildConfigFromEnv({ SPUR_A2A_ENABLED: 'yes-please' })).toThrow(/boolean/);
+    });
+});
+
+describe('config — embedded MCP server (feature B9)', () => {
+    test('the server is off by default', () => {
+        expect(configSchema.parse({}).server.mcp).toEqual({ enabled: false });
+    });
+
+    test('reads the switch and the token variable name from the environment', () => {
+        const config = buildConfigFromEnv({
+            SPUR_MCP_ENABLED: 'true',
+            SPUR_MCP_AUTH_ENV: 'SPUR_MCP_TOKEN',
+        });
+        expect(config.server.mcp).toEqual({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' });
+    });
+
+    test('an enabled server without a token variable fails the load', () => {
+        expect(() => configSchema.parse({ server: { mcp: { enabled: true } } })).toThrow(/authEnv/);
+    });
+
+    test('a malformed switch value is rejected, not silently treated as true', () => {
+        expect(() => buildConfigFromEnv({ SPUR_MCP_ENABLED: 'yes-please' })).toThrow(/boolean/);
     });
 });
 

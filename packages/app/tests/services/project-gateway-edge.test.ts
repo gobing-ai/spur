@@ -109,6 +109,22 @@ describe('gateway host guard and CSRF (K4 R8)', () => {
         expect(res).toBeNull();
     });
 
+    it('exempts the bearer-authenticated /mcp/ surface', () => {
+        const res = gatewayGuard(
+            req('/alpha/mcp/tools/list', {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            }),
+            edge,
+        );
+        expect(res).toBeNull();
+    });
+
+    it('still enforces the host allowlist on /mcp', () => {
+        const res = gatewayGuard(req('/alpha/mcp/tools/list', { method: 'POST', host: 'evil.test' }), edge);
+        expect(res?.status).toBe(421);
+    });
+
     it('rewrites Host and Origin to the loopback upstream and drops hop-by-hop headers', () => {
         const headers = upstreamRequestHeaders(
             new Request('http://board.example.com/alpha/api/tasks', {

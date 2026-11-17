@@ -9,6 +9,7 @@ import { featureModule } from './feature';
 import { healthModule } from './health';
 import { historyModule } from './history';
 import { jobsModule } from './jobs';
+import { mcpModule } from './mcp';
 import { observabilityModule } from './observability';
 import { processesModule } from './processes';
 import { runsModule } from './runs';
@@ -42,6 +43,8 @@ const builtins: ServerModule[] = [
     databaseModule,
     // A2A listener (feature G9): mounts nothing unless `server.a2a.enabled` is on (R1).
     a2aModule,
+    // Embedded MCP endpoint (feature B9): mounts nothing unless `server.mcp.enabled` is on.
+    mcpModule,
 ];
 
 /**

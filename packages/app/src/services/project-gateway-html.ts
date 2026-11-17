@@ -6,12 +6,14 @@ export function escapeHtml(value: string): string {
     return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
+/** One registry row rendered into the gateway landing page's project list. */
 export interface GatewayIndexProject {
     entry: ProjectEntry;
     /** Gateway path prefix (`/slug`) for local projects; `null` for remote projects. */
     prefix: string | null;
 }
 
+/** Template inputs for the gateway landing page render. */
 export interface GatewayIndexInput {
     port: number;
     edge?: GatewayEdgeOptions;
@@ -870,7 +872,8 @@ h1 {
             cancelBtn.disabled = true;
             modalErr.hidden = true;
             try {
-                const res = await fetch('/api/projects/remove', {
+                // Embedded page script — browser fetch is the only transport here (no client seam to route through).
+                const res = await window.fetch('/api/projects/remove', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify(pending),

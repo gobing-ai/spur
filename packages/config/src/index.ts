@@ -18,6 +18,8 @@ export const SPUR_ENV_VARS = {
     databaseUrl: 'DATABASE_URL',
     a2aEnabled: 'SPUR_A2A_ENABLED',
     a2aAuthEnv: 'SPUR_A2A_AUTH_ENV',
+    mcpEnabled: 'SPUR_MCP_ENABLED',
+    mcpAuthEnv: 'SPUR_MCP_AUTH_ENV',
 } as const;
 
 /** Logging levels accepted by Spur app configuration. */
@@ -1361,6 +1363,16 @@ export const configSchema = z.object({
                 })
                 .default({ enabled: false }),
             /**
+             * Embedded MCP 2.0+ server (feature B9): same contract as `a2a` — off by default,
+             * bearer-only when on; `authEnv` names the token variable, the value never rests here.
+             */
+            mcp: z
+                .object({
+                    enabled: z.boolean().default(false),
+                    authEnv: z.string().min(1).optional(),
+                })
+                .default({ enabled: false }),
+            /**
              * One-port project gateway (feature K4, ADR-151): the fixed port every local project is
              * routed under by path prefix, and the tunnel hostnames allowed through its host guard.
              */
@@ -1377,6 +1389,7 @@ export const configSchema = z.object({
             openBrowser: true,
             webDistPath: null,
             a2a: { enabled: false },
+            mcp: { enabled: false },
             gateway: { port: 3000, allowedHosts: [] },
         })
         .superRefine((server, ctx) => {
@@ -1387,6 +1400,13 @@ export const configSchema = z.object({
                     code: z.ZodIssueCode.custom,
                     path: ['a2a', 'authEnv'],
                     message: 'is required when server.a2a.enabled is true — name the variable holding the bearer token',
+                });
+            }
+            if (server.mcp.enabled && server.mcp.authEnv === undefined) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['mcp', 'authEnv'],
+                    message: 'is required when server.mcp.enabled is true — name the variable holding the bearer token',
                 });
             }
         }),
@@ -1429,6 +1449,10 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = get
             a2a: {
                 enabled: parseEnvBoolean(env[SPUR_ENV_VARS.a2aEnabled]),
                 authEnv: env[SPUR_ENV_VARS.a2aAuthEnv],
+            },
+            mcp: {
+                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]),
+                authEnv: env[SPUR_ENV_VARS.mcpAuthEnv],
             },
         },
         telemetry: {

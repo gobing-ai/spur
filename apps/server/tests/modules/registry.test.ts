@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { builtins, registerModules } from '../../src/modules/registry';
 
 describe('module registry', () => {
-    test('builtins includes health, task, feature, events, jobs, processes and a2a modules', () => {
+    test('builtins includes health, task, feature, events, jobs, processes, a2a and mcp modules', () => {
         const names = builtins.map((m) => m.name);
         expect(names).toEqual([
             'health',
@@ -20,6 +20,8 @@ describe('module registry', () => {
             'database',
             // A2A listener (feature G9): mounted last and inert unless enabled.
             'a2a',
+            // Embedded MCP endpoint (feature B9): inert unless `server.mcp.enabled` is on.
+            'mcp',
         ]);
     });
 

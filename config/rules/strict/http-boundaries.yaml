@@ -22,6 +22,10 @@ rules:
       # Hono/Cloudflare Workers entrypoint — `fetch` is the platform contract
       # (worker.ts:55 `async fetch(` matches the pattern when stripped).
       - "apps/server/src/worker.ts"
+      # stdio-to-HTTP bridge (feature B9, task 1373): POSTing each JSON-RPC line
+      # is the command's entire purpose; platform fetch per call, no shared
+      # client seam exists to reuse (see the file header above).
+      - "apps/cli/src/commands/mcp.ts"
 
   - id: no-globalthis-fetch
     description: "Avoid globalThis.fetch(...); route HTTP through a client seam when one exists."

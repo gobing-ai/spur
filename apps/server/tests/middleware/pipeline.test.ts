@@ -160,6 +160,7 @@ describe('csrf middleware', () => {
         mountMiddleware(app);
         app.post('/api/agents/a1/start', (c) => c.json({ ok: true }));
         app.get('/api/agents', (c) => c.json({ ok: true }));
+        app.post('/mcp', (c) => c.json({ ok: true }));
         return app;
     }
 
@@ -174,6 +175,13 @@ describe('csrf middleware', () => {
             else setEnvVar('SPUR_CORS_ORIGINS', prev);
         }
     };
+
+    test('exempts the bearer-authenticated /mcp endpoint (feature B9): a form-typed simple request reaches the route', async () => {
+        const app = appWithMutatingRoute();
+        const res = await app.request('/mcp', { method: 'POST', body: 'jsonrpc=2.0' });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true });
+    });
 
     test('blocks a cross-origin POST with no Content-Type (a CORS-simple request)', async () => {
         // The core CSRF shape: no body, no custom headers → no preflight → the

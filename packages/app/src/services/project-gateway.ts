@@ -113,8 +113,8 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  *
  * The browser talks to the tunnel origin while the upstream only ever sees loopback, so both checks
  * happen here — no project serve is modified and no forwarded header is trusted. Returns `null` when
- * the request may proceed. `/<prefix>/a2a/*` is exempt: those routes are bearer-authenticated, which
- * a cross-site simple request cannot produce.
+ * the request may proceed. `/<prefix>/a2a/*` and `/<prefix>/mcp/*` are exempt: those routes are
+ * bearer-authenticated, which a cross-site simple request cannot produce.
  */
 export function gatewayGuard(req: Request, options: GatewayEdgeOptions): Response | null {
     const allowed = allowedHostnames(
@@ -130,7 +130,7 @@ export function gatewayGuard(req: Request, options: GatewayEdgeOptions): Respons
 
     const url = new URL(req.url);
     const segments = url.pathname.split('/').filter((segment) => segment !== '');
-    if (segments[1] === 'a2a') return null;
+    if (segments[1] === 'a2a' || segments[1] === 'mcp') return null;
 
     const origin = req.headers.get('origin');
     if (origin !== null) {

@@ -74,6 +74,10 @@ export function mountMiddleware(app: Hono, appRt?: ApplicationRuntime): void {
         // protects nothing there. It also BREAKS the client — the unmodified `a2a` CLI sends no
         // Content-Type on `task cancel`, which is the shape csrf() rejects with a 403.
         if (c.req.path.startsWith('/a2a/')) return next();
+        // `/mcp` is exempt (feature B9, task 1372): the embedded MCP endpoint is bearer-only
+        // (server.mcp.authEnv) and is called machine-to-machine with JSON-RPC bodies — the same
+        // shape csrf() rejects, and the token header is unforgeable cross-site.
+        if (c.req.path === '/mcp') return next();
         return csrfGuard(c, next);
     });
     app.use('*', requestId());

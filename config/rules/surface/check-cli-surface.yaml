@@ -61,6 +61,10 @@ rules:
       - "apps/cli/src/commands/task/wrapup.ts"
       - "apps/cli/src/commands/feature/handoff.ts"
       - "apps/cli/src/commands/feature/verify.ts"
+      # stdio transport shim (feature B9, task 1373): stdout is the raw NDJSON
+      # JSON-RPC channel forwarded verbatim from the /mcp endpoint — envelope
+      # framing would corrupt the protocol stream; declares no --json.
+      - "apps/cli/src/commands/mcp.ts"
       # Per-noun shared.ts files that hold service factories only and declare no options
       # (feature/history split, 03 §3 layout); `builder publish` declares no --json.
       - "apps/cli/src/commands/feature/shared.ts"
