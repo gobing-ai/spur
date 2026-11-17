@@ -4,7 +4,7 @@ name: Centralize workflow promotion evaluation and close the A93 script ownershi
 status: done
 template: feature-impl
 created_at: 2026-11-16T23:01:54.457Z
-updated_at: "2026-11-17T01:32:35.041Z"
+updated_at: "2026-11-17T04:29:21.902Z"
 feature_id: A93
 priority: P2
 tags:
@@ -97,14 +97,14 @@ Receipt: `.spur/run/1356-promotion-e2e.json`.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/promotion-evaluation.ts` exports `readAgentRunHistory`, `measureAgentRunHistory`, `evaluateCandidate` and the measurement/verdict types, reusing domain rows (`readAgentRunHistoryRows`, `openExistingDb`) and carrying no repository path defaults — the caller passes `dbPath`. `scripts/commands/workflow-promotion.ts` imports them and keeps the catalogue (`load/save/validateCandidate`), deadline/parallel-definition/retirement policy and the `check |
-| R2 | MET | Behaviour is preserved and pinned: zero real runs never promotes (`promotion-evaluation.test.ts` + dispatcher E2E), strictly-fewer-actions bar, `baselineAgentRunCount` pins the incumbent, an `agent.run`-less run keeps `durationMs: null` (never 0), refusal messages still name the candidate and the contradiction, and `evaluatedAt` is the caller's `--now` (`evaluate` E2E asserts the literal timestamp). No public promotion verb was added and the app imports nothing from `scripts/`. |
-| R3 | MET | Receipts consumed from 1351–1355; `docs/reports/A93-script-ownership.json` regenerated (60 candidates — the four companions that moved with their subjects left the script set — remapped test anchors, per-entry `disposition`, `consentStatus`, `waves[]`, `boundaryEdges: []`). `docs/reports/A93-tooling-absorption.md` is the closing record with per-task receipts and an explicit not-done list. Every remaining dispatcher route is classified retained-or-forwarder in the report; nothing is claimed removed without evidence. |
-| R4 | MET | `scripts/commands/workflow-promotion.e2e.test.ts` drives the real dispatcher (`bun scripts/spur-dev.ts promotion …`) with catalogue/config/workflows fixtures and an isolated SQLite history plane (9 cases: promote, equal-count rejection, zero-history refusal, pinned baseline, missing candidate, contradicting resolve, matching resolve, expired check, fresh check). App-side unit tests cover the reading/summarizing path against a temp DB (11 cases, 100 % funcs/100 % lines). Feature-owned verification is requested below, not claimed here. |
+| R1 | MET | `packages/app/src/workflow/promotion-evaluation.ts:106`, `packages/app/src/workflow/promotion-evaluation.ts:176`; history measurement and verdict logic are app-owned, while script policy/CLI parsing remains local. |
+| R2 | MET | `packages/app/src/workflow/promotion-evaluation.ts:176`, `scripts/commands/workflow-promotion.e2e.test.ts:145`; zero-history, strict-fewer, pinned-baseline, timestamp and resolve-contradiction dispatcher cases passed without live model calls. |
+| R3 | MET | `docs/reports/A93-script-ownership.json:1`, `docs/reports/A93-tooling-absorption.md:1`; current 61-entry report has no app-to-script boundary edges and retains reasoned single-owner forwarders. |
+| R4 | MET | `scripts/commands/workflow-promotion.e2e.test.ts:145`; fresh dispatcher, inventory and three-mode installed-artifact proofs passed; the feature-owned verification command is run separately and its actual outcome is reported at the batch boundary. Fix-pass artifacts: `.spur/run/1356-verify-answer.txt:1-33` and `.spur/run/1356-verdict.json:1-67` (re-evaluated requirement/AC evidence); session-local batch report `.spur/run/A93-verifyall-20261116-report.md:1-60`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `scripts/commands/workflow-promotion.e2e.test.ts` (dispatcher) + `packages/app/tests/workflow/promotion-evaluation.test.ts` (owner) + `repo-wide-tests/a93-script-ownership.test.ts` (disposition consistency, empty boundary ledger) |
+| Noun-specific tooling and retained repository checks keep one owner | MET | test | `scripts/commands/workflow-promotion.e2e.test.ts:145`; fresh test output and real CLI receipts: batch artifact `.spur/run/A93-verifyall-20261116-scripts.log` line 1. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
