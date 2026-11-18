@@ -67,7 +67,9 @@ export class TaskLocator {
             return;
         }
         const folderKeys = source.foldersConfig ? Object.keys(source.foldersConfig.folders) : [];
-        this.dirs = [...new Set([source.tasksDir, ...folderKeys.map((key) => source.fs.resolve(key))])];
+        // Resolve every entry, tasksDir included: a relative tasksDir beside its resolved folder key
+        // is one directory under two spellings, which the Set cannot dedupe (a false WBS collision).
+        this.dirs = [...new Set([source.tasksDir, ...folderKeys].map((dir) => source.fs.resolve(dir)))];
     }
 
     /**
