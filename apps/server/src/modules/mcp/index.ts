@@ -368,7 +368,9 @@ function correlation(args: Record<string, unknown>, result: unknown): { runId?: 
 
 /** The three catalog error codes, derived at the emit site from the dispatcher's own throws (1376 R2). */
 function toolErrorCode(message: string): 'unknown_tool' | 'invalid_arguments' | 'tool_error' {
-    if (message.startsWith('unknown tool')) return 'unknown_tool';
+    // A legacy name that 1379/1380 renamed is not a tool failure — the client sent a name this
+    // surface no longer accepts, which is the same signal as an unknown one.
+    if (message.startsWith('unknown tool') || message.includes('was renamed to')) return 'unknown_tool';
     // The argument validators are the only throws ending in these two suffixes.
     if (/ is required$| must be a map of strings$/.test(message)) return 'invalid_arguments';
     return 'tool_error';
@@ -445,7 +447,9 @@ export const mcpModule: ServerModule = {
             }),
             // 1376 R4: the refusal is observable without the token — surface, structural reason, path only.
             onDenied: ({ reason, path }) => {
-                ctx.eventBus()?.emit('auth.denied', { surface: 'mcp', reason, path });
+                // A partial context (test slice, older embedding) may carry no bus; observability
+                // must never turn a 401 into a 500.
+                ctx.eventBus?.()?.emit('auth.denied', { surface: 'mcp', reason, path });
             },
         });
         // Enabled with an unreadable token variable is a misconfiguration; mounting a surface

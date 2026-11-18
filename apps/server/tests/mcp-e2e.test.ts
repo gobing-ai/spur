@@ -444,11 +444,15 @@ describe('1376: mcp events reach the system_events ledger', () => {
     }
 
     test('a successful tool call emits mcp.tool.called with metadata only (R2, R5)', async () => {
-        const res = await mcpPost(rpc('tools/call', { name: 'task_show', arguments: { wbs: '9001' } }), authHeaders());
+        // 1379/1380 namespaced the harness tools: `task_show` → `sp_task_show`.
+        const res = await mcpPost(
+            rpc('tools/call', { name: 'sp_task_show', arguments: { wbs: '9001' } }),
+            authHeaders(),
+        );
         expect(res.status).toBe(200);
         const [row] = await rowsFor('mcp.tool.called');
         if (row === undefined) throw new Error('expected an mcp.tool.called row');
-        expect(row.payload.tool).toBe('task_show');
+        expect(row.payload.tool).toBe('sp_task_show');
         expect(row.payload.argKeys).toEqual(['wbs']);
         expect(row.payload.outcome).toBe('ok');
         expect(row.payload.wbs).toBe('9001');
@@ -470,7 +474,7 @@ describe('1376: mcp events reach the system_events ledger', () => {
     });
 
     test('missing required arguments emit mcp.tool.failed with errorCode invalid_arguments (R2)', async () => {
-        await mcpPost(rpc('tools/call', { name: 'task_show', arguments: {} }), authHeaders());
+        await mcpPost(rpc('tools/call', { name: 'sp_task_show', arguments: {} }), authHeaders());
         const rows = await rowsFor('mcp.tool.failed');
         const codes = rows.map((row) => row.payload.errorCode);
         expect(codes).toContain('invalid_arguments');

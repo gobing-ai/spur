@@ -187,7 +187,9 @@ export const a2aModule: ServerModule = {
                 ),
             // 1376 R4: one shared refusal event across both surfaces — no token material.
             onDenied: ({ reason, path }) => {
-                ctx.eventBus()?.emit('auth.denied', { surface: 'a2a', reason, path });
+                // A partial context (test slice, older embedding) may carry no bus; observability
+                // must never turn a 401 into a 500.
+                ctx.eventBus?.()?.emit('auth.denied', { surface: 'a2a', reason, path });
             },
         });
         // Enabled with an unreadable token variable is a misconfiguration, and mounting a surface
