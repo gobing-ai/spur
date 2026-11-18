@@ -210,7 +210,8 @@ describe('spur projects clean suspects (Q R7)', () => {
         // A long-lived root: this workspace, never under tmp.
         const real = process.cwd();
         // An ephemeral root that still exists: `refreshProjects` cannot purge it.
-        const ephemeral = mkdtempSync(join('/private/tmp', 'spur-clean-ephemeral-'));
+        // `tmpdir()`, never a hardcoded macOS path — Linux runners have no /private/tmp.
+        const ephemeral = mkdtempSync(join(tmpdir(), 'spur-clean-ephemeral-'));
         writeFileSync(
             projectsFile,
             JSON.stringify({
