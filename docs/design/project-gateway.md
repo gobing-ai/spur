@@ -85,8 +85,22 @@ how many projects are registered.
 | Composition | `apps/server/src/gateway.ts` builds the handler from `{ enabled, authEnv, env }` and injects it as `GatewayDeps.mcp`; `packages/app` stays transport-free |
 | `server/discover` | additive `projects: [{ name, prefix, namespace }]` (local entries only; namespace from the plugin manifest, because the gateway env cannot describe N projects) and `diagnostics: [{ name, reason: 'remote-not-proxied (ADR-151)', remedy: 'run the project locally and spur projects add <path>' }]` |
 
-Tool aggregation and call routing belong to 1383; this section covers the config, the guard, the
-route and discover only.
+### 4.1b Tool aggregation and call routing (task 1383)
+
+`tools/list` and `tools/call` are served from one route table built inside the gateway handler on
+every request — no cache, and **listing never starts a project**.
+
+| Aspect | Contract |
+| --- | --- |
+| `tools/list` | the five `sp_*` built-ins exactly once, each input schema extended with a required `project` selector, plus every local project's exposed workflow tools under its manifest namespace |
+| Resolution | a built-in routes by its `project` argument (stripped before forwarding); a workflow tool routes by the namespace that owns it |
+| Upstream call | the gateway starts the project through the shared `ensureUpstream` (de-duplicated) and POSTs `tools/call` to `/<prefix>/mcp` with the project's bearer token and `MIN_MCP_PROTOCOL_VERSION`; the upstream `result` is returned unchanged |
+| Namespace collision | a namespace claimed by 2+ local projects is reported in discover `diagnostics` (`namespace-collision`), its tools are withheld from `tools/list`, and a call to one is refused naming both projects |
+| Refusals | unknown or ambiguous `project`, missing project token, upstream 401 and 5xx each produce a tool error naming the cause and the remedy. Token values never appear in any message |
+| Resources | `resources/list` is `[]` at the gateway root, by scope |
+
+The gateway forwards ONE project token (from the env variable named by `projectTokenEnv`), because
+its environment describes the gateway, not N projects; a per-project token map is deferred.
 
 ### 4.2 Request flow
 

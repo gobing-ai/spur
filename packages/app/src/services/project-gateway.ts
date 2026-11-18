@@ -1,5 +1,10 @@
+import { join } from 'node:path';
 import { findPrefixCollisions, isLocalHost, type ProjectEntry, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
+import { MCP_BUILTIN_TOOL_NAMES } from './mcp-builtin-tools';
+import { resolveMcpNamespace } from './mcp-namespace';
+import { type ExposedWorkflowTool, resolveExposedWorkflowTools } from './mcp-workflow-tools';
 import { type GatewayIndexProject, renderGatewayIndex } from './project-gateway-html';
 
 /**
@@ -28,9 +33,45 @@ export interface GatewayDeps {
     onEvent?: (event: GatewayEvent) => void;
     /**
      * Gateway-hosted MCP handler for the root `/mcp` route (task 1382). Injected by `apps/server` so
-     * this layer stays transport-free; omitted means `/mcp` is a 404, never a proxy attempt.
+     * this layer stays transport-free; omitted means `/mcp` is a 404, never a proxy attempt. The
+     * registry is built here (it needs `ensureUpstream`'s de-duplication) and handed in (task 1383).
      */
-    mcp?: (req: Request) => Promise<Response>;
+    mcp?: (req: Request, registry: McpGatewayRegistry) => Promise<Response>;
+    /** The five `sp_*` built-in descriptors, supplied by `apps/server` (task 1383 R1). */
+    builtinTools?: () => McpGatewayTool[];
+    /** Project bearer token for upstream calls; the gateway env holds one shared value (closed Q&A). */
+    projectMcpToken?: () => string | undefined;
+    /** The MCP protocol version header the project adapter requires (task 1383 R3). */
+    mcpProtocolVersion?: string;
+}
+
+/** The subset of an MCP tool descriptor the gateway aggregates (task 1383 R1). */
+export interface McpGatewayTool {
+    name: string;
+    description?: string;
+    /** Passed through opaquely, like the server's `McpToolDescriptor.inputSchema`. */
+    inputSchema?: unknown;
+}
+
+/** One local project's routing facts, recomputed per request — the gateway keeps no cache. */
+export interface GatewayMcpRoute {
+    entry: ProjectEntry;
+    prefix: string;
+    namespace: string | null;
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+}
+
+/**
+ * The gateway's own MCP registry (task 1383). Structurally the server's `McpHandlerRegistry`, plus
+ * the route table `tools/call` needs; declared here so `packages/app` owns no server import.
+ */
+export interface McpGatewayRegistry {
+    listTools(): Promise<McpGatewayTool[]>;
+    callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+    listResources(): Promise<unknown[]>;
+    readResource(uri: string): Promise<unknown>;
+    namespace(): string | null;
+    discoverExtras(): Promise<{ projects: unknown[]; diagnostics: unknown[] }>;
 }
 
 /** Structured gateway event kinds (feature K42, task 1384 R1). */
@@ -606,6 +647,258 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         return Response.json({ ok: true });
     }
 
+    /**
+     * Route table for the gateway's MCP surface (task 1383 R1/R2): every local project's prefix,
+     * manifest namespace and exposed workflow tools, recomputed per call so listing never starts a
+     * project and no cache can go stale.
+     */
+    async function mcpRoutes(fs: FileSystem): Promise<GatewayMcpRoute[]> {
+        const routes: GatewayMcpRoute[] = [];
+        for (const { entry, prefix } of await localEntries()) {
+            const resolved = await resolveMcpNamespace({ configured: undefined, projectRoot: entry.path, fs });
+            const exposed =
+                resolved.namespace === null
+                    ? { tools: [] as ExposedWorkflowTool[] }
+                    : await resolveExposedWorkflowTools({
+                          namespace: resolved.namespace,
+                          reserved: MCP_BUILTIN_TOOL_NAMES,
+                          roots: [join(entry.path, 'config', 'workflows')],
+                          fs,
+                      });
+            routes.push({
+                entry,
+                prefix,
+                namespace: resolved.namespace,
+                tools: exposed.tools.map((tool) => ({
+                    name: tool.tool,
+                    ...(tool.description !== undefined ? { description: tool.description } : {}),
+                    inputSchema: {
+                        type: 'object',
+                        properties: Object.fromEntries(
+                            Object.entries(tool.vars).map(([name, description]) => [
+                                name,
+                                { type: 'string', description },
+                            ]),
+                        ),
+                    },
+                })),
+            });
+        }
+        return routes;
+    }
+
+    /** Namespaces claimed by 2+ local projects (task 1383 R2): ambiguous, so their tools are withheld. */
+    function collidingNamespaces(routes: GatewayMcpRoute[]): Map<string, string[]> {
+        const byNamespace = new Map<string, string[]>();
+        for (const route of routes) {
+            if (route.namespace === null) continue;
+            const names = byNamespace.get(route.namespace) ?? [];
+            names.push(route.entry.name);
+            byNamespace.set(route.namespace, names);
+        }
+        return new Map([...byNamespace].filter(([, names]) => names.length > 1));
+    }
+
+    /** A tool error names the cause and the remedy; it never carries a token value (task 1383 R5). */
+    function toolError(message: string): Error {
+        return new Error(message);
+    }
+
+    const mcpRegistry: McpGatewayRegistry = {
+        async listTools(): Promise<McpGatewayTool[]> {
+            const routes = await mcpRoutes(createNodeFileSystem());
+            const collisions = collidingNamespaces(routes);
+            const builtins = deps.builtinTools?.() ?? [];
+            return [
+                // Built-ins once, each extended with the required `project` selector (R1).
+                ...builtins.map((tool) => {
+                    const schema = (tool.inputSchema ?? {}) as {
+                        properties?: Record<string, unknown>;
+                        required?: string[];
+                        [key: string]: unknown;
+                    };
+                    return {
+                        ...tool,
+                        inputSchema: {
+                            ...schema,
+                            type: 'object',
+                            properties: {
+                                project: {
+                                    type: 'string',
+                                    description:
+                                        'Registered project name or gateway prefix that should execute this tool',
+                                },
+                                ...(schema.properties ?? {}),
+                            },
+                            required: ['project', ...(schema.required ?? []).filter((name) => name !== 'project')],
+                        },
+                    };
+                }),
+                ...routes.flatMap((route) =>
+                    route.namespace !== null && !collisions.has(route.namespace) ? route.tools : [],
+                ),
+            ];
+        },
+
+        async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+            const fs = createNodeFileSystem();
+            const routes = await mcpRoutes(fs);
+            const collisions = collidingNamespaces(routes);
+
+            let target: GatewayMcpRoute | undefined;
+            let forwarded = args;
+            const isBuiltin = (deps.builtinTools?.() ?? []).some((tool) => tool.name === name);
+            if (isBuiltin) {
+                const requested = typeof args.project === 'string' ? args.project.trim() : '';
+                if (requested === '') {
+                    throw toolError(
+                        `tool "${name}" needs a "project" argument naming a registered project (spur projects list)`,
+                    );
+                }
+                const matches = routes.filter(
+                    (route) => route.entry.name === requested || route.prefix === `/${requested.replace(/^\//, '')}`,
+                );
+                if (matches.length === 0) {
+                    const known = routes.map((route) => route.entry.name).join(', ') || '(none registered)';
+                    throw toolError(`unknown project "${requested}" for tool "${name}"; registered projects: ${known}`);
+                }
+                if (matches.length > 1) {
+                    throw toolError(
+                        `project "${requested}" is ambiguous for tool "${name}": ${matches
+                            .map((route) => route.entry.name)
+                            .join(' and ')}; call it by its registered name`,
+                    );
+                }
+                target = matches[0];
+                // The upstream expects the tool's own arguments only (R3).
+                const { project: _project, ...rest } = args;
+                forwarded = rest;
+            } else {
+                const owners = routes.filter((route) => route.tools.some((tool) => tool.name === name));
+                const colliding = owners.filter((route) => route.namespace !== null && collisions.has(route.namespace));
+                if (colliding.length > 0) {
+                    const names = colliding.map((route) => route.entry.name).join(' and ');
+                    throw toolError(
+                        `tool "${name}" is not callable: its namespace "${colliding[0]?.namespace ?? ''}" is claimed by ${names}; give one project a distinct plugin manifest name`,
+                    );
+                }
+                if (owners.length === 0) {
+                    throw toolError(
+                        `unknown tool "${name}"; tools/list lists the built-ins (with a "project" argument) and each local project's namespaced workflow tools`,
+                    );
+                }
+                target = owners[0];
+            }
+            if (target === undefined) throw toolError(`tool "${name}" is not routable`);
+            const route: GatewayMcpRoute = target;
+
+            const token = deps.projectMcpToken?.();
+            if (token === undefined || token === '') {
+                throw toolError(
+                    `cannot call project "${route.entry.name}": the gateway has no project MCP token; set the variable named by server.mcp.authEnv for this project`,
+                );
+            }
+
+            let port: number;
+            try {
+                port = await ensureUpstream(route.entry);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                throw toolError(`could not start project "${route.entry.name}" for tool "${name}": ${message}`);
+            }
+
+            const upstreamUrl = `http://${loopbackAuthority('127.0.0.1', port)}${route.prefix}/mcp`;
+            let response: Response;
+            try {
+                response = await fetchUpstream(upstreamUrl, {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        ...(deps.mcpProtocolVersion !== undefined
+                            ? { 'mcp-protocol-version': deps.mcpProtocolVersion }
+                            : {}),
+                        authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: name,
+                        method: 'tools/call',
+                        params: { name, arguments: forwarded },
+                    }),
+                });
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                throw toolError(`project "${route.entry.name}" is unreachable for tool "${name}": ${message}`);
+            }
+
+            if (response.status === 401) {
+                throw toolError(
+                    `project "${route.entry.name}" refused the gateway's MCP token (401); point the gateway at this project's token variable (server.mcp.authEnv)`,
+                );
+            }
+            if (response.status >= 500) {
+                throw toolError(
+                    `project "${route.entry.name}" failed to answer tool "${name}" (${response.status}); check its serve log`,
+                );
+            }
+
+            const body = (await response.json().catch(() => null)) as {
+                result?: unknown;
+                error?: { message?: string };
+            } | null;
+            if (body === null) {
+                throw toolError(`project "${route.entry.name}" returned no JSON for tool "${name}"`);
+            }
+            if (body.error !== undefined) {
+                throw toolError(
+                    `project "${route.entry.name}" refused tool "${name}": ${body.error.message ?? 'unspecified error'}`,
+                );
+            }
+            // The upstream result travels unchanged (R3): the gateway never reshapes a project's answer.
+            return body.result;
+        },
+
+        async listResources(): Promise<unknown[]> {
+            return [];
+        },
+
+        async readResource(uri: string): Promise<unknown> {
+            throw toolError(`unknown resource "${uri}": the gateway exposes no resources (resources/list is empty)`);
+        },
+
+        namespace(): string | null {
+            return null;
+        },
+
+        async discoverExtras(): Promise<{ projects: unknown[]; diagnostics: unknown[] }> {
+            const routes = await mcpRoutes(createNodeFileSystem());
+            const collisions = collidingNamespaces(routes);
+            const projects = routes.map((route) => ({
+                name: route.entry.name,
+                prefix: route.prefix,
+                namespace: route.namespace,
+            }));
+            const diagnostics: Array<{ name: string; reason: string; remedy: string }> = [];
+            for (const entry of await deps.listProjects()) {
+                if (!isLocalHost(entry.host)) {
+                    diagnostics.push({
+                        name: entry.name,
+                        reason: 'remote-not-proxied (ADR-151)',
+                        remedy: `run the project locally and spur projects add ${entry.path}`,
+                    });
+                }
+            }
+            for (const [namespace, names] of collisions) {
+                diagnostics.push({
+                    name: names.join(', '),
+                    reason: 'namespace-collision',
+                    remedy: `namespace "${namespace}" is claimed by ${names.join(' and ')}; give each project a distinct plugins/<name>/plugin.json name`,
+                });
+            }
+            return { projects, diagnostics };
+        },
+    };
+
     /** Count every final response once, so refusals and upstream failures are not invisible (R1). */
     const handle = async (req: Request): Promise<Response> => {
         const url = new URL(req.url);
@@ -627,7 +920,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         if (url.pathname === '/mcp') {
             return deps.mcp === undefined
                 ? new Response('Not Found\n', { status: 404, headers: { 'content-type': 'text/plain' } })
-                : deps.mcp(req);
+                : deps.mcp(req, mcpRegistry);
         }
         if (url.pathname === '/api/projects/remove') {
             return removeProject(req);

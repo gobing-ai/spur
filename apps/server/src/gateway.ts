@@ -1,8 +1,8 @@
-import { createGatewayHandler, type GatewayDeps, isLocalHost, resolveMcpNamespace } from '@gobing-ai/spur-app';
-import { getEnvVars, resolveProjectPrefix } from '@gobing-ai/spur-config';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createGatewayHandler, type GatewayDeps, type McpGatewayRegistry } from '@gobing-ai/spur-app';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { bearerGuard } from './middleware/bearer-guard';
-import { handleMcpHttpRequest, type McpHandlerRegistry } from './modules/mcp/protocol';
+import { TOOL_DESCRIPTORS } from './modules/mcp';
+import { handleMcpHttpRequest, type McpHandlerRegistry, MIN_MCP_PROTOCOL_VERSION } from './modules/mcp/protocol';
 
 /** A running gateway listener. */
 export interface GatewayHandle {
@@ -26,7 +26,13 @@ export interface StartGatewayOptions {
      * Gateway-hosted MCP (task 1382). Enabled requires a token variable; the handler is composed
      * here so `packages/app` never imports this transport.
      */
-    mcp?: { enabled: boolean; authEnv?: string; env?: Record<string, string | undefined> };
+    mcp?: {
+        enabled: boolean;
+        authEnv?: string;
+        env?: Record<string, string | undefined>;
+        /** NAME of the variable holding the per-project MCP token the gateway forwards on calls. */
+        projectTokenEnv?: string;
+    };
 }
 
 /**
@@ -81,44 +87,18 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
             },
         }),
     });
-    const fs = createNodeFileSystem();
-    const registry: McpHandlerRegistry = {
-        // 1383 replaces these; discover is the whole contract this task ships.
-        listTools: async () => [],
-        callTool: async (name) => {
-            throw new Error(`unknown tool "${name}"; the gateway exposes no tools yet`);
-        },
-        listResources: async () => [],
-        readResource: async (uri) => {
-            throw new Error(`unknown resource "${uri}"; the gateway exposes no resources yet`);
-        },
-        namespace: () => null,
-        discoverExtras: async () => {
-            const entries = await deps.listProjects();
-            const projects: Array<{ name: string; prefix: string; namespace: string | null }> = [];
-            const diagnostics: Array<{ name: string; reason: string; remedy: string }> = [];
-            for (const entry of entries) {
-                if (!isLocalHost(entry.host)) {
-                    diagnostics.push({
-                        name: entry.name,
-                        reason: 'remote-not-proxied (ADR-151)',
-                        remedy: `run the project locally and spur projects add ${entry.path}`,
-                    });
-                    continue;
-                }
-                const prefix = resolveProjectPrefix(entry);
-                if (prefix === null) continue;
-                // The gateway env is shared across projects, so only the plugin manifest can name a
-                // namespace here — a per-project configured value is not visible at the root.
-                const resolved = await resolveMcpNamespace({ configured: undefined, projectRoot: entry.path, fs });
-                projects.push({ name: entry.name, prefix, namespace: resolved.namespace });
-            }
-            return { projects, diagnostics };
-        },
-    };
+    const projectTokenEnv = mcp.projectTokenEnv;
     return {
         ...deps,
-        mcp: async (req: Request): Promise<Response> => {
+        // Task 1383 R1/R3: the five `sp_*` descriptors and the upstream protocol version.
+        builtinTools: () => TOOL_DESCRIPTORS,
+        projectMcpToken: () => {
+            if (projectTokenEnv === undefined) return undefined;
+            const value = env[projectTokenEnv];
+            return value === '' ? undefined : value;
+        },
+        mcpProtocolVersion: MIN_MCP_PROTOCOL_VERSION,
+        mcp: async (req: Request, registry: McpGatewayRegistry): Promise<Response> => {
             // The guard speaks the Hono-shaped context the project mounts use; adapt the raw request.
             const denied = guard.authorize({
                 req: {
@@ -127,7 +107,8 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
                 },
             });
             if (denied !== null) return denied;
-            return handleMcpHttpRequest(req, registry);
+            // The app layer owns routing; the server adapter owns the wire protocol (1383 R3).
+            return handleMcpHttpRequest(req, registry as unknown as McpHandlerRegistry);
         },
     };
 }

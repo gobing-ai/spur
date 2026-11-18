@@ -34,7 +34,7 @@ import {
  */
 
 /** The harness tools the embedded server advertises (built-ins live in the `sp` namespace, task 1379 R1). */
-const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
+export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     {
         name: 'sp_task_show',
         description: 'Show one Spur task: metadata plus the full markdown content.',

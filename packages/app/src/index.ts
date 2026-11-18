@@ -688,7 +688,10 @@ export {
     GATEWAY_START_LOG,
     type GatewayDeps,
     type GatewayEdgeOptions,
+    type GatewayMcpRoute,
     isGatewayAnswering,
+    type McpGatewayRegistry,
+    type McpGatewayTool,
     probeGatewayPort,
     setGatewayProbeForTests,
 } from './services/project-gateway';

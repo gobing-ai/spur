@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Aggregate tools and route calls across projects
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:25.889Z
-updated_at: "2026-11-18T05:45:53.249Z"
+updated_at: "2026-11-18T19:27:36.433Z"
 feature_id: K41
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 6
 
 dependencies: ["1382", "1381"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1383. Aggregate tools and route calls across projects
@@ -30,17 +32,17 @@ Fronting each project with its own MCP endpoint means one agent configuration pe
 
 ### Requirements
 
-- [ ] R1. Gateway `tools/list` returns the five `sp_*` built-ins once, each input schema extended with a required `project` string, plus every local project's exposed workflow tools under that project's manifest namespace. No project is started for a list.
-- [ ] R2. A namespace resolved for two or more local projects is reported in discover `diagnostics` (`namespace-collision`, naming the projects). Its workflow tools are left out of the list, and a call to one is refused, naming the projects.
-- [ ] R3. `tools/call` resolves the target (a `sp_*` tool through its `project` argument, a workflow tool through its namespace), starts the project through the shared `ensureUpstream` and POSTs the JSON-RPC call to `/<prefix>/mcp` via `dial`, with `Authorization: Bearer <project token>`. The upstream result body is returned unchanged. `project` is stripped before forwarding.
-- [ ] R5. An unknown or ambiguous `project`, a missing project token, or an upstream 401/5xx each produce a tool error naming the cause and the remedy. Token values never appear.
+- [x] R1. Gateway `tools/list` returns the five `sp_*` built-ins once, each input schema extended with a required `project` string, plus every local project's exposed workflow tools under that project's manifest namespace. No project is started for a list.
+- [x] R2. A namespace resolved for two or more local projects is reported in discover `diagnostics` (`namespace-collision`, naming the projects). Its workflow tools are left out of the list, and a call to one is refused, naming the projects.
+- [x] R3. `tools/call` resolves the target (a `sp_*` tool through its `project` argument, a workflow tool through its namespace), starts the project through the shared `ensureUpstream` and POSTs the JSON-RPC call to `/<prefix>/mcp` via `dial`, with `Authorization: Bearer <project token>`. The upstream result body is returned unchanged. `project` is stripped before forwarding.
+- [x] R5. An unknown or ambiguous `project`, a missing project token, or an upstream 401/5xx each produce a tool error naming the cause and the remedy. Token values never appear.
 
 Out of scope: resources at the gateway root (`resources/list` returns `[]`), remote forwarding, and caching.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — tools/list aggregates local projects by namespace (req: R1, R2)
-- [ ] AC2 — tools/call routes to the owning project and starts it on demand (req: R3, R5)
+- [x] AC1 — tools/list aggregates local projects by namespace (req: R1, R2)
+- [x] AC2 — tools/call routes to the owning project and starts it on demand (req: R3, R5)
 
 Test layer: a real gateway listener with real fixture serves started on demand (no handler mocks).
 
@@ -83,18 +85,74 @@ interface RouteEntry { entry: ProjectEntry; prefix: string; namespace: string | 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/gateway.ts:1` |
+| `apps/server/src/gateway.ts:110` |
+| `apps/server/src/gateway.ts:29` |
+| `apps/server/src/gateway.ts:4` |
+| `apps/server/src/gateway.ts:90` |
+| `apps/server/src/gateway.ts:93` |
+| `apps/server/src/modules/mcp/index.ts:37` |
+| `apps/server/tests/gateway-mcp.test.ts:122` |
+| `apps/server/tests/gateway-mcp.test.ts:129` |
+| `apps/server/tests/gateway-mcp.test.ts:130` |
+| `apps/server/tests/gateway-mcp.test.ts:132` |
+| `apps/server/tests/gateway-mcp.test.ts:135` |
+| `apps/server/tests/gateway-mcp.test.ts:138` |
+| `apps/server/tests/gateway-mcp.test.ts:140` |
+| `docs/design/project-gateway.md:88` |
+| `packages/app/src/index.ts:691` |
+| `packages/app/src/index.ts:693` |
+| `packages/app/src/services/project-gateway.ts:1` |
+| `packages/app/src/services/project-gateway.ts:3` |
+| `packages/app/src/services/project-gateway.ts:36` |
+| `packages/app/src/services/project-gateway.ts:39` |
+| `packages/app/src/services/project-gateway.ts:5` |
+| `packages/app/src/services/project-gateway.ts:650` |
+| `packages/app/src/services/project-gateway.ts:923` |
+| `apps/server/tests/gateway-mcp-routing.test.ts:1` |
+| `packages/app/tests/services/project-gateway-mcp.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — `tools/list` returns the five `sp_*` built-ins once, each input schema extended with a required `project`, plus every local project's exposed workflow tools under its manifest namespace; no project started for a list | MET | `packages/app/src/services/project-gateway.ts` `mcpRegistry.listTools` (built-ins mapped with `project` prepended to `required`; workflow tools from `resolveExposedWorkflowTools` over `<project>/config/workflows`). Tests: `apps/server/tests/gateway-mcp-routing.test.ts` (each built-in appears once, `required` contains `project`, both namespaces listed) and `packages/app/tests/services/project-gateway-mcp.test.ts` (schema merge keeps `wbs`). Listing is file-only: `mcpRoutes` never calls `ensureUpstream` |
+| R2 — a namespace resolved for 2+ local projects is reported in discover `diagnostics` (`namespace-collision`, naming the projects), its tools withheld from the list, and a call refused naming the projects | MET | `collidingNamespaces` + `discoverExtras` collision row + `callTool` refusal; tests in both files (tool absent from `tools/list`, diagnostic reason `namespace-collision`, call rejected with the namespace and both project names) |
+| R3 — `tools/call` resolves a built-in through its `project` argument or a workflow tool through its namespace, starts the project through the shared `ensureUpstream`, POSTs the JSON-RPC call to `/<prefix>/mcp` via the gateway's dial path with `Authorization: Bearer <project token>`, returns the upstream body unchanged, and strips `project` before forwarding | MET | `callTool` implementation; `apps/server/tests/gateway-mcp-routing.test.ts` asserts the upstream saw `{wbs:'1383'}` (selector stripped), `Bearer <token>`, the protocol-version header, and `alphaspace_deploy` reaching the started project. The upstream `result` is returned as-is (never reshaped) |
+| R5 — unknown/ambiguous `project`, missing project token, upstream 401/5xx each produce a tool error naming cause and remedy; token values never appear | MET | four distinct messages in `callTool`; tests cover all five cases and assert the token string is absent from every message (`gateway-mcp-routing.test.ts` unknown project / missing token / 401 / 502; app test repeats 401 + 5xx plus the "needs a project argument" case) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — tools/list aggregates local projects by namespace (R1, R2) | MET | test | `gateway-mcp-routing.test.ts` (built-ins once + both workflow tools; collision withheld) and `project-gateway-mcp.test.ts` (schema shape) |
+| AC2 — tools/call routes to the owning project and starts it on demand (R3, R5) | MET | test | `gateway-mcp-routing.test.ts` drives a real gateway listener against real upstream HTTP servers (start-on-demand + forwarded wire shape), and the app test asserts the exact forwarded body/headers |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T19:20:00.417Z todo → wip (system)
+- 2026-11-18T19:27:34.831Z wip → testing (system)
+- 2026-11-18T19:27:36.426Z testing → done (system)
+

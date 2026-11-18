@@ -119,25 +119,26 @@ describe('gateway MCP entry (task 1382)', () => {
         );
     });
 
-    test('a tool or resource request names the 1383 seam instead of failing silently', async () => {
-        // 1382 ships discover only; the tool/resource surface is 1383's. The refusal must say so.
+    test('a tool request refuses an unknown name and resources stay empty (1383 fills the tools)', async () => {
+        // 1383 replaced the 1382 stubs with real routing: an unknown name now names the fix, and
+        // resources remain out of scope at the gateway root (resources/list is empty).
         await withGateway({ mcp: ENABLED, projects: [project('alpha')] }, async (url) => {
             const call = await fetch(`${url}/mcp`, {
                 method: 'POST',
                 headers: headers(TOKEN),
-                body: JSON.stringify(rpc('tools/call', { name: 'sp_alpha_task_show', arguments: {} })),
+                body: JSON.stringify(rpc('tools/call', { name: 'no_such_tool', arguments: {} })),
             });
-            expect(call.status).toBe(500);
             const callBody = (await call.json()) as { error: { message: string } };
-            expect(callBody.error.message).toContain('no tools yet');
+            expect(callBody.error.message).toContain('unknown tool');
+            expect(callBody.error.message).toContain('tools/list');
 
-            const read = await fetch(`${url}/mcp`, {
+            const list = await fetch(`${url}/mcp`, {
                 method: 'POST',
                 headers: headers(TOKEN),
-                body: JSON.stringify(rpc('resources/read', { uri: 'spur://tasks/1' })),
+                body: JSON.stringify(rpc('resources/list')),
             });
-            const readBody = (await read.json()) as { error: { message: string } };
-            expect(readBody.error.message).toContain('no resources yet');
+            const listBody = (await list.json()) as { result: { resources: unknown[] } };
+            expect(listBody.result.resources).toEqual([]);
         });
     });
 
