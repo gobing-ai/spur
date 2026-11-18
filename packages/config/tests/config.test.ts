@@ -95,12 +95,19 @@ describe('config — embedded MCP server (feature B9)', () => {
         expect(configSchema.parse({}).server.mcp).toEqual({ enabled: false });
     });
 
-    test('reads the switch and the token variable name from the environment', () => {
+    test('reads the switch, token variable name, and namespace from the environment', () => {
         const config = buildConfigFromEnv({
             SPUR_MCP_ENABLED: 'true',
             SPUR_MCP_AUTH_ENV: 'SPUR_MCP_TOKEN',
+            SPUR_MCP_NAMESPACE: 'cc',
         });
-        expect(config.server.mcp).toEqual({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' });
+        expect(config.server.mcp).toEqual({ enabled: true, authEnv: 'SPUR_MCP_TOKEN', namespace: 'cc' });
+    });
+
+    test('an invalid SPUR_MCP_NAMESPACE fails config load naming the variable and grammar', () => {
+        expect(() => buildConfigFromEnv({ SPUR_MCP_NAMESPACE: 'Bad-Name' })).toThrow(
+            /SPUR_MCP_NAMESPACE.*\[a-z\]\[a-z0-9\]\{1,15\}/,
+        );
     });
 
     test('an enabled server without a token variable fails the load', () => {

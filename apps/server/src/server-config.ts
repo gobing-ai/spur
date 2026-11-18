@@ -24,7 +24,7 @@ export interface ServerBootConfig {
      * Embedded MCP 2.0+ server switch (feature B9, task 1370): same contract as `a2a` — off unless
      * `SPUR_MCP_ENABLED` is set, and the token variable's NAME (`SPUR_MCP_AUTH_ENV`), never its value.
      */
-    mcp?: { enabled: boolean; authEnv: string | null };
+    mcp?: { enabled: boolean; authEnv: string | null; namespace?: string | null };
 }
 
 /**
@@ -68,6 +68,7 @@ export function serverBootstrapConfig(
         mcp: {
             enabled: appConfig.server.mcp.enabled,
             authEnv: appConfig.server.mcp.authEnv ?? null,
+            namespace: appConfig.server.mcp.namespace ?? null,
         },
     };
 }

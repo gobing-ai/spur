@@ -112,6 +112,7 @@ async function jsonBody<T>(res: Response): Promise<T> {
 interface DiscoverBody {
     result: {
         protocolVersion: string;
+        namespace?: string;
         capabilities: {
             tools: Array<{ name: string }>;
             resources: Array<{ uri: string }>;
@@ -125,9 +126,10 @@ describe('mcp E2E through the project gateway (task 1374)', () => {
         expect(res.status).toBe(200);
         const body = await jsonBody<DiscoverBody>(res);
         expect(body.result.protocolVersion).toBe(MIN_MCP_PROTOCOL_VERSION);
+        expect('namespace' in body.result).toBe(false);
         const toolNames = body.result.capabilities.tools.map((tool) => tool.name);
-        expect(toolNames).toContain('task_show');
-        expect(toolNames).toContain('workflow_run');
+        expect(toolNames).toContain('sp_task_show');
+        expect(toolNames).toContain('sp_workflow_run');
         const uris = body.result.capabilities.resources.map((res) => res.uri);
         expect(uris).toContain('spur://tasks/{wbs}');
     });
@@ -145,13 +147,23 @@ describe('mcp E2E through the project gateway (task 1374)', () => {
         expect(guarded.status).toBe(403);
     });
 
-    test('R1: tools/call task_show reads the real corpus task through the gateway', async () => {
-        const res = await mcpPost(rpc('tools/call', { name: 'task_show', arguments: { wbs: '9001' } }), authHeaders());
+    test('R1: tools/call sp_task_show reads the real corpus task through the gateway', async () => {
+        const res = await mcpPost(
+            rpc('tools/call', { name: 'sp_task_show', arguments: { wbs: '9001' } }),
+            authHeaders(),
+        );
         expect(res.status).toBe(200);
         const body = await jsonBody<{ result: { wbs: string; name: string; content: string } }>(res);
         expect(body.result.wbs).toBe('9001');
         expect(body.result.name).toBe('e2e probe');
         expect(body.result.content).toContain('E2E probe task body');
+    });
+
+    test('R2: an old unprefixed tool name is refused with its sp_ replacement', async () => {
+        const res = await mcpPost(rpc('tools/call', { name: 'task_show', arguments: { wbs: '9001' } }), authHeaders());
+        expect(res.status).toBe(500);
+        const body = await jsonBody<{ error: { code: number; message: string } }>(res);
+        expect(body.error.message).toContain('tool "task_show" was renamed to "sp_task_show"');
     });
 
     test('R1: resources/read returns spur://tasks and spur://context bodies through the gateway', async () => {
@@ -211,6 +223,165 @@ describe('mcp E2E through the project gateway (task 1374)', () => {
         expect(code).toBe(0);
         const answer = JSON.parse(answerLine) as DiscoverBody & { id: number };
         expect(answer.id).toBe(7);
-        expect(answer.result.capabilities.tools.map((tool) => tool.name)).toContain('task_show');
+        expect(answer.result.capabilities.tools.map((tool) => tool.name)).toContain('sp_task_show');
     }, 60_000);
+
+    test('R3 (1380): server/discover reports namespace from plugin manifest and SPUR_MCP_NAMESPACE override', async () => {
+        const nsRoot = mkdtempSync(join(tmpdir(), 'spur-mcp-e2e-ns-'));
+        try {
+            mkdirSync(join(nsRoot, 'plugins', 'kk'), { recursive: true });
+            writeFileSync(join(nsRoot, 'plugins', 'kk', 'plugin.json'), JSON.stringify({ name: 'kk' }));
+
+            const manifestEnv: Record<string, string | undefined> = {
+                NODE_ENV: 'test',
+                SPUR_MCP_ENABLED: 'true',
+                SPUR_MCP_AUTH_ENV: TOKEN_VAR,
+            };
+            const manifestApp = createApp(mockRuntime(), {
+                ctx: createServerContext(mockRuntime(), {
+                    cwd: nsRoot,
+                    fs: createNodeFileSystem(nsRoot),
+                    dbUrl: ':memory:',
+                    env: manifestEnv,
+                    bootConfig: serverBootstrapConfig(manifestEnv),
+                }),
+            });
+            const manifestRes = await manifestApp.fetch(
+                new Request('http://localhost/mcp', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify(rpc('server/discover')),
+                }),
+            );
+            expect(manifestRes.status).toBe(200);
+            expect((await jsonBody<DiscoverBody>(manifestRes)).result.namespace).toBe('kk');
+
+            const overrideEnv: Record<string, string | undefined> = {
+                ...manifestEnv,
+                SPUR_MCP_NAMESPACE: 'cc',
+            };
+            const overrideApp = createApp(mockRuntime(), {
+                ctx: createServerContext(mockRuntime(), {
+                    cwd: nsRoot,
+                    fs: createNodeFileSystem(nsRoot),
+                    dbUrl: ':memory:',
+                    env: overrideEnv,
+                    bootConfig: serverBootstrapConfig(overrideEnv),
+                }),
+            });
+            const overrideRes = await overrideApp.fetch(
+                new Request('http://localhost/mcp', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify(rpc('server/discover')),
+                }),
+            );
+            expect(overrideRes.status).toBe(200);
+            expect((await jsonBody<DiscoverBody>(overrideRes)).result.namespace).toBe('cc');
+        } finally {
+            rmSync(nsRoot, { recursive: true, force: true });
+        }
+    });
+
+    test('R2/R3 (1381): an opted-in workflow is a namespaced tool that runs through the service path', async () => {
+        const wfRoot = mkdtempSync(join(tmpdir(), 'spur-mcp-e2e-wf-'));
+        try {
+            mkdirSync(join(wfRoot, 'plugins', 'kk'), { recursive: true });
+            writeFileSync(join(wfRoot, 'plugins', 'kk', 'plugin.json'), JSON.stringify({ name: 'kk' }));
+            mkdirSync(join(wfRoot, '.spur', 'workflows'), { recursive: true });
+            writeFileSync(
+                join(wfRoot, '.spur', 'workflows', 'daily-report.yaml'),
+                `name: daily-report
+description: build the daily report
+kind: state-machine
+metadata:
+  mcp:
+    expose: true
+vars:
+  target: default-target
+initialState: start
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`,
+            );
+            writeFileSync(
+                join(wfRoot, '.spur', 'workflows', 'hidden.yaml'),
+                `name: hidden-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+terminalStates:
+  - start
+`,
+            );
+
+            const env: Record<string, string | undefined> = {
+                NODE_ENV: 'test',
+                SPUR_MCP_ENABLED: 'true',
+                SPUR_MCP_AUTH_ENV: TOKEN_VAR,
+            };
+            const wfApp = createApp(mockRuntime(), {
+                ctx: createServerContext(mockRuntime(), {
+                    cwd: wfRoot,
+                    fs: createNodeFileSystem(wfRoot),
+                    dbUrl: ':memory:',
+                    env,
+                    bootConfig: serverBootstrapConfig(env),
+                }),
+            });
+            const post = (body: unknown) =>
+                wfApp.fetch(
+                    new Request('http://localhost/mcp', {
+                        method: 'POST',
+                        headers: authHeaders(),
+                        body: JSON.stringify(body),
+                    }),
+                );
+
+            // First request is the call, not the list — the ordering a hostile client can pick.
+            // (This does not deterministically reproduce the not-yet-resolved namespace: the
+            // resolver's fs awaits usually settle first. The `namespaceReady` await in
+            // exposedWorkflowTools is the actual guard.)
+            const firstCall = await post(
+                rpc('tools/call', { name: 'kk_daily_report', arguments: { target: 'first' } }),
+            );
+            expect(firstCall.status).toBe(200);
+
+            const listed = await post(rpc('tools/list'));
+            expect(listed.status).toBe(200);
+            const listedBody = await jsonBody<{
+                result: { tools: Array<{ name: string; description?: string; inputSchema: unknown }> };
+            }>(listed);
+            const byName = new Map(listedBody.result.tools.map((tool) => [tool.name, tool]));
+            expect([...byName.keys()]).toContain('kk_daily_report');
+            expect([...byName.keys()]).not.toContain('kk_hidden_flow');
+            expect(byName.get('kk_daily_report')?.description).toBe('build the daily report');
+            expect(byName.get('kk_daily_report')?.inputSchema).toEqual({
+                type: 'object',
+                properties: { target: { type: 'string', default: 'default-target' } },
+                additionalProperties: false,
+            });
+
+            const refused = await post(rpc('tools/call', { name: 'kk_daily_report', arguments: { bogus: 'x' } }));
+            expect(refused.status).toBe(500);
+            const refusedBody = await jsonBody<{ error: { message: string } }>(refused);
+            expect(refusedBody.error.message).toContain('invalid_arguments');
+
+            const called = await post(rpc('tools/call', { name: 'kk_daily_report', arguments: { target: 'today' } }));
+            expect(called.status).toBe(200);
+            const calledBody = await jsonBody<{ result: { runId: string; status: string } }>(called);
+            expect(typeof calledBody.result.runId).toBe('string');
+            expect(calledBody.result.status).toBe('done');
+        } finally {
+            rmSync(wfRoot, { recursive: true, force: true });
+        }
+    });
 });

@@ -20,7 +20,11 @@ export const SPUR_ENV_VARS = {
     a2aAuthEnv: 'SPUR_A2A_AUTH_ENV',
     mcpEnabled: 'SPUR_MCP_ENABLED',
     mcpAuthEnv: 'SPUR_MCP_AUTH_ENV',
+    mcpNamespace: 'SPUR_MCP_NAMESPACE',
 } as const;
+
+/** Valid MCP project namespace grammar: 2–16 lowercase alphanumeric characters starting with a letter. */
+export const MCP_NAMESPACE_PATTERN = /^[a-z][a-z0-9]{1,15}$/;
 
 /** Logging levels accepted by Spur app configuration. */
 export const SPUR_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
@@ -1370,6 +1374,13 @@ export const configSchema = z.object({
                 .object({
                     enabled: z.boolean().default(false),
                     authEnv: z.string().min(1).optional(),
+                    namespace: z
+                        .string()
+                        .regex(
+                            MCP_NAMESPACE_PATTERN,
+                            `invalid ${SPUR_ENV_VARS.mcpNamespace}: expected ${MCP_NAMESPACE_PATTERN.toString()}`,
+                        )
+                        .optional(),
                 })
                 .default({ enabled: false }),
             /**
@@ -1453,6 +1464,7 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = get
             mcp: {
                 enabled: parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]),
                 authEnv: env[SPUR_ENV_VARS.mcpAuthEnv],
+                namespace: env[SPUR_ENV_VARS.mcpNamespace],
             },
         },
         telemetry: {

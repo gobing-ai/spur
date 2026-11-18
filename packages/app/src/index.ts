@@ -562,6 +562,21 @@ export {
 } from './services/job-exclusion-guard';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
+// Workflow tools exposed over MCP (feature B91, task 1381)
+export { MCP_BUILTIN_TOOL_NAMES } from './services/mcp-builtin-tools';
+// Project MCP namespace resolution (feature B91, task 1380)
+export {
+    type McpNamespace,
+    type McpNamespaceSource,
+    resolveMcpNamespace,
+} from './services/mcp-namespace';
+export {
+    type ExposedWorkflowTool,
+    type McpExposureIssue,
+    type McpExposureReason,
+    resolveExposedWorkflowTools,
+    workflowToolName,
+} from './services/mcp-workflow-tools';
 // 1333 (ADR-148): the named-member delivery ladder — one definition for the run path and doctor.
 export {
     dispatchToNamedMember,

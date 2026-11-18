@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Rename built-in MCP harness tools to the sp namespace
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:24.290Z
-updated_at: "2026-11-18T05:41:17.028Z"
+updated_at: "2026-11-18T07:48:01.617Z"
 feature_id: B91
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - protocol-surfaces
 estimate_hours: 2
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1379. Rename built-in MCP harness tools to the sp namespace
@@ -26,16 +28,16 @@ The embedded MCP endpoint advertises five unprefixed harness tools: `task_show`,
 
 ### Requirements
 
-- [ ] R1. Rename the five tool descriptors and `callTool` cases to `sp_task_show`, `sp_task_list`, `sp_workflow_status`, `sp_workflow_run` and `sp_workflow_continue`.
-- [ ] R2. A call to an old unprefixed name fails with a tool error naming its `sp_` replacement, e.g. `tool "task_show" was renamed to "sp_task_show"`. `tools/list` never lists an old name.
-- [ ] R3. Verify the tool-name grammar against the MCP 2026-07-28 specification, then cite the section URL in `docs/design/embedded-mcp-server.md` §4. If `[a-z0-9_]` turns out to be narrower than the spec allows, keep it anyway and record that it was chosen deliberately.
-- [ ] R4. Amend ADR-152 (`docs/00_ADR.md:2956`) with a dated amendment line and update the tool table in `docs/design/embedded-mcp-server.md` §4.
+- [x] R1. Rename the five tool descriptors and `callTool` cases to `sp_task_show`, `sp_task_list`, `sp_workflow_status`, `sp_workflow_run` and `sp_workflow_continue`.
+- [x] R2. A call to an old unprefixed name fails with a tool error naming its `sp_` replacement, e.g. `tool "task_show" was renamed to "sp_task_show"`. `tools/list` never lists an old name.
+- [x] R3. Verify the tool-name grammar against the MCP 2026-07-28 specification, then cite the section URL in `docs/design/embedded-mcp-server.md` §4. If `[a-z0-9_]` turns out to be narrower than the spec allows, keep it anyway and record that it was chosen deliberately.
+- [x] R4. Amend ADR-152 (`docs/00_ADR.md:2956`) with a dated amendment line and update the tool table in `docs/design/embedded-mcp-server.md` §4.
 
 Out of scope: aliases for the old names, the project namespace for non-built-in tools (1380), and workflow tools (1381).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Built-in harness tools carry the sp namespace (req: R1, R2, R3, R4)
+- [x] AC1 — Built-in harness tools carry the sp namespace (req: R1, R2, R3, R4)
 
 Test layer: `apps/server/tests/mcp-e2e.test.ts`, which runs a real serve app through the gateway with no mocks.
 
@@ -72,18 +74,59 @@ Test layer: `apps/server/tests/mcp-e2e.test.ts`, which runs a real serve app thr
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What/Why |
+| --- | --- | --- |
+| `apps/server/src/modules/mcp/index.ts` | 36-141 | R1/R2: renamed the five descriptors and `callTool` cases to `sp_*`; added `RENAMED_TOOLS` refusal map in the `default` branch and exported `BUILTIN_TOOL_NAMES` (1381 handoff). |
+| `apps/server/src/modules/mcp/protocol.ts` | 24 | Doc comment now cites `sp_task_show`. |
+| `apps/server/tests/mcp-e2e.test.ts` | 129-165, 224 | R1: expectations to `sp_*`; R2: new old-name-refusal case (500 + rename hint). |
+| `apps/server/tests/modules/mcp-module.test.ts` | 197-348 | Renamed advertised-tool list and every `tools/call` name to `sp_*`. |
+| `apps/server/tests/modules/mcp/protocol.test.ts` | 24-265 | Stub-registry tool name renamed to `sp_task_show` (protocol layer is name-agnostic). |
+| `apps/cli/tests/commands/mcp.test.ts` | 54 | Stdio-bridge fixture line renamed. |
+| `docs/design/embedded-mcp-server.md` | §4 | R3/R4: sp_ names, no-alias refusal contract, `[a-z0-9_]` kept deliberately narrower than spec with citation. |
+| `docs/00_ADR.md` | 2956-2964 | R4: ADR-152 `Amended: 2026-11-17 (task 1379)` bullet + Decision names updated. |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 rename five tools (descriptors + cases) | MET | test: e2e `tools/call sp_task_show` green (apps/server/tests/mcp-e2e.test.ts:148); static-ref: descriptors apps/server/src/modules/mcp/index.ts:33-76, cases index.ts:130-145 |
+| R2 old names refused, no alias; list never shows them | MET | test: refusal case asserts rename hint (apps/server/tests/mcp-e2e.test.ts:164); map index.ts:89-94, default-branch throw index.ts:156-158; static-ref: tools/list advertises only `sp_*` (apps/server/tests/modules/mcp-module.test.ts:462) |
+| R3 grammar verified vs MCP 2026-07-28; deliberate narrowness cited | MET | static-ref: `docs/design/embedded-mcp-server.md:65-67` — `[a-z0-9_]` kept deliberately narrower than spec SHOULD-set, cited https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-names (fetched this run) |
+| R4 ADR-152 dated amendment + §4 table | MET | static-ref: `docs/00_ADR.md:2957-2961` (`Amended: 2026-11-17 (task 1379)` + Decision names), `docs/design/embedded-mcp-server.md:61-67` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 built-ins carry the `sp` namespace in every project | MET | test | refusal hint maps every legacy name (apps/server/src/modules/mcp/index.ts:89-94); `BUILTIN_TOOL_NAMES` export index.ts:98; e2e suite green |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Run d0462ea9 review of task 1379 — verdict tables (merged fragments, backfill bare only).
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 rename five tools (descriptors + cases) | MET | test: e2e `tools/call sp_task_show` green (apps/server/tests/mcp-e2e.test.ts:148); static-ref: descriptors apps/server/src/modules/mcp/index.ts:33-76, cases index.ts:130-145 |
+| R2 old names refused, no alias; list never shows them | MET | test: refusal asserts rename hint (apps/server/tests/mcp-e2e.test.ts:164); map apps/server/src/modules/mcp/index.ts:89-94, default-branch throw index.ts:156-158; static-ref: tools/list advertises only `sp_*` (apps/server/tests/modules/mcp-module.test.ts:462) |
+| R3 grammar vs MCP 2026-07-28 + deliberate narrowness cited | MET | static-ref: `docs/design/embedded-mcp-server.md:65-67` + spec anchor (fetched this run) |
+| R4 ADR-152 dated amendment + §4 table | MET | static-ref: `docs/00_ADR.md:2957-2961`, `docs/design/embedded-mcp-server.md:61-67` |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 built-ins carry the `sp` namespace in every project | MET | test | refusal hint maps every legacy name (apps/server/src/modules/mcp/index.ts:89-94); `BUILTIN_TOOL_NAMES` index.ts:98; e2e suite green |
+
+Verdict: PASS
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T07:43:54.151Z todo → wip (system)
+- 2026-11-18T07:47:59.735Z wip → testing (system)
+- 2026-11-18T07:48:01.612Z testing → done (system)
+

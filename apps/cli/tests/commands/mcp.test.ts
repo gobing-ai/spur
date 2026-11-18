@@ -51,7 +51,7 @@ describe('runMcpStdioBridge (task 1373 R1/R2)', () => {
         }));
         const { output, stdout } = captureOutput();
         const line1 = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
-        const line2 = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"task_show"}}';
+        const line2 = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sp_task_show"}}';
 
         const exit = await runMcpStdioBridge({
             url: upstream.url,

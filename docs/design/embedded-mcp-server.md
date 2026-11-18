@@ -33,9 +33,19 @@ services. Stdio-only clients connect through the `spur mcp` CLI bridge
 | --- | --- | --- |
 | `server.mcp.enabled` | `SPUR_MCP_ENABLED` | `false` |
 | `server.mcp.authEnv` | `SPUR_MCP_AUTH_ENV` | — (NAME of the variable holding the bearer token; required when `enabled` is true — enabling without it fails the config load; the value is read at request time, never stored) |
+| `server.mcp.namespace` | `SPUR_MCP_NAMESPACE` | — (optional project namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load naming the variable and grammar) |
 
 Mirrors `server.a2a` end to end (`packages/config/src/index.ts` schema + `superRefine`;
 `ServerBootConfig.mcp` in `apps/server/src/server-config.ts`).
+
+**Namespace resolution (task 1380):** `resolveMcpNamespace` in `packages/app/src/services/mcp-namespace.ts`
+resolves the project namespace once when `McpDispatcher` constructs:
+1. `server.mcp.namespace` (`SPUR_MCP_NAMESPACE`), if configured (`source: 'config'`).
+2. Otherwise, the `name` field of the single depth-1 `plugins/*/plugin.json` manifest if that
+   `name` matches `/^[a-z][a-z0-9]{1,15}$/` (`source: 'plugin-manifest'`). Zero manifests, multiple
+   manifests, nested-only manifests (`plugins/<group>/<name>/plugin.json`), or an invalid `name`
+   all resolve to `none` (`namespace: null`).
+3. `server/discover` includes `namespace` in its result when non-null and omits it when `null`.
 
 ## 3. Protocol contract (stateless MCP 2.0+ only)
 
@@ -59,11 +69,28 @@ Mirrors `server.a2a` end to end (`packages/config/src/index.ts` schema + `superR
 ## 4. Tools and resources
 
 Five tools delegate directly to `@gobing-ai/spur-app` services (no CLI spawn, no second workflow
-state machine): `task_show`, `task_list` (`TaskService`), `workflow_status`, `workflow_run`,
-`workflow_continue` (`WorkflowService`). Three read-only `spur://` resources:
+state machine): `sp_task_show`, `sp_task_list` (`TaskService`), `sp_workflow_status`,
+`sp_workflow_run`, `sp_workflow_continue` (`WorkflowService`). Built-ins always carry the `sp`
+namespace (task 1379, breaking rename, no alias period): a call to an old unprefixed name is
+refused with `tool "<name>" was renamed to "<sp-name>"`. Names use `[a-z0-9_]` — deliberately
+narrower than the MCP 2026-07-28 spec allows, which SHOULD-permits `A-Z a-z 0-9 _ - .` (see
+[Tool Names](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-names));
+the restriction is chosen on purpose for greppability and collision safety. Three read-only
+`spur://` resources:
 `spur://tasks/{wbs}`, `spur://features/{id}`, `spur://context/{name}` — single-path-segment
 confinement: traversal is refused, an unknown feature id is an error (not empty), an unknown scheme
 is refused.
+
+**Workflow tools (task 1381).** `tools/list` additionally advertises every workflow that declares
+`metadata: { mcp: { expose: true } }`, named `<namespace>_<workflow>` (lowercase, non-alphanumerics
+mapped to `_`), described by the workflow's own `description`, with one optional string property per
+declared `vars` entry carrying its default (`additionalProperties: false`). Roots are the workflow
+layers — project, registered `workflows.paths`, shared — so an opt-in is per file. `tools/call` on
+such a name runs the file through `WorkflowService.run(file, { vars })`; an argument outside the
+declared vars is refused with `invalid_arguments`. `listTools` and `spur workflow validate` share
+one resolver (`packages/app/src/services/mcp-workflow-tools.ts`), so a name is never advertised
+while validate rejects it: no project namespace, a collision with a built-in name, or two
+definitions deriving the same name omit the tool and fail validate with the reason and remedy.
 
 ## 5. `spur mcp` stdio bridge
 

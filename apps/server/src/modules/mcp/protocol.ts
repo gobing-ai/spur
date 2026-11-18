@@ -21,7 +21,7 @@ export const MIN_MCP_PROTOCOL_VERSION = '2026-07-28';
 
 /** One tool advertised by the embedded server (task 1372 wires the real harness tools). */
 export interface McpToolDescriptor {
-    /** Tool name a client passes to `tools/call` (e.g. `task_show`). */
+    /** Tool name a client passes to `tools/call` (e.g. `sp_task_show`). */
     name: string;
     /** Human-readable summary shown by clients. */
     description?: string;
@@ -55,6 +55,8 @@ export interface McpHandlerRegistry {
     listResources(): Promise<McpResourceDescriptor[]>;
     /** Read one resource body by URI; the value is serialized as the read result verbatim. */
     readResource(uri: string): Promise<unknown>;
+    /** Resolved project namespace for tools exposed by this server, or `null` when none applies. */
+    namespace(): string | null;
 }
 
 /** A protocol-level failure: the HTTP status for the response plus the JSON-RPC error code peers expect. */
@@ -158,14 +160,19 @@ async function parseCall(req: Request): Promise<McpCall> {
 /** Route one parsed call to the registry. Unknown methods are METHOD_NOT_FOUND, never guessed. */
 async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Request, version: string): Promise<unknown> {
     switch (call.method) {
-        case 'server/discover':
+        case 'server/discover': {
+            const tools = await registry.listTools();
+            const resources = await registry.listResources();
+            const ns = registry.namespace();
             return {
                 protocolVersion: version,
+                ...(ns !== null ? { namespace: ns } : {}),
                 capabilities: {
-                    tools: await registry.listTools(),
-                    resources: await registry.listResources(),
+                    tools,
+                    resources,
                 },
             };
+        }
         case 'tools/list':
             return { tools: await registry.listTools() };
         case 'tools/call': {

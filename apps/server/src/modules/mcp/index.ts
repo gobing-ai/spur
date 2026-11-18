@@ -1,11 +1,17 @@
 import { join } from 'node:path';
-import type {
-    FeatureShowResult,
-    TaskShowResult,
-    TaskSummary,
-    WorkflowRunResult,
-    WorkflowTraceListResult,
-    WorkflowTraceTimeline,
+import {
+    type ExposedWorkflowTool,
+    type FeatureShowResult,
+    MCP_BUILTIN_TOOL_NAMES,
+    registeredWorkflowPaths,
+    resolveExposedWorkflowTools,
+    resolveMcpNamespace,
+    type TaskShowResult,
+    type TaskSummary,
+    type WorkflowRunResult,
+    type WorkflowTraceListResult,
+    type WorkflowTraceTimeline,
+    workflowLayers,
 } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import type { Hono } from 'hono';
@@ -27,10 +33,10 @@ import {
  * (`server.mcp.authEnv` names the token variable; the value never rests in configuration).
  */
 
-/** The harness tools the embedded server advertises (frozen names, task 1372 R2). */
+/** The harness tools the embedded server advertises (built-ins live in the `sp` namespace, task 1379 R1). */
 const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     {
-        name: 'task_show',
+        name: 'sp_task_show',
         description: 'Show one Spur task: metadata plus the full markdown content.',
         inputSchema: {
             type: 'object',
@@ -39,7 +45,7 @@ const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
         },
     },
     {
-        name: 'task_list',
+        name: 'sp_task_list',
         description: 'List Spur tasks, optionally filtered.',
         inputSchema: {
             type: 'object',
@@ -52,7 +58,7 @@ const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
         },
     },
     {
-        name: 'workflow_status',
+        name: 'sp_workflow_status',
         description: 'Inspect a workflow run (per-run timeline), or list recent runs without a runId.',
         inputSchema: {
             type: 'object',
@@ -60,7 +66,7 @@ const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
         },
     },
     {
-        name: 'workflow_run',
+        name: 'sp_workflow_run',
         description: 'Run a workflow YAML file through the existing task-pipeline engine.',
         inputSchema: {
             type: 'object',
@@ -73,7 +79,7 @@ const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
         },
     },
     {
-        name: 'workflow_continue',
+        name: 'sp_workflow_continue',
         description: 'Resume a paused workflow run (HITL); runId defaults to the most recent paused run.',
         inputSchema: {
             type: 'object',
@@ -84,6 +90,32 @@ const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
         },
     },
 ];
+
+/** Old unprefixed names are refused with a rename hint — no alias period (task 1379 R2, breaking rename). */
+const RENAMED_TOOLS: Readonly<Record<string, string>> = {
+    task_show: 'sp_task_show',
+    task_list: 'sp_task_list',
+    workflow_status: 'sp_workflow_status',
+    workflow_run: 'sp_workflow_run',
+    workflow_continue: 'sp_workflow_continue',
+};
+
+/** The built-in tool names in their final `sp` form (handoff: 1381 collision checks). */
+export const BUILTIN_TOOL_NAMES: readonly string[] = TOOL_DESCRIPTORS.map((tool) => tool.name);
+
+/**
+ * A workflow's tool descriptor (task 1381 R2): one optional string property per declared var,
+ * carrying its default, and no other accepted argument (R3 refuses extras).
+ */
+function workflowToolDescriptor(tool: ExposedWorkflowTool): McpToolDescriptor {
+    const properties: Record<string, { type: 'string'; default: string }> = {};
+    for (const [name, value] of Object.entries(tool.vars)) properties[name] = { type: 'string', default: value };
+    return {
+        name: tool.tool,
+        description: tool.description ?? `Run the "${tool.workflow}" workflow.`,
+        inputSchema: { type: 'object', properties, additionalProperties: false },
+    };
+}
 
 /** The `spur://` resources the embedded server advertises (frozen URIs, task 1372 R3). */
 const RESOURCE_DESCRIPTORS: McpResourceDescriptor[] = [
@@ -102,35 +134,99 @@ type McpToolResult =
 
 /** The narrow context slice the dispatcher reads; tests stub these accessors. */
 class McpDispatcher implements McpHandlerRegistry {
-    constructor(private readonly ctx: ServerContext) {}
+    private resolvedNamespace: string | null = null;
+    private readonly namespaceReady: Promise<void>;
+
+    constructor(private readonly ctx: ServerContext) {
+        const configured = mcpSettings(ctx).namespace;
+        this.namespaceReady = resolveMcpNamespace({
+            configured,
+            projectRoot: ctx.cwd,
+            fs: ctx.fs,
+        })
+            .then((resolved) => {
+                this.resolvedNamespace = resolved.namespace;
+            })
+            .catch(() => {
+                this.resolvedNamespace = null;
+            });
+    }
+
+    namespace(): string | null {
+        return this.resolvedNamespace;
+    }
 
     async listTools(): Promise<McpToolDescriptor[]> {
-        return TOOL_DESCRIPTORS;
+        await this.namespaceReady;
+        const exposed = await this.exposedWorkflowTools();
+        return [...TOOL_DESCRIPTORS, ...exposed.map(workflowToolDescriptor)];
+    }
+
+    /**
+     * Workflows this project exposes as tools (task 1381 R2). Recomputed per call: the server is
+     * stateless and the resolver is one directory walk, so a cache would only add staleness.
+     */
+    private async exposedWorkflowTools(): Promise<ExposedWorkflowTool[]> {
+        // The namespace resolves asynchronously; a `tools/call` can be the very first request,
+        // so awaiting here is what stops it reading a not-yet-resolved `null` (task 1381 R3).
+        await this.namespaceReady;
+        const { tools } = await resolveExposedWorkflowTools({
+            namespace: this.resolvedNamespace,
+            reserved: MCP_BUILTIN_TOOL_NAMES,
+            roots: workflowLayers({
+                cwd: this.ctx.cwd,
+                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
+            }).map((layer) => layer.path),
+            fs: this.ctx.fs,
+        });
+        return tools;
+    }
+
+    /** R3: run an exposed workflow through the same service path as `sp_workflow_run`. */
+    private async callWorkflowTool(
+        tool: ExposedWorkflowTool,
+        args: Record<string, unknown>,
+    ): Promise<WorkflowRunResult> {
+        const accepted = Object.keys(tool.vars);
+        const vars: Record<string, string> = {};
+        for (const [key, value] of Object.entries(args)) {
+            if (!(key in tool.vars)) {
+                throw new Error(
+                    `invalid_arguments: tool "${tool.tool}" accepts only ${accepted.length === 0 ? 'no arguments' : accepted.join(', ')}; got "${key}"`,
+                );
+            }
+            if (typeof value !== 'string') {
+                throw new Error(`invalid_arguments: tool "${tool.tool}" argument "${key}" must be a string`);
+            }
+            vars[key] = value;
+        }
+        return this.ctx.workflowService().run(tool.file, { vars });
     }
 
     async listResources(): Promise<McpResourceDescriptor[]> {
+        await this.namespaceReady;
         return RESOURCE_DESCRIPTORS;
     }
 
     /** Route one harness tool to its `@gobing-ai/spur-app` service; unknown names are refused. */
     async callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
         switch (name) {
-            case 'task_show':
+            case 'sp_task_show':
                 return this.ctx.taskService().show(requiredString(args, 'wbs'));
-            case 'task_list':
+            case 'sp_task_list':
                 return this.ctx.taskService().list(taskListFilters(args));
-            case 'workflow_status': {
+            case 'sp_workflow_status': {
                 const runId = optionalString(args, 'runId');
                 return runId === undefined
                     ? this.ctx.workflowService().trace()
                     : this.ctx.workflowService().trace(runId);
             }
-            case 'workflow_run':
+            case 'sp_workflow_run':
                 return this.ctx.workflowService().run(requiredString(args, 'file'), {
                     vars: stringRecord(args, 'vars'),
                     ...(args.dryRun === true ? { dryRun: true } : {}),
                 });
-            case 'workflow_continue': {
+            case 'sp_workflow_continue': {
                 const runId =
                     optionalString(args, 'runId') ?? (await this.ctx.workflowService().latestPausedRun())?.runId;
                 if (runId === undefined) {
@@ -140,10 +236,17 @@ class McpDispatcher implements McpHandlerRegistry {
                     ...(typeof args.answerText === 'string' ? { answerText: args.answerText } : {}),
                 });
             }
-            default:
+            default: {
+                const renamed = RENAMED_TOOLS[name];
+                if (renamed !== undefined) {
+                    throw new Error(`tool "${name}" was renamed to "${renamed}"`);
+                }
+                const exposed = (await this.exposedWorkflowTools()).find((tool) => tool.tool === name);
+                if (exposed !== undefined) return this.callWorkflowTool(exposed, args);
                 throw new Error(
                     `unknown tool "${name}"; supported: ${TOOL_DESCRIPTORS.map((tool) => tool.name).join(', ')}`,
                 );
+            }
         }
     }
 
@@ -222,10 +325,10 @@ function stringRecord(args: Record<string, unknown>, key: string): Record<string
     return record;
 }
 
-/** The listener switch and the NAME of the variable holding its token (never the value). */
-function mcpSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null } {
+/** The listener switch, token variable name (never the value), and optional configured namespace. */
+function mcpSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null; namespace: string | undefined } {
     const mcp = typeof ctx.bootConfig === 'function' ? ctx.bootConfig()?.mcp : undefined;
-    return { enabled: mcp?.enabled === true, authEnv: mcp?.authEnv ?? null };
+    return { enabled: mcp?.enabled === true, authEnv: mcp?.authEnv ?? null, namespace: mcp?.namespace ?? undefined };
 }
 
 /** The bearer token this surface accepts, from the variable `server.mcp.authEnv` names. */

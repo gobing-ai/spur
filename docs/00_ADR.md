@@ -2955,7 +2955,11 @@ re-import pressure this entry already records).
 
 ## ADR-152: spur serve embeds a stateless MCP 2.0+ server that delegates to spur-app services
 
-- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9
+- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9 · **Amended:** 2026-11-17 (task 1379)
+- **Amended 2026-11-17 (task 1379):** the five built-in tool names moved into the `sp` namespace
+  (`sp_task_show`, `sp_task_list`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue`) —
+  a breaking rename with no alias period; a call to an old unprefixed name is refused with a rename
+  hint. Built-ins are Spur's in every project, independent of any future project namespace (1380).
 - **Decision:** `spur serve` mounts `mcpModule` on `POST /mcp` (registered in the server module
   registry, off unless `server.mcp.enabled`) speaking stateless MCP 2.0+ Streamable HTTP only: a
   `2026-07-28` protocol-version floor is enforced on every request and legacy versions
@@ -2963,8 +2967,9 @@ re-import pressure this entry already records).
   self-contained — no `initialize` handshake, no `Mcp-Session-Id` session store, no persistent SSE;
   answers are `application/json` or one request-scoped SSE frame. Bearer auth reads the token from
   the environment variable `server.mcp.authEnv` names (required at config load when enabled; only
-  the NAME is configuration, the value is never persisted). Five tools (`task_show`, `task_list`,
-  `workflow_status`, `workflow_run`, `workflow_continue`) and three `spur://` resources
+  the NAME is configuration, the value is never persisted). Five tools (`sp_task_show`,
+  `sp_task_list`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue` — the `sp`
+  namespace rename is task 1379) and three `spur://` resources
   (tasks/features/context) delegate directly to `@gobing-ai/spur-app` services — no CLI spawn, no
   second workflow state machine. Stdio-only agents reach the endpoint through the thin `spur mcp`
   NDJSON→HTTP bridge, which is transport-only (it forwards protocol headers and the bearer token and

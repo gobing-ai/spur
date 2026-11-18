@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+import { getEnvVars, SPUR_ENV_VARS } from '@gobing-ai/spur-config';
 import type { DbAdapter, RunTraceRow } from '@gobing-ai/spur-domain';
 import {
     type ActionCostAttribution,
@@ -9,7 +11,7 @@ import {
 } from '@gobing-ai/spur-domain';
 import type { DecisionType } from '@gobing-ai/ts-ai-decision';
 import { createDefaultWorkflowEngineHost } from '@gobing-ai/ts-dual-workflow-engine';
-import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { getDecisionService } from '../decision/decision-service';
 import {
     collectAgentRunRoleViolations,
@@ -33,6 +35,9 @@ import {
     resolveWorkflowFile,
     workflowLayers,
 } from '../workflow/workflow-resolver';
+import { MCP_BUILTIN_TOOL_NAMES } from './mcp-builtin-tools';
+import { resolveMcpNamespace } from './mcp-namespace';
+import { resolveExposedWorkflowTools } from './mcp-workflow-tools';
 import { resolveRunRecordDir } from './run-storage';
 import type { WorkflowListEntryIdentity } from './workflow-catalog-scan';
 import { extractWorkflowMeta, scanWorkflowFiles } from './workflow-catalog-scan';
@@ -212,6 +217,14 @@ export class WorkflowInspectOps {
             const phaseErrors = validatePhaseTable(workflow);
             if (phaseErrors.length > 0) {
                 return { ok: false, valid: false, file, errors: phaseErrors };
+            }
+
+            // MCP exposure check (1381 R4): an exposed workflow must derive a usable tool name —
+            // no project namespace, a built-in collision, or two definitions deriving the same
+            // name all fail validate here, so `tools/list` never advertises what validate rejects.
+            const exposureErrors = await this.mcpExposureErrors(absolute);
+            if (exposureErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: exposureErrors };
             }
 
             // 0614: warn-only composition advisory (shell measure + agent.run
@@ -410,6 +423,30 @@ export class WorkflowInspectOps {
      * the invalid entry, with the resolver's error message — no invented valid
      * identity.
      */
+    /** R4 (1381): exposure issues naming this file, phrased with the reason and the remedy. */
+    private async mcpExposureErrors(absolute: string): Promise<string[]> {
+        const fs = createNodeFileSystem();
+        // The namespace is env-scoped (task 1380 R1), so it comes from the same env funnel
+        // `buildConfigFromEnv` reads — the app-layer config view has no `server` block.
+        const { namespace } = await resolveMcpNamespace({
+            configured: getEnvVars()[SPUR_ENV_VARS.mcpNamespace],
+            projectRoot: this.ctx.cwd,
+            fs,
+        });
+        const { issues } = await resolveExposedWorkflowTools({
+            namespace,
+            reserved: MCP_BUILTIN_TOOL_NAMES,
+            roots: workflowLayers({
+                cwd: this.ctx.cwd,
+                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
+            }).map((layer) => layer.path),
+            fs,
+        });
+        return issues
+            .filter((issue) => resolve(issue.file) === resolve(absolute))
+            .map((issue) => `MCP tool "${issue.tool}" (${issue.reason}): ${issue.remedy}`);
+    }
+
     private async loadListEntry(filePath: string): Promise<WorkflowListEntryIdentity> {
         try {
             const resolved = await resolveWorkflowDefinition(this.ctx.cwd, filePath, {

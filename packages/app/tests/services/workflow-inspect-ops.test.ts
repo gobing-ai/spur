@@ -173,3 +173,72 @@ terminalStates:
         expect(inspect.inspectRunRecord('never-ran')).toEqual({ status: 'missing' });
     });
 });
+
+// 1381 R4: an exposed workflow must derive a usable MCP tool name; the same resolver backs
+// `tools/list`, so validate can never accept a name the server refuses to advertise.
+describe('WorkflowInspectOps.validate — MCP exposure (1381 R4)', () => {
+    const EXPOSED = (name: string) => `name: ${name}
+description: ${name} tool
+kind: state-machine
+metadata:
+  mcp:
+    expose: true
+vars:
+  target: default-target
+initialState: start
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+    /** The namespace comes from the plugin manifest (task 1380 R2), so no env mutation is needed. */
+    function writePluginManifest(name: string): void {
+        mkdirSync(join(dir, 'plugins', name), { recursive: true });
+        writeFileSync(join(dir, 'plugins', name, 'plugin.json'), JSON.stringify({ name }));
+    }
+
+    function exposedOps(): WorkflowInspectOps {
+        return new WorkflowInspectOps(ctx, new WorkflowEngineFactory(ctx));
+    }
+
+    test('R4(a): an exposed workflow fails validate when the project has no namespace', async () => {
+        writeFileSync(join(wfDir, 'daily.yaml'), EXPOSED('daily-report'));
+        const result = await exposedOps().validate(join(wfDir, 'daily.yaml'));
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.errors.join('\n')).toContain('no-namespace');
+            expect(result.errors.join('\n')).toContain('SPUR_MCP_NAMESPACE');
+        }
+    });
+
+    test('R4(c): two workflows deriving the same tool name both fail validate', async () => {
+        writePluginManifest('cc');
+        writeFileSync(join(wfDir, 'a-b.yaml'), EXPOSED('a-b'));
+        writeFileSync(join(wfDir, 'a_b.yaml'), EXPOSED('a_b'));
+        const result = await exposedOps().validate(join(wfDir, 'a-b.yaml'));
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.errors.join('\n')).toContain('duplicate');
+    });
+
+    test('R4(b): a tool name equal to a built-in fails validate', async () => {
+        writePluginManifest('sp');
+        writeFileSync(join(wfDir, 'task-show.yaml'), EXPOSED('task-show'));
+        const result = await exposedOps().validate(join(wfDir, 'task-show.yaml'));
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.errors.join('\n')).toContain('builtin-collision');
+            expect(result.errors.join('\n')).toContain('sp_task_show');
+        }
+    });
+
+    test('R4: a workflow that does not opt in is unaffected by exposure checks', async () => {
+        const result = await exposedOps().validate(join(wfDir, 'linear.yaml'));
+        expect(result.ok).toBe(true);
+    });
+});

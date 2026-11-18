@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Resolve the project MCP namespace from config or plugin manifest
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:24.292Z
-updated_at: "2026-11-18T05:41:18.336Z"
+updated_at: "2026-11-18T08:14:35.560Z"
 feature_id: B91
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - protocol-surfaces
 estimate_hours: 3
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1380. Resolve the project MCP namespace from config or plugin manifest
@@ -27,16 +29,16 @@ Namespaced workflow tools (1381) need a per-project namespace. The plugin prefix
 
 ### Requirements
 
-- [ ] R1. Add `namespace: z.string().regex(/^[a-z][a-z0-9]{1,15}$/).optional()` to `server.mcp` and map it from `SPUR_MCP_NAMESPACE` in `SPUR_ENV_VARS` and `buildConfigFromEnv`. An invalid value fails config load, naming the variable and the grammar.
-- [ ] R2. Add `resolveMcpNamespace({ configured, projectRoot, fs })` in `packages/app` that returns `{ namespace, source }` with `source` ∈ `config | plugin-manifest | none`. Order: the configured value, else the `name` of exactly one `plugins/*/plugin.json` at depth 1 if that name passes the grammar, else none.
-- [ ] R3. `McpHandlerRegistry` gains `namespace(): string | null`, and `server/discover` returns `namespace` (omitted when null). `McpDispatcher` resolves the namespace once at construction.
-- [ ] R4. Document the `SPUR_MCP_NAMESPACE` key in `docs/design/configuration-contracts.md`, and the resolution order and discover field in `docs/design/embedded-mcp-server.md`.
+- [x] R1. Add `namespace: z.string().regex(/^[a-z][a-z0-9]{1,15}$/).optional()` to `server.mcp` and map it from `SPUR_MCP_NAMESPACE` in `SPUR_ENV_VARS` and `buildConfigFromEnv`. An invalid value fails config load, naming the variable and the grammar.
+- [x] R2. Add `resolveMcpNamespace({ configured, projectRoot, fs })` in `packages/app` that returns `{ namespace, source }` with `source` ∈ `config | plugin-manifest | none`. Order: the configured value, else the `name` of exactly one `plugins/*/plugin.json` at depth 1 if that name passes the grammar, else none.
+- [x] R3. `McpHandlerRegistry` gains `namespace(): string | null`, and `server/discover` returns `namespace` (omitted when null). `McpDispatcher` resolves the namespace once at construction.
+- [x] R4. Document the `SPUR_MCP_NAMESPACE` key in `docs/design/configuration-contracts.md`, and the resolution order and discover field in `docs/design/embedded-mcp-server.md`.
 
 Out of scope: a project-file server config surface, a `spur projects` registry field, and using the namespace for built-ins (always `sp_`, 1379).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Project namespace resolves from config then plugin manifest (req: R1, R2, R3, R4)
+- [x] AC1 — Project namespace resolves from config then plugin manifest (req: R1, R2, R3, R4)
 
 Test layer: resolver tests against real temp directories, plus the `server/discover` assertion in `apps/server/tests/mcp-e2e.test.ts`.
 
@@ -75,26 +77,70 @@ The manifest scan lists `plugins/` children and reads `<child>/plugin.json`. Zer
 
 ### Plan
 
-- [ ] Step 1 (test first, R2): write resolver cases with a temp-dir fixture: config wins; a single depth-1 manifest; two manifests → none; a nested-only manifest (knowledge-kit shape) → none; an invalid manifest name → none.
-- [ ] Step 2 (R1): add the schema field and env mapping, and a config test proving that an invalid `SPUR_MCP_NAMESPACE` fails load.
-- [ ] Step 3 (R3): extend the registry interface and discover, then add a `server/discover` namespace assertion to `apps/server/tests/mcp-e2e.test.ts`.
-- [ ] Step 4 (R4): update both design satellites.
-- [ ] Step 5: run the focused tests in `packages/app`, `packages/config` and `apps/server`, then `bun run spur-check`.
+- [x] Step 1 (test first, R2): write resolver cases with a temp-dir fixture: config wins; a single depth-1 manifest; two manifests → none; a nested-only manifest (knowledge-kit shape) → none; an invalid manifest name → none.
+- [x] Step 2 (R1): add the schema field and env mapping, and a config test proving that an invalid `SPUR_MCP_NAMESPACE` fails load.
+- [x] Step 3 (R3): extend the registry interface and discover, then add a `server/discover` namespace assertion to `apps/server/tests/mcp-e2e.test.ts`.
+- [x] Step 4 (R4): update both design satellites.
+- [x] Step 5: run the focused tests in `packages/app`, `packages/config` and `apps/server`, then `spur task gate 1380 light`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `packages/config/src/index.ts:23-27`, `packages/config/src/index.ts:1376-1384`, `packages/config/src/index.ts:1467` — added `SPUR_ENV_VARS.mcpNamespace` (`SPUR_MCP_NAMESPACE`), exported `MCP_NAMESPACE_PATTERN` (`/^[a-z][a-z0-9]{1,15}$/`), added `server.mcp.namespace` with a custom error naming `SPUR_MCP_NAMESPACE` and the regex, and mapped it in `buildConfigFromEnv`.
+- `packages/config/tests/config.test.ts:98-112` — added tests verifying `SPUR_MCP_NAMESPACE` loads when valid and fails config load naming the variable and grammar when invalid.
+- `packages/app/src/services/mcp-namespace.ts:1-69`, `packages/app/src/index.ts:565-570` — added and exported `resolveMcpNamespace({ configured, projectRoot, fs })` resolving `config` → single depth-1 `plugins/*/plugin.json` `name` → `none`.
+- `packages/app/tests/services/mcp-namespace.test.ts:1-97` — added temp-dir fixture tests covering config precedence, single depth-1 manifest, multiple manifests, nested-only (depth-2) manifests, invalid manifest names, and missing/malformed manifests.
+- `apps/server/src/server-config.ts:27`, `apps/server/src/server-config.ts:71` — added `namespace?: string | null` to `ServerBootConfig.mcp` and populated it in `serverBootstrapConfig`.
+- `apps/server/src/modules/mcp/protocol.ts:59`, `apps/server/src/modules/mcp/protocol.ts:163-174` — added `namespace(): string | null` to `McpHandlerRegistry` and updated `server/discover` to include `namespace` when non-null and omit it when `null`.
+- `apps/server/src/modules/mcp/index.ts:117-148`, `apps/server/src/modules/mcp/index.ts:266-269` — updated `McpDispatcher` to resolve the project namespace once at construction via `resolveMcpNamespace` and expose it through `namespace()`.
+- `apps/server/tests/modules/mcp/protocol.test.ts:29`, `apps/server/tests/modules/mcp/protocol.test.ts:123-135` — updated the registry fixture with `namespace: () => null` and verified `server/discover` omits `null` and includes non-null `namespace`.
+- `apps/server/tests/mcp-e2e.test.ts:115`, `apps/server/tests/mcp-e2e.test.ts:129`, `apps/server/tests/mcp-e2e.test.ts:229-280` — asserted `server/discover` omits `namespace` when unconfigured and reports `kk` / `cc` from plugin manifest and `SPUR_MCP_NAMESPACE` override.
+- `docs/design/configuration-contracts.md:128-130`, `docs/design/embedded-mcp-server.md:34-49` — documented `SPUR_MCP_NAMESPACE`, resolution order, and the `server/discover` `namespace` field.
+- Public-surface probe: not-applicable (no public CLI/HTTP route/plugin script surface changed; `server/discover` response field is covered by `apps/server/tests/mcp-e2e.test.ts`).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 config key + env mapping, fail-closed grammar | MET | static-ref: `packages/config/src/index.ts:23` (`SPUR_MCP_NAMESPACE`), `:27` (`MCP_NAMESPACE_PATTERN`), `:1374-1384` (schema + error naming variable and regex), `:1467` (env mapping); test: `packages/config/tests/config.test.ts:107` (invalid value fails load) |
+| R2 `resolveMcpNamespace` with `config → plugin-manifest → none` | MET | static-ref: `packages/app/src/services/mcp-namespace.ts:18-69`, exported `packages/app/src/index.ts:569`; test: 6 resolver cases `packages/app/tests/services/mcp-namespace.test.ts:29-95` (config wins, single manifest, ambiguous→none, depth-2→none, bad grammar→none, missing/malformed→none) |
+| R3 registry `namespace()` + `server/discover` field, resolved once | MET | static-ref: `apps/server/src/modules/mcp/protocol.ts:59` (interface), `:163-174` (discover, omitted when null), `apps/server/src/modules/mcp/index.ts:117-138` (resolve at construction); test: `apps/server/tests/mcp-e2e.test.ts:229` (manifest `kk` + `SPUR_MCP_NAMESPACE` override, omit when unconfigured) |
+| R4 document key + resolution order + discover field | MET | static-ref: `docs/design/configuration-contracts.md:130`, `docs/design/embedded-mcp-server.md:34-49` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 namespace resolves config then plugin manifest (R1–R4) | MET | test | `packages/app/tests/services/mcp-namespace.test.ts` 6/6 pass; `packages/config/tests/config.test.ts` 16/16; `apps/server` modules+e2e 390/390 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Review of run 294c9e7e — verdict tables (merged fragments, backfill bare only).
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 config key + env mapping, fail-closed grammar | MET | static-ref: `packages/config/src/index.ts:23,27,1376-1384,1467`; test: `packages/config/tests/config.test.ts:107` |
+| R2 `resolveMcpNamespace` (`config → plugin-manifest → none`) | MET | static-ref: `packages/app/src/services/mcp-namespace.ts:18-69`, export `packages/app/src/index.ts:569`; test: `packages/app/tests/services/mcp-namespace.test.ts:29-95` (6 cases) |
+| R3 registry `namespace()` + discover field, resolved once | MET | static-ref: `apps/server/src/modules/mcp/protocol.ts:59,163-174`, `apps/server/src/modules/mcp/index.ts:117-138`; test: `apps/server/tests/mcp-e2e.test.ts:229` |
+| R4 document key, resolution order, discover field | MET | static-ref: `docs/design/configuration-contracts.md:130`, `docs/design/embedded-mcp-server.md:34-49` |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 namespace resolves config then plugin manifest | MET | test | `packages/app/tests/services/mcp-namespace.test.ts` 6/6; `packages/config/tests/config.test.ts` 16/16; `apps/server` modules+e2e 390/390 |
+
+Open P3: `namespace()` is synchronous while resolution is async, awaited only in `listTools`/`listResources` (`apps/server/src/modules/mcp/index.ts:140-148`) — 1381 must read it after listing. No P1/P2. P4: grammar-invalid configured value falls through to the manifest scan (`packages/app/src/services/mcp-namespace.ts:25`), unreachable via fail-closed config load.
+
+Verdict: PASS
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:13:02.260Z todo → wip (system)
+- 2026-11-18T08:14:33.721Z wip → testing (system)
+- 2026-11-18T08:14:35.553Z testing → done (system)
+

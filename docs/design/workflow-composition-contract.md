@@ -70,6 +70,29 @@ a field-level diff until design and definition are deliberately updated together
 by those unit gates plus the advisory. The snapshot's `stateEffect`/`evidenceEffect` declarations
 and the proof-input baseline retired with the snapshot.
 
+## MCP exposure (`metadata.mcp`, task 1381)
+
+A workflow opts into being callable as an MCP tool by declaring the generic root `metadata` key —
+the engine only requires that it be an object, so MCP vocabulary never enters the engine schema:
+
+```yaml
+name: daily-report
+description: build the daily report   # becomes the tool description
+metadata:
+  mcp:
+    expose: true
+vars:
+  target: default-target             # one optional string property per var, carrying its default
+```
+
+`resolveExposedWorkflowTools` (`packages/app/src/services/mcp-workflow-tools.ts`) derives the tool
+name as `<namespace>_<name>` with lowercase and every run of non-alphanumerics mapped to `_`
+(`daily-report` → `daily_report`), because `-` is not part of Spur's tool-name grammar. Both
+`tools/list` and `spur workflow validate` call that one resolver, so a name cannot be advertised
+while validate rejects it: a project with no namespace, a name equal to a built-in `sp_*` tool, or
+two exposed workflows deriving the same name all fail validate and are omitted from `tools/list`.
+Exposure is opt-in per file; nothing is exposed by default.
+
 ## Stable action identity and effects
 
 > **Current reading (ADR-140):** the canonical task pipeline no longer uses the ADR-071 effect,

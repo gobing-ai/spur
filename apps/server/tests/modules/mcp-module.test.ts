@@ -10,6 +10,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MCP_BUILTIN_TOOL_NAMES } from '@gobing-ai/spur-app';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../src/context';
@@ -194,11 +195,11 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
             capabilities: { tools: { name: string }[]; resources: { uri: string }[] };
         };
         expect(result.capabilities.tools.map((tool) => tool.name)).toEqual([
-            'task_show',
-            'task_list',
-            'workflow_status',
-            'workflow_run',
-            'workflow_continue',
+            'sp_task_show',
+            'sp_task_list',
+            'sp_workflow_status',
+            'sp_workflow_run',
+            'sp_workflow_continue',
         ]);
         expect(result.capabilities.resources.map((res) => res.uri)).toEqual([
             'spur://tasks/{wbs}',
@@ -207,7 +208,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         ]);
     });
 
-    test('task_show passes the wbs through to TaskService.show', async () => {
+    test('sp_task_show passes the wbs through to TaskService.show', async () => {
         const { app, recorder } = harness();
         const result = (await envelopeResult(
             await post(app, {
@@ -216,7 +217,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'tools/call',
-                    params: { name: 'task_show', arguments: { wbs: ' 1372 ' } },
+                    params: { name: 'sp_task_show', arguments: { wbs: ' 1372 ' } },
                 },
             }),
         )) as { wbs: string; content: string };
@@ -225,17 +226,17 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         expect(result.content).toBe('# task 1372');
     });
 
-    test('task_show without a wbs is an error, not a silent undefined', async () => {
+    test('sp_task_show without a wbs is an error, not a silent undefined', async () => {
         const { app } = harness();
         const res = await post(app, {
             token: TOKEN,
-            body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'task_show', arguments: {} } },
+            body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'sp_task_show', arguments: {} } },
         });
         expect(res.status).toBe(500);
         expect(JSON.stringify(await jsonOf(res))).toContain('wbs is required');
     });
 
-    test('task_list forwards the filters', async () => {
+    test('sp_task_list forwards the filters', async () => {
         const { app, recorder } = harness();
         const result = (await envelopeResult(
             await post(app, {
@@ -244,7 +245,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'tools/call',
-                    params: { name: 'task_list', arguments: { status: 'todo', featureId: 'B9' } },
+                    params: { name: 'sp_task_list', arguments: { status: 'todo', featureId: 'B9' } },
                 },
             }),
         )) as { wbs: string; status: string }[];
@@ -252,7 +253,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         expect(result).toEqual([{ wbs: '1372', status: 'todo' }]);
     });
 
-    test('workflow_status with a runId reads the per-run timeline', async () => {
+    test('sp_workflow_status with a runId reads the per-run timeline', async () => {
         const { app, recorder } = harness();
         const result = (await envelopeResult(
             await post(app, {
@@ -261,7 +262,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'tools/call',
-                    params: { name: 'workflow_status', arguments: { runId: 'r-1' } },
+                    params: { name: 'sp_workflow_status', arguments: { runId: 'r-1' } },
                 },
             }),
         )) as { run: { runId: string } };
@@ -269,7 +270,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         expect(result.run.runId).toBe('r-1');
     });
 
-    test('workflow_status without a runId lists recent runs', async () => {
+    test('sp_workflow_status without a runId lists recent runs', async () => {
         const { app, recorder } = harness();
         const result = (await envelopeResult(
             await post(app, {
@@ -278,7 +279,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'tools/call',
-                    params: { name: 'workflow_status', arguments: {} },
+                    params: { name: 'sp_workflow_status', arguments: {} },
                 },
             }),
         )) as { total: number };
@@ -286,7 +287,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         expect(result.total).toBe(0);
     });
 
-    test('workflow_run forwards file, string vars and dryRun', async () => {
+    test('sp_workflow_run forwards file, string vars and dryRun', async () => {
         const { app, recorder } = harness();
         const result = (await envelopeResult(
             await post(app, {
@@ -296,7 +297,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                     id: 1,
                     method: 'tools/call',
                     params: {
-                        name: 'workflow_run',
+                        name: 'sp_workflow_run',
                         arguments: { file: 'task-pipeline.yaml', vars: { profile: 'auto' }, dryRun: true },
                     },
                 },
@@ -306,7 +307,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         expect(result.runId).toBe('r-new');
     });
 
-    test('workflow_run refuses non-string vars instead of coercing', async () => {
+    test('sp_workflow_run refuses non-string vars instead of coercing', async () => {
         const { app } = harness();
         const res = await post(app, {
             token: TOKEN,
@@ -314,14 +315,14 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                 jsonrpc: '2.0',
                 id: 1,
                 method: 'tools/call',
-                params: { name: 'workflow_run', arguments: { file: 'x.yaml', vars: { n: 3 } } },
+                params: { name: 'sp_workflow_run', arguments: { file: 'x.yaml', vars: { n: 3 } } },
             },
         });
         expect(res.status).toBe(500);
         expect(JSON.stringify(await jsonOf(res))).toContain('vars must be a map of strings');
     });
 
-    test('workflow_continue without a runId resumes the most recent paused run', async () => {
+    test('sp_workflow_continue without a runId resumes the most recent paused run', async () => {
         const { app, recorder } = harness();
         const result = (await envelopeResult(
             await post(app, {
@@ -330,7 +331,7 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
                     jsonrpc: '2.0',
                     id: 1,
                     method: 'tools/call',
-                    params: { name: 'workflow_continue', arguments: { answerText: 'the receipt' } },
+                    params: { name: 'sp_workflow_continue', arguments: { answerText: 'the receipt' } },
                 },
             }),
         )) as { runId: string };
@@ -341,11 +342,16 @@ describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
         expect(result.runId).toBe('r-paused');
     });
 
-    test('workflow_continue with no paused run and no runId is refused with a clear message', async () => {
+    test('sp_workflow_continue with no paused run and no runId is refused with a clear message', async () => {
         const { app } = makeHarness({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' }, { SPUR_MCP_TOKEN: TOKEN }, null);
         const res = await post(app, {
             token: TOKEN,
-            body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'workflow_continue', arguments: {} } },
+            body: {
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'tools/call',
+                params: { name: 'sp_workflow_continue', arguments: {} },
+            },
         });
         expect(res.status).toBe(500);
         expect(JSON.stringify(await jsonOf(res))).toContain('no paused workflow run');
@@ -446,6 +452,9 @@ describe('direct handler seam', () => {
         const recorder = makeRecorder();
         const handler = createMcpHandler({
             cwd: tempDir,
+            // 1381: tools/list resolves the project namespace and its exposed workflows from
+            // the context filesystem, so the seam needs the documented `fs` member.
+            fs: createNodeFileSystem(),
             taskService: recorder.taskService,
             featureService: recorder.featureService,
             workflowService: recorder.workflowService,
@@ -460,5 +469,15 @@ describe('direct handler seam', () => {
         expect(res.status).toBe(200);
         const result = (await res.json()) as { result: { tools: { name: string }[] } };
         expect(result.result.tools).toHaveLength(5);
+    });
+});
+
+// 1381 R4 reads MCP_BUILTIN_TOOL_NAMES (the app-layer copy `workflow validate` uses), while the
+// dispatcher advertises TOOL_DESCRIPTORS. A drift between the two would let validate accept a
+// workflow tool the server then refuses — so the lists must stay identical.
+describe('mcp built-in tool names (1381 R4)', () => {
+    test('the app-layer reserved list matches the advertised descriptors', async () => {
+        const { BUILTIN_TOOL_NAMES } = await import('../../src/modules/mcp/index');
+        expect([...MCP_BUILTIN_TOOL_NAMES].sort()).toEqual([...BUILTIN_TOOL_NAMES].sort());
     });
 });

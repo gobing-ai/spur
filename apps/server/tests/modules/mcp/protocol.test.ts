@@ -21,11 +21,12 @@ const VERSION = MIN_MCP_PROTOCOL_VERSION;
 function registry(overrides: Partial<McpHandlerRegistry> = {}): McpHandlerRegistry {
     return {
         listTools: async (): Promise<McpToolDescriptor[]> => [
-            { name: 'task_show', description: 'Show one task', inputSchema: { type: 'object' } },
+            { name: 'sp_task_show', description: 'Show one task', inputSchema: { type: 'object' } },
         ],
         callTool: async (name: string, args: Record<string, unknown>) => ({ tool: name, args }),
         listResources: async (): Promise<McpResourceDescriptor[]> => [{ uri: 'spur://tasks/1371', name: 'task 1371' }],
         readResource: async (uri: string) => ({ uri, text: `contents of ${uri}` }),
+        namespace: () => null,
         ...overrides,
     };
 }
@@ -110,7 +111,7 @@ describe('stateless dispatch on valid 2026-07-28+ calls', () => {
             capabilities: { tools: McpToolDescriptor[]; resources: McpResourceDescriptor[] };
         };
         expect(body.protocolVersion).toBe(VERSION);
-        expect(body.capabilities.tools[0]?.name).toBe('task_show');
+        expect(body.capabilities.tools[0]?.name).toBe('sp_task_show');
         expect(body.capabilities.resources[0]?.uri).toBe('spur://tasks/1371');
     });
 
@@ -119,11 +120,25 @@ describe('stateless dispatch on valid 2026-07-28+ calls', () => {
         expect(res.status).toBe(200);
     });
 
+    test('server/discover omits namespace when null and includes it when set', async () => {
+        const omittedRes = await post(registry({ namespace: () => null }), {
+            headers: { 'Mcp-Method': 'server/discover' },
+        });
+        const omittedBody = (await jsonOf(omittedRes)) as Record<string, unknown>;
+        expect('namespace' in omittedBody).toBe(false);
+
+        const setRes = await post(registry({ namespace: () => 'sp' }), {
+            headers: { 'Mcp-Method': 'server/discover' },
+        });
+        const setBody = (await jsonOf(setRes)) as Record<string, unknown>;
+        expect(setBody.namespace).toBe('sp');
+    });
+
     test('tools/list returns the registry tools', async () => {
         const res = await post(registry(), { headers: { 'Mcp-Method': 'tools/list' } });
         expect(res.status).toBe(200);
         const body = (await jsonOf(res)) as { tools: McpToolDescriptor[] };
-        expect(body.tools[0]?.name).toBe('task_show');
+        expect(body.tools[0]?.name).toBe('sp_task_show');
     });
 
     test('tools/call resolves the tool from the Mcp-Name header and passes arguments', async () => {
@@ -135,11 +150,11 @@ describe('stateless dispatch on valid 2026-07-28+ calls', () => {
             },
         });
         const res = await post(reg, {
-            headers: { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'task_show' },
+            headers: { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'sp_task_show' },
             body: { arguments: { wbs: '1371' } },
         });
         expect(res.status).toBe(200);
-        expect(calls).toEqual([{ name: 'task_show', args: { wbs: '1371' } }]);
+        expect(calls).toEqual([{ name: 'sp_task_show', args: { wbs: '1371' } }]);
     });
 
     test('tools/call via a JSON-RPC envelope mirrors the envelope and echoes the id', async () => {
@@ -148,14 +163,14 @@ describe('stateless dispatch on valid 2026-07-28+ calls', () => {
                 jsonrpc: '2.0',
                 id: 7,
                 method: 'tools/call',
-                params: { name: 'task_show', arguments: { wbs: '1371' } },
+                params: { name: 'sp_task_show', arguments: { wbs: '1371' } },
             },
         });
         expect(res.status).toBe(200);
         const body = (await jsonOf(res)) as { jsonrpc: string; id: unknown; result: { tool: string; args: unknown } };
         expect(body.jsonrpc).toBe('2.0');
         expect(body.id).toBe(7);
-        expect(body.result.tool).toBe('task_show');
+        expect(body.result.tool).toBe('sp_task_show');
     });
 
     test('tools/call without arguments still calls the tool with an empty object', async () => {
@@ -166,9 +181,9 @@ describe('stateless dispatch on valid 2026-07-28+ calls', () => {
                 return 'ok';
             },
         });
-        const res = await post(reg, { headers: { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'task_show' } });
+        const res = await post(reg, { headers: { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'sp_task_show' } });
         expect(res.status).toBe(200);
-        expect(calls).toEqual([{ name: 'task_show', args: {} }]);
+        expect(calls).toEqual([{ name: 'sp_task_show', args: {} }]);
     });
 
     test('resources/list returns the registry resources', async () => {
@@ -243,7 +258,7 @@ describe('request validation', () => {
 
     test('a registry rejection becomes INTERNAL_ERROR, not a crash', async () => {
         const reg = registry({ callTool: async () => Promise.reject(new Error('boom')) });
-        const res = await post(reg, { headers: { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'task_show' } });
+        const res = await post(reg, { headers: { 'Mcp-Method': 'tools/call', 'Mcp-Name': 'sp_task_show' } });
         expect(res.status).toBe(500);
         const error = errorOf(await jsonOf(res));
         expect(error.code).toBe('INTERNAL_ERROR');
@@ -262,7 +277,7 @@ describe('request-scoped SSE encoding (R1)', () => {
         expect(text).toMatch(/^event: message\ndata: /);
         expect(text.endsWith('\n\n')).toBe(true);
         const frame = JSON.parse(text.slice(text.indexOf('data: ') + 6)) as { tools: McpToolDescriptor[] };
-        expect(frame.tools[0]?.name).toBe('task_show');
+        expect(frame.tools[0]?.name).toBe('sp_task_show');
     });
 
     test('an SSE request without Accept keeps the JSON encoding', async () => {
