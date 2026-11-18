@@ -8,6 +8,38 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: scripts/commands/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.38] - 2026-11-17
+
+### Added
+- embed an MCP 2.0+ server behind the gateway's `/<prefix>/mcp` route with a bearer-only `server.mcp` config block, and bridge it to stdio-only clients via `spur mcp` (05279a162)
+  <!-- src: packages/config/src/index.ts:1369 · confidence: HIGH -->
+- host the gateway daemon lifecycle as flat `spur self daemon install | uninstall | status` verbs (2b3df0cfd)
+  <!-- src: apps/cli/src/commands/self/daemon.ts:73 · confidence: HIGH -->
+- derive project prefixes and registry route findings from `projects.json` instead of per-project config (9e2f34dd7)
+  <!-- src: packages/config/src/projects.ts:142 · confidence: HIGH -->
+- link the gateway project switcher from the Board sidebar footer (6b174bfcc)
+  <!-- src: apps/web/src/components/LeftSidebar.tsx:118 · confidence: HIGH -->
+
+### Fixed
+- refuse `.` and `..` segments in `spur://` resource uris (6ef7a7f20)
+  <!-- src: apps/server/src/modules/mcp/index.ts:160 · confidence: HIGH -->
+- treat an IPv6-only port listener as in-use so a fresh start no longer dials the other process (8524f4ec3)
+  <!-- src: packages/app/src/services/project-process.ts:264 · confidence: HIGH -->
+- degrade a failed status daemon probe to an omitted line instead of failing `spur status` (e4b4445dd)
+  <!-- src: apps/cli/src/commands/self/daemon.ts:60 · confidence: HIGH -->
+- cover the darwin-only daemon branches with host-independent tests so Linux CI meets the coverage gate (78a95e6ed)
+  <!-- src: apps/cli/tests/commands/self/daemon.test.ts:154 · confidence: HIGH -->
+- build the projects-prefix ephemeral fixtures under `tmpdir()` so Linux runners can create them (2f9a87bdc)
+  <!-- src: apps/cli/tests/commands/projects-prefix.test.ts:214 · confidence: HIGH -->
+
+### Other
+- bump packages to 0.4.38 (ac2b7e603)
+- record the B9 embedded MCP server feature as done with verify receipts (4e6b82300)
+- record B9 batch learnings and close-out metrics (8895f423e)
+- land the B9 worktree with close-out writes (8c1ccd65d)
+- refine the B9 MCP 2.0 tasks 1370-1374 (d0ebf80ae)
+- plan the embedded MCP 2.0 server in spur serve (7b47b8eea)
+
 ## [0.4.37] - 2026-11-16
 
 ### Added
