@@ -128,7 +128,7 @@ export function memberDelivery(
             reason: 'member is disabled (agent.fleet.members[].enabled: false) — enable it or address another member',
         };
     }
-    if (member.a2a !== undefined) {
+    if (member.a2a !== undefined || member.project !== undefined) {
         return {
             delivery: 'a2a',
             reason: live
@@ -226,11 +226,13 @@ export async function dispatchToNamedMember(
         },
     );
     const output =
-        member.a2a !== undefined && receipt.status === 'completed' && receipt.runId !== undefined
+        (member.a2a !== undefined || member.project !== undefined) &&
+        receipt.status === 'completed' &&
+        receipt.runId !== undefined
             ? await deps.a2aOutput?.(receipt.runId)
             : undefined;
     return {
-        delivery: member.a2a !== undefined ? 'a2a' : 'warm',
+        delivery: member.a2a !== undefined || member.project !== undefined ? 'a2a' : 'warm',
         member,
         status: receipt.status,
         messageId: receipt.messageId,

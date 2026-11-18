@@ -534,3 +534,71 @@ describe('a2a module — intake and cancellation events (1377)', () => {
         expect(row.raw).not.toContain('deploy the docs site');
     });
 });
+
+/**
+ * 1395 R3/R4 — the card behind the gateway.
+ *
+ * The failure this closes: the gateway rewrites `host` to the upstream loopback authority, so a card
+ * built from `new URL(c.req.url).origin` advertises `http://127.0.0.1:<ephemeral serve port>/…`. Every
+ * later send then bypasses the gateway and breaks when the serve restarts on a new port.
+ */
+describe('A2A card origin behind the gateway (1395 R4)', () => {
+    async function cardWith(headers: Record<string, string>): Promise<string> {
+        const res = await harness.app.request(cardUrl(), authed({ headers }));
+        expect(res.status).toBe(200);
+        const card = (await res.json()) as { supportedInterfaces: Array<{ url: string }> };
+        return card.supportedInterfaces[0]?.url ?? '';
+    }
+
+    test('honors x-forwarded-host and x-forwarded-prefix together', async () => {
+        expect(await cardWith({ 'x-forwarded-host': 'localhost:3000', 'x-forwarded-prefix': '/tslibs' })).toBe(
+            `http://localhost:3000/tslibs/a2a/members/${MEMBER}`,
+        );
+    });
+
+    test('falls back to the request origin when a header is missing', async () => {
+        const partials: Array<Record<string, string>> = [
+            {},
+            { 'x-forwarded-host': 'localhost:3000' },
+            { 'x-forwarded-prefix': '/tslibs' },
+        ];
+        for (const headers of partials) {
+            expect(await cardWith(headers)).toBe(`http://localhost/a2a/members/${MEMBER}`);
+        }
+    });
+
+    test('an empty forwarded prefix is not treated as a prefix', async () => {
+        expect(await cardWith({ 'x-forwarded-host': 'localhost:3000', 'x-forwarded-prefix': '' })).toBe(
+            `http://localhost/a2a/members/${MEMBER}`,
+        );
+    });
+});
+
+/**
+ * 1395 R2/R3/R4 end to end: the real gateway handler in front of this module's real card route.
+ * Nothing is mocked on the A2A path — the gateway proxies into the Hono app — so this pins the whole
+ * chain: forwarded headers, card origin, and the URL `resolveProjectCardTarget` would fetch.
+ */
+describe('gateway → card round trip (1395 R2/R3/R4)', () => {
+    test('a card fetched through the gateway advertises the stable gateway URL', async () => {
+        const { createGatewayHandler } = await import('@gobing-ai/spur-app');
+        const handler = createGatewayHandler({
+            listProjects: async () => [{ name: 'ts-libs', path: tempDir, prefix: '/tslibs', port: 3007 }],
+            ensureUpstream: async () => 3007,
+            port: 3000,
+            fetchUpstream: (async (input: unknown, init?: RequestInit) => {
+                // Hand the upstream call to the real Hono app; only the authority is rewritten.
+                const url = new URL(String(input));
+                return harness.app.request(`http://localhost${url.pathname}${url.search}`, init);
+            }) as unknown as typeof fetch,
+        });
+        const res = await handler(
+            new Request(`http://localhost:3000/tslibs/a2a/members/${MEMBER}/.well-known/agent-card.json`, {
+                headers: { authorization: `Bearer ${TOKEN}` },
+            }),
+        );
+        expect(res.status).toBe(200);
+        const card = (await res.json()) as { supportedInterfaces: Array<{ url: string }> };
+        expect(card.supportedInterfaces[0]?.url).toBe(`http://localhost:3000/tslibs/a2a/members/${MEMBER}`);
+    });
+});

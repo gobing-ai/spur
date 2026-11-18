@@ -110,3 +110,61 @@ describe('spur agent trace (1076 R4)', () => {
         }
     });
 });
+
+/**
+ * 1396 R2/R3 — the delegated receipt in the operator surface: the human line names the remote task,
+ * member, A2A state and branch, the JSON carries the same fields, and a refresh failure is visible
+ * rather than silent. The remote is unreachable in this fixture project (no fleet member is declared),
+ * which is exactly the "target down" path.
+ */
+describe('spur agent trace — delegated receipt (1396 R2/R3)', () => {
+    async function delegatedProject(): Promise<{ cwd: string; db: Awaited<ReturnType<typeof createMigratedDb>> }> {
+        const cwd = await mkdtemp(join(tmpdir(), 'spur-agent-trace-a2a-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        await new CoordinationRunDao(db).insertStart({
+            specId: 'proj-tslibs',
+            agentKind: 'a2a',
+            processId: null,
+            runId: 'turn-a2a',
+            generation: 1,
+            startedAt: '2026-11-18T00:00:00.000Z',
+            messageIds: ['msg-1'],
+            remoteTaskId: 'task-9',
+            remoteContextId: 'ctx-9',
+        });
+        return { cwd, db };
+    }
+
+    test('human output names the remote task and reports why it could not refresh', async () => {
+        const { cwd, db } = await delegatedProject();
+        const { output, messages } = captureOutput();
+        try {
+            expect(await main(['agent', 'trace', 'turn-a2a'], { cwd, output, db })).toBe(0);
+            const text = messages.join('\n');
+            expect(text).toContain('remote=proj-tslibs/task-9');
+            expect(text).toContain('refresh-error=');
+        } finally {
+            await rm(cwd, { recursive: true, force: true });
+            await db.close();
+        }
+    });
+
+    test('--json carries remoteTaskId, remoteContextId and refreshError', async () => {
+        const { cwd, db } = await delegatedProject();
+        const { output, messages } = captureOutput();
+        try {
+            expect(await main(['agent', 'trace', 'turn-a2a', '--json'], { cwd, output, db })).toBe(0);
+            const payload = JSON.parse(messages.at(-1) ?? '{}') as {
+                data?: { nodes: Array<Record<string, unknown>> };
+                nodes?: Array<Record<string, unknown>>;
+            };
+            const node = (payload.data?.nodes ?? payload.nodes ?? [])[0] ?? {};
+            expect(node.remoteTaskId).toBe('task-9');
+            expect(node.remoteContextId).toBe('ctx-9');
+            expect(typeof node.refreshError).toBe('string');
+        } finally {
+            await rm(cwd, { recursive: true, force: true });
+            await db.close();
+        }
+    });
+});

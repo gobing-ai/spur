@@ -1,9 +1,9 @@
 {
     "schemaVersion": 1,
-    "generatedAt": "2026-11-15T20:08:00.139Z",
+    "generatedAt": "2026-11-18T08:29:28.404Z",
     "command": "bun run a2a-two-install-e2e",
     "a2aVersion": "a2a 0.4.0",
-    "scratch": "/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/a2a-two-install-jkg7ijgg",
+    "scratch": "/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/a2a-two-install-vpq0a33e",
     "steps": [
         {
             "step": "read-only-two-install",
@@ -16,10 +16,10 @@
         {
             "step": "write-fencing-card",
             "requirement": "R3",
-            "command": "a2a -a http://127.0.0.1:62397/a2a/members/b-worker/.well-known/agent-card.json card get",
+            "command": "a2a -a http://127.0.0.1:55130/a2a/members/b-worker/.well-known/agent-card.json card get",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "{\n  \"supportedInterfaces\": [\n    {\n      \"url\": \"http://127.0.0.1:62397/a2a/members/b-worker\",\n      \"protocolBinding\": \"HTTP+JSON\",\n      \"protocolVersion\": \"1.0\"\n    }\n  ],\n  \"capabilities\": {\n    \"extensions\": [\n      {\n        \"description\": \"The member fences its own working tree\",\n        \"uri\": \"urn:spur:write-fencing:v1\"\n      }\n    ],\n    \"pushNotifications\": false,\n    \"streaming\": false\n  },\n  \"defaultInputModes\": [\n    \"text/plain\"\n  ],\n  \"defaultOutputModes\": [\n    \"text/plain\"\n  ],\n  \"description\": \"Spur fleet member b-worker\",\n  \"name\": \"b-worker\",\n  \"skills\": [],\n  \"version\": \"1.0.0\"\n}"
+            "evidence": "{\n  \"supportedInterfaces\": [\n    {\n      \"url\": \"http://127.0.0.1:55130/a2a/members/b-worker\",\n      \"protocolBinding\": \"HTTP+JSON\",\n      \"protocolVersion\": \"1.0\"\n    }\n  ],\n  \"capabilities\": {\n    \"extensions\": [\n      {\n        \"description\": \"The member fences its own working tree\",\n        \"uri\": \"urn:spur:write-fencing:v1\"\n      }\n    ],\n    \"pushNotifications\": false,\n    \"streaming\": false\n  },\n  \"defaultInputModes\": [\n    \"text/plain\"\n  ],\n  \"defaultOutputModes\": [\n    \"text/plain\"\n  ],\n  \"description\": \"Spur fleet member b-worker\",\n  \"name\": \"b-worker\",\n  \"skills\": [],\n  \"version\": \"1.0.0\"\n}"
         },
         {
             "step": "extension-free-refusal",
@@ -59,7 +59,7 @@
             "command": "A2aMemberTransport.dispatch with B stopped",
             "exitCode": 0,
             "status": "passed",
-            "evidence": "status=not-started; reason=member \"a-remote-b\" A2A turn: a2a card failed (exit 3): {\n  \"error\": {\n    \"code\": \"A2ACLI_ERR_IO\",\n    \"message\": \"failed to resolve agent card: card request failed: Get \\\"http://127.0.0.1:62397/a2a/members/b-worker/.well-known/agent-card.json\\\": dial tcp 127.0.0.1:62397: connect: connection refused\",\n    \"hint\": \"check the agent is running and the --agent-card reference is correct\"\n  }\n}"
+            "evidence": "status=not-started; reason=member \"a-remote-b\" A2A turn: a2a card failed (exit 3): {\n  \"error\": {\n    \"code\": \"A2ACLI_ERR_IO\",\n    \"message\": \"failed to resolve agent card: card request failed: Get \\\"http://127.0.0.1:55130/a2a/members/b-worker/.well-known/agent-card.json\\\": dial tcp 127.0.0.1:55130: connect: connection refused\",\n    \"hint\": \"check the agent is running and the --agent-card reference is correct\"\n  }\n}"
         },
         {
             "step": "restart-reattach",

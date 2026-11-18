@@ -176,3 +176,125 @@ describe('AgentTraceService (1076 R4)', () => {
         }
     });
 });
+
+/**
+ * 1396 R2/R3 — trace surfaces delegated receipts and refreshes them once per render.
+ *
+ * Failure modes: refreshing a terminal row (wasted call), refreshing without a remote task id, a
+ * refresh that throws and takes the whole trace with it, and a JSON row that hides `refreshError`
+ * so an operator cannot tell "still working" from "we could not ask".
+ */
+describe('AgentTraceService delegated receipts (1396 R2/R3)', () => {
+    async function delegated(refresh?: (runId: string) => Promise<Record<string, unknown>>) {
+        const dir = tempDir();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const dao = new CoordinationRunDao(db);
+        await dao.insertStart({
+            specId: 'proj-tslibs',
+            agentKind: 'a2a',
+            processId: null,
+            runId: 'turn-a2a',
+            generation: 1,
+            startedAt: '2026-11-18T00:00:00.000Z',
+            messageIds: ['msg-1'],
+            remoteTaskId: 'task-9',
+            remoteContextId: 'ctx-9',
+        });
+        const calls: string[] = [];
+        const service = new AgentTraceService({
+            projectPath: dir,
+            openDb: async () => db,
+            logDir: dir,
+            ...(refresh === undefined
+                ? {}
+                : {
+                      refresh: async (runId: string) => {
+                          calls.push(runId);
+                          return await refresh(runId);
+                      },
+                  }),
+        });
+        return { service, calls, db, dir };
+    }
+
+    test('refreshes a live delegated row once and reports its remote fields', async () => {
+        const { service, calls, db } = await delegated(async () => ({
+            status: 'completed',
+            remoteTaskId: 'task-9',
+            remoteContextId: 'ctx-9',
+            remoteBranch: 'sp/remote-work',
+            remoteState: 'TASK_STATE_COMPLETED',
+            member: 'proj-tslibs',
+        }));
+        try {
+            const tree = await service.trace('turn-a2a');
+            expect(calls).toEqual(['turn-a2a']);
+            expect(tree.nodes[0]).toMatchObject({
+                remoteTaskId: 'task-9',
+                remoteContextId: 'ctx-9',
+                remoteBranch: 'sp/remote-work',
+                remoteState: 'TASK_STATE_COMPLETED',
+                member: 'proj-tslibs',
+            });
+        } finally {
+            cleanup();
+            await db.close();
+        }
+    });
+
+    test('a refresh error keeps the row and names the cause — the trace still renders', async () => {
+        const { service, db } = await delegated(async () => ({
+            status: 'outcome-unknown',
+            remoteTaskId: 'task-9',
+            refreshError: 'connection refused',
+        }));
+        try {
+            const tree = await service.trace('turn-a2a');
+            expect(tree.nodes).toHaveLength(1);
+            expect(tree.nodes[0]?.refreshError).toBe('connection refused');
+            expect(tree.nodes[0]?.remoteTaskId).toBe('task-9');
+        } finally {
+            cleanup();
+            await db.close();
+        }
+    });
+
+    test('a throwing refresh is reported on the row instead of failing the trace', async () => {
+        const { service, db } = await delegated(async () => {
+            throw new Error('boom');
+        });
+        try {
+            const tree = await service.trace('turn-a2a');
+            expect(tree.nodes[0]?.refreshError).toContain('boom');
+        } finally {
+            cleanup();
+            await db.close();
+        }
+    });
+
+    test('a row without a remote task id is not refreshed', async () => {
+        const { service, calls, db } = await delegated(async () => ({ status: 'completed' }));
+        try {
+            await new CoordinationRunDao(db).updateExit('turn-a2a', 'exited', '2026-11-18T00:01:00.000Z', '[]', {
+                messageIds: ['msg-1'],
+                outcome: 'run-exit-only',
+            });
+            await service.trace('turn-a2a');
+            expect(calls).toEqual([]);
+        } finally {
+            cleanup();
+            await db.close();
+        }
+    });
+
+    test('--follow refreshes on every poll', async () => {
+        const { service, calls, db } = await delegated(async () => ({ status: 'outcome-unknown' }));
+        try {
+            await service.follow('turn-a2a', { timeoutMs: 0 });
+            expect(calls.length).toBeGreaterThanOrEqual(1);
+        } finally {
+            cleanup();
+            await db.close();
+        }
+    });
+});

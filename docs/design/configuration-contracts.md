@@ -153,6 +153,8 @@ config/
     idea-pipeline.yaml              # idea → feature → AC → task batch; stops at handoff (1250)
     wrapup-pipeline.yaml            # post-execution wrap-up for one task or a batch; never mutates status (1249)
     history-anatomy.yaml            # diagnostic report over already-imported history (I8, ADR-079)
+    delegate-upstream-fix.yaml      # cross-install upstream fix request; tags both ends (1397)
+    delegate-install-sync.yaml      # cross-install install sync request; tags both ends (1397)
   tasks/
     section-matrix.yaml             # Section-Status-Matrix for `spur task check` (§7.4)
   transition-shims.json            # transition-shim manifest — removal worklist for the agent-role transition (task 0541, §2.5)
@@ -163,6 +165,24 @@ config/
     docs/{99_PROJECT_CONSTITUTION,00_ADR,01_PRD,02_ROADMAP,03_ARCHITECTURE,04_DESIGN,05_FEATURES}.md  # doc stubs (task 0088)
   plugins/
     .gitkeep                        # home for future bundled plugins (ADR-012)
+```
+
+**Delegation workflows (1397).** `delegate-upstream-fix` and `delegate-install-sync` carry no URL,
+project or transport: they name a fleet member (`member`, default `tslibs` / `superskill`) and send one
+`agent.run` to it. The member declaration owns reachability — `{ project, member, authEnv }` resolves
+through the one-port gateway (1395) — and `spur agent trace <runId>` can follow the receipt (1396).
+The request asks the target to create a task tagged `delegated-from:<senderSlug>:<wbs>` and to reply
+with `WBS: <id>` as its first line; the workflow parses exactly that line and writes
+`delegated-to:<member>:<id>` on the requesting task, so `spur task list --tag …` joins both ends and no
+new field or table is introduced. Expected member config (operator-declared, not shipped):
+
+```yaml
+agent:
+  fleet:
+    enabled: true
+    members:
+      - { id: tslibs, project: ts-libs, member: coder, authEnv: TSLIBS_A2A_TOKEN }
+      - { id: superskill, project: superskill, member: coder, authEnv: SUPERSKILL_A2A_TOKEN }
 ```
 
 **Build → install → init flow:**

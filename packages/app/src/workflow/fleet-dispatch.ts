@@ -207,7 +207,9 @@ export async function dispatchToFleet(
         return { status: 'unavailable', reason: resolution.unavailable };
     }
     const member = resolution.member;
-    if (member.a2a !== undefined) {
+    // Both A2A shapes go through the same admission: a project-addressed member (1395) advertises its
+    // fencing through the card it resolves to, so it must be asked rather than assumed.
+    if (member.a2a !== undefined || member.project !== undefined) {
         let writeFenced = false;
         try {
             writeFenced = deps.a2a !== undefined && (await deps.a2a.supportsWriteFencing(member));
@@ -241,20 +243,34 @@ export async function dispatchToFleet(
             member,
         };
     }
-    const body = [
-        '[spur fleet dispatch — agent.run]',
-        `run: ${input.runId}`,
-        `state: ${input.state}`,
-        `role: ${input.role}`,
-        `prompt artifact: ${promptPath}`,
-        `expectFile: ${expectFileAbs ?? '(none declared)'}`,
-        '',
-        'Read your task prompt from the prompt artifact above.',
-        ...(expectFileAbs !== undefined
-            ? [`On completion, write your result artifact to the expectFile path above.`]
-            : []),
-        '',
-    ].join('\n');
+    // An A2A member runs in ANOTHER install and cannot read this filesystem, so the pointer body
+    // (ADR-057) would deliver nothing but a path it cannot open. It gets the prompt text itself; the
+    // artifact above is still written here for the local audit trail.
+    const remote = member.a2a !== undefined || member.project !== undefined;
+    const body = remote
+        ? [
+              '[spur fleet dispatch — agent.run]',
+              `run: ${input.runId}`,
+              `state: ${input.state}`,
+              `role: ${input.role}`,
+              '',
+              input.prompt,
+              '',
+          ].join('\n')
+        : [
+              '[spur fleet dispatch — agent.run]',
+              `run: ${input.runId}`,
+              `state: ${input.state}`,
+              `role: ${input.role}`,
+              `prompt artifact: ${promptPath}`,
+              `expectFile: ${expectFileAbs ?? '(none declared)'}`,
+              '',
+              'Read your task prompt from the prompt artifact above.',
+              ...(expectFileAbs !== undefined
+                  ? [`On completion, write your result artifact to the expectFile path above.`]
+                  : []),
+              '',
+          ].join('\n');
     let messageId: string;
     try {
         // `fromId` is the dispatching RUN, never null: a member may reply, and

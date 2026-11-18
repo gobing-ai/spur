@@ -86,6 +86,10 @@ export interface ResolvedFleetMember {
     model?: string;
     /** Agent Card host, URL or local path (ADR-148); presence selects the A2A turn driver. */
     a2a?: string;
+    /** Registered local project owning the target member (1395) — resolved to a card URL per dispatch. */
+    project?: string;
+    /** Target member's local id inside {@link project}. */
+    member?: string;
     /** NAME of the environment variable holding the A2A credential. */
     authEnv?: string;
     enabled: boolean;
@@ -168,6 +172,10 @@ export interface RosterMember extends MemberIdentity {
     purpose?: string;
     /** A2A member card and credential variable name; mutually exclusive with `executor`. */
     a2a?: string;
+    /** Registered local project owning the target member (1395) — the alternative to a literal a2a. */
+    project?: string;
+    /** Target member's local id inside {@link project}. */
+    member?: string;
     authEnv?: string;
     /** Fleet-only (0835): `false` keeps the derived id but leaves the member out of the derived specs. */
     enabled?: boolean;
@@ -314,7 +322,7 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
         // projection to the enabled subset, so the id simply stays undeclared.)
         if (member.enabled === false) continue;
 
-        if (member.a2a !== undefined) {
+        if (member.a2a !== undefined || member.project !== undefined) {
             toUpsert.push({
                 id: composedId,
                 name: member.purpose ?? composedId,
@@ -323,7 +331,9 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
                 purpose: member.purpose && member.purpose.length > 0 ? member.purpose : 'A2A remote agent',
                 tags: [`fleet:${slug}`, 'spur:generated'],
                 config: {
-                    a2a: member.a2a,
+                    ...(member.a2a !== undefined ? { a2a: member.a2a } : {}),
+                    ...(member.project !== undefined ? { project: member.project } : {}),
+                    ...(member.member !== undefined ? { member: member.member } : {}),
                     ...(member.authEnv !== undefined ? { authEnv: member.authEnv } : {}),
                     ...(member.role !== undefined ? { role: member.role } : {}),
                 },
@@ -527,6 +537,8 @@ export class FleetService {
                     ...(member.role !== undefined ? { role: member.role } : {}),
                     executor: member.executor ?? '',
                     ...(member.a2a !== undefined ? { a2a: member.a2a } : {}),
+                    ...(member.project !== undefined ? { project: member.project } : {}),
+                    ...(member.member !== undefined ? { member: member.member } : {}),
                     ...(member.authEnv !== undefined ? { authEnv: member.authEnv } : {}),
                     enabled: false,
                     writeCapable: false,
@@ -534,13 +546,17 @@ export class FleetService {
                 });
                 continue;
             }
-            if (member.a2a !== undefined) {
+            // A2A-shaped members (a literal card, or a project address from 1395) need no local
+            // executor: they are driven by the remote card, so resolveMemberExecutor must not see them.
+            if (member.a2a !== undefined || member.project !== undefined) {
                 resolvedMembers.push({
                     instanceId,
                     localId: memberLocalId(member, members, index),
                     ...(member.role !== undefined ? { role: member.role } : {}),
                     executor: '',
-                    a2a: member.a2a,
+                    ...(member.a2a !== undefined ? { a2a: member.a2a } : {}),
+                    ...(member.project !== undefined ? { project: member.project } : {}),
+                    ...(member.member !== undefined ? { member: member.member } : {}),
                     ...(member.authEnv !== undefined ? { authEnv: member.authEnv } : {}),
                     enabled: true,
                     writeCapable: false,

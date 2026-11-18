@@ -8,6 +8,7 @@ import {
     capabilityDiagnostic,
     DEFAULT_LOOP_POLL_MS,
     DeliveryReconciler,
+    envProjectCardRefResolver,
     evaluateCapabilities,
     FINDING_CODES,
     FleetDispatcher,
@@ -548,9 +549,32 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
  * status` uses, so "no daemon" reads as "not live" instead of an error, and the ladder simply
  * takes the cold rung. Nothing here starts a server.
  */
+/**
+ * The per-dispatch card resolver for project-addressed members (1395). The registry is read fresh and
+ * the gateway port comes from the env config, so a re-registered or re-prefixed target resolves right.
+ */
+/** Card resolver for project-addressed members, shared by dispatch, doctor and trace (1395/1396). */
+export function projectCardRefs(
+    context: CliContext,
+): (member: { instanceId: string; project?: string; member?: string }) => Promise<string> {
+    return envProjectCardRefResolver({ env: context.env });
+}
+
+/**
+ * The declaration + liveness + dispatch seams behind a named-member dispatch (1333, ADR-148).
+ *
+ * Liveness is read from `spur serve` (`GET /api/processes`) — the same probe `spur agent
+ * status` uses, so "no daemon" reads as "not live" instead of an error, and the ladder simply
+ * takes the cold rung. Nothing here starts a server.
+ */
 export async function memberDispatchDeps(context: CliContext): Promise<MemberDispatchDeps> {
     const coordination = new AgentCoordinationService(context);
-    const a2aTransport = new A2aMemberTransport({ cwd: context.cwd, getDb: () => context.getDb(), env: context.env });
+    const a2aTransport = new A2aMemberTransport({
+        cwd: context.cwd,
+        getDb: () => context.getDb(),
+        env: context.env,
+        cardRefs: projectCardRefs(context),
+    });
     // One probe per deps instance: `spur agent doctor` classifies N members off ONE server
     // resolution and ONE /processes read (a per-member probe repeats both, and its warning,
     // N times for a single command).
@@ -594,11 +618,26 @@ export interface MemberDeliveryRow {
 export async function memberDeliveryRows(context: CliContext): Promise<MemberDeliveryRow[]> {
     const deps = await memberDispatchDeps(context);
     const members = await deps.members();
-    const a2aTransport = new A2aMemberTransport({ cwd: context.cwd, getDb: () => context.getDb(), env: context.env });
+    const a2aTransport = new A2aMemberTransport({
+        cwd: context.cwd,
+        getDb: () => context.getDb(),
+        env: context.env,
+        cardRefs: projectCardRefs(context),
+    });
     const rows: MemberDeliveryRow[] = [];
     for (const member of members) {
         const chosen = memberDelivery(member, await deps.live(member.instanceId));
-        if (member.a2a !== undefined) {
+        if (member.a2a !== undefined || member.project !== undefined) {
+            // 1395 R5: a project-addressed member reports the URL it resolves to, so the operator can
+            // see the target the rung will actually drive — or why it cannot be resolved at all.
+            let resolved = '';
+            if (member.project !== undefined) {
+                try {
+                    resolved = `card ${await projectCardRefs(context)(member)}; `;
+                } catch (err) {
+                    resolved = `card unresolved (${err instanceof Error ? err.message : String(err)}); `;
+                }
+            }
             const readiness = await a2aTransport.doctor(member);
             const card = readiness.cardReachable
                 ? `card reachable; protocol ${readiness.protocolVersion}`
@@ -606,7 +645,7 @@ export async function memberDeliveryRows(context: CliContext): Promise<MemberDel
             rows.push({
                 instanceId: member.instanceId,
                 delivery: chosen.delivery,
-                reason: `${chosen.reason}; ${readiness.binaryVersion}; ${card}`,
+                reason: `${chosen.reason}; ${resolved}${readiness.binaryVersion}; ${card}`,
             });
             continue;
         }
@@ -721,7 +760,7 @@ export async function runAgentLoop(
             const member = (await new AgentCoordinationService(context).listFleetMembers()).find(
                 (candidate) => candidate.instanceId === recipient,
             );
-            if (member?.a2a === undefined) {
+            if (member?.a2a === undefined && member?.project === undefined) {
                 return claimed.map((claim) => ({
                     status: 'failed' as const,
                     messageId: claim.id,
@@ -732,6 +771,7 @@ export async function runAgentLoop(
                 cwd: context.cwd,
                 getDb: () => context.getDb(),
                 env: context.env,
+                cardRefs: projectCardRefs(context),
             }).runClaimed(member, claimed, options);
         },
         memberSession: {

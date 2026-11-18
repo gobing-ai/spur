@@ -27,6 +27,7 @@ import type { FleetDispatchDeps } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import { loadRunCorrelation } from '../workflow/run-correlation';
 import type { WorkflowSteeringController } from '../workflow/steering';
+import { envProjectCardRefResolver } from './a2a-member-address';
 import { A2aMemberTransport } from './a2a-member-transport';
 import { AgentCoordinationService, type CoordinationEventBus } from './agent-coordination-service';
 import { withWorkflowIdentity } from './event-bridge';
@@ -209,6 +210,8 @@ export class WorkflowEngineFactory {
                 cwd: this.ctx.cwd,
                 getDb: () => this.ctx.getDb(),
                 env: getEnvVars(),
+                // 1395 R2: a project-addressed member resolves through the gateway on every dispatch.
+                cardRefs: envProjectCardRefResolver({ env: getEnvVars() }),
             }),
             now: () => Date.now(),
         };

@@ -20,6 +20,15 @@ export interface TraceNode {
     sessionIds: string[];
     /** The durable stream's path, when the run wrote one. */
     logPath: string | null;
+    /** Delegated (A2A) receipt fields, present only on a row that carries a remote task id (1396). */
+    member?: string;
+    remoteTaskId?: string;
+    remoteContextId?: string;
+    remoteBranch?: string;
+    /** The remote task state as last observed (`TASK_STATE_WORKING`, …). */
+    remoteState?: string;
+    /** Why the receipt could not be refreshed this render; the row keeps its last known state. */
+    refreshError?: string;
 }
 
 /** Root-first, depth-first lineage. `nodes[0]` is always the root. */
@@ -35,6 +44,19 @@ export interface AgentTraceDeps {
     openDb(projectPath: string): Promise<DbAdapter>;
     /** `.spur/memory/runs` — where this run's durable stream lives (defaults under `projectPath`). */
     logDir?: string;
+    /**
+     * Refresh one delegated receipt from its remote task (1396 R2). Injected by the transport so the
+     * trace layer owns no A2A wiring; absent means "render the receipt as stored".
+     */
+    refresh?(runId: string): Promise<{
+        status?: string;
+        member?: string;
+        remoteTaskId?: string;
+        remoteContextId?: string;
+        remoteBranch?: string;
+        remoteState?: string;
+        refreshError?: string;
+    }>;
 }
 
 /** Terminal statuses across both row families. Anything else means "still running". */
@@ -93,7 +115,7 @@ export class AgentTraceService {
     private async node(db: DbAdapter, runId: string): Promise<TraceNode> {
         const coordination = await new CoordinationRunDao(db).getByRunId(runId);
         if (coordination !== null) {
-            return {
+            const node: TraceNode = {
                 runId,
                 kind: 'agent',
                 status: coordination.status,
@@ -101,6 +123,11 @@ export class AgentTraceService {
                 sessionIds: await this.sessionIds(db, runId),
                 logPath: await this.existingLog(runId),
             };
+            return await this.delegated(
+                node,
+                coordination.remote_task_id ?? null,
+                coordination.remote_context_id ?? null,
+            );
         }
         const workflow = await new RunDao(db).findById(runId);
         return {
@@ -113,6 +140,42 @@ export class AgentTraceService {
             sessionIds: await this.sessionIds(db, runId),
             logPath: await this.existingLog(runId),
         };
+    }
+
+    /**
+     * Attach a delegated receipt, refreshing it once when it can still move (1396 R2/R3).
+     *
+     * Read-on-demand, never a poller: a row with no remote task id, or a terminal one, is rendered as
+     * stored. A refresh that fails keeps the last known status and puts the cause on the row — the
+     * trace always renders, because the operator came here to find out what happened.
+     */
+    private async delegated(
+        node: TraceNode,
+        remoteTaskId: string | null,
+        remoteContextId: string | null,
+    ): Promise<TraceNode> {
+        if (remoteTaskId === null) return node;
+        const base: TraceNode = {
+            ...node,
+            ...(remoteContextId !== null ? { remoteContextId } : {}),
+            remoteTaskId,
+        };
+        if (this.deps.refresh === undefined || TERMINAL.has(node.status)) return base;
+        try {
+            const refreshed = await this.deps.refresh(node.runId);
+            return {
+                ...base,
+                status: refreshed.status ?? base.status,
+                ...(refreshed.member !== undefined ? { member: refreshed.member } : {}),
+                ...(refreshed.remoteTaskId !== undefined ? { remoteTaskId: refreshed.remoteTaskId } : {}),
+                ...(refreshed.remoteContextId !== undefined ? { remoteContextId: refreshed.remoteContextId } : {}),
+                ...(refreshed.remoteBranch !== undefined ? { remoteBranch: refreshed.remoteBranch } : {}),
+                ...(refreshed.remoteState !== undefined ? { remoteState: refreshed.remoteState } : {}),
+                ...(refreshed.refreshError !== undefined ? { refreshError: refreshed.refreshError } : {}),
+            };
+        } catch (error) {
+            return { ...base, refreshError: error instanceof Error ? error.message : String(error) };
+        }
     }
 
     /** Exact run→session rows only (a `.md`-derived guess is not this report's business). */

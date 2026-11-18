@@ -150,6 +150,12 @@ export {
     writeJsonError,
 } from './output/envelope';
 export {
+    createProjectCardRefResolver,
+    envProjectCardRefResolver,
+    type ProjectCardTarget,
+    resolveProjectCardTarget,
+} from './services/a2a-member-address';
+export {
     A2A_WRITE_FENCING_EXTENSION,
     type A2aCard,
     type A2aCli,
@@ -448,6 +454,10 @@ export {
     renderGatewayPlist,
     uninstallGatewayDaemon,
 } from './services/gateway-daemon';
+export {
+    createJsonlEventSink,
+    GATEWAY_EVENT_LOG_MAX_BYTES,
+} from './services/gateway-event-log';
 export { type GitContext, gitContext } from './services/git-context';
 export {
     GLOBAL_CONFIG_DIR,
@@ -728,6 +738,13 @@ export {
     setProjectStopFetchForTests,
     stopRegisteredProject,
 } from './services/project-stop';
+export {
+    collectProjectsView,
+    PROJECTS_VIEW_TIMEOUT_MS,
+    type ProjectEventSummary,
+    type ProjectViewRow,
+    type ProjectViewState,
+} from './services/projects-summary';
 export {
     type Colorize,
     type FailOnSeverity,

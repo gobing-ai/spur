@@ -124,6 +124,16 @@ function for its claimed messages. A stored `remote_task_id`/`remote_context_id`
 `coordination_runs` row (migrations 0055/0056) suppresses `send` on every restart, and the loop's local
 orphan reaper deliberately skips rows carrying a remote task id.
 
+**Refresh on read (1396).** A turn's poll ends at `timeoutMs` (default 600 s) with
+`outcome-unknown`; the row keeps its `remote_task_id`, and only a restarted live loop used to
+re-attach. `A2aMemberTransport.refresh(runId)` closes that gap without a poller: for a `running` row
+carrying a remote task id it performs exactly ONE `task get`, applies the §4.2 mapping, and writes the
+receipt (completed → `exited`, failed → `errored`, still working → unchanged). It never sends, a
+terminal row costs no network call, and a failure leaves the last known receipt intact with the cause
+reported. `spur agent trace` calls it once per delegated row (and on every `--follow` poll) and renders
+`member`, `remoteTaskId`, `remoteContextId`, `remoteState`, `remoteBranch` and `refreshError`; raising
+the timeout would only move the cliff, so it stays at 600 s.
+
 The credential variable's VALUE reaches only the spawned environment. A generated helper file contains
 only `SPUR_A2A_AUTH_VALUE`'s name and answers the a2a credential-helper protocol over its private pipe;
 errors are redacted before they reach receipts or logs. Artifact text lands at
@@ -166,12 +176,13 @@ The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a 
 | --- | --- |
 | Switch | `server.a2a.enabled` (`SPUR_A2A_ENABLED`, default `false`); **off mounts no route at all**, so every path below answers 404 like any unknown path |
 | Credential | `server.a2a.authEnv` (`SPUR_A2A_AUTH_ENV`) names the environment variable holding the bearer token. `enabled` without `authEnv` fails the config load (an enabled endpoint with no token can only reject everyone). Only the NAME is configuration; the value is read at mount and never persisted, echoed, or logged |
-| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false`, and `capabilities.extensions` carrying `urn:spur:write-fencing:v1` (the member fences its own tree) |
+| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false`, and `capabilities.extensions` carrying `urn:spur:write-fencing:v1` (the member fences its own tree). The advertised origin is `http://<x-forwarded-host><x-forwarded-prefix>` when BOTH headers are present, else `new URL(c.req.url).origin` — the gateway rewrites `host` to the upstream loopback authority, so without this the card advertises an ephemeral serve port that dies on the next restart (1395 R4). The upstream binds loopback only, so these headers can come from a local process, and they affect the advertised URL alone, never auth |
 | Send | `POST /a2a/members/<member>/message:send` — `{message:{messageId, role, parts:[{text}]}}` → `{task}`. One inbox request, `kind: 'request'`, request key `a2a:<member>:<messageId>`; a repeated `messageId` with the same work replays the same task id, a different body is `409 ALREADY_EXISTS` |
 | Get | `GET /a2a/members/<member>/tasks/<id>` — the task id IS the inbox message id; state comes from the run receipt |
 | Cancel | `POST /a2a/members/<member>/tasks/<id>:cancel` — stops the member's run through the supervisor's existing stop path and records the intent first, so the state survives a restart. A task with no run in progress, or a terminal one, is `400 FAILED_PRECONDITION` (`TASK_NOT_CANCELABLE`) — a queued request is never reported canceled |
 | Errors | A2A envelope `{error:{code,status,message,details:[{@type:"type.googleapis.com/google.rpc.ErrorInfo",domain:"a2a-protocol.org",reason,metadata}]}}`; missing/wrong token is `401` with `WWW-Authenticate: Bearer` and **writes nothing** |
 | member id | the member's inbox address `<projectSlug>-<memberLocalId>`; `FleetService.memberAddresses` resolves it from the declaration alone, so a member whose executor is globally disabled still has an address (its launch is a separate failure) |
+| Forwarded identity | the gateway's `proxy` sets `x-forwarded-host` (the authority the client dialed) and `x-forwarded-prefix` (the matched project prefix) on every upstream request, and strips any inbound copy first (1395 R3) |
 
 Receiver-side state mapping (the inverse of §4.2, `projectState`): a cancel intent outranks the
 receipt (a stopped run exits `errored`, and the caller must still read `canceled`); then run row
@@ -205,10 +216,21 @@ and B restart → re-attach with one send, plus a no-fetch/no-merge assertion. R
 | Key | Meaning |
 | --- | --- |
 | `members[].a2a` | Agent Card host, URL or local card path; presence makes the member an A2A member |
-| `members[].authEnv` | optional; the NAME of an environment variable holding the credential. Must match `[A-Za-z_][A-Za-z0-9_]*`; inline values and assignments are invalid |
+| `members[].project` | alternative to `a2a` (task 1395): a registered LOCAL project — registry name or gateway prefix — whose member this declaration addresses |
+| `members[].member` | required with `project`; the target member's local id, so the remote instance id is `<projectRegistryName>-<member>` |
+| `members[].authEnv` | the NAME of an environment variable holding the credential. Required with `project`; optional with `a2a`. Must match `[A-Za-z_][A-Za-z0-9_]*`; inline values and assignments are invalid |
 
-`a2a` and `executor` on one member are a config validation error; `authEnv` is only a variable name,
-never a credential.
+`a2a`, `project` and `executor` are pairwise mutually exclusive on one member — one target, never two;
+`authEnv` is only a variable name, never a credential.
+
+**Project-addressed resolution (1395).** `project` + `member` resolves at DISPATCH time, never cached,
+to `http://localhost:<server.gateway.port><prefix>/a2a/members/<registryName>-<member>/.well-known/agent-card.json`
+and is handed to `A2aMemberTransport` exactly as a literal `a2a` value would be, so the delivery
+ladder, write fencing, receipts and never-resend are unchanged. A remote entry, an unknown or
+ambiguous project, a gateway that is not answering, or a foreign listener on the gateway port each
+fail as a `not-started` turn whose message says what to do; `spur agent doctor` prints the resolved
+URL next to the rung. The address grammar on `--agent` and `spur message` is untouched — a member
+declaration names the target, so there is no new public verb.
 
 Existing configs are unchanged. `strategy`, `orchestrator`, `role` and `purpose` keep their
 defaults and are not needed for manual dispatch.

@@ -42,6 +42,7 @@
  *   a2a-serve-e2e                               prove `spur serve` speaks A2A through the real `a2a` CLI, write the receipt
  *   a2a-member-e2e                              prove A2A member delivery cold, live and on restart, write the receipt
  *   a2a-two-install-e2e                         prove two Spur installs dispatch over A2A with write fencing, write the receipt
+ *   delegate-workflow-e2e                       prove both 1397 delegation workflows link tasks across two installs
  *   fleet-e2e --guest-join-fixture              exercise the R4 pre-1081 guest-join skip arm, write its receipt
  *   fleet-e2e --perf [--trials <n>]             task 1273 KPI arm: paired stub trials per target agent, receipts in docs/reports/
  *   skill-eval [--fixtures|--json]             run the skill scenarios and render the report
@@ -66,6 +67,7 @@ import { bundleConfigOutput } from './commands/bundle-config';
 import { bundleLayaWorker } from './commands/bundle-laya-worker';
 import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWebOutput } from './commands/bundle-web';
+import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { devAll } from './commands/dev-all';
 import { emitBoardDeclarations, emitKitDeclarations } from './commands/emit-board-types';
 import { emitMigrationSql } from './commands/emit-migration-sql';
@@ -182,6 +184,9 @@ try {
             break;
         case 'a2a-two-install-e2e':
             process.exit(await runA2aTwoInstallE2e(args));
+            break;
+        case 'delegate-workflow-e2e':
+            process.exit(await runDelegateWorkflowE2e(args));
             break;
         case 'link-check':
             process.exit(await linkCheck());

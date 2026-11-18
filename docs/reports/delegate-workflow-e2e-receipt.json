@@ -1,0 +1,34 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-11-18T09:33:22.582Z",
+    "command": "bun run delegate-workflow-e2e",
+    "a2aVersion": "a2a 0.4.0",
+    "scratch": "/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/delegate-e2e-ilsmampl",
+    "steps": [
+        {
+            "step": "delegate-upstream-fix",
+            "requirement": "R1/R2/R3/AC1",
+            "command": "spur workflow run delegate-upstream-fix.yaml --vars {wbs:0001, member:handler}",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=0; target task=0001_delegated-request-87027.md; requesting tag=delegated-to:handler:0001; workflow={   \"runId\": \"8b6a8244-540e-42a1-b1bc-b2d746fd3e27\",   \"workflowName\": \"delegate-upstream-fix\",   \"mode\": \"state-machine"
+        },
+        {
+            "step": "delegate-install-sync",
+            "requirement": "R1/R2/R3/AC1",
+            "command": "spur workflow run delegate-install-sync.yaml --vars {wbs:0002, member:handler}",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=0; target task=0002_delegated-request-87405.md; requesting tag=delegated-to:handler:0002; workflow={   \"runId\": \"d8127907-9b7c-4d8e-bff5-b9f5b5206571\",   \"workflowName\": \"delegate-install-sync\",   \"mode\": \"state-machine"
+        },
+        {
+            "step": "malformed-reply-fails-loudly",
+            "requirement": "R3",
+            "command": "spur workflow run against a reply without a WBS: line",
+            "exitCode": 0,
+            "status": "passed",
+            "evidence": "exit=1; finalState=record; tag=absent; reason=Command "
+        }
+    ],
+    "passed": true
+}

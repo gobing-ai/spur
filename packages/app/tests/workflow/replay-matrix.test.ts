@@ -50,6 +50,9 @@ const MATRIX: Record<string, StateMatrixRow> = {
     'history-anatomy': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     // D65 1241: branch-cleanup is an evidence-bound decision point (consent-only), no pause.
     'wrapup-pipeline': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
+    // 1397: delegation workflows send one agent.run each; no state declares a resume re-run or pause.
+    'delegate-upstream-fix': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
+    'delegate-install-sync': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
 };
 
 interface CanonicalDoc {

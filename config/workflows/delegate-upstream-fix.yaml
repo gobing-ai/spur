@@ -1,0 +1,142 @@
+# Delegation workflow — upstream facade fix (task 1397).
+#
+# Two existing actions only (`agent.run` + a shell step for `spur task update`): the transport is
+# never user-selected (a2a-member-transport.md §4.3), so this file names a MEMBER, never a URL or a
+# project. The member is reached through the one-port gateway when it is declared as
+# `{ project, member, authEnv }` (1395), and its receipt can be followed with
+# `spur agent trace <runId>` (1396).
+#
+# Return channel: a completed A2A turn's artifact text arrives as the member's inbox reply (§3.5),
+# so the request asks for `WBS: <id>` as the reply's FIRST line and the record state parses exactly
+# that line — nothing else about the reply is read.
+#
+# Vars (passed as a JSON object via `--vars`):
+#   wbs            — the REQUESTING task (required); it receives the `delegated-to:` tag
+#   member         — fleet member id to delegate to (default: tslibs)
+#   summary        — the request text (what should change upstream)
+#   stepTimeoutMs  — agent.run budget (default: 15 min; cross-project work is not local work)
+#
+# Usage:
+#   spur workflow run delegate-upstream-fix.yaml \
+#     --vars '{"wbs":"1234","member":"tslibs","summary":"export createJsonlEventSink from the ts-utils facade"}'
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: delegate-upstream-fix
+version: "1"
+description: >
+  Delegate an upstream (shared package / facade) fix to a fleet member and record the target task on
+  the requesting task. Requests are addressed by member id; the transport, the gateway prefix and the
+  credential variable are the member declaration's business, so this workflow never carries a URL.
+initialState: request
+terminalStates:
+  - done
+  - failed
+
+vars:
+  spurBin: 'spur'
+  # ADR-126: `agent.run` reaches a fleet member only under the fleet executor. These workflows exist
+  # to delegate, so the executor is not a choice the caller makes.
+  executor: fleet
+  # Runtime-written by the engine (0674 R5 declares it so the static validator can see the source).
+  __runId: ''
+  wbs: X
+  member: tslibs
+  summary: ''
+  stepTimeoutMs: '900000'
+  # Written at request time by the slug step below, then read back into a var: the prompt must name
+  # the requesting project, and a static default would be wrong for every project but one.
+  senderSlug: ''
+
+states:
+  - id: request
+    description: Resolve the requesting project slug, then send one delegated request to the member.
+    onEnter:
+      - kind: shell
+        options:
+          # The slug the target tags with `delegated-from:<slug>:<wbs>`: the project directory name,
+          # which is the same identity the fleet mints instance ids from.
+          command: >-
+            mkdir -p .spur/run; basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" > ".spur/run/$wbs-delegation-sender-slug.txt"
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.wbs}-delegation-sender-slug.txt
+          var: senderSlug
+      - kind: agent.run
+        options:
+          agent: ${vars.member}
+          # Declared Layer-1 role (0538 R2): the target member creates the work item and the change.
+          role: coder
+          # The observable completion is the target's own change: a Spur member fences its tree
+          # (urn:spur:write-fencing:v1), so a mutation-shaped request is admitted and produces a diff
+          # in the TARGET repository. No expectFiles: that path would be resolved against this tree.
+          requireDiff: true
+          timeoutMs: ${vars.stepTimeoutMs}
+          # The sentinel leads the body so `spur message inbox` (which truncates bodies) can find this
+          # request again; the rest is the instruction the target acts on.
+          input: >-
+            delegated-from:${vars.senderSlug}:${vars.wbs} — upstream fix request from project
+            ${vars.senderSlug} (requesting task ${vars.wbs}).
+            What is needed: ${vars.summary}
+            Do this in your own repository: (1) make the change; (2) create a task that tracks it with
+            `spur task create` and tag it `delegated-from:${vars.senderSlug}:${vars.wbs}` so both ends
+            carry a queryable link; (3) reply with the new task id as the FIRST line of your answer, in
+            exactly this form: `WBS: <id>`. Keep that first line machine-parseable — nothing else on it.
+
+  - id: record
+    description: >
+      Parse `WBS: <id>` from the member's reply and tag the requesting task. A missing or malformed
+      line fails the state and names the member and the remote task id, so the operator can go read
+      the reply instead of guessing. Split over four shell actions: ADR-115 bounds one action, and
+      locating the request, finding its id, parsing the reply and writing the link are separate steps.
+    onEnter:
+      - kind: shell
+        options:
+          # The remote task id comes from the trace; it is only used to make a failure message useful.
+          command: >-
+            remote="$(spur agent trace "$__runId" 2>/dev/null | sed -n 's/.*remote=\([^ ]*\).*/\1/p' | head -1)";
+            if [ -z "$remote" ]; then remote="unknown"; fi;
+            mkdir -p .spur/run; printf '%s\n' "$remote" > .spur/run/$wbs-delegation-remote.txt
+      - kind: shell
+        options:
+          # Find THIS run's request: the inbox is addressed to the member's instance id
+          # (`<projectSlug>-<localId>`), and the thread carries the sentinel this workflow wrote.
+          command: >-
+            msg="";
+            for id in $(spur message inbox --agent "${vars.senderSlug}-${vars.member}" 2>/dev/null | cut -f1);
+            do if spur message show "$id" 2>/dev/null | grep -qF "delegated-from:${vars.senderSlug}:${vars.wbs}"; then msg="$id"; break; fi; done;
+            if [ -z "$msg" ]; then echo "delegate: member ${vars.member} (remote $(cat .spur/run/$wbs-delegation-remote.txt)) has no inbox request carrying delegated-from:${vars.senderSlug}:${vars.wbs} - run spur agent trace $__runId before retrying" >&2; exit 1; fi;
+            printf '%s\n' "$msg" > .spur/run/$wbs-delegation-request.txt
+      - kind: shell
+        options:
+          # The reply's FIRST line is the contract; nothing else about it is read.
+          command: >-
+            msg="$(cat .spur/run/$wbs-delegation-request.txt)";
+            remote="$(cat .spur/run/$wbs-delegation-remote.txt)";
+            line="$(spur message show "$msg" 2>/dev/null | grep -m1 '^WBS: ')";
+            if [ -z "$line" ]; then echo "delegate: member ${vars.member} (remote $remote) replied without a first-line 'WBS: <id>' - read it with spur message show $msg" >&2; exit 1; fi;
+            id="$(printf '%s' "$line" | sed 's/^WBS: //' | tr -d '[:space:]')";
+            case "$id" in ''|*[!0-9]*) echo "delegate: member ${vars.member} (remote $remote) replied WBS: $id, which is not a numeric task id" >&2; exit 1 ;; esac;
+            printf '%s\n' "$id" > .spur/run/$wbs-delegation-target.txt
+      - kind: shell
+        options:
+          # The link: one tag, written through the CLI so the corpus rules still apply.
+          command: >-
+            $spurBin task update "${vars.wbs}" --add-tag "delegated-to:${vars.member}:$(cat .spur/run/$wbs-delegation-target.txt)" --no-lifecycle
+
+  - id: done
+    description: The target task was created and the requesting task carries the `delegated-to:` tag.
+  - id: failed
+    description: >
+      Terminal — the request never reached the member, or the reply carried no parseable `WBS:` line.
+
+transitions:
+  - from: request
+    to: record
+    description: The turn completed — parse its reply and link the tasks.
+    guard:
+      kind: always
+  - from: record
+    to: done
+    description: The target task id was recorded on the requesting task.
+    guard:
+      kind: always

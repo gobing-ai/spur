@@ -6,7 +6,7 @@ import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { bearerEnv, bearerGuard } from '../../middleware/bearer-guard';
 import type { ServerModule } from '../types';
-import { type A2ATask, a2aError, agentCard, projectState, textParts } from './projection';
+import { type A2ATask, a2aError, agentCard, cardOrigin, projectState, textParts } from './projection';
 
 /**
  * `spur serve` speaks A2A (feature G9, task 1336; ADR-148, design `a2a-member-transport` §3.5).
@@ -211,7 +211,13 @@ export const a2aModule: ServerModule = {
                 agentCard({
                     instanceId: member.instanceId,
                     executor: member.executor ?? '',
-                    origin: new URL(c.req.url).origin,
+                    origin: cardOrigin(
+                        {
+                            host: c.req.header('x-forwarded-host'),
+                            prefix: c.req.header('x-forwarded-prefix'),
+                        },
+                        new URL(c.req.url).origin,
+                    ),
                 }),
             );
         });

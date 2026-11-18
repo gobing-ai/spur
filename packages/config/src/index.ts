@@ -586,6 +586,13 @@ export const FleetMemberSchema = z.object({
     executor: z.string().min(1).optional(),
     /** Agent Card host, URL or local path. Presence makes this an A2A-driven member (ADR-148). */
     a2a: z.string().min(1).optional(),
+    /**
+     * Registered local project (registry name or gateway prefix) owning the target member (1395 R1).
+     * Resolved to the gateway's card URL at dispatch time, so a re-prefixed project keeps working.
+     */
+    project: z.string().min(1).optional(),
+    /** Target member's local id inside `project` — the `-<member>` half of the remote instance id. */
+    member: z.string().min(1).optional(),
     /** NAME of the environment variable holding the A2A credential — never the credential itself. */
     authEnv: z
         .string()
@@ -633,10 +640,51 @@ const FleetMemberEntrySchema = FleetMemberSchema.superRefine((member, ctx) => {
                 'a2a and executor are mutually exclusive — an A2A member is driven by its Agent Card, not a local executor',
         });
     }
-    if (member.role === undefined && member.executor === undefined && member.a2a === undefined) {
+    if (member.a2a !== undefined && member.project !== undefined) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'must declare a role or an executor (or an a2a card) — at least one is required',
+            path: ['project'],
+            message:
+                'project and a2a are mutually exclusive — a project-addressed member resolves its own card, so declare one target',
+        });
+    }
+    if (member.project !== undefined && member.executor !== undefined) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['project'],
+            message: 'project and executor are mutually exclusive — a project-addressed member runs in its own install',
+        });
+    }
+    if (member.project !== undefined && member.member === undefined) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['member'],
+            message: 'a project member needs the target member id (member: <id>) to address it',
+        });
+    }
+    if (member.member !== undefined && member.project === undefined) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['project'],
+            message: 'member is only meaningful with project — declare the project it belongs to',
+        });
+    }
+    if (member.project !== undefined && member.authEnv === undefined) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['authEnv'],
+            message: 'a project member needs authEnv — the name of the variable holding the target project A2A token',
+        });
+    }
+    if (
+        member.role === undefined &&
+        member.executor === undefined &&
+        member.a2a === undefined &&
+        member.project === undefined
+    ) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'must declare a role or an executor (or an a2a card, or a project) — at least one is required',
         });
     }
 });

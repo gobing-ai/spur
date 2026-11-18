@@ -485,3 +485,59 @@ describe('1334: A2A member dispatch under the fleet surface', () => {
         ).toMatchObject({ status: 'failed', reason: 'needs-input', runId: 'run-a2a', member: { a2a: './card.json' } });
     });
 });
+
+/**
+ * 1397 R2: the prompt must reach a REMOTE member. ADR-057's pointer body is right for a co-located
+ * member (it reads the artifact from the project) and useless for an A2A one (it cannot read this
+ * filesystem), so an A2A member receives the prompt text itself — and the artifact is still written
+ * here for the local audit trail.
+ */
+describe('dispatchToFleet — A2A members receive the prompt text (1397 R2)', () => {
+    // Only the project-addressed shape travels by inbox dispatch; a literal `a2a` member takes the
+    // in-process turn, which never had a pointer body to fix.
+    for (const [label, overrides] of [
+        ['a project address', { project: 'ts-libs', member: 'coder', authEnv: 'TOKEN' }],
+    ] as const) {
+        test(`${label} member gets the prompt inline and no unusable local path`, async () => {
+            const project = tempProject();
+            const { dispatcher: dispatch, calls } = dispatcher(completed);
+            const result = await dispatchToFleet(
+                {
+                    role: 'coder',
+                    prompt: 'delegated-from:a:0001 — fix the facade, reply WBS: <id>',
+                    projectPath: project,
+                    runId: 'run-1',
+                    state: 'request',
+                },
+                {
+                    ...deps(
+                        fleetSvc(declaration(), [member({ instanceId: 'p-remote', role: 'coder', ...overrides })]),
+                        dispatch,
+                    ),
+                    // A fenced card: the A2A pre-flight asks the card, exactly as a real member does.
+                    a2a: { supportsWriteFencing: async () => true } as never,
+                },
+            );
+            expect(result.status).toBe('completed');
+            const body = calls[0]?.request.body ?? '';
+            expect(body).toContain('delegated-from:a:0001 — fix the facade, reply WBS: <id>');
+            expect(body).not.toContain('prompt artifact:');
+            // The local audit artifact is still written (ADR-057) — it just is not the delivery channel.
+            if (result.status === 'completed') {
+                expect(readFileSync(result.promptPath, 'utf8')).toContain('delegated-from:a:0001');
+            }
+        });
+    }
+
+    test('a co-located member keeps the pointer body', async () => {
+        const project = tempProject();
+        const { dispatcher: dispatch, calls } = dispatcher(completed);
+        const result = await dispatchToFleet(
+            { role: 'coder', prompt: 'implement', projectPath: project, runId: 'run-1', state: 'impl' },
+            deps(fleetSvc(declaration(), [member({ instanceId: 'p-coder' })]), dispatch),
+        );
+        const body = calls[0]?.request.body ?? '';
+        expect(body).toContain('prompt artifact:');
+        if (result.status === 'completed') expect(body).toContain(result.promptPath);
+    });
+});

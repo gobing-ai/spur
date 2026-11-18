@@ -1,9 +1,9 @@
 import type { Command } from '@commander-js/extra-typings';
-import { AgentTraceService, type TraceTree } from '@gobing-ai/spur-app';
+import { A2aMemberTransport, AgentCoordinationService, AgentTraceService, type TraceTree } from '@gobing-ai/spur-app';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
-import { DEFAULT_TRACE_FOLLOW_TIMEOUT_MS, parseTimeout } from './shared';
+import { DEFAULT_TRACE_FOLLOW_TIMEOUT_MS, parseTimeout, projectCardRefs } from './shared';
 
 /** Register `spur agent trace`. */
 export function registerAgentTraceCommand(agent: Command, context: CliContext): void {
@@ -19,7 +19,20 @@ export function registerAgentTraceCommand(agent: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.timeout, parseTimeout)
         .option(...SHARED_OPTIONS.json)
         .action(async (runId: string, options: { follow?: boolean; timeout?: number; json?: boolean }) => {
-            const service = new AgentTraceService({ projectPath: context.cwd, openDb: () => context.getDb() });
+            const service = new AgentTraceService({
+                projectPath: context.cwd,
+                openDb: () => context.getDb(),
+                // 1396 R2: delegated receipts refresh on read (and on every `--follow` poll) — never a
+                // poller, and never a resend.
+                refresh: (runId) =>
+                    new A2aMemberTransport({
+                        cwd: context.cwd,
+                        getDb: () => context.getDb(),
+                        env: context.env,
+                        cardRefs: projectCardRefs(context),
+                        members: () => new AgentCoordinationService(context).listFleetMembers(),
+                    }).refresh(runId),
+            });
             const render = (tree: TraceTree): void => {
                 if (options.json === true) {
                     context.output.write(toEnvelopeJson(tree));
@@ -33,7 +46,16 @@ export function registerAgentTraceCommand(agent: Command, context: CliContext): 
                                     node.sessionIds.length > 0 ? ` sessions=${node.sessionIds.join(',')}` : '';
                                 const log = node.logPath !== null ? ` stream=${node.logPath}` : '';
                                 const parent = node.parentRunId !== null ? ` parent=${node.parentRunId}` : '';
-                                return `${node.kind}\t${node.runId}\t${node.status}${parent}${sessions}${log}`;
+                                // 1396 R2: a delegated receipt names its remote task, state and branch.
+                                const remote =
+                                    node.remoteTaskId === undefined
+                                        ? ''
+                                        : ` remote=${node.member ?? 'unknown'}/${node.remoteTaskId}${
+                                              node.remoteState === undefined ? '' : ` ${node.remoteState}`
+                                          }${node.remoteBranch === undefined ? '' : ` branch=${node.remoteBranch}`}`;
+                                const refreshError =
+                                    node.refreshError === undefined ? '' : ` refresh-error=${node.refreshError}`;
+                                return `${node.kind}\t${node.runId}\t${node.status}${parent}${sessions}${log}${remote}${refreshError}`;
                             }),
                         )
                         .join('\n'),

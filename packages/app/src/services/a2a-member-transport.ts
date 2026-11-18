@@ -16,6 +16,10 @@ import { InboxService } from './inbox-service';
 export interface A2aMemberRef {
     instanceId: string;
     a2a?: string;
+    /** Registered local project owning the target member (1395); resolved per dispatch, never stored. */
+    project?: string;
+    /** Target member's local id inside {@link project}. */
+    member?: string;
     authEnv?: string;
 }
 
@@ -84,6 +88,20 @@ export interface A2aTurnResult {
     remoteBranch?: string;
 }
 
+/** One refreshed delegated receipt (1396). `refreshError` is set when the remote could not be read. */
+export interface A2aRefreshResult {
+    runId: string;
+    status: FleetReceiptStatus;
+    member?: string;
+    remoteTaskId?: string;
+    remoteContextId?: string;
+    remoteBranch?: string;
+    /** The remote task state as reported (`TASK_STATE_WORKING`, …), when one was read. */
+    remoteState?: string;
+    reason?: string;
+    refreshError?: string;
+}
+
 /** Terminal-state mapping shared by polling and tests (design §4.2). */
 export function a2aTaskToReceipt(
     task: A2aTask,
@@ -144,6 +162,11 @@ export class A2aCliService implements A2aCli {
             });
     }
 
+    /**
+     * The card reference handed to `a2a -a`. A project-addressed member (1395) resolves through the
+     * gateway per invocation, so a re-prefixed or restarted target keeps working; everything else
+     * uses its declared `a2a` value unchanged.
+     */
     private cardRef(member: A2aMemberRef): string {
         if (member.a2a === undefined || member.a2a === '') {
             throw new Error(`member "${member.instanceId}" has no a2a Agent Card declaration`);
@@ -287,6 +310,13 @@ export interface A2aMemberTransportDeps {
     now?: () => number;
     sleep?: (ms: number) => Promise<void>;
     pollIntervalMs?: number;
+    /**
+     * Resolve a member's card reference per invocation (1395 R2). Injected by the composition root,
+     * which owns the project registry and the gateway port; absent means "use the declared `a2a`".
+     */
+    cardRefs?: (member: A2aMemberRef) => Promise<string>;
+    /** The declared members by instance id, so a receipt can be refreshed from its `spec_id` (1396). */
+    members?: () => Promise<ResolvedFleetMember[]>;
 }
 
 /** Options for an in-process dispatch from `spur agent run` or a workflow stage. */
@@ -322,6 +352,92 @@ export class A2aMemberTransport {
         this.pollIntervalMs = deps.pollIntervalMs ?? 2_000;
     }
 
+    /**
+     * The member view the A2A CLI runs against (1395 R2). A project-addressed member has no literal
+     * card, so its URL is resolved here — once per turn, never cached — and handed on exactly as a
+     * declared `a2a` value would be. Every failure propagates as the turn's `failed` receipt.
+     */
+    private async withCardRef(member: ResolvedFleetMember): Promise<ResolvedFleetMember> {
+        if (this.deps.cardRefs === undefined || member.project === undefined || member.a2a !== undefined) {
+            return member;
+        }
+        return { ...member, a2a: await this.deps.cardRefs(member) };
+    }
+
+    /**
+     * Refresh one delegated receipt (1396 R1): read the remote task once and apply the §4.2 mapping.
+     *
+     * Read-on-demand instead of a poller, and never a send — a row that already carries a remote task
+     * id must never re-deliver. A terminal row costs no network call, and a failure keeps the last
+     * known receipt so the row still renders (R3).
+     */
+    async refresh(runId: string): Promise<A2aRefreshResult> {
+        const runs = new CoordinationRunDao(await this.deps.getDb());
+        const row = await runs.getByRunId(runId);
+        if (row === null) return { runId, status: 'outcome-unknown', refreshError: `no coordination run "${runId}"` };
+        const base: A2aRefreshResult = {
+            runId,
+            status: row.status === 'exited' ? 'completed' : row.status === 'errored' ? 'failed' : 'outcome-unknown',
+            member: row.spec_id,
+            ...(row.remote_task_id !== null ? { remoteTaskId: row.remote_task_id } : {}),
+            ...(row.remote_context_id !== null ? { remoteContextId: row.remote_context_id } : {}),
+            ...(remoteBranchOf(row.artifact_refs_json) !== undefined
+                ? { remoteBranch: remoteBranchOf(row.artifact_refs_json) as string }
+                : {}),
+        };
+        // Terminal rows and rows that never reached the remote are already final: no network call.
+        if (row.status !== 'running' || row.remote_task_id === null || row.remote_task_id === undefined) {
+            return base;
+        }
+
+        const member = (await this.deps.members?.())?.find((candidate) => candidate.instanceId === row.spec_id);
+        if (member === undefined) {
+            return { ...base, refreshError: `member "${row.spec_id}" is no longer declared — cannot refresh` };
+        }
+        const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
+        if (member.authEnv !== undefined && (secret === undefined || secret === '')) {
+            return {
+                ...base,
+                refreshError: `auth environment variable "${member.authEnv}" is unset — cannot refresh`,
+            };
+        }
+        const remoteTaskId = row.remote_task_id;
+        try {
+            const target = await this.withCardRef(member);
+            const task = await this.cli.get(target, remoteTaskId);
+            const mapped = a2aTaskToReceipt(task);
+            if (mapped === null) return { ...base, remoteState: task.state };
+            const refs = JSON.stringify([
+                {
+                    kind: 'result',
+                    path: this.fs.resolve('.spur/run', runId, 'a2a-result.md'),
+                    mediaType: 'text/markdown',
+                    ...(mapped.remoteBranch !== undefined ? { remoteBranch: mapped.remoteBranch } : {}),
+                },
+            ]);
+            await this.fs.writeFile(this.fs.resolve('.spur/run', runId, 'a2a-result.md'), mapped.output ?? '');
+            await runs.updateExit(
+                runId,
+                mapped.status === 'completed' ? 'exited' : 'errored',
+                new Date(this.now()).toISOString(),
+                refs,
+                {
+                    messageIds: messageIdsOf(row.message_ids_json),
+                    outcome: mapped.status === 'completed' ? 'run-exit-only' : 'errored',
+                },
+            );
+            return {
+                ...base,
+                status: mapped.status,
+                remoteState: task.state,
+                ...(mapped.remoteBranch !== undefined ? { remoteBranch: mapped.remoteBranch } : {}),
+                ...(mapped.reason !== undefined ? { reason: mapped.reason } : {}),
+            };
+        } catch (error) {
+            return { ...base, refreshError: errorText(error, secret) };
+        }
+    }
+
     /** Read a completed run's artifact text (the warm-path counterpart of runMessage's output). */
     async outputForRun(runId: string): Promise<string | undefined> {
         const row = await new CoordinationRunDao(await this.deps.getDb()).getByRunId(runId);
@@ -338,7 +454,7 @@ export class A2aMemberTransport {
 
     /** Doctor readiness: binary, card and protocol are observed independently (R10). */
     async supportsWriteFencing(member: ResolvedFleetMember): Promise<boolean> {
-        return a2aWriteFencingSupported(await this.cli.card(member));
+        return a2aWriteFencingSupported(await this.cli.card(await this.withCardRef(member)));
     }
 
     /** Doctor readiness: binary, card and protocol are observed independently (R10). */
@@ -355,7 +471,7 @@ export class A2aMemberTransport {
             binaryVersion = `unavailable (${errorText(error)})`;
         }
         try {
-            const card = await this.cli.card(member);
+            const card = await this.cli.card(await this.withCardRef(member));
             return { binaryVersion, cardReachable: true, protocolVersion: card.protocolVersion };
         } catch (error) {
             const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
@@ -415,9 +531,11 @@ export class A2aMemberTransport {
         messageId: string,
         options: { timeoutMs?: number; work?: A2aWorkShape; claimed?: boolean } = {},
     ): Promise<A2aTurnResult> {
-        if (member.a2a === undefined) {
+        // A project-addressed member (1395) has no literal declaration: the resolver supplies its card.
+        if (member.a2a === undefined && !(member.project !== undefined && this.deps.cardRefs !== undefined)) {
             return { status: 'failed', messageId, reason: `member "${member.instanceId}" has no a2a declaration` };
         }
+        const target = await this.withCardRef(member);
         const inbox = new InboxService({ getDb: this.deps.getDb });
         const runs = new CoordinationRunDao(await this.deps.getDb());
         const existing = (await runs.listByMessageId(messageId)).find((row) => row.spec_id === member.instanceId);
@@ -454,7 +572,7 @@ export class A2aMemberTransport {
         let remoteContextId = existing?.remote_context_id ?? undefined;
         const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
         try {
-            const card = await this.cli.card(member);
+            const card = await this.cli.card(target);
             const mutation = a2aMutationReason(options.work, a2aWriteFencingSupported(card));
             if (mutation !== null) {
                 if (claim !== null) await inbox.settle([claim], 'not-started', mutation);
@@ -468,7 +586,7 @@ export class A2aMemberTransport {
                         ...(message.error !== null ? { reason: message.error } : {}),
                     };
                 }
-                const sent = await this.cli.send(member, message.body, message.requestKey ?? message.id);
+                const sent = await this.cli.send(target, message.body, message.requestKey ?? message.id);
                 remoteTaskId = sent.taskId;
                 remoteContextId = sent.contextId;
                 runId = randomUUID();
@@ -491,13 +609,13 @@ export class A2aMemberTransport {
             }
             const deadline = this.now() + (options.timeoutMs ?? 600_000);
             for (;;) {
-                const task = await this.cli.get(member, remoteTaskId);
+                const task = await this.cli.get(target, remoteTaskId);
                 const mapped = a2aTaskToReceipt(task);
                 if (mapped !== null) {
                     let reason = mapped.reason;
                     if (mapped.cancel) {
                         try {
-                            await this.cli.cancel(member, remoteTaskId);
+                            await this.cli.cancel(target, remoteTaskId);
                         } catch (error) {
                             reason = `${reason ?? 'interrupted'} (cancel failed: ${errorText(error, secret)})`;
                         }
@@ -556,5 +674,26 @@ export class A2aMemberTransport {
             if (claim !== null) await inbox.settle([claim], 'not-started', reason);
             return { status: 'not-started', messageId, reason };
         }
+    }
+}
+
+/** The remote branch recorded on a row's artifact refs, when it has one. */
+function remoteBranchOf(artifactRefsJson: string): string | undefined {
+    try {
+        const refs = JSON.parse(artifactRefsJson) as Array<{ remoteBranch?: unknown }>;
+        const branch = refs.find((ref) => typeof ref.remoteBranch === 'string')?.remoteBranch;
+        return typeof branch === 'string' ? branch : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/** The inbox message ids a row was started for, so an update keeps the column contract. */
+function messageIdsOf(messageIdsJson: string): string[] {
+    try {
+        const ids = JSON.parse(messageIdsJson) as unknown;
+        return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
+    } catch {
+        return [];
     }
 }

@@ -59,6 +59,21 @@ export interface AgentCardInput {
     origin: string;
 }
 
+/**
+ * The origin a card advertises (1395 R4).
+ *
+ * Behind the gateway the incoming `host` is the upstream loopback authority, so the card must build
+ * its interface URL from the forwarded identity instead — otherwise it advertises an ephemeral serve
+ * port that dies on the next restart. The upstream binds loopback only, so these headers can come
+ * from a local process, and they affect the advertised URL alone: never authentication.
+ */
+export function cardOrigin(forwarded: { host?: string | null; prefix?: string | null }, fallback: string): string {
+    const host = forwarded.host?.trim() ?? '';
+    const prefix = forwarded.prefix?.trim() ?? '';
+    if (host === '' || prefix === '') return fallback;
+    return `http://${host}${prefix.replace(/\/+$/, '')}`;
+}
+
 /** Build the card: protocol 1.0, HTTP+JSON only, streaming and push declared false. */
 export function agentCard(input: AgentCardInput): Record<string, unknown> {
     return {

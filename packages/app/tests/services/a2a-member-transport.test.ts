@@ -390,3 +390,55 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
         });
     });
 });
+
+/**
+ * 1395 R2: a `project`-addressed member has no literal card URL, so the transport resolves it per
+ * dispatch through the injected resolver — the same `-a` argument an `a2a` value would produce, never
+ * a cached URL (a re-prefixed or restarted target must keep working).
+ */
+describe('1395 R2: project-addressed member resolves its card per dispatch', () => {
+    const PROJECT_MEMBER: ResolvedFleetMember = {
+        instanceId: 'proj-tslibs',
+        localId: 'tslibs',
+        executor: '',
+        enabled: true,
+        writeCapable: false,
+        capabilityState: 'unavailable',
+        project: 'ts-libs',
+        member: 'coder',
+        authEnv: 'REMOTE_TOKEN',
+    };
+
+    test('hands the resolved URL to the a2a CLI exactly as a declared a2a value would', async () => {
+        const seen: unknown[] = [];
+        const cli = new FakeCli();
+        const cardRefs = async (member: { instanceId: string }) => {
+            seen.push(member.instanceId);
+            return `http://localhost:3000/tslibs/a2a/members/ts-libs-coder/.well-known/agent-card.json`;
+        };
+        let db: DbAdapter | undefined;
+        const getDb = async () => (db ??= await createMigratedDb({ url: ':memory:' }));
+        const transport = new A2aMemberTransport({
+            cwd: '/tmp/a2a-test',
+            getDb,
+            env: { REMOTE_TOKEN: 'secret-value' },
+            cli,
+            pollIntervalMs: 1,
+            sleep: async () => undefined,
+            cardRefs,
+        });
+        const inbox = new InboxService({ getDb });
+        const dispatcher = {
+            enqueue: async (req: FleetDispatchRequest) => {
+                const sent = await inbox.send({ from: req.fromId, to: req.member, body: req.body, kind: 'request' });
+                return { messageId: sent.message.id, replayed: sent.replayed };
+            },
+        };
+        const card = await cli.card();
+        expect(card.protocolVersion).toBe('1.0');
+        const result = await transport.dispatch(PROJECT_MEMBER, 'ping', { dispatcher, fromId: 'operator' });
+        expect(result).toMatchObject({ status: 'completed' });
+        // The fake CLI records the member it was handed; the resolver ran once per invocation.
+        expect(seen).toEqual(['proj-tslibs']);
+    });
+});
