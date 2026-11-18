@@ -55,6 +55,27 @@ export interface ProtocolA2aUsage {
     cancelled: number;
 }
 
+/**
+ * A repeated `(tool, errorCode)` failure pair (task 1400): the evidence a rule-scan candidate needs.
+ * Codes only — the redacted `error` message never reaches a cluster.
+ */
+export interface ProtocolFailureCluster {
+    tool: string;
+    errorCode: string;
+    count: number;
+    /** Earliest and latest occurrence in the window (ISO). */
+    firstAt: string;
+    lastAt: string;
+    /** Up to {@link FAILURE_CLUSTER_SAMPLE_LIMIT} row ids, oldest first, as the finding's anchor. */
+    sampleEventIds: string[];
+}
+
+/** Repetition threshold: one or two failures are noise, three is a pattern (task 1400). */
+export const FAILURE_CLUSTER_MIN_COUNT = 3;
+
+/** The evidence anchor stays small enough to quote in a finding. */
+export const FAILURE_CLUSTER_SAMPLE_LIMIT = 5;
+
 /** Bearer refusals per surface and structural reason. */
 export interface ProtocolAuthDeniedUsage {
     surface: string;
@@ -69,6 +90,8 @@ export interface ProtocolUsage {
     byActor: ProtocolActorUsage[];
     a2a: ProtocolA2aUsage[];
     authDenied: ProtocolAuthDeniedUsage[];
+    /** Repeated failure pairs, most frequent first (task 1400). */
+    failureClusters: ProtocolFailureCluster[];
 }
 
 /** Options for {@link protocolUsageSummary}; absent bounds are unbounded. */
@@ -81,6 +104,8 @@ export interface ProtocolUsageOptions {
 
 /** The one row shape the fold needs; JSON is extracted in SQL so a malformed payload cannot throw. */
 interface ProtocolEventRow {
+    id: string;
+    occurred_at: string;
     event_name: string;
     actor: string | null;
     tool: string | null;
@@ -90,6 +115,7 @@ interface ProtocolEventRow {
     reason: string | null;
     outcome: string | null;
     duration_ms: number | null;
+    error_code: string | null;
 }
 
 const PROTOCOL_EVENT_NAMES = [
@@ -118,7 +144,7 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
     let rows: ProtocolEventRow[];
     try {
         rows = await db.queryAll<ProtocolEventRow>(
-            `SELECT event_name,
+            `SELECT id, occurred_at, event_name,
                     actor,
                     json_extract(payload_json, '$.data.tool') AS tool,
                     json_extract(payload_json, '$.data.uri') AS uri,
@@ -126,14 +152,15 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
                     json_extract(payload_json, '$.data.surface') AS surface,
                     json_extract(payload_json, '$.data.reason') AS reason,
                     json_extract(payload_json, '$.data.outcome') AS outcome,
-                    json_extract(payload_json, '$.data.durationMs') AS duration_ms
+                    json_extract(payload_json, '$.data.durationMs') AS duration_ms,
+                    json_extract(payload_json, '$.data.errorCode') AS error_code
              FROM system_events
              WHERE event_name IN (${names})
                ${where}`,
             ...params,
         );
     } catch {
-        return { tools: [], resources: [], byActor: [], a2a: [], authDenied: [] };
+        return { tools: [], resources: [], byActor: [], a2a: [], authDenied: [], failureClusters: [] };
     }
 
     const tools = new Map<string, { calls: number; failures: number; durations: number[]; unmeasured: number }>();
@@ -141,6 +168,7 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
     const actors = new Map<string, ProtocolActorUsage>();
     const a2a = new Map<string, ProtocolA2aUsage>();
     const denied = new Map<string, ProtocolAuthDeniedUsage>();
+    const failures = new Map<string, ProtocolFailureCluster>();
 
     const bucket = (key: string) => {
         let entry = tools.get(key);
@@ -180,8 +208,31 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
                 if (duration === null) entry.unmeasured += 1;
                 else entry.durations.push(duration);
                 const actor = actorBucket(row.actor ?? 'unknown');
-                if (failed) actor.failures += 1;
-                else actor.calls += 1;
+                if (failed) {
+                    actor.failures += 1;
+                    const errorCode = row.error_code ?? 'unknown';
+                    const key = `${tool}\u0000${errorCode}`;
+                    const cluster = failures.get(key);
+                    if (cluster === undefined) {
+                        failures.set(key, {
+                            tool,
+                            errorCode,
+                            count: 1,
+                            firstAt: row.occurred_at,
+                            lastAt: row.occurred_at,
+                            sampleEventIds: [row.id],
+                        });
+                    } else {
+                        cluster.count += 1;
+                        if (row.occurred_at < cluster.firstAt) cluster.firstAt = row.occurred_at;
+                        if (row.occurred_at > cluster.lastAt) cluster.lastAt = row.occurred_at;
+                        if (cluster.sampleEventIds.length < FAILURE_CLUSTER_SAMPLE_LIMIT) {
+                            cluster.sampleEventIds.push(row.id);
+                        }
+                    }
+                } else {
+                    actor.calls += 1;
+                }
                 break;
             }
             case 'mcp.resource.read': {
@@ -234,6 +285,11 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
             (a, b) => b.calls + b.failures - (a.calls + a.failures) || a.actor.localeCompare(b.actor),
         ),
         a2a: [...a2a.values()].sort((a, b) => a.member.localeCompare(b.member)),
+        failureClusters: [...failures.values()]
+            .filter((cluster) => cluster.count >= FAILURE_CLUSTER_MIN_COUNT)
+            .sort(
+                (a, b) => b.count - a.count || a.tool.localeCompare(b.tool) || a.errorCode.localeCompare(b.errorCode),
+            ),
         authDenied: [...denied.values()].sort(
             (a, b) => b.count - a.count || a.surface.localeCompare(b.surface) || a.reason.localeCompare(b.reason),
         ),

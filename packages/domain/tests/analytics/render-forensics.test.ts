@@ -547,7 +547,14 @@ describe('renderForensics — protocol usage (1398 R4)', () => {
 
     test('an empty window reads not available, never zeros', () => {
         const a = artifact({
-            protocolUsage: { tools: [], resources: [], byActor: [], a2a: [], authDenied: [] },
+            protocolUsage: {
+                tools: [],
+                resources: [],
+                byActor: [],
+                a2a: [],
+                authDenied: [],
+                failureClusters: [],
+            },
         } as Partial<HistoryArtifact>);
         const out = renderForensics(a);
         expect(out).toContain('not available (no protocol events in window)');

@@ -136,6 +136,59 @@ describe('protocolUsageSummary (1398 R1/R2)', () => {
         }
     });
 
+    test('repeated (tool, errorCode) pairs cluster; a pair under the threshold does not (1400 R1)', async () => {
+        const db = await setupDb();
+        try {
+            // Three failures of the same pair inside the window → one cluster.
+            await emit(db, 'c1', 'mcp.tool.failed', T0, { tool: 'task_show', errorCode: 'invalid_arguments' });
+            await emit(db, 'c2', 'mcp.tool.failed', T1, { tool: 'task_show', errorCode: 'invalid_arguments' });
+            await emit(db, 'c3', 'mcp.tool.failed', T2, { tool: 'task_show', errorCode: 'invalid_arguments' });
+            // Two failures of another pair → below the threshold, no cluster.
+            await emit(db, 'c4', 'mcp.tool.failed', T0, { tool: 'workflow_run', errorCode: 'tool_error' });
+            await emit(db, 'c5', 'mcp.tool.failed', T1, { tool: 'workflow_run', errorCode: 'tool_error' });
+            // A third one outside the window must not lift it over the threshold.
+            await emit(db, 'c6', 'mcp.tool.failed', OUTSIDE, { tool: 'workflow_run', errorCode: 'tool_error' });
+
+            const usage = await protocolUsageSummary(db, { since: '2026-11-17T00:00:00.000Z', until: T3 });
+            expect(usage.failureClusters).toHaveLength(1);
+            const cluster = usage.failureClusters[0];
+            if (cluster === undefined) throw new Error('expected one failure cluster');
+            expect(cluster.tool).toBe('task_show');
+            expect(cluster.errorCode).toBe('invalid_arguments');
+            expect(cluster.count).toBe(3);
+            expect(cluster.sampleEventIds).toEqual(['c1', 'c2', 'c3']);
+            // No error MESSAGE text survives into a cluster (R4 anti-pattern: codes only).
+            expect(JSON.stringify(cluster)).not.toContain('wbs is required');
+        } finally {
+            await db.close();
+        }
+    });
+
+    test('a cluster keeps at most five sample ids, newest last (1400 R1)', async () => {
+        const db = await setupDb();
+        try {
+            const ids = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7'];
+            for (const [index, id] of ids.entries()) {
+                await emit(db, id, 'mcp.tool.failed', `2026-11-17T10:0${index}:00.000Z`, {
+                    tool: 'task_list',
+                    errorCode: 'tool_error',
+                });
+            }
+            const usage = await protocolUsageSummary(db, {
+                since: '2026-11-17T00:00:00.000Z',
+                until: '2026-11-17T11:00:00.000Z',
+            });
+            const cluster = usage.failureClusters[0];
+            if (cluster === undefined) throw new Error('expected one failure cluster');
+            expect(cluster.count).toBe(7);
+            expect(cluster.sampleEventIds).toHaveLength(5);
+            expect(cluster.firstAt).toBe('2026-11-17T10:00:00.000Z');
+            expect(cluster.lastAt).toBe('2026-11-17T10:06:00.000Z');
+        } finally {
+            await db.close();
+        }
+    });
+
     test('an unreadable plane reads as empty arrays instead of throwing', async () => {
         // The ledger is best-effort on the trace path: a missing/broken plane must not fail the report.
         const broken = {
@@ -144,14 +197,21 @@ describe('protocolUsageSummary (1398 R1/R2)', () => {
             },
         } as unknown as DbAdapter;
         const usage = await protocolUsageSummary(broken, { since: '2026-11-17T00:00:00.000Z', until: T3 });
-        expect(usage).toEqual({ tools: [], resources: [], byActor: [], a2a: [], authDenied: [] });
+        expect(usage).toEqual({ tools: [], resources: [], byActor: [], a2a: [], authDenied: [], failureClusters: [] });
     });
 
     test('an empty window reads as empty arrays, never fabricated zeros', async () => {
         const db = await setupDb();
         try {
             const usage = await protocolUsageSummary(db, { since: '2026-11-17T00:00:00.000Z', until: T3 });
-            expect(usage).toEqual({ tools: [], resources: [], byActor: [], a2a: [], authDenied: [] });
+            expect(usage).toEqual({
+                tools: [],
+                resources: [],
+                byActor: [],
+                a2a: [],
+                authDenied: [],
+                failureClusters: [],
+            });
         } finally {
             await db.close();
         }

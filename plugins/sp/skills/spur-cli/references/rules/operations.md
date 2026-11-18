@@ -201,6 +201,12 @@ cleanly separated from precise/gated authoring. Procedure:
    - modules with no corresponding test (systematic, not a single gap)
    - inconsistent conventions applied unevenly (naming, error handling, logging)
    Use `rg`/`sg` to count occurrences — evidence is the number of hits across files.
+   **Event evidence (task 1400):** repeated *runtime* tool failures are a second source. Read
+   `spur history analyze --since <30d> --json` → `protocolUsage.failureClusters` (`{ tool,
+   errorCode, count, firstAt, lastAt, sampleEventIds }`, clustered at `count >= 3`). Each cluster is
+   one candidate whose evidence is `count` plus its `sampleEventIds`, and whose finding key is
+   `repetition:mcp-tool:<tool>:<errorCode>` (history-anatomy contract). Clusters carry codes, never
+   error text — do not invent a payload rule from a message you cannot see.
 3. **Cluster into candidate concerns** — group hits by the single concern they imply, and for each
    pick the evaluator that would catch it ([authoring-rules.md → Evaluator selection](authoring-rules.md#evaluator-selection)).
 4. **Filter against the catalog** — run [find-existing-coverage](#sub-procedure-find-existing-coverage)
@@ -208,10 +214,14 @@ cleanly separated from precise/gated authoring. Procedure:
    (→ refine/extend) vs. genuinely new (→ add).
 5. **Rank and report** — order candidates by occurrence count × severity-of-concern. For each:
    the concern, evidence (hit count + sample files), proposed evaluator, and the recommended route
-   (`add` new / `refine`-extend existing / skip-already-covered). **Author nothing.**
+   (`add` new / `refine`-extend existing / skip-already-covered / `not-a-rule`). **Author nothing.**
+   `not-a-rule` is the route for a runtime failure a static rule cannot catch: the candidate becomes
+   a task carrying the finding key instead of a rule nobody can enforce.
 
 Output contract: a ranked list of rule candidates, each with `{ concern, evidence, evaluator,
-route: add|extend|covered }`. The user picks which to act on; accepted ones hand off to `add`/`refine`.
+route: add|extend|covered|not-a-rule }`. The user picks which to act on; accepted ones hand off to
+`add`/`refine`. The list is a **proposal set**: no candidate is applied by the scan, and a rule file
+is written only by `add` after the operator confirms it (R4).
 
 ## validate / list (direct CLI — no command, no procedure)
 

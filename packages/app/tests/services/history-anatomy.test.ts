@@ -624,6 +624,7 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
         for (const [key, cat] of [
             ['reliability:mcp-tool:task_show:failure-rate', 'reliability'],
             ['coverage:skill:sp:brainstorm:zero-use', 'coverage'],
+            ['repetition:mcp-tool:task_show:invalid_arguments', 'repetition'],
         ] as const) {
             expect(
                 checkReportStructure(findingBlock(fullFinding(key, cat))).problems.filter((p) =>

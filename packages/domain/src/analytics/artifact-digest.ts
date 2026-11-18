@@ -71,6 +71,8 @@ export const ARTIFACT_ARRAY_CLASSIFICATION: Readonly<Record<ArtifactArrayKey, 'r
     authDenied: 'set',
     // SurfaceUsage (task 1399) — inventory order is the app's, not evidence; sorted for stability.
     items: 'set',
+    // ProtocolFailureCluster[] (task 1400) — already ordered by count; sorted for digest stability.
+    failureClusters: 'set',
     zeroUse: 'set',
 };
 

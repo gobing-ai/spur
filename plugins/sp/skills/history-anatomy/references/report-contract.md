@@ -59,6 +59,7 @@ it reads (`protocolUsage` / `surfaceUsage`) as its evidence anchor:
 | --- | --- | --- |
 | `reliability:mcp-tool:<tool>:failure-rate` | `calls >= 20 && failureRate >= 0.2` for that tool | `protocolUsage.tools[]` |
 | `coverage:<kind>:<name>:zero-use` | the item appears in `zeroUse`, and the window is at least 30 days | `surfaceUsage.zeroUse[]` |
+| `repetition:mcp-tool:<tool>:<errorCode>` | a `failureClusters[]` entry (`count >= 3`) — one finding per cluster, anchored on its `sampleEventIds` | `protocolUsage.failureClusters[]` |
 
 A window shorter than 30 days renders zero-use as `not comparable (window < 30d)` and emits **no**
 `zero-use` finding. MCP tool zero-use is never asserted: the tool catalog is not in the artifact, so

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Feed repeated tool failures to rule-scan as candidates
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:36.439Z
-updated_at: "2026-11-18T06:09:03.207Z"
+updated_at: "2026-11-18T08:48:08.037Z"
 feature_id: I61
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 2
 
 dependencies: ["1398"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1400. Feed repeated tool failures to rule-scan as candidates
@@ -28,14 +30,14 @@ dependencies: ["1398"]
 
 ### Requirements
 
-- [ ] R1. `protocolUsage.failureClusters[]`: `{ tool, errorCode, count, firstAt, lastAt, sampleEventIds (max 5) }` for `(tool, errorCode)` pairs with `count >= 3` in the window, sorted by count descending.
-- [ ] R2. Anatomy finding key `repetition:mcp-tool:<tool>:<errorCode>` per cluster, citing `sampleEventIds` as its evidence anchor.
-- [ ] R3. The rule-scan procedure adds an event-evidence source. It reads `spur history analyze --since <30d> --json` → `protocolUsage.failureClusters`, and maps each cluster to a candidate with `evidence: count + sample event ids`. The route list gains `not-a-rule` (→ task carrying the finding key).
-- [ ] R4. The scan doc restates that candidates are proposals and rules are written only by `add` on confirmation.
+- [x] R1. `protocolUsage.failureClusters[]`: `{ tool, errorCode, count, firstAt, lastAt, sampleEventIds (max 5) }` for `(tool, errorCode)` pairs with `count >= 3` in the window, sorted by count descending.
+- [x] R2. Anatomy finding key `repetition:mcp-tool:<tool>:<errorCode>` per cluster, citing `sampleEventIds` as its evidence anchor.
+- [x] R3. The rule-scan procedure adds an event-evidence source. It reads `spur history analyze --since <30d> --json` → `protocolUsage.failureClusters`, and maps each cluster to a candidate with `evidence: count + sample event ids`. The route list gains `not-a-rule` (→ task carrying the finding key).
+- [x] R4. The scan doc restates that candidates are proposals and rules are written only by `add` on confirmation.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Repeated tool failures become rule candidates (req: R1, R2, R3, R4)
+- [x] AC1 — Repeated tool failures become rule candidates (req: R1, R2, R3, R4)
 
 Test layer: domain analytics test on in-memory SQLite, plus the scan procedure documentation (the agent procedure has no executable surface).
 
@@ -75,18 +77,69 @@ Test layer: domain analytics test on in-memory SQLite, plus the scan procedure d
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/tests/services/history-anatomy.test.ts:627` |
+| `packages/domain/src/analytics/artifact-digest.ts:74` |
+| `packages/domain/src/analytics/protocol-usage.ts:107` |
+| `packages/domain/src/analytics/protocol-usage.ts:118` |
+| `packages/domain/src/analytics/protocol-usage.ts:147` |
+| `packages/domain/src/analytics/protocol-usage.ts:155` |
+| `packages/domain/src/analytics/protocol-usage.ts:163` |
+| `packages/domain/src/analytics/protocol-usage.ts:171` |
+| `packages/domain/src/analytics/protocol-usage.ts:211` |
+| `packages/domain/src/analytics/protocol-usage.ts:288` |
+| `packages/domain/src/analytics/protocol-usage.ts:58` |
+| `packages/domain/src/analytics/protocol-usage.ts:93` |
+| `packages/domain/tests/analytics/protocol-usage.test.ts:139` |
+| `packages/domain/tests/analytics/protocol-usage.test.ts:200` |
+| `packages/domain/tests/analytics/protocol-usage.test.ts:207` |
+| `packages/domain/tests/analytics/render-forensics.test.ts:550` |
+| `plugins/sp/skills/history-anatomy/references/report-contract.md:62` |
+| `plugins/sp/skills/spur-cli/references/rules/operations.md:204` |
+| `plugins/sp/skills/spur-cli/references/rules/operations.md:217` |
+| `plugins/sp/skills/spur-cli/references/rules/operations.md:222` |
+| `packages/domain/coverage/lcov.info:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — `protocolUsage.failureClusters[]`: `{tool, errorCode, count, firstAt, lastAt, sampleEventIds (max 5)}` for pairs with `count >= 3`, count-descending | MET | `packages/domain/src/analytics/protocol-usage.ts:74,77` (constants), `:213-233` (fold), `:288-296` (filter + order); `protocol-usage.test.ts` 7/7 — cluster threshold with a pair under it and an out-of-window row that must not lift it, the 5-id cap, `firstAt`/`lastAt`, and count-descending order over two clusters |
+| R2 — finding key `repetition:mcp-tool:<tool>:<errorCode>` per cluster citing `sampleEventIds` | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` new row in the surface-findings table (anchored on `protocolUsage.failureClusters[]`, `count >= 3`, anchored on `sampleEventIds`); structure-gate fixture in `packages/app/tests/services/history-anatomy.test.ts` proves the key passes the closed-category gate (69/69) |
+| R3 — rule-scan procedure reads `spur history analyze --since <30d> --json` → `protocolUsage.failureClusters`, maps each cluster to a candidate with `evidence: count + sample event ids`, and the route list gains `not-a-rule` (→ task carrying the finding key) | MET | `plugins/sp/skills/spur-cli/references/rules/operations.md` § scan step 2 (event-evidence paragraph naming the command, the cluster fields and the key) and step 5 route list (`add |
+| R4 — the scan doc restates that candidates are proposals and rules are written only by `add` on confirmation | MET | same file, output-contract paragraph: "The list is a **proposal set**: no candidate is applied by the scan, and a rule file is written only by `add` after the operator confirms it (R4)"; the pre-existing propose-only preamble is retained |
+| Anti-patterns — no error-message text, no automatic `add`, no argument-value clustering | MET | clusters carry `errorCode` only (`protocol-usage.ts:213`, `:221`); a test asserts the cluster JSON never contains the message text; the doc forbids authoring in scan |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Repeated tool failures become rule candidates (R1,R2,R3,R4) | MET | test | `protocol-usage.test.ts` 7/7 (domain proof of the cluster semantics), `history-anatomy.test.ts` 69/69 (key passes the gate); the procedure itself is documentation — no executable surface exists, as the task states |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:47:25.651Z todo → wip (system)
+- 2026-11-18T08:48:06.630Z wip → testing (system)
+- 2026-11-18T08:48:08.032Z testing → done (system)
+
