@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { collectSelfStatus } from '@gobing-ai/spur-app';
+import { collectSelfStatus, type SelfStatusSection } from '@gobing-ai/spur-app';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { CommandError } from '../errors';
@@ -75,9 +75,13 @@ async function runStatusCore(
         }`,
         `DecisionMaker: ${aggregate.decisionMaker.state}${aggregate.decisionMaker.credentialPresent ? ' (key present)' : ''}`,
         `Readiness: ${aggregate.overallState}`,
-        ...Object.entries(aggregate.sections).map(
-            ([name, section]) => `  ${name}: ${section.state}${section.message === '' ? '' : ` — ${section.message}`}`,
-        ),
+        ...Object.entries(aggregate.sections).flatMap(([name, section]) => {
+            const line = `  ${name}: ${section.state}${section.message === '' ? '' : ` — ${section.message}`}`;
+            return [
+                line,
+                ...(gatewayCountersLine(name, section) === null ? [] : [gatewayCountersLine(name, section) as string]),
+            ];
+        }),
         ...(daemon === null
             ? []
             : [
@@ -95,6 +99,26 @@ async function runStatusCore(
     ];
     context.output.write(lines.join('\n'));
     return aggregate.ok ? 0 : 1;
+}
+
+/**
+ * The one counters line `spur status` prints under a live gateway (1385 R3). Returns null for any
+ * other section, or when the gateway section carries no counters — a probe that did not answer must
+ * not be rendered as zeroes.
+ */
+export function gatewayCountersLine(name: string, section: SelfStatusSection): string | null {
+    const counters = section.data?.counters as
+        | {
+              since?: string;
+              requests?: number;
+              status4xx?: number;
+              status5xx?: number;
+              upstreamRestarts?: Record<string, number>;
+          }
+        | undefined;
+    if (name !== 'gateway' || counters === undefined) return null;
+    const restarts = Object.values(counters.upstreamRestarts ?? {}).reduce((sum, count) => sum + count, 0);
+    return `  gateway counters: requests=${counters.requests ?? 0} 4xx=${counters.status4xx ?? 0} 5xx=${counters.status5xx ?? 0} restarts=${restarts} since=${counters.since ?? 'unknown'}`;
 }
 
 async function readTargetStatus(

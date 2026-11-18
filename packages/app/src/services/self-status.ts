@@ -59,6 +59,7 @@ export type SelfStatusSections = {
     decisions: SelfStatusSection;
     corpus: SelfStatusSection;
     workflows: SelfStatusSection;
+    gateway: SelfStatusSection;
 };
 
 /** Everything the collector is allowed to read, injected by the CLI composition root. */
@@ -251,6 +252,44 @@ async function probeProjectServer(
     }
 }
 
+/**
+ * The one-port gateway is machine state, not project readiness: probe its fixed port and report what
+ * it says about itself (1385 R3). A closed port is legitimate — no gateway is running — while a
+ * listener that is not the gateway must be named, because a project serve there would swallow every
+ * prefix silently.
+ */
+async function probeGateway(ctx: SelfStatusContext, signal: AbortSignal): Promise<SelfStatusSection> {
+    const source = 'services/project-gateway.ts';
+    // The shared config type carries no `server` block (project files cannot set it; the env mapping
+    // is the K41 gap), so the port is read structurally and falls back to the documented default.
+    const port = (ctx.config as { server?: { gateway?: { port?: number } } } | null)?.server?.gateway?.port ?? 3000;
+    const host = 'localhost';
+    const fetchImpl = ctx.fetchImpl ?? fetch;
+    let response: Response;
+    try {
+        response = await fetchImpl(`http://${host}:${port}/api/health`, { redirect: 'error', signal });
+    } catch {
+        return {
+            state: 'not-applicable',
+            scope: 'machine',
+            source,
+            message: `no gateway is listening on ${host}:${port}; \`spur serve\` starts one`,
+            data: { port, host },
+        };
+    }
+    const body = (await response.json().catch(() => null)) as { gateway?: unknown; counters?: unknown } | null;
+    if (!response.ok || body?.gateway !== true) {
+        return {
+            state: 'degraded',
+            scope: 'machine',
+            source,
+            message: `${host}:${port} is held by a listener that is not the gateway; stop it or change \`server.gateway.port\``,
+            data: { port, host },
+        };
+    }
+    return { state: 'ready', scope: 'machine', source, message: '', data: { port, host, counters: body.counters } };
+}
+
 /** Agent specs plus live process state when a serve answers; specs alone otherwise. */
 async function collectAgents(
     ctx: SelfStatusContext,
@@ -391,10 +430,11 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
         };
 
         const decisionMaker = decisionMakerSummary(ctx.config, ctx.env);
-        const [projectsProbe, agentsProbe, decisionsProbe] = await Promise.all([
+        const [projectsProbe, agentsProbe, decisionsProbe, docsSelfProbe] = await Promise.all([
             bounded(controller, (signal) => probeProjectServer(ctx.cwd, ctx, signal)),
             bounded(controller, (signal) => collectAgents(ctx, signal, agentSpecs)),
             bounded(controller, () => collectDecisions(ctx, decisionMaker)),
+            bounded(controller, (signal) => probeGateway(ctx, signal)),
         ]);
         const projects = projectsProbe.ok
             ? projectsProbe.value
@@ -458,6 +498,14 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
                 : 'no project database yet; run summaries appear after `spur self migrate`',
         };
 
+        const gateway = docsSelfProbe.ok
+            ? docsSelfProbe.value
+            : unavailable(
+                  'machine',
+                  'services/project-gateway.ts',
+                  'gateway readiness exceeded the collection deadline',
+              );
+
         const sections: SelfStatusSections = {
             installation,
             configuration,
@@ -468,6 +516,7 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
             decisions,
             corpus,
             workflows,
+            gateway,
         };
 
         const degraded = Object.values(sections).some(

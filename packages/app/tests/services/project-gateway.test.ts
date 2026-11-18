@@ -269,6 +269,14 @@ describe('gateway handler (K4 R3/R4/R5)', () => {
                 { name: 'alpha', prefix: '/alpha', running: true },
                 { name: '<script>x</script>', prefix: '/script-x-script', running: false },
             ],
+            // 1385 R2: additive counters; this read reports the count before its own increment.
+            counters: {
+                since: expect.any(String),
+                requests: 0,
+                status4xx: 0,
+                status5xx: 0,
+                upstreamRestarts: {},
+            },
         });
 
         const index = await handler(new Request('http://gw.test/'));

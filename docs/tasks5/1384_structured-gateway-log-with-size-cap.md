@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Structured gateway log with size cap
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:27.369Z
-updated_at: "2026-11-18T05:48:10.253Z"
+updated_at: "2026-11-18T08:14:28.629Z"
 feature_id: K42
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - protocol-surfaces
 estimate_hours: 3.5
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1384. Structured gateway log with size cap
@@ -28,15 +30,15 @@ The gateway (`createGatewayHandler`, `packages/app/src/services/project-gateway.
 
 ### Requirements
 
-- [ ] R1. Emit one event per occurrence through `GatewayDeps.onEvent`: `upstream.ensure` (`outcome`, `ms`), `upstream.restart`, `proxy.unreachable` (dialed addresses, as listed in the 502 body), `route.collision` (prefix and identities), `guard.host` and `guard.csrf` (refusal status). Each event carries `ts`, `kind`, project `name`/`prefix` when known, and `reason`.
-- [ ] R2. `createJsonlEventSink({ path, maxBytes = 5 MiB, fs })` appends one JSON line per event. When the next line would exceed `maxBytes`, it rotates to `<path>.1`, overwriting any earlier `.1`. A sink write failure never fails the request (report once on stderr, then drop).
-- [ ] R3. Events never contain request headers, query strings or bodies; only the URL pathname is recorded.
+- [x] R1. Emit one event per occurrence through `GatewayDeps.onEvent`: `upstream.ensure` (`outcome`, `ms`), `upstream.restart`, `proxy.unreachable` (dialed addresses, as listed in the 502 body), `route.collision` (prefix and identities), `guard.host` and `guard.csrf` (refusal status). Each event carries `ts`, `kind`, project `name`/`prefix` when known, and `reason`.
+- [x] R2. `createJsonlEventSink({ path, maxBytes = 5 MiB, fs })` appends one JSON line per event. When the next line would exceed `maxBytes`, it rotates to `<path>.1`, overwriting any earlier `.1`. A sink write failure never fails the request (report once on stderr, then drop).
+- [x] R3. Events never contain request headers, query strings or bodies; only the URL pathname is recorded.
 
 Out of scope: multi-file retention, log shipping, the `mcp.call` event (1383) and the adopt/start distinction.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Gateway failures and routing decisions are logged as structured lines (req: R1, R2, R3)
+- [x] AC1 — Gateway failures and routing decisions are logged as structured lines (req: R1, R2, R3)
 
 Test layer: the real gateway handler with a fixture registry and a real temp-dir sink (no handler mocks).
 
@@ -83,18 +85,76 @@ The emit points are the existing return sites: `gatewayGuard` (421 host, 403 CSR
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/serve.ts:127` |
+| `apps/cli/src/commands/serve.ts:15` |
+| `apps/cli/src/commands/serve.ts:2` |
+| `apps/cli/src/commands/serve.ts:5` |
+| `apps/cli/src/commands/serve.ts:8` |
+| `docs/design/project-gateway.md:121` |
+| `docs/features/INDEX.md:211` |
+| `docs/features/K42_gateway-operational-observability-structured-log-and-health-counters.md:5` |
+| `docs/features/K42_gateway-operational-observability-structured-log-and-health-counters.md:53` |
+| `docs/features/K42_gateway-operational-observability-structured-log-and-health-counters.md:63` |
+| `docs/features/K42_gateway-operational-observability-structured-log-and-health-counters.md:9` |
+| `packages/app/src/index.ts:451` |
+| `packages/app/src/services/project-gateway.ts:27` |
+| `packages/app/src/services/project-gateway.ts:31` |
+| `packages/app/src/services/project-gateway.ts:368` |
+| `packages/app/src/services/project-gateway.ts:482` |
+| `packages/app/src/services/project-gateway.ts:486` |
+| `packages/app/src/services/project-gateway.ts:489` |
+| `packages/app/src/services/project-gateway.ts:509` |
+| `packages/app/src/services/project-gateway.ts:519` |
+| `packages/app/src/services/project-gateway.ts:534` |
+| `packages/app/src/services/project-gateway.ts:540` |
+| `packages/app/src/services/project-gateway.ts:576` |
+| `packages/app/src/services/project-gateway.ts:579` |
+| `packages/app/src/services/project-gateway.ts:587` |
+| `packages/app/src/services/project-gateway.ts:613` |
+| `packages/app/src/services/gateway-event-log.ts:1` |
+| `packages/app/tests/services/gateway-event-log.test.ts:1` |
+| `packages/app/tests/services/project-gateway-events.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Six kinds emitted per occurrence, each stamped with ISO `ts` in the `emit` wrapper (`packages/app/src/services/project-gateway.ts:370`): `upstream.ensure` ok at `:486` and failed+`ms` at `:489`, `upstream.restart` at `:514`, `proxy.unreachable` with name/prefix/dialed/reason at `:536`, `guard.host`/`guard.csrf` with path+status at `:575`, `route.collision` with prefix+both names at `:608`. Covered by `packages/app/tests/services/project-gateway-events.test.ts` (421, 403, 409, 502 start failure, GET retry sequence). |
+| R2 | MET | `createJsonlEventSink` at `packages/app/src/services/gateway-event-log.ts:20`; default cap `GATEWAY_EVENT_LOG_MAX_BYTES` = 5 MiB at `:6`; serialized stat→rotate→append chain at `:34`; rotate to `<path>.1` before writing the crossing line; write failure reported once via `echoError` then dropped at `:50`. Covered by `packages/app/tests/services/gateway-event-log.test.ts` (append, parent mkdir, rotation, default 5 MiB cap, report-once). |
+| R3 | MET | Emit sites pass the URL `pathname` only; the leak test asserts request headers, query string and body substrings never appear in serialized events (`packages/app/tests/services/project-gateway-events.test.ts`, "never records request headers, query strings or bodies"). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Structured lines hold end-to-end on the real handler with a fixture registry and a real temp-dir sink (no handler mocks): `packages/app/tests/services/project-gateway-events.test.ts` (6 tests) + `packages/app/tests/services/gateway-event-log.test.ts` (5 tests). |
+| AC1 | MET | command | `bun test tests/services/{project-gateway-events,gateway-event-log,project-gateway,project-gateway-dial,project-gateway-edge}.test.ts` → 46 pass / 0 fail in `packages/app`; `bun test tests/commands/{serve,serve-gateway}.test.ts` → 23 pass / 0 fail in `apps/cli`; `bunx biome check` clean and `bunx tsc --noEmit` clean on the changed files. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T07:48:14.889Z todo → wip (system)
+- 2026-11-18T08:14:27.235Z wip → testing (system)
+- 2026-11-18T08:14:28.625Z testing → done (system)
+

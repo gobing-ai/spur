@@ -2,11 +2,11 @@
 schema_version: 1
 id: "K42"
 name: "Gateway operational observability: structured log and health counters"
-status: backlog
+status: active
 priority: P1
 tags: []
 created_at: "2026-11-18T05:29:26.193Z"
-updated_at: "2026-11-18T05:48:10.049Z"
+updated_at: "2026-11-18T08:13:39.604Z"
 ---
 
 # K42: Gateway operational observability: structured log and health counters
@@ -50,7 +50,7 @@ Feature: Gateway operational observability: structured log and health counters
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1385 | Gateway health counters rendered by self status | todo |
-| 1384 | Structured gateway log with size cap | todo |
+| 1384 | Structured gateway log with size cap | wip |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -60,3 +60,6 @@ Counters reset on gateway restart by design; durable history stays in each proje
 Phase 1 of the protocol-surfaces roadmap (2026-11-17 planning session).
 
 ## History
+
+- 2026-11-18T08:13:39.604Z backlog → active (system)
+

@@ -25,6 +25,7 @@ const SECTION_KEYS = [
     'corpus',
     'decisions',
     'dependencies',
+    'gateway',
     'installation',
     'projects',
     'schema',

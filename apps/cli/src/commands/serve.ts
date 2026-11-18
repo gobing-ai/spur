@@ -1,14 +1,28 @@
 import { statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
+import { createJsonlEventSink, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
 import { startGateway, startServer } from '@gobing-ai/spur-server';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { resolveSpurArgv } from '../workflow/resolve-spur-bin';
 import { SHARED_OPTIONS } from './shared-options';
+
+/**
+ * Where `serve --gateway` writes its structured event log (task 1384): next to the launchd logs on
+ * darwin, under the config dir elsewhere — a foreground `spur serve --gateway` on any OS has no
+ * launchd log directory of its own.
+ */
+function gatewayEventLogPath(): string {
+    const home = homedir();
+    return process.platform === 'darwin'
+        ? `${home}/Library/Logs/spur/gateway.events.jsonl`
+        : `${home}/.config/spur/logs/gateway.events.jsonl`;
+}
 
 /** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
 export function resolveServeDbUrl(cwd: string, env: Record<string, string | undefined>, configuredUrl: string): string {
@@ -110,6 +124,7 @@ export function registerServeCommand(
                                 ).port,
                             port: gatewayPort,
                             edge: { bindHost: gatewayHost, allowedHosts: config.server.gateway.allowedHosts },
+                            onEvent: createJsonlEventSink({ path: gatewayEventLogPath(), fs: createNodeFileSystem() }),
                         },
                     });
                     context.output.write(`Spur gateway listening on ${handle.url}`);
