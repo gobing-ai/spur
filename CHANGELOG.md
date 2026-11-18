@@ -14,7 +14,7 @@
 - embed an MCP 2.0+ server behind the gateway's `/<prefix>/mcp` route with a bearer-only `server.mcp` config block, and bridge it to stdio-only clients via `spur mcp` (05279a162)
   <!-- src: packages/config/src/index.ts:1369 · confidence: HIGH -->
 - host the gateway daemon lifecycle as flat `spur self daemon install | uninstall | status` verbs (2b3df0cfd)
-  <!-- src: apps/cli/src/commands/self/daemon.ts:73 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/self/shared.ts:73 · confidence: HIGH -->
 - derive project prefixes and registry route findings from `projects.json` instead of per-project config (9e2f34dd7)
   <!-- src: packages/config/src/projects.ts:142 · confidence: HIGH -->
 - link the gateway project switcher from the Board sidebar footer (6b174bfcc)
@@ -26,9 +26,9 @@
 - treat an IPv6-only port listener as in-use so a fresh start no longer dials the other process (8524f4ec3)
   <!-- src: packages/app/src/services/project-process.ts:264 · confidence: HIGH -->
 - degrade a failed status daemon probe to an omitted line instead of failing `spur status` (e4b4445dd)
-  <!-- src: apps/cli/src/commands/self/daemon.ts:60 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/self/shared.ts:60 · confidence: HIGH -->
 - cover the darwin-only daemon branches with host-independent tests so Linux CI meets the coverage gate (78a95e6ed)
-  <!-- src: apps/cli/tests/commands/self/daemon.test.ts:154 · confidence: HIGH -->
+  <!-- src: apps/cli/tests/commands/self/shared.test.ts:154 · confidence: HIGH -->
 - build the projects-prefix ephemeral fixtures under `tmpdir()` so Linux runners can create them (2f9a87bdc)
   <!-- src: apps/cli/tests/commands/projects-prefix.test.ts:214 · confidence: HIGH -->
 
@@ -346,7 +346,7 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 - add readiness explanations to the planning views — `GET /task/readiness` reports, per task, why it is not ready (blocking dependencies, paused runs) instead of a bare `ready: false`, with the projection computed in one pass (1302) (5cc899be6)
   <!-- src: packages/app/src/services/planning-readiness.ts:25, packages/contracts/src/task.ts:155 · confidence: HIGH -->
 - bind JavaScript actions to the detected package manager during `spur self init` — lockfile evidence selects one manager and refuses contradictory evidence instead of guessing (1303) (7bf80ffe9)
-  <!-- src: apps/cli/src/commands/init.ts:94, apps/cli/src/commands/init.ts:124 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/self/init.ts:94, apps/cli/src/commands/self/init.ts:124 · confidence: HIGH -->
 - extend `spur self init` onboarding to monorepos — a root manifest wins, otherwise one immediate child is selected, multiple roots stay unbound with their paths listed, and child commands prefix a shell-quoted `cd` (1304) (dffd0d361)
   <!-- src: config/config.example.yaml:243 · confidence: HIGH -->
 - declare per-surface admission capabilities in `agent.run` — each dispatch surface states what it can enforce before a run is admitted, instead of inheriting an implicit policy (1305) (2e91387e9)
@@ -497,7 +497,7 @@ filings) and assert no code, API or version fact._
 
 ### Added
 - report zg readiness in `spur init` and gitignore the `.zvec-grep/` index directory (1289) (3f6a00b0d)
-  <!-- src: apps/cli/src/commands/init.ts:401, apps/cli/src/commands/init.ts:507 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/self/init.ts:401, apps/cli/src/commands/self/init.ts:507 · confidence: HIGH -->
 - mount the search contract on the local server and add the Board search module with auto/exact/fuzzy mode tabs (1287) (730dcd2d4)
   <!-- src: packages/contracts/src/index.ts:39, apps/server/src/router.ts:47, apps/web/src/modules/search/index.tsx:88 · confidence: HIGH -->
 - add the hybrid search core service (exact ripgrep + fuzzy zg), the zg output adapter, and the `spur self search` verb (1285, 1286) (4f9ba1aad)
@@ -505,7 +505,7 @@ filings) and assert no code, API or version fact._
 
 ### Fixed
 - report the search readiness line and JSON field on converged re-runs by probing before the init early return (c9c8e837e)
-  <!-- src: apps/cli/src/commands/init.ts:254, apps/cli/tests/commands/init-search.test.ts:120 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/self/init.ts:254, apps/cli/tests/commands/init-search.test.ts:120 · confidence: HIGH -->
 - resolve nested bun.lock keys through the `.bun` store instead of the hoisted copy, so isolated-linker packages are not blamed against the root workspace pin (0bc503c38)
   <!-- src: scripts/commands/dependency-drift-check.ts:81, scripts/commands/dependency-drift-check.ts:88, scripts/commands/dependency-drift-check.test.ts:204 · confidence: HIGH -->
 - re-check remote board entries the server reports stopped from the browser so they reopen instead of dead-ending (a8946da4f)
@@ -864,7 +864,7 @@ status moves, filings) and assert no code, API or version fact._
 - route the quality gate and the shipped workflows through those declared actions instead of hardcoded commands (964009fc6)
   <!-- src: packages/app/src/services/quality-gate.ts:554 · confidence: HIGH -->
 - seed `builder.actions` from the stack detected at `spur init` (aa4959f5d)
-  <!-- src: apps/cli/src/commands/init.ts:63 · confidence: HIGH -->
+  <!-- src: apps/cli/src/commands/self/init.ts:63 · confidence: HIGH -->
 - dispatch `agent.run` to a host pause with a durable work item and receipt (c059ed5d6)
   <!-- src: packages/app/src/workflow/receipt.ts:45 · confidence: HIGH -->
 - lint self-contained `agent.run` stages in `spur workflow validate` (1a4ff8bb8)

@@ -385,7 +385,7 @@ async function sourceFreeSmoke(): Promise<OwnershipReport['offlineProof']> {
             SPUR_PROJECTS_FILE: join(cwd, 'projects.json'),
             SPUR_SLASH_COMMANDS_FILE: join(cwd, 'slash_commands.json'),
         };
-        const proc = Bun.spawnSync([process.execPath, bundlePath, 'migrate', '--json'], {
+        const proc = Bun.spawnSync([process.execPath, bundlePath, 'self', 'migrate', '--json'], {
             cwd,
             env,
             stdout: 'pipe',
