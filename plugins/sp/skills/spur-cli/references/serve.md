@@ -64,6 +64,6 @@ the supervisor API become available at `http://<host>:<port>`.
 project's server: a fixed port (default `server.gateway.port` = 3000) routes `/<prefix>/*` to that
 local project's own `spur serve` on its internal loopback port, starting or adopting it on first
 request. `GET /` is an index of the registered projects and `GET /api/health` answers
-`{ ok, gateway: true, port, projects: [{ name, prefix, running }] }` (what `spur self daemon status`
+`{ ok, gateway: true, port, projects: [{ name, prefix, running }] }` (what `spur self status`
 reads). `--json` stays a dry probe (`{ port, url, gateway: true, running: false }`). A port held by
 another process fails with `Gateway port <n> is already in use by another process`.

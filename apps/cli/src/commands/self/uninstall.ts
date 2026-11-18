@@ -3,7 +3,7 @@ import { type GatewayDaemonDeps, uninstallGatewayDaemon } from '@gobing-ai/spur-
 import type { CliContext } from '../../context';
 import { toEnvelopeJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
-import { resolveDaemonDeps } from './daemon';
+import { resolveDaemonDeps } from './shared';
 
 /**
  * `spur self uninstall [--daemon] [--json] [--json-envelope]` — reverse a machine-level install.

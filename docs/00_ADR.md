@@ -2940,9 +2940,9 @@ re-import pressure this entry already records).
   `spur projects list` URL column, `server.gateway.{port,allowedHosts}`, and the registry `prefix`
   field with `resolveProjectPrefix`/`findPrefixCollisions`. `GET /api/projects` carries `prefix`,
   `url` and the registry `findings` (prefix collisions, duplicate paths). The daemon lifecycle is
-  flat — `spur self install --daemon` / `spur self uninstall` / `spur self status` — and
-  `spur self daemon <action>` remains as a hidden deprecated alias (amended 2026-11-17, operator
-  consent: a positional `action` put a noun-shaped operand in a verb slot). The Board's module kit publishes `basePath`/`withBase`/`resolveApiUrl` (`BOARD_UI_KIT_VERSION`
+  flat — `spur self install --daemon` / `spur self uninstall` / `spur self status`. The hidden
+  `spur self daemon <action>` alias added on 2026-11-17 was **removed** on 2026-11-18 (task 1387):
+  one spelling per action, and `spur self daemon` is now an unknown command. The Board's module kit publishes `basePath`/`withBase`/`resolveApiUrl` (`BOARD_UI_KIT_VERSION`
   1.1.0).
 - **Consequence:** The Board must be base-path aware at runtime (relative built chunks plus a
   `basePath()` helper); all local projects share one browser origin, so per-project `localStorage`

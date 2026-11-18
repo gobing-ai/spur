@@ -1,5 +1,4 @@
 import { homedir } from 'node:os';
-import type { Command } from '@commander-js/extra-typings';
 import {
     type GatewayDaemonDeps,
     type GatewayStatusResult,
@@ -13,7 +12,6 @@ import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime
 import type { CliContext } from '../../context';
 import { toJson } from '../../output';
 import { resolveSpurArgv } from '../../workflow/resolve-spur-bin';
-import { SHARED_OPTIONS } from '../shared-options';
 
 /** The three daemon operations, hosted by `install --daemon`, `uninstall` and `status`. */
 export type DaemonAction = 'install' | 'uninstall' | 'status';
@@ -126,41 +124,4 @@ export async function runDaemonAction(
         }
         return { exitCode: 1 };
     }
-}
-
-/**
- * Register the deprecated `spur self daemon <install|uninstall|status>` spelling.
- *
- * Hidden since the surface flattened to `spur self install --daemon` / `spur self uninstall` /
- * `spur self status`: a positional `action` put a noun-shaped operand inside a verb slot. The
- * alias keeps existing scripts working and names its replacement on use.
- */
-export function registerDaemonCommand(
-    self: Command,
-    context: CliContext,
-    /** Test seam: override the resolved host facts (platform, home, fs, exec, probe…). */
-    overrides: Partial<GatewayDaemonDeps> = {},
-): void {
-    self.command('daemon', { hidden: true })
-        .summary('DEPRECATED — use `spur self install --daemon`, `spur self uninstall` or `spur self status`')
-        .argument('<action>', 'install | uninstall | status')
-        .option(...SHARED_OPTIONS.portServe, Number.parseInt)
-        .option(...SHARED_OPTIONS.json)
-        .action(async (action: string, opts) => {
-            if (action !== 'install' && action !== 'uninstall' && action !== 'status') {
-                context.output.error(`Unknown daemon action "${action}": expected install, uninstall or status.`);
-                context.setExitCode(2);
-                return;
-            }
-            context.output.error(
-                action === 'install'
-                    ? 'deprecated: use `spur self install --daemon`'
-                    : action === 'uninstall'
-                      ? 'deprecated: use `spur self uninstall`'
-                      : 'deprecated: use `spur self status`',
-            );
-            const { exitCode } = await runDaemonAction(action, context, opts, overrides);
-            // Success keeps the default exit code: only a failure needs to be recorded.
-            if (exitCode !== 0) context.setExitCode(exitCode);
-        });
 }

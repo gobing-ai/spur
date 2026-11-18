@@ -52,8 +52,9 @@ The lifecycle is flat — no `daemon` sub-noun. `spur self install --daemon` ins
 non-macOS platform or a port held by another process **without writing anything**; `status` reports
 installed/loaded/pid/last-exit plus `GET /api/health`; `uninstall` boots the agent out and removes the
 plist (absent = success, exit 0). `spur self status` embeds the same report under `daemon` and
-renders a one-line `Daemon:` summary. The deprecated `spur self daemon <install|uninstall|status>`
-spelling still works (hidden) and prints the replacement verb.
+renders a one-line `Daemon:` summary. There is no `spur self daemon <action>` spelling: it was
+removed in task 1387 and now fails as an unknown command, so write `install --daemon`,
+`uninstall` or `status`.
 
 ## `self exec` - run a project SDLC action
 

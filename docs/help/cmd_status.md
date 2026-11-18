@@ -124,5 +124,6 @@ It keeps the one-port project gateway always on as a macOS user LaunchAgent
 `install --daemon` refuses a non-macOS platform and a port held by another process without writing
 anything; `spur self status` reports loaded/pid/last exit plus `GET /api/health`; `spur self
 uninstall` boots it out and removes the plist (absent = success). The agent runs `spur self serve
---gateway`. The deprecated `spur self daemon <action>` form still works but is hidden. See
+--gateway`. The old `spur self daemon <action>` form was removed (task 1387); `spur self daemon`
+is now an unknown command. See
 [cmd_serve](./cmd_serve.md) for gateway mode itself.

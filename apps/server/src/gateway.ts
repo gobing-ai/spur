@@ -25,7 +25,7 @@ export interface StartGatewayOptions {
  *
  * Deliberately not `startServer`: the gateway owns no database, fleet, scheduler or job worker, so
  * its lifetime is independent of any project's serve. Binding failures surface as one actionable
- * message because `spur self daemon status` and the daemon plist both read it.
+ * message because `spur self status` and the daemon plist both read it.
  */
 export function startGateway(options: StartGatewayOptions): GatewayHandle {
     const handler = createGatewayHandler(options.deps);

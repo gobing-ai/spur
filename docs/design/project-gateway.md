@@ -61,7 +61,7 @@ projectEntrySchema = z.object({
 | Command | Change |
 | --- | --- |
 | `spur self serve --gateway [--port <n>] [--host <name>]` | New flag on the existing `self serve`; no new noun or verb |
-| `spur self install --daemon [--port <n>] [--json]` · `spur self uninstall [--daemon]` · `spur self status` | Flat verbs, no `daemon` sub-noun (amended 2026-11-17); `spur self daemon <action>` stays hidden and deprecated |
+| `spur self install --daemon [--port <n>] [--json]` · `spur self uninstall [--daemon]` · `spur self status` | Flat verbs, no `daemon` sub-noun; the `spur self daemon <action>` alias was removed on 2026-11-18 (task 1387) |
 | `spur projects add --prefix <slug>` | New flag |
 
 Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**)

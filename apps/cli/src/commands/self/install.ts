@@ -3,7 +3,7 @@ import { type GatewayDaemonDeps, INSTALL_TOOLS, type InstallTool, installSelf } 
 import type { CliContext } from '../../context';
 import { toEnvelopeJson, toJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
-import { runDaemonAction } from './daemon';
+import { runDaemonAction } from './shared';
 
 /** Usage exit code for an unknown `--with` value, distinct from a failed step (A93 1353 R1). */
 const EXIT_USAGE = 2;

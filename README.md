@@ -174,8 +174,8 @@ Notes:
 - Uninstalling Spur itself is a package-manager action (`bun remove -g @gobing-ai/spur`); `spur self
   uninstall` only removes the LaunchAgent.
 
-The deprecated `spur self daemon <install|uninstall|status>` spelling still works (hidden) and
-prints a replacement hint.
+`spur self daemon <install|uninstall|status>` was removed (task 1387) — use `spur self install
+--daemon`, `spur self uninstall` or `spur self status`.
 
 ---
 

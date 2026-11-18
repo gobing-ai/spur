@@ -6,7 +6,7 @@ import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toEnvelopeJson, writeJsonError } from '../output';
-import { readDaemonStatusOrNull } from './self/daemon';
+import { readDaemonStatusOrNull } from './self/shared';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
