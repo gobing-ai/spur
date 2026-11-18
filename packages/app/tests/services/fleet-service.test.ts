@@ -944,8 +944,7 @@ describe('fleet registration and launch ground truth (G62)', () => {
     });
 });
 
-describe('G71 R4 — a renamed member with recorded occupancy fails closed (ADR-126 A4)', () => {
-    /** A service whose occupancy check has a database to read. */
+describe('G71 R4 — the legacy id rename guard is retired (ADR-126 A4, task 1389)', () => {
     function serviceWithDb(project: string, db: DbAdapter): FleetService {
         return new FleetService({
             spurConfig: configFor(parseConfig(EXECUTORS_YAML), project),
@@ -957,45 +956,17 @@ describe('G71 R4 — a renamed member with recorded occupancy fails closed (ADR-
         });
     }
 
-    test('a member whose OLD executor-derived id already has runs is refused, naming both ids and both pins', async () => {
+    test('a member whose pre-1075 id has ledger rows now resolves to the role-first id, without failing', async () => {
+        // 1389's preflight found no project whose changed legacy id carried history, so the guard
+        // was retired. Rows under the OLD address are no longer a refusal reason — the member is
+        // simply addressed by its current id.
         const { project, slug, cleanup } = await makeProject();
         const db = await createMigratedDb({ url: ':memory:' });
         try {
-            // The address the operator's members already occupy under the old derivation.
             await recordMemberSession(db, `${slug}-writer`, { mode: 'resume', id: 'sess-1' });
-            await writeFleet(project, { members: [{ role: 'coder', executor: 'writer' }] });
-            const svc = serviceWithDb(project, db);
-            await expect(svc.resolve(project)).rejects.toThrow(/its id changes from/);
-            // The fix names both ends and both `id:` pins.
-            await expect(svc.resolve(project)).rejects.toThrow(/id: writer/);
-            await expect(svc.resolve(project)).rejects.toThrow(/id: coder-1/);
-        } finally {
-            await cleanup();
-            await db.close();
-        }
-    });
-
-    test('a project with no occupancy adopts the new role id silently', async () => {
-        const { project, slug, cleanup } = await makeProject();
-        const db = await createMigratedDb({ url: ':memory:' });
-        try {
             await writeFleet(project, { members: [{ role: 'coder', executor: 'writer' }] });
             const fleet = await serviceWithDb(project, db).resolve(project);
             expect(fleet.members[0]?.instanceId).toBe(`${slug}-coder-1`);
-        } finally {
-            await cleanup();
-            await db.close();
-        }
-    });
-
-    test('an explicit id is never touched by the migration check', async () => {
-        const { project, slug, cleanup } = await makeProject();
-        const db = await createMigratedDb({ url: ':memory:' });
-        try {
-            await recordMemberSession(db, `${slug}-writer`, { mode: 'resume', id: 'sess-1' });
-            await writeFleet(project, { members: [{ id: 'writer', role: 'coder', executor: 'writer' }] });
-            const fleet = await serviceWithDb(project, db).resolve(project);
-            expect(fleet.members[0]?.instanceId).toBe(`${slug}-writer`);
         } finally {
             await cleanup();
             await db.close();

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Retire the fleet legacy member-id fallback behind a precondition
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:30.254Z
-updated_at: "2026-11-18T05:52:47.903Z"
+updated_at: "2026-11-18T18:36:10.158Z"
 feature_id: A36
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - protocol-surfaces
 estimate_hours: 2
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1389. Retire the fleet legacy member-id fallback behind a precondition
@@ -27,13 +29,13 @@ ADR-126 A4 changed fleet member id derivation. To avoid silently re-addressing m
 
 ### Requirements
 
-- [ ] R1. Preflight (not shipped): for each local entry in `~/.config/spur/projects.json`, load its `agent.fleet` declarations, compute legacy and current ids for unpinned members, and query `readMemberSessions` and `CoordinationRunDao.getLatestBySpecId` for each changed legacy id. Record the per-project result table in the task's Solution section.
-- [ ] R2. Only if the preflight finds no history: delete the guard block in `fleet-service.ts`, `legacyMemberLocalId` and its export, and `member-id-legacy.test.ts`. If any history is found, stop and report the members with the `id: <legacyLocal>` remedy.
-- [ ] R3. Amend ADR-126 with an A4 retirement note (date, preflight evidence pointer) without renumbering.
+- [x] R1. Preflight (not shipped): for each local entry in `~/.config/spur/projects.json`, load its `agent.fleet` declarations, compute legacy and current ids for unpinned members, and query `readMemberSessions` and `CoordinationRunDao.getLatestBySpecId` for each changed legacy id. Record the per-project result table in the task's Solution section.
+- [x] R2. Only if the preflight finds no history: delete the guard block in `fleet-service.ts`, `legacyMemberLocalId` and its export, and `member-id-legacy.test.ts`. If any history is found, stop and report the members with the `id: <legacyLocal>` remedy.
+- [x] R3. Amend ADR-126 with an A4 retirement note (date, preflight evidence pointer) without renumbering.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Fleet legacy member-id fallback is retired safely (req: R1, R2, R3)
+- [x] AC1 — Fleet legacy member-id fallback is retired safely (req: R1, R2, R3)
 
 Test layer: real in-memory DB fleet-service tests, plus the recorded preflight over real project databases.
 
@@ -69,18 +71,64 @@ Test layer: real in-memory DB fleet-service tests, plus the recorded preflight o
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Preflight (R1, 2026-11-18, read-only over `~/.config/spur/projects.json`).** For every local
+entry the fleet declaration was loaded with the shipped `loadSpurConfig`, each unpinned
+`role`+`executor` member's legacy id computed with the shipped `legacyMemberLocalId` and its current
+id with `memberLocalId`, and the project's own ledger asked through `readMemberSessions` and
+`CoordinationRunDao.getLatestBySpecId`.
+
+| Project | Member # | Legacy id | Current id | Fleet sessions | Coordination runs | Verdict |
+| --- | ---: | --- | --- | ---: | ---: | --- |
+| spur-new | 2 | `spur-new-agy-opus-5.5` | `spur-new-reviewer-1` | 0 | 0 | clean |
+| a2a-smoke | – | (member is pinned `id: coder`) | – | – | – | not affected |
+| every other registered project | – | no `agent.fleet.members` | – | – | – | not affected |
+
+Only one member's id ever changes, and its old address has no history of any kind, so the guard
+could never fire. That satisfies R2's condition: the guard block in `fleet-service.ts`, the
+`legacyMemberLocalId` helper and its export, and `packages/config/tests/member-id-legacy.test.ts`
+were deleted. The fleet-service test that asserted the refusal now asserts the opposite: rows under
+the pre-1075 address are not a refusal reason, and the member resolves to its role-first id.
+
+**Change map.** `packages/app/src/services/fleet-service.ts` (guard + now-unused imports),
+`packages/config/src/index.ts` (`legacyMemberLocalId`), `packages/config/tests/member-id-legacy.test.ts`
+(deleted), `packages/config/tests/member-local-id.test.ts` (frozen-order case re-pointed at the
+current derivation), `packages/app/tests/services/fleet-service.test.ts` (retirement assertion),
+`docs/00_ADR.md` (ADR-126 A4 retirement note with this evidence pointer).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — preflight over every local registry entry: load `agent.fleet`, compute legacy + current ids for unpinned members, query `readMemberSessions` and `CoordinationRunDao.getLatestBySpecId` per changed legacy id, record the table in Solution | MET | Preflight ran read-only with the **shipped** pieces (`loadSpurConfig`, `legacyMemberLocalId`, `memberLocalId`, `readMemberSessions`, `CoordinationRunDao`) against every DB in `~/.config/spur/projects.json`. Result: one affected member — `spur-new` #2 `spur-new-agy-opus-5.5` → `spur-new-reviewer-1`, **0** fleet sessions, **0** coordination runs; `a2a-smoke`'s member is pinned; every other project declares no fleet. Table recorded in the task's Solution section via `spur task update --section Solution` |
+| R2 — delete the guard block, `legacyMemberLocalId` and its export, and `member-id-legacy.test.ts` **only if** no history | MET | Condition met (0/0 above). `packages/app/src/services/fleet-service.ts` guard block removed (26 lines) plus its now-unused imports; `packages/config/src/index.ts` helper + export removed (38 lines); `packages/config/tests/member-id-legacy.test.ts` deleted; the frozen-order case in `member-local-id.test.ts` re-pointed at the current derivation. `packages/app/tests/services/fleet-service.test.ts` now asserts the opposite: rows under the pre-1075 address no longer refuse the resolve, and the member lands on `${slug}-coder-1` |
+| R3 — amend ADR-126 with an A4 retirement note (date, preflight evidence pointer) without renumbering | MET | `docs/00_ADR.md` — new dated amendment under ADR-126 ("Amendment (2026-11-18 · A4 now carries no id-migration guard, task 1389)") citing the one member, its 0/0 history, and pointing at this task's Solution; no ADR number moved |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Fleet legacy member-id fallback is retired safely (R1,R2,R3) | MET | test | Preflight table in the task Solution (real project DBs, shipped readers); `packages/app/tests/services/fleet-service.test.ts` 38/38 through a real in-memory migrated DB; `packages/config/tests/member-local-id.test.ts` 26/26; 7/7 workspaces typecheck |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T18:35:31.855Z todo → wip (system)
+- 2026-11-18T18:36:08.608Z wip → testing (system)
+- 2026-11-18T18:36:10.154Z testing → done (system)
+

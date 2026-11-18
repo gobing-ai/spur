@@ -2171,6 +2171,17 @@ boundary is now a green gate receipt for the tree plus one reviewer verdict.
   Alternative rejected: keep the strategy's blocking in-process path (blocks the orchestrator's own
   inbox and bypasses receipts). Detail: [agent fleet inbox redesign](plans/2026-10-04-agent-fleet-inbox-redesign.md) §3.
 
+- **Amendment (2026-11-18 · A4 now carries no id-migration guard, task 1389):** The A4 role-first id
+  order (1075) left a fail-closed guard for a member whose pre-1075 executor-derived id already had
+  ledger rows, plus the `legacyMemberLocalId` helper that derived it. A one-time preflight over every
+  local project in the operator's registry (`~/.config/spur/projects.json`) found exactly one member
+  whose id changed — `spur-new-agy-opus-5.5` → `spur-new-reviewer-1` — with **0** fleet-session rows
+  and **0** coordination runs under the old address; no other project declares an unpinned
+  role+executor member. With no history behind any changed id the guard could never fire, so it,
+  `legacyMemberLocalId` and the frozen-order test were retired. A member that still needs its old
+  address keeps it with `id: <local>`; nothing else changed about A4's receipt or wait rules.
+  Preflight evidence: task 1389 Solution.
+
 ## ADR-127: Parallel Batch Tasks Are Isolated in Per-Task Worktrees and Integrated by Rebase-Then-Fast-Forward
 
 - **Status:** Accepted · **Date:** 2026-09-24 · **Feature:** H1

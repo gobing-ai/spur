@@ -522,45 +522,6 @@ export function memberLocalId(member: MemberIdentity, roster: readonly MemberIde
     return '';
 }
 
-/**
- * The FROZEN pre-1075 member-id derivation (`id` → executor → role). It exists only so the
- * migration check in `FleetService.resolve` can name a member's OLD address: under the
- * current order role outranks executor, so a role member with a pinned executor was
- * renamed and its inbox moved. Never use this to allocate a live id.
- */
-export function legacyMemberLocalId(member: MemberIdentity, roster: readonly MemberIdentity[], index: number): string {
-    if (member.id !== undefined) return member.id;
-    const used = new Set<string>();
-    const executorSeen = new Map<string, number>();
-    const roleSeen = new Map<string, number>();
-    for (let i = 0; i <= index; i++) {
-        const current = i === index ? member : roster[i];
-        if (current === undefined) continue;
-        let localId: string;
-        if (current.id !== undefined) {
-            localId = current.id;
-        } else if (current.executor !== undefined) {
-            const base = current.executor;
-            let suffix = (executorSeen.get(base) ?? 0) + 1;
-            executorSeen.set(base, suffix);
-            localId = suffix === 1 ? base : `${base}-${suffix}`;
-            while (used.has(localId)) {
-                suffix += 1;
-                localId = `${base}-${suffix}`;
-            }
-        } else if (current.role !== undefined) {
-            const n = (roleSeen.get(current.role) ?? 0) + 1;
-            roleSeen.set(current.role, n);
-            localId = `${current.role}-${n}`;
-        } else {
-            localId = '';
-        }
-        if (i === index) return localId;
-        used.add(localId);
-    }
-    return '';
-}
-
 // ---- Project fleet declaration (0835, moved under `agent.fleet` by 0858) ----
 
 /**

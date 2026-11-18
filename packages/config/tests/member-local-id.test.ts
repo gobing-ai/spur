@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
     type AgentConfig,
     AgentConfigSchema,
-    legacyMemberLocalId,
     type MemberIdentity,
     memberLocalId,
     resolveExecutor,
@@ -211,9 +210,10 @@ describe('memberLocalId role precedence (1075 R3)', () => {
         expect(memberLocalId(roster[1] as MemberIdentity, roster, 1)).toBe('coder-2');
     });
 
-    test('the frozen legacy derivation still yields the old executor-derived id', () => {
+    // Task 1389 retired `legacyMemberLocalId` (ADR-126 A4): the pre-1075 derivation no longer
+    // exists, so only the current role-first id is asserted here.
+    test('a role member with a pinned executor derives the role-first id', () => {
         const roster: MemberIdentity[] = [{ role: 'coder', executor: 'writer' }];
-        expect(legacyMemberLocalId(roster[0] as MemberIdentity, roster, 0)).toBe('writer');
         expect(memberLocalId(roster[0] as MemberIdentity, roster, 0)).toBe('coder-1');
     });
 });
