@@ -391,7 +391,8 @@ class McpDispatcher implements McpHandlerRegistry {
                 // 1392 R1: no ready-prep dispatch from a server tool — the agent refines explicitly.
                 return {
                     wbs: result.ref.id,
-                    filePath: (result as { filePath?: string }).filePath ?? null,
+                    // `WriteResult` carries the path on `ref` (1392 R1 asks for `filePath`).
+                    filePath: result.ref.filePath,
                     warnings: (result as { warnings?: string[] }).warnings ?? [],
                     readiness: 'skipped',
                 };

@@ -517,23 +517,29 @@ describe('1376: mcp events reach the system_events ledger', () => {
  * argument must never reach a service.
  */
 describe('1392: guarded corpus write tools', () => {
-    /** Unique per run: `task create` has a 300s duplicate-name window by design. */
-    const unique = (label: string) => `${label} ${Math.random().toString(36).slice(2, 9)}`;
     /**
      * Task creation resolves its folder from the runner's cwd (a context quirk, not this task's
      * concern), so every created task is recorded and removed: the suite must leave no corpus file
      * behind, or a later `refresh` sees tasks the fixture invented.
      */
-    const created: string[] = [];
+    /** Every title carries a random token, so the cleanup can find the file wherever it landed. */
+    const tokens: string[] = [];
     const createTask = async (title: string, extra: Record<string, unknown> = {}) => {
-        const result = await call('sp_task_create', { title: unique(title), ...extra });
-        const created_ = result.body.result as { wbs: string; filePath?: string | null } | undefined;
-        if (created_?.filePath !== undefined && created_.filePath !== null) created.push(created_.filePath);
-        return result;
+        const token = Math.random().toString(36).slice(2, 9);
+        tokens.push(token);
+        return call('sp_task_create', { title: `${title} ${token}`, ...extra });
     };
 
     afterAll(() => {
-        for (const path of created) rmSync(path, { force: true });
+        // The service resolves its tasks folder from the runner's cwd, which is not always the
+        // scratch root, so the sweep looks in both places instead of trusting one path.
+        for (const dir of [join(root, 'docs', 'tasks'), join(process.cwd(), 'docs', 'tasks')]) {
+            for (const token of tokens) {
+                for (const name of new Bun.Glob(`*${token}*.md`).scanSync({ cwd: dir, onlyFiles: true })) {
+                    rmSync(join(dir, name), { force: true });
+                }
+            }
+        }
     });
     /** Call one tool and return its JSON-RPC envelope (result or error). */
     async function call(name: string, args: Record<string, unknown>) {
