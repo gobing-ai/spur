@@ -18,7 +18,7 @@ describe('config', () => {
                 webDistPath: null,
                 a2a: { enabled: false },
                 mcp: { enabled: false },
-                gateway: { port: 3000, allowedHosts: [] },
+                gateway: { port: 3000, allowedHosts: [], mcp: { enabled: false } },
             },
             telemetry: { enabled: false },
             logging: { level: 'info' },
@@ -43,7 +43,7 @@ describe('config', () => {
                 webDistPath: null,
                 a2a: { enabled: false },
                 mcp: { enabled: false },
-                gateway: { port: 3000, allowedHosts: [] },
+                gateway: { port: 3000, allowedHosts: [], mcp: { enabled: false } },
             },
             telemetry: { enabled: true },
             logging: { level: 'debug' },
@@ -134,5 +134,39 @@ describe('config — builder bump-ver resolution and the disabled-executor error
         const error = new ExecutorDisabledError('codex');
         expect(error.message).toContain('codex');
         expect(error.name).toBe('ExecutorDisabledError');
+    });
+});
+
+describe('server.gateway.mcp (task 1382 R1)', () => {
+    test('is off by default and mapped from its own env variables', () => {
+        const off = configSchema.parse({});
+        expect(off.server.gateway.mcp).toEqual({ enabled: false });
+
+        const on = buildConfigFromEnv({
+            SPUR_GATEWAY_MCP_ENABLED: 'true',
+            SPUR_GATEWAY_MCP_AUTH_ENV: 'GW_MCP_TOKEN',
+        });
+        expect(on.server.gateway.mcp).toEqual({ enabled: true, authEnv: 'GW_MCP_TOKEN' });
+    });
+
+    test('enabled without a token variable fails the load, like server.mcp', () => {
+        const result = configSchema.safeParse({ server: { gateway: { mcp: { enabled: true } } } });
+        expect(result.success).toBe(false);
+        const issue = result.success
+            ? undefined
+            : result.error.issues.find((i) => i.path.join('.') === 'server.gateway.mcp.authEnv');
+        expect(issue?.message).toContain('server.gateway.mcp.enabled is true');
+    });
+
+    test('the gateway token variable is distinct from the project one', () => {
+        // A gateway credential must never imply a project credential (task 1382 anti-pattern).
+        const cfg = buildConfigFromEnv({
+            SPUR_MCP_ENABLED: 'true',
+            SPUR_MCP_AUTH_ENV: 'PROJECT_TOKEN',
+            SPUR_GATEWAY_MCP_ENABLED: 'true',
+            SPUR_GATEWAY_MCP_AUTH_ENV: 'GATEWAY_TOKEN',
+        });
+        expect(cfg.server.mcp.authEnv).toBe('PROJECT_TOKEN');
+        expect(cfg.server.gateway.mcp.authEnv).toBe('GATEWAY_TOKEN');
     });
 });

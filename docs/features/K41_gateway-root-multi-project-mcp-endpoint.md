@@ -2,11 +2,11 @@
 schema_version: 1
 id: "K41"
 name: "Gateway-root multi-project MCP endpoint"
-status: backlog
+status: active
 priority: P1
 tags: []
 created_at: "2026-11-18T05:29:24.642Z"
-updated_at: "2026-11-18T05:46:05.278Z"
+updated_at: "2026-11-18T19:13:57.066Z"
 ---
 
 # K41: Gateway-root multi-project MCP endpoint
@@ -65,7 +65,7 @@ Feature: Gateway-root multi-project MCP endpoint
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1383 | Aggregate tools and route calls across projects | todo |
-| 1382 | Gateway MCP config, bearer guard and discover | todo |
+| 1382 | Gateway MCP config, bearer guard and discover | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -75,3 +75,6 @@ knowledge-kit has both a remote entry (192.168.87.27) and a local entry in the r
 Phase 1 of the protocol-surfaces roadmap (2026-11-17 planning session).
 
 ## History
+
+- 2026-11-18T19:13:57.066Z backlog → active (system)
+

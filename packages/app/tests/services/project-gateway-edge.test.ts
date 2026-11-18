@@ -253,3 +253,49 @@ describe('gateway adaptation edge cases (K4 R8)', () => {
         expect(body.icons[1]).toBeNull();
     });
 });
+
+describe('root /mcp entry (task 1382 R4)', () => {
+    it('is exempt from the CSRF check but never from the host allowlist', async () => {
+        // Bearer-authenticated, so a cross-site simple request cannot reach it — same reason the
+        // per-project `/<prefix>/mcp` is exempt.
+        expect(
+            gatewayGuard(
+                req('/mcp', {
+                    method: 'POST',
+                    host: 'board.example.com',
+                    headers: { origin: 'https://evil.test', 'content-type': 'application/json' },
+                }),
+                edge,
+            ),
+        ).toBeNull();
+        // The host guard still applies: an unlisted origin never reaches the handler.
+        expect(gatewayGuard(req('/mcp', { method: 'POST', host: 'evil.test' }), edge)?.status).toBe(421);
+    });
+
+    it('answers 404 when no MCP handler is injected, and never proxies', async () => {
+        let proxied = false;
+        const handler = createGatewayHandler({
+            listProjects: async () => [{ name: 'alpha', path: '/tmp/alpha', port: 1234 } as never],
+            ensureUpstream: async () => {
+                proxied = true;
+                return 1234;
+            },
+            port: 3000,
+        });
+        const res = await handler(req('/mcp', { method: 'POST', body: '{}' }));
+        expect(res.status).toBe(404);
+        expect(proxied).toBe(false);
+    });
+
+    it('hands /mcp to the injected handler and leaves the prefix routes alone', async () => {
+        const handler = createGatewayHandler({
+            listProjects: async () => [],
+            ensureUpstream: async () => 0,
+            port: 3000,
+            mcp: async (request) => Response.json({ seen: new URL(request.url).pathname }),
+        });
+        const res = await handler(req('/mcp', { method: 'POST', body: '{}' }));
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ seen: '/mcp' });
+    });
+});

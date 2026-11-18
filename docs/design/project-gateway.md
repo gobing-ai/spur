@@ -64,9 +64,29 @@ projectEntrySchema = z.object({
 | `spur self install --daemon [--port <n>] [--json]` · `spur self uninstall [--daemon]` · `spur self status` | Flat verbs, no `daemon` sub-noun; the `spur self daemon <action>` alias was removed on 2026-11-18 (task 1387) |
 | `spur projects add --prefix <slug>` | New flag |
 
-Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**)
-and `server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`). `allocatePort()`
-skips the gateway port; spawned serves already bind `127.0.0.1` (`project-start.ts:450-460`).
+Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**),
+`server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`) and, since task 1382,
+`server.gateway.mcp: { enabled: boolean (default false), authEnv?: string }` mapped from
+`SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`. `enabled` without `authEnv` fails the
+config load with the same message shape as `server.mcp`. `allocatePort()` skips the gateway port;
+spawned serves already bind `127.0.0.1` (`project-start.ts:450-460`).
+
+### 4.1a Gateway-hosted MCP entry (task 1382, feature K41)
+
+The gateway answers **its own** MCP endpoint at the root, so an MCP client needs one URL no matter
+how many projects are registered.
+
+| Aspect | Contract |
+| --- | --- |
+| Route | `POST /mcp` at the gateway root, matched **before** prefix routing. Disabled ⇒ `404`; never a proxy attempt at a project prefix |
+| Auth | the shared `bearerGuard` (1375) with realm `spur-gateway-mcp` and the gateway's **own** token variable — a gateway credential never implies a project credential. Missing/wrong token ⇒ 401; unset variable ⇒ 500 fail-closed |
+| CSRF | root `/mcp` is exempt from the same-origin check (bearer-authenticated, like `/<prefix>/mcp`); the host allowlist still applies |
+| Reserved | `mcp` joined `RESERVED_PREFIX_SEGMENTS`, so a project can never be prefixed `/mcp` and silently shadow the endpoint |
+| Composition | `apps/server/src/gateway.ts` builds the handler from `{ enabled, authEnv, env }` and injects it as `GatewayDeps.mcp`; `packages/app` stays transport-free |
+| `server/discover` | additive `projects: [{ name, prefix, namespace }]` (local entries only; namespace from the plugin manifest, because the gateway env cannot describe N projects) and `diagnostics: [{ name, reason: 'remote-not-proxied (ADR-151)', remedy: 'run the project locally and spur projects add <path>' }]` |
+
+Tool aggregation and call routing belong to 1383; this section covers the config, the guard, the
+route and discover only.
 
 ### 4.2 Request flow
 

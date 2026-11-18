@@ -21,6 +21,8 @@ export const SPUR_ENV_VARS = {
     mcpEnabled: 'SPUR_MCP_ENABLED',
     mcpAuthEnv: 'SPUR_MCP_AUTH_ENV',
     mcpNamespace: 'SPUR_MCP_NAMESPACE',
+    gatewayMcpEnabled: 'SPUR_GATEWAY_MCP_ENABLED',
+    gatewayMcpAuthEnv: 'SPUR_GATEWAY_MCP_AUTH_ENV',
 } as const;
 
 /** Valid MCP project namespace grammar: 2–16 lowercase alphanumeric characters starting with a letter. */
@@ -1400,8 +1402,18 @@ export const configSchema = z.object({
                 .object({
                     port: z.coerce.number().int().positive().default(3000),
                     allowedHosts: z.array(z.string().min(1)).default([]),
+                    /**
+                     * Gateway-hosted MCP (feature K41): one MCP entry at the gateway root, with its
+                     * OWN token variable — the gateway credential never implies a project's.
+                     */
+                    mcp: z
+                        .object({
+                            enabled: z.boolean().default(false),
+                            authEnv: z.string().min(1).optional(),
+                        })
+                        .default({ enabled: false }),
                 })
-                .default({ port: 3000, allowedHosts: [] }),
+                .default({ port: 3000, allowedHosts: [], mcp: { enabled: false } }),
         })
         .default({
             port: 3000,
@@ -1410,7 +1422,7 @@ export const configSchema = z.object({
             webDistPath: null,
             a2a: { enabled: false },
             mcp: { enabled: false },
-            gateway: { port: 3000, allowedHosts: [] },
+            gateway: { port: 3000, allowedHosts: [], mcp: { enabled: false } },
         })
         .superRefine((server, ctx) => {
             // Fail the load, not the first request: an enabled endpoint with no token variable can
@@ -1420,6 +1432,14 @@ export const configSchema = z.object({
                     code: z.ZodIssueCode.custom,
                     path: ['a2a', 'authEnv'],
                     message: 'is required when server.a2a.enabled is true — name the variable holding the bearer token',
+                });
+            }
+            if (server.gateway.mcp.enabled && server.gateway.mcp.authEnv === undefined) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['gateway', 'mcp', 'authEnv'],
+                    message:
+                        'is required when server.gateway.mcp.enabled is true — name the variable holding the bearer token',
                 });
             }
             if (server.mcp.enabled && server.mcp.authEnv === undefined) {
@@ -1474,6 +1494,12 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = get
                 enabled: parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]),
                 authEnv: env[SPUR_ENV_VARS.mcpAuthEnv],
                 namespace: env[SPUR_ENV_VARS.mcpNamespace],
+            },
+            gateway: {
+                mcp: {
+                    enabled: parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]),
+                    authEnv: env[SPUR_ENV_VARS.gatewayMcpAuthEnv],
+                },
             },
         },
         telemetry: {

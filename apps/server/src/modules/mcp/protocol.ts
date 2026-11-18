@@ -57,6 +57,11 @@ export interface McpHandlerRegistry {
     readResource(uri: string): Promise<unknown>;
     /** Resolved project namespace for tools exposed by this server, or `null` when none applies. */
     namespace(): string | null;
+    /**
+     * Extra `server/discover` facts (task 1382): the gateway advertises the routing table it
+     * proxies and why any entry is excluded. Omitted means the discover payload is unchanged.
+     */
+    discoverExtras?(): Promise<{ projects: unknown[]; diagnostics: unknown[] }>;
 }
 
 /** A protocol-level failure: the HTTP status for the response plus the JSON-RPC error code peers expect. */
@@ -164,6 +169,7 @@ async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Reques
             const tools = await registry.listTools();
             const resources = await registry.listResources();
             const ns = registry.namespace();
+            const extras = await registry.discoverExtras?.();
             return {
                 protocolVersion: version,
                 ...(ns !== null ? { namespace: ns } : {}),
@@ -171,6 +177,8 @@ async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Reques
                     tools,
                     resources,
                 },
+                // Additive: only a registry that advertises routing (the gateway) supplies these.
+                ...(extras !== undefined ? { projects: extras.projects, diagnostics: extras.diagnostics } : {}),
             };
         }
         case 'tools/list':

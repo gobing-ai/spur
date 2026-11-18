@@ -18,7 +18,7 @@ export const projectEntrySchema = z.object({
 });
 
 /** First URL segment the gateway owns, so a project may not claim it as a prefix. */
-export const RESERVED_PREFIX_SEGMENTS = ['api', 'board', 'modules', '_astro', 'openapi.json', 'health'] as const;
+export const RESERVED_PREFIX_SEGMENTS = ['api', 'board', 'modules', '_astro', 'openapi.json', 'health', 'mcp'] as const;
 
 /** Max prefix length after the leading slash. */
 const PREFIX_SLUG_MAX = 63;

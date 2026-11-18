@@ -26,6 +26,11 @@ export interface GatewayDeps {
     edge?: GatewayEdgeOptions;
     /** Structured event sink (the CLI composes a JSONL log); omission disables event logging. */
     onEvent?: (event: GatewayEvent) => void;
+    /**
+     * Gateway-hosted MCP handler for the root `/mcp` route (task 1382). Injected by `apps/server` so
+     * this layer stays transport-free; omitted means `/mcp` is a 404, never a proxy attempt.
+     */
+    mcp?: (req: Request) => Promise<Response>;
 }
 
 /** Structured gateway event kinds (feature K42, task 1384 R1). */
@@ -161,6 +166,9 @@ export function gatewayGuard(req: Request, options: GatewayEdgeOptions): Respons
 
     const url = new URL(req.url);
     const segments = url.pathname.split('/').filter((segment) => segment !== '');
+    // Root `/mcp` is the gateway-hosted MCP entry (task 1382): bearer-authenticated, so a cross-site
+    // simple request cannot reach it — same exemption as the per-project `/<prefix>/mcp`.
+    if (segments[0] === 'mcp') return null;
     if (segments[1] === 'a2a' || segments[1] === 'mcp') return null;
 
     const origin = req.headers.get('origin');
@@ -614,6 +622,12 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         }
         if (url.pathname === '/' || url.pathname === '') {
             return index();
+        }
+        // Before prefix matching: `/mcp` is the gateway's own MCP entry, never a project prefix.
+        if (url.pathname === '/mcp') {
+            return deps.mcp === undefined
+                ? new Response('Not Found\n', { status: 404, headers: { 'content-type': 'text/plain' } })
+                : deps.mcp(req);
         }
         if (url.pathname === '/api/projects/remove') {
             return removeProject(req);
