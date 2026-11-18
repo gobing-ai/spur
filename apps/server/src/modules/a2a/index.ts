@@ -1,10 +1,10 @@
 import { join } from 'node:path';
 import { FleetService, type InboxMessage, type InboxService, RequestKeyConflictError } from '@gobing-ai/spur-app';
-import { getEnvVars } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type CoordinationRunRow } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
+import { bearerEnv, bearerGuard } from '../../middleware/bearer-guard';
 import type { ServerModule } from '../types';
 import { type A2ATask, a2aError, agentCard, projectState, textParts } from './projection';
 
@@ -49,26 +49,6 @@ function a2aSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | 
     // Embedded/test contexts may omit bootConfig; that is the default-off case, never a crash.
     const a2a = typeof ctx.bootConfig === 'function' ? ctx.bootConfig()?.a2a : undefined;
     return { enabled: a2a?.enabled === true, authEnv: a2a?.authEnv ?? null };
-}
-
-/** The bearer token this surface accepts, from the variable `server.a2a.authEnv` names (R6). */
-function requiredToken(authEnv: string | null, env: Record<string, string | undefined>): string | null {
-    if (authEnv === null) return null;
-    // The token value reaches this process only through the configured variable; it is never
-    // written to the corpus, a receipt or a log (R6). @gobing-ai/spur-app already redacts any
-    // env value whose name matches /token|secret|credential/.
-    const value = env[authEnv];
-    return value === undefined || value === '' ? null : value;
-}
-
-/** Constant-time-ish comparison: never short-circuit on the first differing byte. */
-function sameToken(provided: string | undefined, expected: string): boolean {
-    if (provided === undefined) return false;
-    const a = new TextEncoder().encode(provided);
-    const b = new TextEncoder().encode(expected);
-    let diff = a.length ^ b.length;
-    for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-    return diff === 0;
 }
 
 /** The live member a path segment addresses — by inbox address, or by its local id suffix. */
@@ -191,36 +171,30 @@ export const a2aModule: ServerModule = {
         const settings = a2aSettings(ctx);
         // R1: off by default. No route, no handler, no path — the surface does not exist.
         if (!settings.enabled) return;
-        const token = requiredToken(settings.authEnv, envOver(ctx));
+        // R6: everything below the card is bearer-only, and the check precedes any write — the
+        // shared guard (task 1375) carries the a2a realm and envelope; this module keeps the
+        // mount-time warning and the per-route call.
+        const guard = bearerGuard({
+            realm: 'spur-a2a',
+            authEnv: settings.authEnv,
+            env: bearerEnv(ctx),
+            unauthenticated: () => a2aError(401, 'UNAUTHENTICATED', 'a bearer token is required'),
+            unconfigured: () =>
+                a2aError(
+                    500,
+                    'INTERNAL',
+                    'the A2A listener has no token configured; set the variable named by server.a2a.authEnv',
+                ),
+        });
         // Enabled with an unreadable token variable is a misconfiguration, and mounting a surface
         // that refuses everyone is still better than a 404 the operator cannot tell from "off".
-        if (token === null) {
+        if (guard.configured === false) {
             ctx.logger.warn('a2a listener enabled but its token variable is unset; every request will be refused', {
                 variable: settings.authEnv ?? '(server.a2a.authEnv is not configured)',
             });
         }
+        const authorize = guard.authorize;
         const inbox = ctx.inbox();
-
-        /** R6: everything below the card is bearer-only, and the check precedes any write. */
-        const authorize = (c: { req: { header: (name: string) => string | undefined } }): Response | null => {
-            if (token === null) {
-                return Response.json(
-                    a2aError(
-                        500,
-                        'INTERNAL',
-                        'the A2A listener has no token configured; set the variable named by server.a2a.authEnv',
-                    ),
-                    { status: 500 },
-                );
-            }
-            const header = c.req.header('Authorization') ?? '';
-            const provided = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : undefined;
-            if (sameToken(provided, token)) return null;
-            return Response.json(a2aError(401, 'UNAUTHENTICATED', 'a bearer token is required'), {
-                status: 401,
-                headers: { 'WWW-Authenticate': 'Bearer realm="spur-a2a"' },
-            });
-        };
 
         app.get(`/a2a/members/:member/${CARD_SUFFIX}`, async (c) => {
             const denied = authorize(c);
@@ -350,10 +324,4 @@ function notFoundTask(taskId: string): Response {
         a2aError(404, 'NOT_FOUND', `unknown task ${taskId}`, { reason: 'TASK_NOT_FOUND', metadata: { taskId } }),
         { status: 404 },
     );
-}
-
-/** The environment the token variable is read from: an injected map, else the sanctioned funnel. */
-function envOver(ctx: ServerContext): Record<string, string | undefined> {
-    const injected = (ctx as unknown as { env?: Record<string, string | undefined> }).env;
-    return injected ?? getEnvVars();
 }

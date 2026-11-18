@@ -189,6 +189,38 @@ describe('mcp E2E through the project gateway (task 1374)', () => {
         expect(wrong.status).toBe(401);
     });
 
+    test('R4: enabled with an unset token variable answers 500 with the mcp error envelope', async () => {
+        // A second real serve app whose token-variable NAME is unset: the guard must refuse
+        // loudly (500, no challenge header) instead of serving open or faking a 404.
+        const unsetEnv: Record<string, string | undefined> = {
+            NODE_ENV: 'test',
+            SPUR_MCP_ENABLED: 'true',
+            SPUR_MCP_AUTH_ENV: 'SPUR_E2E_MCP_UNSET_TOKEN_VAR',
+        };
+        const ctx = createServerContext(mockRuntime(), {
+            cwd: root,
+            fs: createNodeFileSystem(root),
+            dbUrl: ':memory:',
+            env: unsetEnv,
+            bootConfig: serverBootstrapConfig(unsetEnv),
+        });
+        const app = createApp(mockRuntime(), { ctx });
+        const res = await app.request('/mcp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Mcp-Protocol-Version': MIN_MCP_PROTOCOL_VERSION,
+                Authorization: `Bearer ${TOKEN}`,
+            },
+            body: JSON.stringify(rpc('server/discover')),
+        });
+        expect(res.status).toBe(500);
+        expect(res.headers.get('WWW-Authenticate')).toBeNull();
+        const body = await jsonBody<{ error: { code: string; message: string } }>(res);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+        expect(body.error.message).toContain('server.mcp.authEnv');
+    });
+
     test('AC2: legacy pre-2026-07-28 protocol versions are rejected, never negotiated', async () => {
         for (const version of LEGACY_VERSIONS) {
             const res = await mcpPost(rpc('server/discover'), authHeaders({ 'Mcp-Protocol-Version': version }));

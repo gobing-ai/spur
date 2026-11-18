@@ -2,11 +2,11 @@
 schema_version: 1
 id: "J94"
 name: "Agent-protocol observability: MCP, A2A and auth events over one shared bearer guard"
-status: backlog
+status: active
 priority: P1
 tags: []
 created_at: "2026-11-18T05:24:38.825Z"
-updated_at: "2026-11-18T05:36:57.740Z"
+updated_at: "2026-11-18T07:52:20.968Z"
 ---
 
 # J94: Agent-protocol observability: MCP, A2A and auth events over one shared bearer guard
@@ -70,7 +70,7 @@ Feature: Agent-protocol observability: MCP, A2A and auth events over one shared 
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1377 | Emit A2A message intake and cancellation events | todo |
-| 1375 | Extract one shared bearer guard for the MCP and A2A surfaces | todo |
+| 1375 | Extract one shared bearer guard for the MCP and A2A surfaces | testing |
 | 1378 | Render protocol events in the Board System Events view | todo |
 | 1376 | Emit MCP tool, resource and auth.denied events | todo |
 <!-- END AUTO-GENERATED -->
@@ -82,3 +82,6 @@ Catalog-open ingestion (ADR-110) already persists uncataloged names; the catalog
 Phase 1 of the protocol-surfaces roadmap (2026-11-17 planning session).
 
 ## History
+
+- 2026-11-18T07:52:20.968Z backlog → active (system)
+

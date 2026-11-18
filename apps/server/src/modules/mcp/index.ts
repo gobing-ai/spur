@@ -13,9 +13,9 @@ import {
     type WorkflowTraceTimeline,
     workflowLayers,
 } from '@gobing-ai/spur-app';
-import { getEnvVars } from '@gobing-ai/spur-config';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
+import { bearerEnv, bearerGuard } from '../../middleware/bearer-guard';
 import type { ServerModule } from '../types';
 import {
     handleMcpHttpRequest,
@@ -331,31 +331,6 @@ function mcpSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | 
     return { enabled: mcp?.enabled === true, authEnv: mcp?.authEnv ?? null, namespace: mcp?.namespace ?? undefined };
 }
 
-/** The bearer token this surface accepts, from the variable `server.mcp.authEnv` names. */
-function requiredToken(authEnv: string | null, env: Record<string, string | undefined>): string | null {
-    if (authEnv === null) return null;
-    // The token value reaches this process only through the configured variable; it is never
-    // written to the corpus, a receipt or a log (same contract as the a2a listener).
-    const value = env[authEnv];
-    return value === undefined || value === '' ? null : value;
-}
-
-/** Constant-time-ish comparison: never short-circuit on the first differing byte. */
-function sameToken(provided: string | undefined, expected: string): boolean {
-    if (provided === undefined) return false;
-    const a = new TextEncoder().encode(provided);
-    const b = new TextEncoder().encode(expected);
-    let diff = a.length ^ b.length;
-    for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-    return diff === 0;
-}
-
-/** The environment the token variable is read from: an injected map, else the sanctioned funnel. */
-function envOver(ctx: ServerContext): Record<string, string | undefined> {
-    const injected = (ctx as unknown as { env?: Record<string, string | undefined> }).env;
-    return injected ?? getEnvVars();
-}
-
 /** The embedded MCP endpoint module: mounts nothing unless `server.mcp.enabled` is on (R1/AC1). */
 export const mcpModule: ServerModule = {
     name: 'mcp',
@@ -366,37 +341,29 @@ export const mcpModule: ServerModule = {
         // Off by default. No route, no handler, no path — the surface does not exist, and a
         // boot config without the mcp key (tests / CF Workers default) is the same default-off.
         if (!settings.enabled) return;
-        const token = requiredToken(settings.authEnv, envOver(ctx));
+        // Bearer-only: missing/invalid tokens are 401 with the challenge header (AC1) — the
+        // shared guard (task 1375) carries the mcp realm and envelope; this module keeps the
+        // mount-time warning and the per-route call.
+        const guard = bearerGuard({
+            realm: 'spur-mcp',
+            authEnv: settings.authEnv,
+            env: bearerEnv(ctx),
+            unauthenticated: () => ({ error: { code: 'UNAUTHENTICATED', message: 'a bearer token is required' } }),
+            unconfigured: () => ({
+                error: {
+                    code: 'INTERNAL_ERROR',
+                    message: 'the mcp endpoint has no token configured; set the variable named by server.mcp.authEnv',
+                },
+            }),
+        });
         // Enabled with an unreadable token variable is a misconfiguration; mounting a surface
         // that refuses everyone is still better than a 404 the operator cannot tell from "off".
-        if (token === null) {
+        if (guard.configured === false) {
             ctx.logger.warn('mcp endpoint enabled but its token variable is unset; every request will be refused', {
                 variable: settings.authEnv ?? '(server.mcp.authEnv is not configured)',
             });
         }
-
-        /** Bearer-only: missing/invalid tokens are 401 with the challenge header (AC1). */
-        const authorize = (c: { req: { header: (name: string) => string | undefined } }): Response | null => {
-            if (token === null) {
-                return Response.json(
-                    {
-                        error: {
-                            code: 'INTERNAL_ERROR',
-                            message:
-                                'the mcp endpoint has no token configured; set the variable named by server.mcp.authEnv',
-                        },
-                    },
-                    { status: 500 },
-                );
-            }
-            const header = c.req.header('Authorization') ?? '';
-            const provided = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : undefined;
-            if (sameToken(provided, token)) return null;
-            return Response.json(
-                { error: { code: 'UNAUTHENTICATED', message: 'a bearer token is required' } },
-                { status: 401, headers: { 'WWW-Authenticate': 'Bearer realm="spur-mcp"' } },
-            );
-        };
+        const authorize = guard.authorize;
 
         const handleMcp = createMcpHandler(ctx);
         app.post('/mcp', async (c) => {

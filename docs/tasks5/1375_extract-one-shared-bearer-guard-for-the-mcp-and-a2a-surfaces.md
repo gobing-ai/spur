@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Extract one shared bearer guard for the MCP and A2A surfaces
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:15.944Z
-updated_at: "2026-11-18T05:36:39.120Z"
+updated_at: "2026-11-18T07:52:21.763Z"
 feature_id: J94
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - protocol-surfaces
 estimate_hours: 3
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1375. Extract one shared bearer guard for the MCP and A2A surfaces
@@ -27,16 +29,16 @@ The bearer-auth code is duplicated verbatim across the two agent-facing protocol
 
 ### Requirements
 
-- [ ] R1. Add `apps/server/src/middleware/bearer-guard.ts` exporting `bearerGuard(options)` that returns an `authorize(c)` check (`Response | null`) plus `configured: boolean`.
-- [ ] R3. Replace the module-local `requiredToken`/`sameToken`/`authorize` copies in the a2a and mcp modules with `bearerGuard`; the mount-time "token variable is unset" `logger.warn` stays in each module.
-- [ ] R4. Preserve existing behavior byte-for-byte: status codes (401 / 500), `WWW-Authenticate: Bearer realm="<realm>"` on 401, each surface's error bodies, and the length-independent byte comparison.
-- [ ] R5. The guard reports each refusal through an optional `onDenied({ reason })` callback with `reason` ∈ `missing | mismatch | unset`, and never passes token material to it.
+- [x] R1. Add `apps/server/src/middleware/bearer-guard.ts` exporting `bearerGuard(options)` that returns an `authorize(c)` check (`Response | null`) plus `configured: boolean`.
+- [x] R3. Replace the module-local `requiredToken`/`sameToken`/`authorize` copies in the a2a and mcp modules with `bearerGuard`; the mount-time "token variable is unset" `logger.warn` stays in each module.
+- [x] R4. Preserve existing behavior byte-for-byte: status codes (401 / 500), `WWW-Authenticate: Bearer realm="<realm>"` on 401, each surface's error bodies, and the length-independent byte comparison.
+- [x] R5. The guard reports each refusal through an optional `onDenied({ reason })` callback with `reason` ∈ `missing | mismatch | unset`, and never passes token material to it.
 
 Out of scope: emitting any event (1376 wires `onDenied`), request-time token reads, gateway auth (1382).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — One bearer guard serves both protocol surfaces (req: R1, R3, R4, R5)
+- [x] AC1 — One bearer guard serves both protocol surfaces (req: R1, R3, R4, R5)
 
 Verified by the existing 401/500/realm assertions in `apps/server/tests/mcp-e2e.test.ts` and `apps/server/tests/modules/a2a/routes.test.ts`, plus the new MCP unset-variable case. Both run a real `createServerContext` app with no module mocks.
 
@@ -91,18 +93,64 @@ Reason mapping: token unset → `unset` (500); no `Bearer ` header → `missing`
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/modules/a2a/index.ts:174` |
+| `apps/server/src/modules/a2a/index.ts:191` |
+| `apps/server/src/modules/a2a/index.ts:196` |
+| `apps/server/src/modules/a2a/index.ts:198` |
+| `apps/server/src/modules/a2a/index.ts:2` |
+| `apps/server/src/modules/a2a/index.ts:327` |
+| `apps/server/src/modules/a2a/index.ts:53` |
+| `apps/server/src/modules/a2a/index.ts:7` |
+| `apps/server/src/modules/mcp/index.ts:12` |
+| `apps/server/src/modules/mcp/index.ts:230` |
+| `apps/server/src/modules/mcp/index.ts:241` |
+| `apps/server/src/modules/mcp/index.ts:258` |
+| `apps/server/src/modules/mcp/index.ts:263` |
+| `apps/server/src/modules/mcp/index.ts:9` |
+| `apps/server/tests/mcp-e2e.test.ts:179` |
+| `apps/server/src/middleware/bearer-guard.ts:1` |
+| `apps/server/tests/middleware/bearer-guard.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — `apps/server/src/middleware/bearer-guard.ts` exporting `bearerGuard(options)` returning `authorize(c)` (`Response | null`) plus `configured: boolean` | MET | `apps/server/src/middleware/bearer-guard.ts:30` (`BearerGuard` interface: `configured`, `authorize`), `:58` (`export function bearerGuard`); no `ServerContext` dependency, per design |
+| R3 — module-local `requiredToken`/`sameToken`/`authorize` copies replaced in a2a + mcp; mount-time unset `logger.warn` stays in each module | MET | local copies deleted (grep: zero remaining `requiredToken`/`sameToken`/`envOver` refs outside the guard file); `apps/server/src/modules/a2a/index.ts:177` + `:192`, `apps/server/src/modules/mcp/index.ts:244` + `:259`; `envOver` moved to `bearerEnv` (`bearer-guard.ts:99`) per design |
+| R4 — byte-for-byte behavior: 401/500, `WWW-Authenticate: Bearer realm="<realm>"`, per-surface envelopes, length-independent byte compare | MET | `sameToken` copied byte-identical (`bearer-guard.ts:47-54`); header parse identical (`:67`); a2a envelopes `a2a/index.ts:181-187` == pre-change diff; mcp envelopes `mcp/index.ts:248-254` == pre-change diff; unchanged assertions pass: `tests/modules/a2a/routes.test.ts` (401/realm/500/token-leak), `tests/mcp-e2e.test.ts:165-174` (401 + `Bearer realm="spur-mcp"`) |
+| R5 — optional `onDenied({ reason })`, reason ∈ `missing | mismatch | unset`, never token material | MET | `bearer-guard.ts:64,69-70` fire exactly `{ reason }`; no token/header value reaches the callback or the envelopes; modules pass no `onDenied` yet (1376 wires it) — runtime behavior unchanged |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — one bearer guard serves both protocol surfaces (R1, R3, R4, R5); verified by existing 401/500/realm assertions in `mcp-e2e.test.ts` + `a2a/routes.test.ts`, plus the new MCP unset-variable case; real `createServerContext` app, no module mocks | MET | test | new `tests/middleware/bearer-guard.test.ts` (4 outcomes: allow/missing/mismatch/unset + realm header + onDenied reasons); new `tests/mcp-e2e.test.ts:180` real-app 500 unset case (`INTERNAL_ERROR`, no challenge header); existing `tests/mcp-e2e.test.ts:165` (401 + realm) and `tests/modules/a2a/routes.test.ts` (401/realm, 500 `server.a2a.authEnv`, token-leak) all green after the swap: command `bun test tests/middleware/bearer-guard.test.ts tests/modules/a2a/routes.test.ts` → 27 pass / 0 fail; `bun test tests/mcp-e2e.test.ts` → 8 pass / 0 fail; `bun run spur-check` → lint + 12657 tests / 0 fail + post rules pass; `bunx biome check` on 5 changed files → clean |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T07:40:39.271Z todo → wip (system)
+- 2026-11-18T07:52:19.846Z wip → testing (system)
+- 2026-11-18T07:52:21.758Z testing → done (system)
+
