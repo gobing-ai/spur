@@ -34,8 +34,6 @@ let root = '';
 let upstream: ReturnType<typeof Bun.serve> | undefined;
 let gateway: GatewayHandle | undefined;
 let baseUrl = '';
-/** The same context the app serves from: the 1392 tools write through it. */
-let appCtx: ReturnType<typeof createServerContext> | undefined;
 /** 1376: the catalog-driven tap persists the mcp/auth names the module emits onto `ctx.eventBus()`. */
 let eventDao: SystemEventDao;
 
@@ -76,7 +74,6 @@ beforeAll(async () => {
         // 1392: the server boot loads this; a directly-created context must be handed it.
         sectionMatrix: await loadSectionMatrix(root),
     });
-    appCtx = ctx;
     eventDao = new SystemEventDao(await ctx.getDb());
     await registerSystemEventTap(bus, eventDao, { warn: () => {}, debug: () => {} }, { diagnosticEnabled: false });
     const app = createApp(mockRuntime(), { ctx });
