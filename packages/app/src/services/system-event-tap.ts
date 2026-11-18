@@ -57,6 +57,11 @@ export function registerSystemEventTap(
         retention?: SystemEventRetentionConfig;
         secretValues?: readonly string[];
         projectContext?: SystemEventProjectContext;
+        /**
+         * Skip an event that is already in the ledger (task 1386): the server relays foreign
+         * rows back onto its own bus, and a relayed payload must not be persisted a second time.
+         */
+        skip?: (event: unknown) => boolean;
     } = {},
 ): SystemEventTap {
     const handlers = new Map<string, (event: unknown) => void>();
@@ -75,6 +80,7 @@ export function registerSystemEventTap(
         // write a second row for one transition.
         if (entry.prefix === 'message') continue;
         const handler = (event: unknown) => {
+            if (options.skip?.(event) === true) return;
             const actor = extractSystemEventActor(event);
             const p = persist(
                 dao,

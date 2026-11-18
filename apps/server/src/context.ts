@@ -300,6 +300,13 @@ export interface ServerContext {
     /** Lazy SystemEventDao (system_events ledger) for the history endpoint + tap. */
     systemEventDao(): Promise<SystemEventDao>;
 
+    /**
+     * Ids of the ledger rows THIS process wrote (task 1386 R1). The ledger relay uses it to tell
+     * a foreign row (a child CLI, another process) from one it just persisted itself; the set is
+     * process-local on purpose, so origin never enters the shared schema.
+     */
+    ownLedgerIds(): Set<string>;
+
     /** Current-project identity injected into persisted, streamed, and legacy-projected envelopes. */
     systemEventProjectContext(): SystemEventProjectContext;
 
@@ -456,6 +463,8 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let workflowSvc: WorkflowAppService | undefined;
     let runStoreSvc: RunStoreService | undefined;
     let systemEventDaoPromise: Promise<SystemEventDao> | undefined;
+    // Task 1386 R1: own-row ids live beside the DAO they were inserted through.
+    const ownLedgerIds = new Set<string>();
     let jobQueuePromise: Promise<ServerJobQueue> | undefined;
     let queueConsumerPromise: Promise<ServerQueueConsumer<unknown>> | undefined;
     return {
@@ -834,6 +843,10 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         async systemEventDao(): Promise<SystemEventDao> {
             systemEventDaoPromise ??= this.getDb().then((db) => new SystemEventDao(db));
             return systemEventDaoPromise;
+        },
+
+        ownLedgerIds(): Set<string> {
+            return ownLedgerIds;
         },
 
         systemEventProjectContext(): SystemEventProjectContext {

@@ -279,6 +279,25 @@ are added in 0221 by emitting the upstream event through a service constructed w
 
 <a id="710-system-event-correlation-columns-task-0369"></a>
 
+### 7.9b Ledger relay — every foreign row reaches the live stream (task 1386)
+
+The server writes `system_events` rows through its tap and catch-all, and any other process — a
+child `spur workflow run`, a sibling CLI, the inbox — writes to the same table through its own
+process-local bus. A `system_events` follower is therefore the only channel that sees every
+process's events, and `startLedgerRelay` (`apps/server/src/modules/events/index.ts`) streams them
+back onto the server bus.
+
+| Rule | Mechanism | Why |
+| --- | --- | --- |
+| Own rows are never re-emitted | `ServerContext.ownLedgerIds()` — a process-local `Set<string>` filled by `trackOwnInserts` (the tap/catch-all DAO wrapper) and drained by the relay's `match` (`!ownIds.delete(row.id)`) | Origin is a fact about this process's writers, not about event families; an id set is exact and needs no migration |
+| Relayed rows are never re-persisted | the relay marks each payload in `relayedRowColumns`; `isRelayedPayload` is passed as `skip` to `registerSystemEventTap` and `createSystemEventCatchAllSink` | the relay would otherwise feed its own output back into the ledger |
+| The boot snapshot still holds | the follower starts at `latestSequence()` | pre-boot rows are the history endpoint's job, not live events |
+| One bad row cannot stop the relay | per-row `try/catch` around parse + emit | the stream is a UI channel, not a delivery guarantee |
+
+The family filter is gone: `message.*` was the original case (G11 R5), but `workflow.*` and
+`rule.*` rows from child processes are exactly as foreign. SSE catalog filtering still decides what
+the Board displays.
+
 ### 7.10 System event correlation columns (task 0369)
 
 `system_events` carries four nullable correlation columns beside the original five,

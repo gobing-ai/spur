@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
-import { eventsModule, sendKeepalive } from '../../../src/modules/events';
+import { eventsModule, isRelayedPayload, sendKeepalive } from '../../../src/modules/events';
 import { SYSTEM_EVENT_STREAMED_NAMES } from '../../../src/modules/events/event-names';
 
 describe('eventsModule', () => {
@@ -471,5 +471,142 @@ describe('sendKeepalive', () => {
         // Same projection: summary, fields, data and the agent chip agree byte-for-byte.
         expect(live?.payload).toEqual(historic?.payload);
         db.close();
+    });
+});
+
+/**
+ * Task 1386 — the relay covers every foreign row, own rows are skipped by id, and a relayed row
+ * is never persisted twice. In-memory ledger + bus; no IPC, no schema change.
+ */
+describe('ledger relay (task 1386)', () => {
+    async function makeRelayCtx() {
+        const { createMigratedDb, SystemEventDao } = await import('@gobing-ai/spur-domain');
+        const db = await createMigratedDb({ url: ':memory:' });
+        const seen: Array<{ name: string; payload: unknown }> = [];
+        const bus = {
+            on: () => {},
+            off: () => {},
+            emit: (name: string, payload: unknown) => {
+                seen.push({ name, payload });
+            },
+        };
+        const ownIds = new Set<string>();
+        const dao = new SystemEventDao(db);
+        // The server path: `trackOwnInserts` registers the id before the insert.
+        type LedgerInput = Parameters<InstanceType<typeof SystemEventDao>['insert']>[0];
+        const insertOwn = async (row: LedgerInput) => {
+            ownIds.add(row.id);
+            return dao.insert(row);
+        };
+        // Any other process: a plain ledger write this process knows nothing about.
+        const insertForeign = async (row: LedgerInput) => dao.insert(row);
+        const ctx = {
+            cwd: '/workspace/acme',
+            getDb: async () => db,
+            systemEventDao: async () => new SystemEventDao(db),
+            systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+            systemEventSecretValues: () => [],
+            ownLedgerIds: () => ownIds,
+            eventBus: () => bus,
+        } as unknown as ServerContext;
+        const app = new Hono();
+        eventsModule.mount(app, ctx);
+        // The boot snapshot: anything written before it is history, not a live event.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const waitFor = async (count: number) => {
+            for (let attempt = 0; attempt < 60 && seen.length < count; attempt += 1) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        };
+        return { db, seen, ownIds, insertOwn, insertForeign, waitFor };
+    }
+
+    test('a foreign workflow row is relayed — the family filter is gone (R2)', async () => {
+        const { db, seen, insertForeign, waitFor } = await makeRelayCtx();
+        try {
+            // A child `spur workflow run` writes this family; 1386 removed the `message.*` filter.
+            await insertForeign({
+                id: 'sev_foreign_wf',
+                event_name: 'workflow.run.started',
+                occurred_at: new Date().toISOString(),
+                actor: null,
+                payload_json: JSON.stringify({ runId: 'run-1' }),
+            });
+            await waitFor(1);
+            expect(seen.map((event) => event.name)).toEqual(['workflow.run.started']);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('an own row is skipped and its id pruned (R1/R2)', async () => {
+        const { db, seen, insertOwn, insertForeign, waitFor } = await makeRelayCtx();
+        try {
+            // Same insert path the server's own tap uses — the id is registered first.
+            await insertOwn({
+                id: 'sev_own_1',
+                event_name: 'task.updated',
+                occurred_at: new Date().toISOString(),
+                actor: 'server',
+                payload_json: JSON.stringify({ field: 'status' }),
+            });
+            // A foreign row follows to prove the relay kept running past the skipped one.
+            await insertForeign({
+                id: 'sev_foreign_2',
+                event_name: 'rule.run.done',
+                occurred_at: new Date().toISOString(),
+                actor: null,
+                payload_json: JSON.stringify({ rules: 2 }),
+            });
+            await waitFor(1);
+            expect(seen.map((event) => event.name)).toEqual(['rule.run.done']);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('a malformed row is skipped and the loop continues (R4)', async () => {
+        const { db, seen, insertForeign, waitFor } = await makeRelayCtx();
+        try {
+            await insertForeign({
+                id: 'sev_bad',
+                event_name: 'rule.eval.done',
+                occurred_at: new Date().toISOString(),
+                actor: null,
+                payload_json: '{not json',
+            });
+            await insertForeign({
+                id: 'sev_good',
+                event_name: 'rule.eval.done',
+                occurred_at: new Date().toISOString(),
+                actor: null,
+                payload_json: JSON.stringify({ ruleId: 'r1' }),
+            });
+            await waitFor(1);
+            // The malformed row yields no usable payload but must not stop the stream.
+            expect(seen.length).toBeGreaterThanOrEqual(1);
+            expect(seen.at(-1)?.payload).toMatchObject({ ruleId: 'r1' });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('a relayed payload is marked so the tap skips re-persisting it (R3)', async () => {
+        const { db, seen, insertForeign, waitFor } = await makeRelayCtx();
+        try {
+            await insertForeign({
+                id: 'sev_marked',
+                event_name: 'workflow.phase',
+                occurred_at: new Date().toISOString(),
+                actor: null,
+                payload_json: JSON.stringify({ phase: 'implement' }),
+            });
+            await waitFor(1);
+            // The marker is what the server passes as `skip` to both sinks.
+            expect(isRelayedPayload(seen[0]?.payload)).toBe(true);
+            expect(isRelayedPayload({ phase: 'local' })).toBe(false);
+        } finally {
+            db.close();
+        }
     });
 });

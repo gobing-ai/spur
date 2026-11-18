@@ -64,6 +64,7 @@ import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
 import { allowedHostnames, isAllowedHost, rejectHost } from './middleware/host-guard';
 import { trimOrigins } from './middleware/pipeline';
+import { isRelayedPayload } from './modules/events';
 import { registerSystemEventTap } from './modules/events/system-event-tap';
 import { type SchedulerScheduleRegistration, setRegisteredSchedules } from './modules/jobs/schedule-registry';
 import { openUrl } from './open-url';
@@ -546,21 +547,16 @@ export function createTaskActionAgentService(options: ConstructorParameters<type
  * Execute a validated task-action job by dispatching its mapped command to the
  * selected local agent.
  *
- * Process boundary policy (task 0226 F3): all 6 current task actions
- * (`refine`, `plan`, `run`, `verify`, `decompose`, `evaluate`) map to
- * AI-driven agent slash commands (`/sp:dev-*`). The server's `AgentService`
- * spawns a child CLI process to execute them. Parent-level `agent.invoke.*`
- * and `process.*` events ARE captured on the server bus because
- * `ctx.agentService()` threads `events: ctx.eventBus()` into the `AiRunner`.
- * However, if the child agent internally runs `spur workflow run` or
- * `spur rule run`, those nested CLI events happen in a separate process with
- * its own process-local bus and do NOT cross back to the parent server bus.
+ * Process boundary (task 0226 F3, revised by 1386): the server's `AgentService` spawns a child
+ * CLI process, so parent-level `agent.invoke.*` / `process.*` events reach the server bus
+ * directly (`ctx.agentService()` threads `events: ctx.eventBus()` into the `AiRunner`).
  *
- * This is an intentional v1 scope limit: only parent-level agent/process/queue
- * lifecycle events are board-observable for board-triggered task actions.
- * Nested workflow/rule events require either server-native execution
- * (`ctx.workflowService()` / `ctx.ruleService()` accessors, wired in F4) or
- * an explicit IPC event bridge, both deferred to follow-up tasks.
+ * A child that runs `spur workflow run` or `spur rule run` writes its events to the shared
+ * `system_events` ledger through its own process-local bus. The ledger relay
+ * (`startLedgerRelay`, modules/events) now streams every foreign row back onto this server's
+ * bus, so nested workflow/rule events are board-observable after all — the v1 scope limit this
+ * comment used to describe is gone. Two guards keep the loop closed: own rows are skipped by id,
+ * and relayed payloads are skipped by the tap/catch-all so nothing is persisted twice.
  */
 export async function runTaskActionJob(
     ctx: ServerContext,
@@ -593,6 +589,20 @@ export async function runTaskActionJob(
     if (exitCode !== 0) {
         throw new Error(`Task action ${job.action} for ${job.wbs} failed with exit code ${exitCode}`);
     }
+}
+
+/**
+ * Wrap the shared ledger DAO so every insert this process makes registers its id first
+ * (task 1386 R1). The id lands in the set before the insert is awaited, so the relay can never
+ * read a row whose owning id is still unrecorded.
+ */
+export function trackOwnInserts(dao: SystemEventDao, ownIds: Set<string>): SystemEventDao {
+    const insert = dao.insert.bind(dao);
+    dao.insert = async (input) => {
+        ownIds.add(input.id);
+        return insert(input);
+    };
+    return dao;
 }
 
 /** Parse and validate the queue payload for a board-triggered feature workflow action. */
@@ -1052,12 +1062,14 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     // other EventBus subscribers. Bun-only — the Workers path has no long-lived bus.
                     if (bootConfig.events.enabled) {
                         try {
-                            const dao = new SystemEventDao(await ctx.getDb());
+                            const dao = trackOwnInserts(new SystemEventDao(await ctx.getDb()), ctx.ownLedgerIds());
                             registerSystemEventTap(ctx.eventBus(), dao, appRt.logger, {
                                 diagnosticEnabled: bootConfig.events.diagnostic === true,
                                 retention: bootConfig.events.retention,
                                 secretValues: configuredSecretValues(env),
                                 projectContext: ctx.systemEventProjectContext(),
+                                // Task 1386 R3: a relayed row is already in the ledger.
+                                skip: isRelayedPayload,
                             });
                             // Catalog-open ingestion (task 0794 R5): uncataloged names
                             // persist through the same DAO/quotas/secrets/project
@@ -1078,6 +1090,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                                     retention: bootConfig.events.retention,
                                     secretValues: configuredSecretValues(env),
                                     projectContext: ctx.systemEventProjectContext(),
+                                    // Task 1386 R3: same rule on the catalog-open path.
+                                    skip: isRelayedPayload,
                                 }),
                             );
                             appRt.logger.debug('system_events tap registered', {

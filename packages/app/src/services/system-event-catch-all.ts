@@ -105,6 +105,8 @@ export interface SystemEventCatchAllSinkOptions {
     retention?: SystemEventRetentionConfig;
     secretValues?: readonly string[];
     projectContext?: SystemEventProjectContext;
+    /** Skip a payload that is already in the ledger — a relayed row (task 1386 R3). */
+    skip?: (payload: unknown) => boolean;
 }
 
 /**
@@ -124,6 +126,7 @@ export function createSystemEventCatchAllSink(options: SystemEventCatchAllSinkOp
     const secretValues = options.secretValues ?? [];
     const driftWarned = new Set<string>();
     return async (name, payload) => {
+        if (options.skip?.(payload) === true) return;
         const entry = genericSystemEventCatalogEntry(name);
         const actor = extractSystemEventActor(payload);
         try {

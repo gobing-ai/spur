@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Relay all foreign-process ledger rows to the server bus
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:28.838Z
-updated_at: "2026-11-18T05:50:26.846Z"
+updated_at: "2026-11-18T16:36:34.092Z"
 feature_id: D92
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - protocol-surfaces
 estimate_hours: 4.5
 
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1386. Relay all foreign-process ledger rows to the server bus
@@ -27,16 +29,16 @@ Board task actions spawn child agent CLIs (`runTaskActionJob`, `apps/server/src/
 
 ### Requirements
 
-- [ ] R1. Wrap the server's shared ledger `SystemEventDao` so every insert by the server tap or catch-all adds its row id to a process-local `ownIds` set exposed on `ServerContext`. No schema change.
-- [ ] R2. Rename the relay to `startLedgerRelay`. It matches every row, skips (and removes) ids in `ownIds`, and emits all others, including in-server `InboxService` `message.*` rows (unchanged behavior) and child-CLI `workflow.*`/`rule.*` rows.
-- [ ] R3. `registerSystemEventTap` and `createSystemEventCatchAllSink` accept `skip?: (event: unknown) => boolean`. The server passes a predicate that matches relayed payloads, so a relayed row is never re-persisted.
-- [ ] R4. Keep per-row failure isolation (one malformed row is skipped and the loop continues), and keep the boot snapshot (rows from before boot are not re-emitted).
-- [ ] R5. Replace the v1 scope-limit comment at `serve.ts:555-563` and the relay doc comment, and update `docs/design/observability-contracts.md`.
+- [x] R1. Wrap the server's shared ledger `SystemEventDao` so every insert by the server tap or catch-all adds its row id to a process-local `ownIds` set exposed on `ServerContext`. No schema change.
+- [x] R2. Rename the relay to `startLedgerRelay`. It matches every row, skips (and removes) ids in `ownIds`, and emits all others, including in-server `InboxService` `message.*` rows (unchanged behavior) and child-CLI `workflow.*`/`rule.*` rows.
+- [x] R3. `registerSystemEventTap` and `createSystemEventCatchAllSink` accept `skip?: (event: unknown) => boolean`. The server passes a predicate that matches relayed payloads, so a relayed row is never re-persisted.
+- [x] R4. Keep per-row failure isolation (one malformed row is skipped and the loop continues), and keep the boot snapshot (rows from before boot are not re-emitted).
+- [x] R5. Replace the v1 scope-limit comment at `serve.ts:555-563` and the relay doc comment, and update `docs/design/observability-contracts.md`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Child-process workflow events reach the live Board stream (req: R2, R4)
-- [ ] AC2 — The server never re-emits its own rows (req: R1, R3, R5)
+- [x] AC1 — Child-process workflow events reach the live Board stream (req: R2, R4)
+- [x] AC2 — The server never re-emits its own rows (req: R1, R3, R5)
 
 Test layer: a real in-memory ledger and bus for the module tests, plus one real child CLI process for the e2e.
 
@@ -84,18 +86,74 @@ registerSystemEventTap(bus, dao, logger, { …, skip: (e) => isRelayed(e) });
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/context.ts:303` |
+| `apps/server/src/context.ts:466` |
+| `apps/server/src/context.ts:848` |
+| `apps/server/src/modules/events/index.ts:128` |
+| `apps/server/src/modules/events/index.ts:142` |
+| `apps/server/src/modules/events/index.ts:158` |
+| `apps/server/src/modules/events/index.ts:162` |
+| `apps/server/src/modules/events/index.ts:173` |
+| `apps/server/src/modules/events/index.ts:194` |
+| `apps/server/src/modules/events/index.ts:226` |
+| `apps/server/src/serve.ts:1065` |
+| `apps/server/src/serve.ts:1071` |
+| `apps/server/src/serve.ts:1093` |
+| `apps/server/src/serve.ts:550` |
+| `apps/server/src/serve.ts:554` |
+| `apps/server/src/serve.ts:594` |
+| `apps/server/src/serve.ts:67` |
+| `apps/server/tests/modules/events/index.test.ts:4` |
+| `apps/server/tests/modules/events/index.test.ts:476` |
+| `docs/design/observability-contracts.md:282` |
+| `packages/app/src/services/system-event-catch-all.ts:108` |
+| `packages/app/src/services/system-event-catch-all.ts:129` |
+| `packages/app/src/services/system-event-tap.ts:60` |
+| `packages/app/src/services/system-event-tap.ts:83` |
+| `apps/server/tests/modules/events/ledger-relay-loop.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — wrap the shared ledger DAO so every server insert registers its id in a process-local `ownIds` set exposed on `ServerContext`; no schema change | MET | `apps/server/src/context.ts:308` (accessor), `:467` (the set), `:848` (impl); `apps/server/src/serve.ts:599` (`trackOwnInserts`, exported + wired at the tap composition); test `apps/server/tests/modules/events/ledger-relay-loop.test.ts` (`trackOwnInserts` — the id is in the set at insert time, so the relay cannot race the write). No migration touched |
+| R2 — rename to `startLedgerRelay`; match every row, skip+remove `ownIds` ids, emit all others (in-server `message.*` and child `workflow.*`/`rule.*`) | MET | `apps/server/src/modules/events/index.ts:158` (`startLedgerRelay`), `:173` (`!ownIds.delete(row.id)` — one call tests and prunes); tests `index.test.ts` (`a foreign workflow row is relayed` — the old `message.*` filter is gone; `an own row is skipped and its id pruned`), `ledger-relay-loop.test.ts` (relayed foreign row emitted once) |
+| R3 — `registerSystemEventTap` and `createSystemEventCatchAllSink` accept `skip?: (event) => boolean`; the server passes a relayed-payload predicate | MET | `packages/app/src/services/system-event-tap.ts:64` + handler early-return, `packages/app/src/services/system-event-catch-all.ts:109` + sink early-return; predicate `apps/server/src/modules/events/index.ts:146` (`isRelayedPayload`) wired at both `serve.ts` call sites; test `ledger-relay-loop.test.ts` (`a relayed foreign row … not persisted a second time` — ledger stays at one row) |
+| R4 — per-row failure isolation and the boot snapshot are kept | MET | `index.ts` keeps the per-row `try/catch` around parse+emit and still starts at `latestSequence()`; test `a malformed row is skipped and the loop continues` (`{not json` then a good row: the good row still surfaces) |
+| R5 — replace the v1 scope-limit comment, the relay doc comment, and update `docs/design/observability-contracts.md` | MET | `apps/server/src/serve.ts` `runTaskActionJob` doc comment rewritten (the "child events do NOT cross back" v1 limit is gone, two guards documented), relay doc comment rewritten at `index.ts:128-145`, `docs/design/observability-contracts.md:282` new §7.9b with the four rules |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Child-process workflow events reach the live Board stream (R2, R4) | MET | test | `ledger-relay-loop.test.ts` — a **real child CLI process** (`bun apps/cli/src/index.ts workflow run <fixture>`) writes `workflow.run.started` into a file-backed ledger; the in-process relay surfaces it on the bus. Plus the module-level test proving the `workflow.*` family is no longer filtered |
+| AC2 — The server never re-emits its own rows (R1, R3, R5) | MET | test | `index.test.ts` (own row skipped, id pruned, following foreign row still relayed) + `ledger-relay-loop.test.ts` (own emit: one ledger row, one bus delivery, no echo after 200ms) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T16:34:23.816Z todo → wip (system)
+- 2026-11-18T16:36:32.349Z wip → testing (system)
+- 2026-11-18T16:36:34.088Z testing → done (system)
+

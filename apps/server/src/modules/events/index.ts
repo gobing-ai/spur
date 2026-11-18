@@ -125,13 +125,27 @@ export function sendKeepalive(
  * (ctx undefined) the module is a no-op and the board falls back to polling.
  */
 /**
- * One relay per server (G11 R5, ADR-143). `InboxService` writes `message.*` rows in the same
- * transaction as the inbox row it describes, and a bus-less service means the server's own
- * sends emit nothing. Agent CLI processes write the same ledger rows and never touch this
- * process's bus at all. Following `system_events` is therefore the only channel that sees
- * every process's message lifecycle, and it emits each row exactly once.
+ * One ledger relay per server (G11 R5, ADR-143; widened by task 1386).
+ *
+ * Any process writing to the shared ledger — a child `spur workflow run`, the inbox service, a
+ * sibling CLI — writes rows this process's bus never sees. Following `system_events` is the only
+ * channel that recovers them, so the relay now streams EVERY foreign row, not just `message.*`.
+ *
+ * Two rules keep that cycle closed:
+ * - own rows are skipped by id (the process tracks the ids it inserted, so its own tap output is
+ *   never re-emitted as if it were foreign);
+ * - relayed payloads are marked in {@link relayedRowColumns}, and the tap and catch-all skip a
+ *   marked payload, so a relayed row is never persisted a second time.
  */
 const relayedContexts = new WeakSet<ServerContext>();
+
+/**
+ * Was this payload relayed from the ledger rather than emitted here? The tap and catch-all read
+ * this to skip re-persisting a row that already exists (task 1386 R3).
+ */
+export function isRelayedPayload(event: unknown): boolean {
+    return typeof event === 'object' && event !== null && relayedRowColumns.has(event);
+}
 
 /**
  * Ledger columns of a relayed row, keyed by the emitted payload object. The `actor` and
@@ -141,10 +155,13 @@ const relayedContexts = new WeakSet<ServerContext>();
  */
 const relayedRowColumns = new WeakMap<object, { actor: string | null; occurredAt: string }>();
 
-function startMessageRelay(ctx: ServerContext): void {
+function startLedgerRelay(ctx: ServerContext): void {
     if (relayedContexts.has(ctx)) return;
     relayedContexts.add(ctx);
     const controller = new AbortController();
+    // Task 1386 R1: ids this process inserted. `delete` both tests membership and prunes the id
+    // in one call, so the set only ever holds own rows the relay has not yet reached.
+    const ownIds = ctx.ownLedgerIds?.();
     void (async () => {
         try {
             const bus: EventBus<Record<string, (event: unknown) => void>> = ctx.eventBus();
@@ -153,7 +170,7 @@ function startMessageRelay(ctx: ServerContext): void {
             const start = await (await ctx.systemEventDao()).latestSequence();
             const stream = followSystemEventsAfter(() => ctx.getDb(), {
                 afterSequence: start,
-                match: (row: SystemEventRow) => row.event_name.startsWith('message.'),
+                match: (row: SystemEventRow) => ownIds === undefined || !ownIds.delete(row.id),
                 signal: controller.signal,
             });
             for await (const row of stream) {
@@ -174,7 +191,7 @@ function startMessageRelay(ctx: ServerContext): void {
     })();
 }
 
-/** SSE + history transport for the system-event ledger, and the `message.*` relay (G11 R5). */
+/** SSE + history transport for the system-event ledger, and the ledger relay (G11 R5 / 1386). */
 export const eventsModule: ServerModule = {
     name: 'events',
 
@@ -206,7 +223,7 @@ export const eventsModule: ServerModule = {
               )
             : [];
         const streamNames = [...baseNames, ...diagnosticNames];
-        startMessageRelay(ctx);
+        startLedgerRelay(ctx);
 
         app.get('/api/events/planning', (c) => {
             const bus: EventBus<Record<string, (event: unknown) => void>> = ctx.eventBus();
