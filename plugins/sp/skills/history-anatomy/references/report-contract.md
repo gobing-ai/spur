@@ -50,6 +50,21 @@ Each finding carries a stable key of the form:
 
 The key is the recurrence identity. Rewording a finding's title must **never** reclassify it.
 
+### Surface findings (task 1399, feature H85)
+
+Two keys are fixed for the authored-surface and protocol surfaces, and each cites the artifact path
+it reads (`protocolUsage` / `surfaceUsage`) as its evidence anchor:
+
+| Key | Condition | Artifact path |
+| --- | --- | --- |
+| `reliability:mcp-tool:<tool>:failure-rate` | `calls >= 20 && failureRate >= 0.2` for that tool | `protocolUsage.tools[]` |
+| `coverage:<kind>:<name>:zero-use` | the item appears in `zeroUse`, and the window is at least 30 days | `surfaceUsage.zeroUse[]` |
+
+A window shorter than 30 days renders zero-use as `not comparable (window < 30d)` and emits **no**
+`zero-use` finding. MCP tool zero-use is never asserted: the tool catalog is not in the artifact, so
+it is reported as a telemetry gap naming that reason instead. A `request`-only invocation row counts
+as use — a command request is not non-use.
+
 ## Per-finding field set
 
 Every finding — problem and positive alike — carries the full field set:

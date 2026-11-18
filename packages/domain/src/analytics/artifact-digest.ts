@@ -69,6 +69,9 @@ export const ARTIFACT_ARRAY_CLASSIFICATION: Readonly<Record<ArtifactArrayKey, 'r
     byActor: 'set',
     a2a: 'set',
     authDenied: 'set',
+    // SurfaceUsage (task 1399) — inventory order is the app's, not evidence; sorted for stability.
+    items: 'set',
+    zeroUse: 'set',
 };
 
 /**

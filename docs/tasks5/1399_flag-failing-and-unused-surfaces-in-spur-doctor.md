@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Flag failing and unused surfaces in spur-doctor
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:36.438Z
-updated_at: "2026-11-18T06:09:00.940Z"
+updated_at: "2026-11-18T08:43:04.450Z"
 feature_id: I61
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 3
 
 dependencies: ["1398"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1399. Flag failing and unused surfaces in spur-doctor
@@ -29,18 +31,18 @@ dependencies: ["1398"]
 
 ### Requirements
 
-- [ ] R1. Add `surfaceUsageSummary(db, { since, until, inventory })` in `packages/domain/src/analytics/surface-usage.ts`. `inventory` is `{ kind: 'command'|'skill', name }[]`. It returns per-item `calls` from `history_skill_call` (classified, any status) in the window, plus `zeroUse[]`.
-- [ ] R2. `history-service` builds the inventory from the plugin `commands/` and `skills/` dirs (reusing the `findPluginsSpCommandsDir` resolution) and sets `HistoryArtifact.surfaceUsage?`. Items are named as E93 records them (`sp:<name>`).
-- [ ] R3. The anatomy contract defines two finding keys:
+- [x] R1. Add `surfaceUsageSummary(db, { since, until, inventory })` in `packages/domain/src/analytics/surface-usage.ts`. `inventory` is `{ kind: 'command'|'skill', name }[]`. It returns per-item `calls` from `history_skill_call` (classified, any status) in the window, plus `zeroUse[]`.
+- [x] R2. `history-service` builds the inventory from the plugin `commands/` and `skills/` dirs (reusing the `findPluginsSpCommandsDir` resolution) and sets `HistoryArtifact.surfaceUsage?`. Items are named as E93 records them (`sp:<name>`).
+- [x] R3. The anatomy contract defines two finding keys:
   - `reliability:mcp-tool:<tool>:failure-rate` when `calls >= 20 && failureRate >= 0.2` from `protocolUsage`
   - `coverage:<kind>:<name>:zero-use` when `surfaceUsage.zeroUse` contains the item and the window is at least 30 days
   Each cites the artifact path and counts as its evidence anchor.
-- [ ] R4. A window shorter than 30 days renders zero-use as `not comparable (window < 30d)` with no findings. MCP tool zero-use always appears as a telemetry gap naming the reason.
-- [ ] R5. No change to the spur-doctor reflection map (it already routes `reliability`/`coverage` findings). Add one line to the doctor SKILL.md that these keys feed H85.
+- [x] R4. A window shorter than 30 days renders zero-use as `not comparable (window < 30d)` with no findings. MCP tool zero-use always appears as a telemetry gap naming the reason.
+- [x] R5. No change to the spur-doctor reflection map (it already routes `reliability`/`coverage` findings). Add one line to the doctor SKILL.md that these keys feed H85.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Doctor flags failing and unused surfaces (req: R1, R2, R3, R4, R5)
+- [x] AC1 — Doctor flags failing and unused surfaces (req: R1, R2, R3, R4, R5)
 
 Test layer: domain analytics test on in-memory SQLite plus the anatomy structure-gate fixture test.
 
@@ -82,18 +84,66 @@ Test layer: domain analytics test on in-memory SQLite plus the anatomy structure
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/history-service.ts:1034` |
+| `packages/app/src/services/history-service.ts:1977` |
+| `packages/app/src/services/history-service.ts:72` |
+| `packages/app/src/services/history-service.ts:914` |
+| `packages/app/src/services/history-service.ts:938` |
+| `packages/app/src/services/history-service.ts:96` |
+| `packages/app/tests/services/history-anatomy.test.ts:622` |
+| `packages/domain/src/analytics/artifact-digest.ts:72` |
+| `packages/domain/src/analytics/artifact.ts:245` |
+| `packages/domain/src/analytics/artifact.ts:6` |
+| `packages/domain/src/analytics/index.ts:267` |
+| `packages/domain/src/analytics/render-forensics.ts:38` |
+| `packages/domain/src/analytics/render-forensics.ts:458` |
+| `packages/domain/tests/analytics/render-forensics.test.ts:561` |
+| `plugins/sp/skills/history-anatomy/references/report-contract.md:53` |
+| `plugins/sp/skills/spur-doctor/SKILL.md:180` |
+| `packages/domain/src/analytics/surface-usage.ts:1` |
+| `packages/domain/tests/analytics/surface-usage.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — `surfaceUsageSummary(db, {since, until, inventory})` returning per-item calls from `history_skill_call` (any status) plus `zeroUse[]` | MET | `packages/domain/src/analytics/surface-usage.ts:59` (one grouped `SELECT` over `skill_name IN (inventory)`, window bounded by the same `buildTimeRangeClauses` the other analytics use), types `:20-45`; `packages/domain/tests/analytics/surface-usage.test.ts` 4/4 (used+unused, short window, unbounded/empty inventory, unreadable plane) |
+| R2 — inventory built in `history-service` from the plugin `commands/` and `skills/` dirs via `findPluginsSpCommandsDir`, names as E93 records them (`sp:<name>`), optional `HistoryArtifact.surfaceUsage` | MET | `packages/app/src/services/history-service.ts:1983` (`surfaceInventory()`, reuses the resolver import at `:17`), wired at `:942` beside `protocolUsageSummary`; artifact field `packages/domain/src/analytics/artifact.ts:249`; digest `'set'` entries `artifact-digest.ts:72-74` (compiler exhaustiveness guard still passes) |
+| R3 — two finding keys with thresholds: `reliability:mcp-tool:<tool>:failure-rate` (`calls >= 20 && failureRate >= 0.2`) and `coverage:<kind>:<name>:zero-use` (item in `zeroUse`, window ≥ 30d), each citing the artifact path | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` new "Surface findings" table cites `protocolUsage.tools[]` / `surfaceUsage.zeroUse[]` with both thresholds; structure-gate fixture `packages/app/tests/services/history-anatomy.test.ts` (new case) proves both keys pass the closed-category gate |
+| R4 — window < 30d renders zero-use as `not comparable (window < 30d)` with no findings; MCP tool zero-use stays a telemetry gap naming the reason; no `request` evidence read as non-use | MET | `surface-usage.ts:16,60-62` (`comparable` false ⇒ `zeroUse: []`), renderer `render-forensics.ts:468` (emits `not comparable (window < 30d …)` and returns before any zero-use table); tests `surface-usage.test.ts:76-90` and `render-forensics.test.ts` (short-window case asserts no zero-use table); contract states the MCP telemetry-gap rule and that a `request`-only row counts as use |
+| R5 — no change to the doctor reflection map; one line that these keys feed H85 | MET | `plugins/sp/skills/spur-doctor/SKILL.md` (H85 paragraph added after the closed-class list; the six-row reflection map is untouched) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Doctor flags failing and unused surfaces (R1,R2,R3,R4,R5) | MET | test | `surface-usage.test.ts` 4/4, `render-forensics.test.ts` 35/35, `history-anatomy.test.ts` 69/69; workspace coverage run reports `surface-usage.ts 100.00% funcs / 100.00% lines`; domain workspace 1495 pass; `spur-doctor` skill structure tests pass in the pipeline gate |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:42:14.779Z todo → wip (system)
+- 2026-11-18T08:43:02.907Z wip → testing (system)
+- 2026-11-18T08:43:04.445Z testing → done (system)
+

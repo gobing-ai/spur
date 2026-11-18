@@ -177,6 +177,11 @@ The five action classes are closed: **task**, **rule candidate**, **workflow opt
 **doc or learning**, **no-op**. The doctor classifies the report's findings and never derives new
 ones from raw records — that would make it a second history interpreter.
 
+Feature H85 rides this map unchanged: `reliability:mcp-tool:<tool>:failure-rate` and
+`coverage:<kind>:<name>:zero-use` findings are ordinary `reliability` / `coverage` rows, so a failing
+protocol surface becomes a task and an unused authored surface becomes a deletion candidate for H85
+(the doctor proposes nothing beyond the finding; H85 owns the cut).
+
 ## Proposal table
 
 Return one row per actionable finding, with exactly these columns:

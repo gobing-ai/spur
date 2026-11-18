@@ -265,6 +265,14 @@ export {
     foldTotals,
 } from './run-cost';
 export {
+    type SurfaceInventoryItem,
+    type SurfaceUsage,
+    type SurfaceUsageItem,
+    type SurfaceUsageOptions,
+    surfaceUsageSummary,
+    ZERO_USE_MIN_WINDOW_DAYS,
+} from './surface-usage';
+export {
     ATTRIBUTION_EVIDENCE_LIMIT,
     ATTRIBUTION_SESSION_LIMIT,
     type AttributionCandidate,

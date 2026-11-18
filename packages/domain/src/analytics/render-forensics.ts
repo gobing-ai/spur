@@ -35,6 +35,7 @@ export function renderForensics(artifact: HistoryArtifact): string {
     lines.push(...renderPerStep(artifact));
     lines.push(...renderBottlenecks(derived));
     lines.push(...renderProtocolUsage(artifact));
+    lines.push(...renderSurfaceUsage(artifact));
     lines.push(...renderRawData(artifact));
 
     return lines.join('\n');
@@ -451,6 +452,54 @@ function renderProtocolUsage(artifact: HistoryArtifact): string[] {
         }
         lines.push('');
     }
+    return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Section 8 (continued) — Authored-surface usage (task 1399, feature H85)
+// ---------------------------------------------------------------------------
+
+/**
+ * Surface usage (1399 R4). Zero-use is only a claim when the window can support it: a window under
+ * 30 days renders `not comparable (window < 30d)` and names no unused surface. MCP tool zero-use is
+ * not derived here at all — it stays a telemetry gap naming the reason, because the tool catalog is
+ * not part of this artifact.
+ */
+function renderSurfaceUsage(artifact: HistoryArtifact): string[] {
+    const usage = artifact.surfaceUsage;
+    const lines = ['### Surface Usage', ''];
+    if (usage === undefined) {
+        lines.push('not available (artifact predates surface usage collection)', '');
+        return lines;
+    }
+    if (usage.items.length === 0) {
+        lines.push('not available (no plugin command/skill inventory resolved)', '');
+        return lines;
+    }
+    const commands = usage.items.filter((item) => item.kind === 'command');
+    const skills = usage.items.filter((item) => item.kind === 'skill');
+    if (commands.length > 0) {
+        lines.push('| Command | Calls |', '| --- | ---: |');
+        for (const item of commands) lines.push(`| ${item.name} | ${item.calls} |`);
+        lines.push('');
+    }
+    if (skills.length > 0) {
+        lines.push('| Skill | Calls |', '| --- | ---: |');
+        for (const item of skills) lines.push(`| ${item.name} | ${item.calls} |`);
+        lines.push('');
+    }
+    if (!usage.comparable) {
+        const window = usage.windowDays === null ? 'unbounded window' : `window ${Math.round(usage.windowDays)}d`;
+        lines.push(`not comparable (window < 30d — ${window}); zero-use is not claimed`, '');
+        return lines;
+    }
+    if (usage.zeroUse.length === 0) {
+        lines.push('no zero-use surface in window', '');
+        return lines;
+    }
+    lines.push('| Zero-use surface | Kind |', '| --- | --- |');
+    for (const item of usage.zeroUse) lines.push(`| ${item.name} | ${item.kind} |`);
+    lines.push('');
     return lines;
 }
 

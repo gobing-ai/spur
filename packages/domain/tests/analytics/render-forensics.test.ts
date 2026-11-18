@@ -558,3 +558,41 @@ describe('renderForensics — protocol usage (1398 R4)', () => {
         expect(out).toContain('not available (artifact predates protocol usage collection)');
     });
 });
+
+describe('renderForensics — surface usage (1399 R4)', () => {
+    test('a comparable window names zero-use surfaces', () => {
+        const a = artifact({
+            surfaceUsage: {
+                items: [
+                    { kind: 'command', name: 'sp:dev-run', calls: 4 },
+                    { kind: 'skill', name: 'sp:brainstorm', calls: 0 },
+                ],
+                zeroUse: [{ kind: 'skill', name: 'sp:brainstorm' }],
+                windowDays: 45,
+                comparable: true,
+            },
+        } as Partial<HistoryArtifact>);
+        const out = renderForensics(a);
+        expect(out).toContain('### Surface Usage');
+        expect(out).toContain('| sp:dev-run | 4 |');
+        expect(out).toContain('| sp:brainstorm | skill |');
+    });
+
+    test('a short window renders not comparable and claims no zero-use', () => {
+        const a = artifact({
+            surfaceUsage: {
+                items: [{ kind: 'command', name: 'sp:dev-run', calls: 0 }],
+                zeroUse: [],
+                windowDays: 12,
+                comparable: false,
+            },
+        } as Partial<HistoryArtifact>);
+        const out = renderForensics(a);
+        expect(out).toContain('not comparable (window < 30d');
+        expect(out).not.toContain('| Zero-use surface |');
+    });
+
+    test('an absent block reads not available', () => {
+        expect(renderForensics(artifact())).toContain('not available (artifact predates surface usage collection)');
+    });
+});

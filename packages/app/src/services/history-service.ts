@@ -69,6 +69,7 @@ import {
     sessionWatermarks,
     sourceSummary,
     stepSupport,
+    surfaceUsageSummary,
     type TaskAttributionSummary,
     type ToolRollupRow,
     todoToolCalls,
@@ -92,6 +93,7 @@ import type { TimeoutPolicyMs } from './execution-policy';
 import { getExecutorTier } from './executor-tier';
 import { refreshHistoryRollups } from './history-analysis-service';
 import { runStoragePaths } from './run-storage';
+import { findPluginsSpCommandsDir } from './slash-commands-service';
 import { attributeSessions } from './task-attribution';
 import { deriveVerifiedOutcome } from './verified-outcome';
 
@@ -909,6 +911,7 @@ export class HistoryService {
             todoRows,
             pairings,
             protocolUsage,
+            surfaceUsage,
             stepTokenRows,
             stepDurationRows,
             cacheWasteAggRow,
@@ -932,6 +935,12 @@ export class HistoryService {
             pairingSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
             // task 1398: protocol usage (mcp/a2a/auth) over the same window, same plane.
             protocolUsageSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
+            // task 1399: authored-surface usage over the same window; the inventory is ours to build.
+            surfaceUsageSummary(db, {
+                since: selector.since ?? undefined,
+                until: selector.until ?? undefined,
+                inventory: surfaceInventory(),
+            }),
             // task 0581: per-step rankings + support verdicts, all LIMIT-bounded (R2).
             topStepsByTokens(db, selector, top, queryOpts),
             topStepsByDuration(db, selector, top, queryOpts),
@@ -1022,6 +1031,7 @@ export class HistoryService {
             warnings,
             pairings,
             protocolUsage,
+            surfaceUsage,
             ladderSnapshot,
             derived,
             topStepsByTokens: stepTokenRows,
@@ -1963,4 +1973,30 @@ export function pruneReports(
         }
     }
     return pruned.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The authored-surface inventory for the artifact (task 1399 R2): plugin commands and skills named
+ * as E93 records them (`sp:<name>`). Absent plugin dirs yield an empty inventory, never a throw —
+ * a project without the plugin has no authored surfaces to measure.
+ */
+function surfaceInventory(): Array<{ kind: 'command' | 'skill'; name: string }> {
+    const commandsDir = findPluginsSpCommandsDir();
+    if (commandsDir === null) return [];
+    const items: Array<{ kind: 'command' | 'skill'; name: string }> = [];
+    try {
+        for (const entry of readdirSync(commandsDir, { withFileTypes: true })) {
+            if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+            items.push({ kind: 'command', name: `sp:${entry.name.slice(0, -'.md'.length)}` });
+        }
+        const skillsDir = join(dirname(commandsDir), 'skills');
+        for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            items.push({ kind: 'skill', name: `sp:${entry.name}` });
+        }
+    } catch {
+        // A partially readable plugin dir yields what was read; the report states the gap.
+        return items;
+    }
+    return items;
 }

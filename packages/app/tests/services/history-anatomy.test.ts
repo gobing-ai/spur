@@ -619,6 +619,21 @@ describe('checkReportStructure closed category vocabulary (0686/I9)', () => {
             '- `ownerSurface`: `pairings.ts`',
         ].join('\n');
 
+    // Task 1399 (H85): the two surface keys the report now emits must pass the gate as-is.
+    test('surface-usage and protocol-reliability keys pass the structure gate (1399 R3)', () => {
+        for (const [key, cat] of [
+            ['reliability:mcp-tool:task_show:failure-rate', 'reliability'],
+            ['coverage:skill:sp:brainstorm:zero-use', 'coverage'],
+        ] as const) {
+            expect(
+                checkReportStructure(findingBlock(fullFinding(key, cat))).problems.filter((p) =>
+                    p.startsWith('finding-'),
+                ),
+                key,
+            ).toEqual([]);
+        }
+    });
+
     test('a report whose findings use only closed categories still passes', () => {
         expect(
             checkReportStructure(

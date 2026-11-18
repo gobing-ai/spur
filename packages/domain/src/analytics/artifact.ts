@@ -3,6 +3,7 @@ import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { DerivedVariables } from './derived';
 import type { PairingStat } from './pairings';
 import type { ProtocolUsage } from './protocol-usage';
+import type { SurfaceUsage } from './surface-usage';
 import type { TokenTotals } from './types';
 import type { VerifiedOutcomeStat } from './verified-outcome';
 import type { SessionState } from './watermark';
@@ -241,6 +242,11 @@ export interface HistoryArtifact {
      * absent on pre-1398 artifacts. Absence reads `not available`, never zeros (R4).
      */
     protocolUsage?: ProtocolUsage;
+    /**
+     * Authored-surface usage (task 1399, feature H85): per-item invocation counts and the
+     * zero-use set — additive, absent on pre-1399 artifacts.
+     */
+    surfaceUsage?: SurfaceUsage;
     /**
      * Executor capability ladder snapshotted from config at analyze time (feature
      * J8 R2) — additive, absent on pre-0573 artifacts.
