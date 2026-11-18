@@ -614,6 +614,24 @@ the `.spur/reports/history/latest.json` pointer and emits a `## History Report` 
 newest artifact path — so a completed nightly run reaches the operator through the summary they already
 open, with no new notification channel.
 
+**Cross-project view (1402).** `spur history summary --all-projects` adds a `## Projects` section in
+the same file: every registered project rendered with exactly one state.
+
+| State | Meaning |
+| --- | --- |
+| `ok` | running and answered: health plus today's event counts by name prefix and the five latest events |
+| `stopped` | not running in the registry, so **never requested** — a gateway read would start it (`ensureUpstream`) and "stopped" could never be observed |
+| `unreachable` | running, but its health or event read failed or timed out — with the cause |
+| `gateway-down` | every running project, when the gateway itself is not answering (one probe decides it) |
+| `remote-not-proxied` | a non-local registry entry; never requested (ADR-151) |
+
+Reads are `GET <gateway>/<prefix>/api/health` and
+`GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=50`, each with a 3 s budget. The
+event read is "since today", so `--all-projects` with a past `--date` is a usage error (exit 2) rather
+than a summary that reports today's events under an older heading. Aggregation lives in the caller
+(`packages/app/src/services/projects-summary.ts`); the gateway stays a path and gains no endpoint.
+Known race: a project that stops between the registry read and the fetch can be woken by the gateway.
+
 <a id="history-completion-triggered-refresh--coalesced-enqueue-on-work-completion-task-0549"></a>
 
 #### History completion-triggered refresh — coalesced enqueue on work completion (task 0549)

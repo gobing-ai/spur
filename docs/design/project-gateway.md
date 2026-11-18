@@ -79,7 +79,14 @@ skips the gateway port; spawned serves already bind `127.0.0.1` (`project-start.
    terminates TLS — the browser sends `https://…` while the loopback listener's `req.url` is `http://…`.
    Same `/<prefix>/a2a/*` and `/<prefix>/mcp/*` exemptions (bearer-authenticated); refusal is 403 before any upstream contact.
 3. `GET /` → gateway index (name, prefix, running) linking to `/<prefix>/board`. `GET /api/health`
-   → `{ ok, gateway: true, port, projects: [{name, prefix, running}] }` (used by `spur self status`).
+   → `{ ok, gateway: true, port, projects: [{name, prefix, running}], counters }` (read by
+   `spur self status` and its machine-scoped `gateway` section). `counters` is additive (1385):
+   `{ since, requests, status4xx, status5xx, upstreamRestarts }`, counted in memory since handler
+   creation at the response boundary — every final status including guard refusals and 502s, and
+   `upstreamRestarts` keyed by prefix because registry names are not unique. A health read reports
+   the count taken before its own increment; a restart resets every counter. `isGatewayAnswering`
+   and `probeGatewayPort` read only `gateway`, so they are unaffected. Nothing is persisted: durable
+   history stays in each project's event log (1384).
 4. `/<prefix>` (no slash) → 308 to `/<prefix>/`. `/<prefix>/<rest>` → resolve the local entry by
    prefix; unknown → 404 naming the known prefixes.
 5. **Ensure upstream** — `startRegisteredProject(...)` adopts the entry the *prefix* belongs to,
@@ -117,6 +124,31 @@ skips the gateway port; spawned serves already bind `127.0.0.1` (`project-start.
 
 The gateway owns no project database, fleet or scheduler; it holds only the registry read path and
 the start path, and never writes `port` except through `startRegisteredProject`.
+
+### 4.3 Structured gateway events (task 1384, feature K42)
+
+The handler takes `GatewayDeps.onEvent?: (event) => void` and emits one event per occurrence;
+the handler itself stays IO-free (ADR-151). `apps/cli/src/commands/serve.ts` composes
+`createJsonlEventSink` (`packages/app/src/services/gateway-event-log.ts`) as the sink, writing
+JSONL to `~/Library/Logs/spur/gateway.events.jsonl` on darwin (next to the launchd logs) and
+`~/.config/spur/logs/gateway.events.jsonl` elsewhere. Cap 5 MiB (`GATEWAY_EVENT_LOG_MAX_BYTES`);
+when the next line would cross the cap the active file rotates to `<path>.1`, overwriting the
+earlier `.1`. Sink failures report once on stderr ("event log write failed") and then drop
+further writes — the event log never fails a gateway request. Writes are serialized per sink so
+the stat→rotate→append chain cannot starve rotation.
+
+| `kind` | When | Extra fields |
+| --- | --- | --- |
+| `upstream.ensure` | Start of upstream for a routed prefix (the request-level `ensureUpstream` wrapper only — the retry's own start belongs to the restart occurrence) | `outcome` `ok`/`failed`, `ms`, `name`, `prefix`, `reason` (failed) |
+| `upstream.restart` | Adopted port died between adoption and request; one fresh start is attempted | `name`, `prefix` |
+| `proxy.unreachable` | 502: dial refused on both families after ensure + retry | `name`, `dialed`, `reason` |
+| `route.collision` | 409: two project entries share the routed prefix | `prefix`, `names` |
+| `guard.host` | 421 host-guard refusal, before any upstream contact | `path`, `status` |
+| `guard.csrf` | 403 cross-origin refusal, before any upstream contact | `path`, `status` |
+
+Every event carries `ts` (ISO-8601). Request data is limited to the URL **pathname** — the event
+log never records request headers, query strings or bodies, so credentials and secrets cannot
+leak into a diagnostic file.
 
 ## 5. Board base path (critical path)
 

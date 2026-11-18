@@ -1112,3 +1112,63 @@ describe('main entrypoint (in-process)', () => {
         await expect(defaultProcessSpawner('__non_existent_binary_for_test__', [], getEnvVars())).rejects.toThrow();
     });
 });
+
+// ───────── 1402: --all-projects ─────────
+
+/**
+ * The cross-project flag. Failure modes: a past date silently reporting today's events, the section
+ * disappearing from the file, and a row rendered as if it were healthy when it is not.
+ */
+describe('1402 --all-projects', () => {
+    const emptyDaily: DailySummary = {
+        date: '2026-11-18',
+        platforms: [],
+        commits: [],
+        annotations: { learnings: '', issuesFixed: '', pending: '' },
+        generatedAt: '2026-11-18 10:00:00',
+    };
+
+    test('parses the flag', () => {
+        expect(parseArgs(['--all-projects']).allProjects).toBe(true);
+        expect(parseArgs([]).allProjects).toBeUndefined();
+    });
+
+    test('refuses a past date as a usage error, before any collection', async () => {
+        const lines: string[] = [];
+        const code = await main(['--all-projects', '--date', '2020-01-01'], {
+            out: (line) => lines.push(line),
+            err: (line) => lines.push(line),
+        });
+        expect(code).toBe(2);
+        expect(lines.join('\n')).toContain('cannot be combined with --date');
+    });
+
+    test('renders the Projects section with each state and the latest events', () => {
+        const markdown = generateMarkdown({
+            ...emptyDaily,
+            projects: [
+                {
+                    name: 'alpha',
+                    prefix: '/alpha',
+                    state: 'ok',
+                    eventCounts: [{ prefix: 'task', count: 3 }],
+                    latest: [{ eventName: 'task.created', occurredAt: '2026-11-18T01:00:00.000Z', summary: 'created' }],
+                },
+                { name: 'beta', prefix: '/beta', state: 'stopped' },
+                { name: 'gamma', prefix: '/gamma', state: 'unreachable', message: 'health answered 502' },
+                { name: 'far', prefix: null, state: 'remote-not-proxied' },
+            ],
+        });
+        expect(markdown).toContain('## Projects');
+        expect(markdown).toContain('| alpha | /alpha | ok | task 3 |');
+        expect(markdown).toContain('| beta | /beta | stopped | — |');
+        expect(markdown).toContain('| gamma | /gamma | unreachable (health answered 502) | — |');
+        expect(markdown).toContain('| far | — | remote-not-proxied | — |');
+        expect(markdown).toContain('### Latest events');
+        expect(markdown).toContain('**alpha** 2026-11-18T01:00:00.000Z task.created — created');
+    });
+
+    test('omits the section entirely without the flag', () => {
+        expect(generateMarkdown(emptyDaily)).not.toContain('## Projects');
+    });
+});

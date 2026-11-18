@@ -70,7 +70,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | History Refresh Process Isolation and Single-Flight Execution | [history-refresh-process-isolation.md](design/history-refresh-process-isolation.md) |
 | History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving | [history-incremental-materialization.md](design/history-incremental-materialization.md) |
 | Project switcher — system design (feature K1) | [project-switcher.md](design/project-switcher.md) |
-| Project gateway — one port, path prefixes, LaunchAgent (feature K4, ADR-151) | [project-gateway.md](design/project-gateway.md) |
+| Project gateway — one port, path prefixes, LaunchAgent; structured event log, health counters and the cross-project delegation/daily-view contracts layered on it (K4/K42/G91/K43, ADR-151) | [project-gateway.md](design/project-gateway.md) |
 | Fleet declaration in spur config — `agent.fleet` + member session modes/observability (G65, G66) | [fleet-config-declaration.md](design/fleet-config-declaration.md) |
 | Workflow catalogue refactor — check receipts, `decide` action, fleet executor, measured candidates (feature D64) | [workflow-catalogue-refactor.md](design/workflow-catalogue-refactor.md) |
 | Workflow consolidation — feature-lifecycle owns verification, wrapup/idea on D65 primitives, three workflows removed (feature D66) | [workflow-consolidation.md](design/workflow-consolidation.md) |
@@ -86,7 +86,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | System Events human table projection | [system-events-human-table.md](design/system-events-human-table.md) |
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Fleet task turns and measured warm execution (G74, ADR-145; implemented — `fleet-e2e --perf --modes` lane comparison) | [fleet-task-turn-execution.md](design/fleet-task-turn-execution.md) |
-| Named-agent dispatch with A2A as a hidden member transport (G8 sender shipped in 1333–1335; G9 listener built in 1336, two-install dispatch and write fencing proven in 1337; ADR-148) | [a2a-member-transport.md](design/a2a-member-transport.md) |
+| Named-agent dispatch with A2A as a hidden member transport (G8 sender 1333–1335; G9 listener 1336; two-install dispatch and write fencing 1337); project-addressed members through the gateway, refresh-on-read receipts and the shipped delegation workflows (1395–1397; ADR-148) | [a2a-member-transport.md](design/a2a-member-transport.md) |
 | Embedded MCP 2.0+ server in spur serve — stateless Streamable HTTP `POST /mcp`, bearer auth, `spur://` resources, `spur mcp` stdio bridge (B9, ADR-152; implemented by 1370–1374) | [embedded-mcp-server](design/embedded-mcp-server.md) |
 | Verified attached fleet occupants (G75, ADR-146; §3 guest renewal + §4 `join --member` implemented by 1279/1281, §5 attached stages + drain by 1282, probe report `docs/reports/fleet-host-capabilities.json` by 1280) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
 | Parallel fleet orchestration — worktree lanes, lane admission and the gated merge queue (G76, ADR-149; implemented by 1341–1346 — `'integrate'` claim slot, `fleet.task.integrated` admission, lane `cwd` in the fleet work-item envelope, remote `sp/remote-*` landing, `--perf --modes batch`) | [fleet-orchestration-lanes.md](design/fleet-orchestration-lanes.md) |

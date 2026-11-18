@@ -9,9 +9,11 @@
 
 import { existsSync, mkdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, getEnvVar, getEnvVars, type ProjectEntry } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor, NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
 import { readHistoryHealth } from './history-service';
+import { ProjectRegistry } from './project-registry';
+import { collectProjectsView, type ProjectViewRow } from './projects-summary';
 
 // ─── Output sink ─────────────────────────────────────────────────────────────
 
@@ -45,6 +47,18 @@ export interface CliOptions {
     outputPath?: string;
     skipGit: boolean;
     skipCcusage: boolean;
+    /** 1402: also read every registered local project through the gateway. Today only. */
+    allProjects?: boolean;
+    /** Test seam: the registry read + fetch used by `--all-projects` (ADR-021). */
+    projectsView?: ProjectsViewSeams;
+}
+
+/** Injected seams for the cross-project section (1402); the CLI leaves them to the defaults. */
+export interface ProjectsViewSeams {
+    listProjects(): Promise<ProjectEntry[]>;
+    gatewayPort: number;
+    fetchImpl?: typeof fetch;
+    sleep?: (ms: number) => Promise<void>;
 }
 
 interface CcusageData {
@@ -135,6 +149,8 @@ export interface DailySummary {
     /** Path to the newest history report artifact (R7), resolved from the
      * `.spur/reports/history/latest.json` pointer. Omitted when no report exists. */
     historyReportPath?: string;
+    /** 1402: every registered local project's status for today, in registry order. */
+    projects?: ProjectViewRow[];
     generatedAt: string;
 }
 
@@ -162,6 +178,8 @@ export function parseArgs(argv: string[]): CliOptions {
             options.dryRun = true;
         } else if (arg === '--output' && i + 1 < args.length) {
             options.outputPath = args[++i];
+        } else if (arg === '--all-projects') {
+            options.allProjects = true;
         } else if (arg === '--no-git') {
             options.skipGit = true;
         } else if (arg === '--no-ccusage') {
@@ -192,6 +210,7 @@ Options:
   --date YYYY-MM-DD     Date for summary (default: today, also: yesterday)
   --dry-run             Show summary without writing file
   --output <path>       Write to custom path
+  --all-projects        Add every registered project's status + today's event counts (today only)
   --no-git              Skip git history collection
   --no-ccusage          Skip token usage collection
   --help, -h            Show this help
@@ -200,6 +219,7 @@ Examples:
   spur history summary                      # Today's summary
   spur history summary --date yesterday     # Yesterday's summary
   spur history summary --dry-run            # Preview without writing
+  spur history summary --all-projects       # Today, plus every registered project
 `);
 }
 
@@ -651,6 +671,35 @@ export function generateMarkdown(summary: DailySummary): string {
         }
     }
 
+    // Cross-project view (1402): one row per registered project, in registry order.
+    if (summary.projects !== undefined && summary.projects.length > 0) {
+        lines.push('## Projects');
+        lines.push('');
+        lines.push('| Project | Prefix | State | Events by prefix |');
+        lines.push('| --- | --- | --- | --- |');
+        for (const project of summary.projects) {
+            const counts =
+                project.eventCounts === undefined || project.eventCounts.length === 0
+                    ? '—'
+                    : project.eventCounts.map((entry) => `${entry.prefix} ${entry.count}`).join(', ');
+            const cause = project.message === undefined ? '' : ` (${project.message})`;
+            lines.push(`| ${project.name} | ${project.prefix ?? '—'} | ${project.state}${cause} | ${counts} |`);
+        }
+        lines.push('');
+        const latest = summary.projects.flatMap((project) =>
+            (project.latest ?? []).map(
+                (event) =>
+                    `- **${project.name}** ${event.occurredAt} ${event.eventName}${event.summary === '' ? '' : ` — ${event.summary}`}`,
+            ),
+        );
+        if (latest.length > 0) {
+            lines.push('### Latest events');
+            lines.push('');
+            lines.push(...latest);
+            lines.push('');
+        }
+    }
+
     // History report path (R7 — surfaces the newest nightly-run artifact).
     if (summary.historyReportPath) {
         lines.push('## History Report');
@@ -773,6 +822,9 @@ export async function buildDailySummary(options: CliOptions): Promise<DailySumma
     if (gitActivity !== undefined) {
         result.gitActivity = gitActivity;
     }
+    if (options.allProjects === true) {
+        result.projects = await collectProjectsSection(options);
+    }
 
     // Query Spur history health (loops, tool errors, and auto-healing proposals). A measured
     // empty day is a real zero and keeps its "Clean" section; an unavailable database (missing
@@ -800,11 +852,40 @@ export async function main(argv: string[], sink: DailySummaryIo): Promise<number
     }
 }
 
+/**
+ * The cross-project section (1402). Registry first, gateway reads only for running locals, and the
+ * day boundary is "since today" — which is why a past `--date` is refused rather than approximated.
+ */
+async function collectProjectsSection(options: CliOptions): Promise<ProjectViewRow[]> {
+    const seams = options.projectsView;
+    return await collectProjectsView({
+        listProjects: seams?.listProjects ?? (async () => new ProjectRegistry().peek().projects),
+        gatewayPort: seams?.gatewayPort ?? buildConfigFromEnv(getEnvVars()).server.gateway.port,
+        since: dayStartIso(),
+        ...(seams?.fetchImpl !== undefined ? { fetchImpl: seams.fetchImpl } : {}),
+    });
+}
+
+/** Today's local midnight as an ISO instant — the events endpoint reads "since". */
+function dayStartIso(): string {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+}
+
 async function runDailySummary(argv: string[]): Promise<number> {
     const options = parseArgs(argv);
     if (options.help) {
         printUsage();
         return 0;
+    }
+    // 1402 R3: the event read is "since today", so a past date would report today's events under a
+    // yesterday heading. Refuse the combination instead of pretending.
+    if (options.allProjects === true && options.date !== todayLocal()) {
+        logger.error(
+            `--all-projects reads today's events, so it cannot be combined with --date ${options.date}; run it without --date`,
+        );
+        return 2;
     }
 
     logger.info(`Generating daily summary for ${options.date}...`);

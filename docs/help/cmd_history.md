@@ -170,7 +170,7 @@ prompt with work time, operator wait, tool calls and tokens (total / non-cached)
 ## spur history summary
 
 ```
-spur history summary [--date <date>] [--dry-run] [--output <path>] [--no-git] [--no-ccusage]
+spur history summary [--date <date>] [--dry-run] [--output <path>] [--all-projects] [--no-git] [--no-ccusage]
 ```
 
 | Flag | Description |
@@ -178,6 +178,7 @@ spur history summary [--date <date>] [--dry-run] [--output <path>] [--no-git] [-
 | `--date <date>` | `YYYY-MM-DD`, `today` or `yesterday` (default: today) |
 | `--dry-run` | Print the summary without writing the file |
 | `--output <path>` | Write to a custom path |
+| `--all-projects` | Add a `Projects` section: every registered project's status, today's event counts and five latest events, read through the gateway (today only) |
 | `--no-git` | Skip git history collection |
 | `--no-ccusage` | Skip token usage collection |
 

@@ -121,7 +121,7 @@ spur history timeline [--transcript <path>] [--group <spec>]
 ## spur history summary
 
 ```bash
-spur history summary [--date <date>] [--dry-run] [--output <path>] [--no-git] [--no-ccusage]
+spur history summary [--date <date>] [--dry-run] [--output <path>] [--all-projects] [--no-git] [--no-ccusage]
 ```
 
 | Flag | Description |
@@ -129,5 +129,6 @@ spur history summary [--date <date>] [--dry-run] [--output <path>] [--no-git] [-
 | `--date <date>` | `YYYY-MM-DD`, `today` or `yesterday` (default: today) |
 | `--dry-run` | Print without writing the file |
 | `--output <path>` | Write to a custom path |
+| `--all-projects` | Cross-project `Projects` section: status per registered project (`ok`/`stopped`/`unreachable`/`gateway-down`/`remote-not-proxied`), today's event counts, five latest events. Today only |
 | `--no-git` | Skip git history collection |
 | `--no-ccusage` | Skip token usage collection |

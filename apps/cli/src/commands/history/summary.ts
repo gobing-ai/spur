@@ -23,6 +23,7 @@ export function registerHistorySummaryCommand(history: Command, context: CliCont
         .option('--date <date>', 'YYYY-MM-DD, today or yesterday (default: today)')
         .option(...SHARED_OPTIONS.dryRunHistorySummary)
         .option('--output <path>', 'write to a custom path')
+        .option('--all-projects', "add every registered project's status + today's event counts (today only)")
         .option('--no-git', 'skip git history collection')
         .option('--no-ccusage', 'skip token usage collection')
         .action(async (options) => {
@@ -31,6 +32,7 @@ export function registerHistorySummaryCommand(history: Command, context: CliCont
             if (options.date !== undefined) argv.push('--date', options.date);
             if (options.dryRun === true) argv.push('--dry-run');
             if (options.output !== undefined) argv.push('--output', options.output);
+            if (options.allProjects === true) argv.push('--all-projects');
             if (options.git === false) argv.push('--no-git');
             if (options.ccusage === false) argv.push('--no-ccusage');
             const code = await main(argv, {

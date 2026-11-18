@@ -24,7 +24,12 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
-/sp:dev-daily [--date <YYYY-MM-DD>] [--dry-run] [--output <path>] [--no-git] [--no-ccusage]
+/sp:dev-daily [--date <YYYY-MM-DD>] [--dry-run] [--output <path>] [--all-projects] [--no-git] [--no-ccusage]
+
+`--all-projects` adds a **Projects** section: every registered project's status (`ok`, `stopped`,
+`unreachable`, `gateway-down`, `remote-not-proxied`) plus today's event counts and the five latest
+events, read through the one-port gateway. Stopped projects are never requested (a gateway read would
+start them), and it is today-only — combining it with a past `--date` is a usage error.
 
 ## Implementation
 

@@ -60,6 +60,9 @@ spur history summary --date 2026-04-17
 
 # Show summary without writing file
 spur history summary --dry-run
+
+# Every registered project (today only): status, event counts, five latest events
+spur history summary --all-projects
 ```
 
 ## Workflows
@@ -166,6 +169,6 @@ Read the skill file and follow the workflow manually.
 
 ## Additional Resources
 
-- **CLI:** `spur history summary [--date d] [--dry-run] [--output p] [--no-git] [--no-ccusage]` — see `sp:spur-cli` (history reference)
+- **CLI:** `spur history summary [--date d] [--dry-run] [--output p] [--all-projects] [--no-git] [--no-ccusage]` — see `sp:spur-cli` (history reference). `--all-projects` renders the cross-project **Projects** section through the gateway (`ok` / `stopped` / `unreachable` / `gateway-down` / `remote-not-proxied`); it is today-only, never starts a stopped project, and a past `--date` with it is a usage error.
 - **Related skills:** `sp:dev-handover` (blocker handoff), `sp:dev-changelog` (commit-based changelog), `sp:spur-cli` (task management)
 - **Upstream CLI:** [ccusage](https://github.com/ryoppippi/ccusage) — AI agent token usage reporter

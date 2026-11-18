@@ -1268,9 +1268,14 @@ Offline readiness is projected by `spur self status` as `decisionMaker: {enabled
 credentialPresent, state, connectivity, inlineSupport}` with states `disabled`, `missing-key`,
 and `configured-not-probed` (presence check only — no live probe, never echoes the key value).
 The aggregate that carries it is additive (A93 1352): `schemaVersion: 1`,
-`overallState: ready|degraded|missing`, and nine `sections` (`installation`, `configuration`,
-`schema`, `dependencies`, `projects`, `agents`, `decisions`, `corpus`, `workflows`) each
-`{state, scope, source, message, data?}`. `spur self status` and the hidden `spur status` alias
+`overallState: ready|degraded|missing`, and ten `sections` (`installation`, `configuration`,
+`schema`, `dependencies`, `projects`, `agents`, `decisions`, `corpus`, `workflows`, `gateway`) each
+`{state, scope, source, message, data?}`. The machine-scoped `gateway` section (1385) probes
+`localhost:<server.gateway.port>/api/health`: `ready` with `data.counters` when the one-port gateway
+answers, `not-applicable` when the port is free, and `degraded` when a foreign listener holds it
+(a project serve or anything that is not the gateway). Text mode prints one
+`gateway counters: requests=… 4xx=… 5xx=… restarts=… since=…` line under it only when the section is
+`ready`, so a probe that did not answer is never rendered as zeroes. `spur self status` and the hidden `spur status` alias
 render the same app-owned collector and dispatch before database boot, so reporting readiness never
 creates the schema it reports on; ledger-backed sections report `unavailable` rather than empty
 counts while the installed ts-db facade has no proven non-mutating read.

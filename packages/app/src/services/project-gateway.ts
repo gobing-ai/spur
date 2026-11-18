@@ -24,7 +24,38 @@ export interface GatewayDeps {
     port: number;
     /** Public-origin edge policy (host guard + CSRF). Omitted means loopback-only trust. */
     edge?: GatewayEdgeOptions;
+    /** Structured event sink (the CLI composes a JSONL log); omission disables event logging. */
+    onEvent?: (event: GatewayEvent) => void;
 }
+
+/** Structured gateway event kinds (feature K42, task 1384 R1). */
+export type GatewayEventKind =
+    | 'upstream.ensure'
+    | 'upstream.restart'
+    | 'proxy.unreachable'
+    | 'route.collision'
+    | 'guard.host'
+    | 'guard.csrf';
+
+/**
+ * One gateway occurrence handed to `GatewayDeps.onEvent`.
+ *
+ * Never carries request headers, query strings or bodies (task 1384 R3): request data is limited
+ * to the URL pathname. Extra fields beyond the named ones are reserved for future kinds.
+ */
+export type GatewayEvent = {
+    ts: string;
+    kind: GatewayEventKind;
+    name?: string;
+    prefix?: string;
+    path?: string;
+    reason?: string;
+    outcome?: 'ok' | 'failed';
+    ms?: number;
+    status?: number;
+    dialed?: string[];
+    names?: string[];
+};
 
 /** Public-origin policy the gateway enforces before any upstream contact. */
 export interface GatewayEdgeOptions {
@@ -176,9 +207,18 @@ export function loopbackAuthority(family: string, port: number): string {
  * host guard and `csrf()` see a plain same-origin request; `Referer` and hop-by-hop headers go.
  * `authority` is the `host:port` the request is actually sent to, never a fixed family.
  */
-export function upstreamRequestHeaders(req: Request, authority: string): Headers {
-    const headers = stripHeaders(req.headers, ['host', 'origin', 'referer']);
+export function upstreamRequestHeaders(
+    req: Request,
+    authority: string,
+    forwarded?: { prefix?: string; host?: string },
+): Headers {
+    // Forwarded identity (1395 R3): the upstream binds loopback, so only a local process can set
+    // these, and they are used for the ADVERTISED card URL — never for auth.
+    const forwardedHost = forwarded?.host ?? req.headers.get('host')?.trim();
+    const headers = stripHeaders(req.headers, ['host', 'origin', 'referer', 'x-forwarded-host', 'x-forwarded-prefix']);
     headers.set('host', authority);
+    if (forwardedHost !== undefined && forwardedHost !== '') headers.set('x-forwarded-host', forwardedHost);
+    if (forwarded?.prefix !== undefined) headers.set('x-forwarded-prefix', forwarded.prefix);
     if (req.headers.get('origin') !== null) {
         headers.set('origin', `http://${authority}`);
     }
@@ -334,9 +374,24 @@ async function adaptResponse(upstreamRes: Response, prefix: string, rest: string
  */
 export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promise<Response> {
     const fetchUpstream = deps.fetchUpstream ?? fetch;
+    /** One event per occurrence (1384 R1): stamp `ts`, then hand to the injected sink. */
+    const emit = (event: Omit<GatewayEvent, 'ts'>): void => {
+        deps.onEvent?.({ ...event, ts: new Date().toISOString() });
+    };
     const inFlight = new Map<string, Promise<number>>();
     /** Answering loopback family per entry, so a later request does not re-probe a known-dead one. */
     const familyByEntry = new Map<string, string>();
+    /**
+     * Since-creation counters (1385 R1). Closure-local on purpose: the gateway is stateless and the
+     * durable history of what broke lives in each project's event log, so a restart resets these.
+     */
+    const counters = {
+        since: new Date().toISOString(),
+        requests: 0,
+        status4xx: 0,
+        status5xx: 0,
+        upstreamRestarts: {} as Record<string, number>,
+    };
 
     /** Registry identity of an entry: path *and* host, so two hosts never share gateway state. */
     function identityKey(entry: ProjectEntry): string {
@@ -380,6 +435,8 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 prefix,
                 running: entry.port > 0,
             })),
+            // 1385 R2: additive — `isGatewayAnswering`/`probeGatewayPort` read only `gateway`.
+            counters: { ...counters, upstreamRestarts: { ...counters.upstreamRestarts } },
         });
     }
 
@@ -407,13 +464,15 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         // Buffered once so a body survives the family fallback: a streamed body is consumed by the
         // first attempt, and re-sending it empty would be a wrong-but-successful write.
         const body = req.method === 'GET' || req.method === 'HEAD' ? null : new Uint8Array(await req.arrayBuffer());
+        /** The authority the client dialed, so a card can advertise the stable gateway URL (1395 R3). */
+        const gatewayAuthority = req.headers.get('host')?.trim() ?? `localhost:${deps.port}`;
 
         const attempt = async (family: string, port: number): Promise<Response> => {
             const authority = loopbackAuthority(family, port);
             const target = `http://${authority}${rest === '' ? '/' : rest}${search}`;
             const init: RequestInit = {
                 method: req.method,
-                headers: upstreamRequestHeaders(req, authority),
+                headers: upstreamRequestHeaders(req, authority, { prefix, host: gatewayAuthority }),
                 redirect: 'manual',
                 signal: req.signal,
             };
@@ -444,11 +503,21 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             throw new UnreachableUpstream(dialed, message);
         }
 
+        const ensureStarted = Date.now();
         let port: number;
         try {
             port = await ensureUpstream(entry);
+            emit({ kind: 'upstream.ensure', outcome: 'ok', ms: Date.now() - ensureStarted, name: entry.name, prefix });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            emit({
+                kind: 'upstream.ensure',
+                outcome: 'failed',
+                ms: Date.now() - ensureStarted,
+                name: entry.name,
+                prefix,
+                reason: message,
+            });
             return new Response(
                 `Gateway could not start project "${entry.name}": ${message}\nLog: ${entry.path}/${GATEWAY_START_LOG}\n`,
                 { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } },
@@ -461,11 +530,19 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             if (!(err instanceof UnreachableUpstream)) throw err;
             const replayable = req.method === 'GET' || req.method === 'HEAD';
             if (!replayable) {
-                return unreachable(entry, err, 'the request body cannot be replayed, so no restart was attempted.');
+                return unreachable(
+                    entry,
+                    prefix,
+                    err,
+                    'the request body cannot be replayed, so no restart was attempted.',
+                );
             }
             // The adopted port went away between adoption and the request: one fresh start, then give up.
             inFlight.delete(key);
             familyByEntry.delete(key);
+            // Keyed by prefix: registry names are not unique (the same project may be registered twice).
+            counters.upstreamRestarts[prefix] = (counters.upstreamRestarts[prefix] ?? 0) + 1;
+            emit({ kind: 'upstream.restart', name: entry.name, prefix });
             let retried: number;
             try {
                 retried = await ensureUpstream(entry);
@@ -480,13 +557,14 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 return await dial(retried);
             } catch (retryErr) {
                 if (!(retryErr instanceof UnreachableUpstream)) throw retryErr;
-                return unreachable(entry, retryErr);
+                return unreachable(entry, prefix, retryErr);
             }
         }
     }
 
     /** 502 naming the entry identity, every dialed loopback address, and the serve spawn log. */
-    function unreachable(entry: ProjectEntry, err: UnreachableUpstream, note?: string): Response {
+    function unreachable(entry: ProjectEntry, prefix: string, err: UnreachableUpstream, note?: string): Response {
+        emit({ kind: 'proxy.unreachable', name: entry.name, prefix, dialed: [...err.dialed], reason: err.reason });
         const host = entry.host ?? 'localhost';
         return new Response(
             `Gateway could not reach project "${entry.name}" (${host}) at ${err.dialed.join(', ')}: ${err.reason}\n` +
@@ -520,12 +598,20 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         return Response.json({ ok: true });
     }
 
-    return async (req: Request): Promise<Response> => {
+    /** Count every final response once, so refusals and upstream failures are not invisible (R1). */
+    const handle = async (req: Request): Promise<Response> => {
+        const url = new URL(req.url);
         if (deps.edge) {
             const refused = gatewayGuard(req, deps.edge);
-            if (refused) return refused;
+            if (refused) {
+                emit({
+                    kind: refused.status === 421 ? 'guard.host' : 'guard.csrf',
+                    path: url.pathname,
+                    status: refused.status,
+                });
+                return refused;
+            }
         }
-        const url = new URL(req.url);
         if (url.pathname === '/' || url.pathname === '') {
             return index();
         }
@@ -551,6 +637,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         const collisions = findPrefixCollisions(await deps.listProjects());
         const collidingNames = collisions.get(match.prefix);
         if (collidingNames) {
+            emit({ kind: 'route.collision', prefix: match.prefix, names: collidingNames });
             return new Response(
                 `Prefix ${match.prefix} is claimed by "${collidingNames.join('" and "')}"; ` +
                     `set one with spur projects add <path> --prefix /<other>\n`,
@@ -563,5 +650,13 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         }
 
         return proxy(req, match.entry, match.prefix, url.pathname.slice(match.prefix.length), url.search);
+    };
+
+    return async (req: Request): Promise<Response> => {
+        const response = await handle(req);
+        counters.requests += 1;
+        if (response.status >= 500) counters.status5xx += 1;
+        else if (response.status >= 400) counters.status4xx += 1;
+        return response;
     };
 }
