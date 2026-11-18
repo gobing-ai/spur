@@ -22,6 +22,7 @@ export type SystemEventSource =
     | 'history'
     | 'bus'
     | 'api'
+    | 'mcp'
     | 'decision';
 /** Visibility tier for board consumers. Diagnostic entries only persist/stream when the runtime toggle is on. */
 export type SystemEventTier = 'default' | 'diagnostic';
@@ -93,6 +94,7 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
     history: { producerPackage: 'spur', subsystem: 'history', remediationKind: 'prefix-filter' },
     bus: { producerPackage: '@gobing-ai/ts-infra', subsystem: 'event-bus', remediationKind: 'prefix-filter' },
     api: { producerPackage: 'spur', subsystem: 'http-api', remediationKind: 'prefix-filter' },
+    mcp: { producerPackage: 'spur', subsystem: 'embedded-mcp', remediationKind: 'prefix-filter' },
     decision: { producerPackage: 'spur', subsystem: 'decision', remediationKind: 'prefix-filter' },
 };
 
@@ -411,6 +413,16 @@ const BASE_CATALOG = [
     baseEvent('workflow.agent', 'workflow', 'workflow-agent', 'redacted', 'diagnostic'),
     baseEvent('workflow.steering', 'workflow', 'workflow-steering', 'redacted'),
     baseEvent('api.request.error', 'api', 'api'),
+    // ── mcp.* / auth.* (task 1376 — embedded MCP protocol surfaces) ──────
+    // Tool failures keep the `redacted` policy: their `error` quotes the
+    // dispatcher message and must pass the secret scan; calls/reads are
+    // metadata-only (names, timings, ids — never an argument value).
+    baseEvent('mcp.tool.called', 'mcp', 'mcp'),
+    baseEvent('mcp.tool.failed', 'mcp', 'mcp', 'redacted'),
+    baseEvent('mcp.resource.read', 'mcp', 'mcp'),
+    // Transport refusal shared by the a2a/mcp mounts; 1377 adds a2a's own
+    // message/cancel names under the same file.
+    baseEvent('auth.denied', 'api', 'api'),
     baseEvent('bus.emit.done', 'bus', 'bus', 'metadata-only', 'diagnostic'),
     baseEvent('bus.emit.noop', 'bus', 'bus', 'metadata-only', 'diagnostic'),
     baseEvent('bus.handler.error', 'bus', 'bus', 'metadata-only', 'diagnostic'),
@@ -1931,6 +1943,73 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
                 : `[decision] ${id ?? 'decision'} rejected`;
         },
         outcome: derivedFromValue('errorKind'),
+    },
+
+    // ── mcp / auth (task 1376 — embedded MCP protocol surfaces) ──────────
+    'mcp.tool.called': {
+        description:
+            'An embedded MCP tool call completed, naming the tool, its argument keys (never values) and duration.',
+        fields: [
+            field('tool', 'Tool'),
+            field('argKeys', 'Argument keys'),
+            field('durationMs', 'Duration (ms)'),
+            field('wbs', 'WBS'),
+            field('runId', 'Run'),
+        ],
+        summary: ({ data }) => {
+            const tool = s(data, 'tool');
+            const duration = n(data, 'durationMs');
+            return tool !== undefined
+                ? `[mcp] ${tool} ok${duration !== undefined ? ` ${duration}ms` : ''}`
+                : '[mcp] tool call';
+        },
+        outcome: derivedFrom('outcome'),
+    },
+    'mcp.tool.failed': {
+        description:
+            'An embedded MCP tool call threw: the derived error code and the redacted message, never argument values.',
+        fields: [
+            field('tool', 'Tool'),
+            field('argKeys', 'Argument keys'),
+            field('durationMs', 'Duration (ms)'),
+            field('errorCode', 'Error code'),
+            field('error', 'Error'),
+            field('wbs', 'WBS'),
+            field('runId', 'Run'),
+        ],
+        summary: ({ data }) => {
+            const tool = s(data, 'tool');
+            const duration = n(data, 'durationMs');
+            return tool !== undefined
+                ? `[mcp] ${tool} failed${duration !== undefined ? ` ${duration}ms` : ''}`
+                : '[mcp] tool failure';
+        },
+        outcome: derivedFrom('errorCode'),
+    },
+    'mcp.resource.read': {
+        description:
+            'An embedded MCP spur:// resource read finished, naming the uri, duration and the error code on failure.',
+        fields: [field('uri', 'URI'), field('durationMs', 'Duration (ms)'), field('errorCode', 'Error code')],
+        summary: ({ data }) => {
+            const uri = s(data, 'uri');
+            const duration = n(data, 'durationMs');
+            return uri !== undefined
+                ? `[mcp] read ${uri}${duration !== undefined ? ` ${duration}ms` : ''}`
+                : '[mcp] resource read';
+        },
+        outcome: derivedFrom('outcome'),
+    },
+    'auth.denied': {
+        description:
+            'A bearer-authenticated protocol surface refused a request; the reason is structural (missing/mismatch/unset), never token material.',
+        fields: [field('surface', 'Surface'), field('reason', 'Reason'), field('path', 'Path')],
+        summary: ({ data }) => {
+            const surface = s(data, 'surface');
+            const reason = s(data, 'reason');
+            if (surface !== undefined && reason !== undefined) return `[auth] ${surface} denied (${reason})`;
+            return '[auth] request denied';
+        },
+        outcome: derivedFrom('reason'),
     },
 } satisfies Record<SystemEventName, SystemEventPresenterSpec>;
 

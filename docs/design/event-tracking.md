@@ -370,6 +370,10 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `bus.handler.error` | `event`, `handlers`, `durationMs`, `error` | `[bus] {event} handler error` | `error` |
 | `bus.handler.async.enqueued` | `event`, `handlers` | `[bus] {event} handlers enqueued` | `handlers` |
 | `decision.start` | `decisionId`, `type`, `maker`, `makerSource`, `catalogLayer`, `minConfidence` | `[decision] {decisionId} asking {maker}` | unsupported |
+| `mcp.tool.called` | `tool`, `argKeys` (names only), `durationMs`, `outcome`, `runId`, `wbs` | `[mcp] {tool} ok {durationMs}ms` | `outcome` |
+| `mcp.tool.failed` | `tool`, `argKeys`, `durationMs`, `outcome`, `errorCode`, `error` (redacted), `runId`, `wbs` | `[mcp] {tool} failed {durationMs}ms` | `errorCode` |
+| `mcp.resource.read` | `uri`, `durationMs`, `outcome`, `errorCode` | `[mcp] read {uri} {durationMs}ms` | `outcome` |
+| `auth.denied` | `surface`, `reason`, `path` | `[auth] {surface} denied ({reason})` | `reason` |
 | `decision.success` | `decisionId`, `value`, `confidence`, `maker` | `[decision] {decisionId} answered {value}` | `value` |
 | `decision.failure` | `decisionId`, `reason`, `fallbackValue`, `confidence`, `maker`, error | `[decision] {decisionId} fell back ({reason})` | `reason` |
 | `decision.end` | `decisionId`, `durationMs`, `value`, `source`, `reason`, `maker`, `confidence` | `[decision] {decisionId} finished via {source}` | `reason` |

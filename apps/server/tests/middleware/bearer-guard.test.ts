@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { bearerGuard } from '../../src/middleware/bearer-guard';
 
-const authz = (value?: string) => ({ req: { header: (_name: string) => value } });
+const authz = (value?: string) => ({ req: { header: (_name: string) => value, path: '/mcp' } });
 const denied: string[] = [];
 const guard = bearerGuard({
     realm: 'spur-test',

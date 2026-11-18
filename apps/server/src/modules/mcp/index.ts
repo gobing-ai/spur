@@ -210,6 +210,51 @@ class McpDispatcher implements McpHandlerRegistry {
 
     /** Route one harness tool to its `@gobing-ai/spur-app` service; unknown names are refused. */
     async callTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
+        const startedAt = performance.now();
+        const argKeys = Object.keys(args).sort();
+        try {
+            const result = await this.dispatchTool(name, args);
+            await this.emitEvent('mcp.tool.called', {
+                tool: name,
+                argKeys,
+                durationMs: Math.round(performance.now() - startedAt),
+                outcome: 'ok',
+                ...correlation(args, result),
+            });
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await this.emitEvent('mcp.tool.failed', {
+                tool: name,
+                argKeys,
+                durationMs: Math.round(performance.now() - startedAt),
+                outcome: 'error',
+                errorCode: toolErrorCode(message),
+                // `redacted` payload policy: the message quotes the dispatcher, never an argument value.
+                error: message,
+                ...correlation(args, undefined),
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Observability must never fail the call it describes: a bus handler that throws is logged,
+     * not surfaced as a tool error (1376). Awaited so the ledger row exists before the response.
+     */
+    private async emitEvent(name: string, payload: Record<string, unknown>): Promise<void> {
+        try {
+            await this.ctx.eventBus()?.emit(name, payload);
+        } catch (error) {
+            this.ctx.logger.warn('mcp event emit failed', {
+                name,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    /** The tool switch itself; the wrapper above owns timing and the event (task 1376). */
+    private async dispatchTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
         switch (name) {
             case 'sp_task_show':
                 return this.ctx.taskService().show(requiredString(args, 'wbs'));
@@ -252,6 +297,29 @@ class McpDispatcher implements McpHandlerRegistry {
 
     /** Read one `spur://` resource through its owning service; unknown schemes are refused. */
     async readResource(uri: string): Promise<unknown> {
+        const startedAt = performance.now();
+        try {
+            const result = await this.dispatchResource(uri);
+            await this.emitEvent('mcp.resource.read', {
+                uri,
+                durationMs: Math.round(performance.now() - startedAt),
+                outcome: 'ok',
+            });
+            return result;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await this.emitEvent('mcp.resource.read', {
+                uri,
+                durationMs: Math.round(performance.now() - startedAt),
+                outcome: 'error',
+                errorCode: message.startsWith('unknown ') ? 'unknown_resource' : 'resource_error',
+            });
+            throw error;
+        }
+    }
+
+    /** The resource resolver itself; the wrapper above owns timing and the event (task 1376). */
+    private async dispatchResource(uri: string): Promise<unknown> {
         const match = /^spur:\/\/(tasks|features|context)\/([^/]+)$/.exec(uri);
         if (match === null) {
             throw new Error(
@@ -284,6 +352,26 @@ class McpDispatcher implements McpHandlerRegistry {
 export function createMcpHandler(ctx: ServerContext): (req: Request) => Promise<Response> {
     const dispatcher = new McpDispatcher(ctx);
     return (req: Request) => handleMcpHttpRequest(req, dispatcher);
+}
+
+/** `runId`/`wbs` when the call's arguments or its result already carry them (1376 R2). */
+function correlation(args: Record<string, unknown>, result: unknown): { runId?: string; wbs?: string } {
+    const from = (source: unknown, key: 'runId' | 'wbs'): string | undefined => {
+        if (typeof source !== 'object' || source === null) return undefined;
+        const value = (source as Record<string, unknown>)[key];
+        return typeof value === 'string' && value !== '' ? value : undefined;
+    };
+    const runId = from(args, 'runId') ?? from(result, 'runId');
+    const wbs = from(args, 'wbs') ?? from(result, 'wbs');
+    return { ...(runId === undefined ? {} : { runId }), ...(wbs === undefined ? {} : { wbs }) };
+}
+
+/** The three catalog error codes, derived at the emit site from the dispatcher's own throws (1376 R2). */
+function toolErrorCode(message: string): 'unknown_tool' | 'invalid_arguments' | 'tool_error' {
+    if (message.startsWith('unknown tool')) return 'unknown_tool';
+    // The argument validators are the only throws ending in these two suffixes.
+    if (/ is required$| must be a map of strings$/.test(message)) return 'invalid_arguments';
+    return 'tool_error';
 }
 
 function requiredString(args: Record<string, unknown>, key: string): string {
@@ -355,6 +443,10 @@ export const mcpModule: ServerModule = {
                     message: 'the mcp endpoint has no token configured; set the variable named by server.mcp.authEnv',
                 },
             }),
+            // 1376 R4: the refusal is observable without the token — surface, structural reason, path only.
+            onDenied: ({ reason, path }) => {
+                ctx.eventBus()?.emit('auth.denied', { surface: 'mcp', reason, path });
+            },
         });
         // Enabled with an unreadable token variable is a misconfiguration; mounting a surface
         // that refuses everyone is still better than a 404 the operator cannot tell from "off".

@@ -23,6 +23,8 @@ interface Harness {
     db: Awaited<ReturnType<typeof createMigratedDb>>;
     inbox: Awaited<ReturnType<typeof makeInbox>>;
     stops: string[];
+    /** 1376: what the module emitted on `ctx.eventBus()`. */
+    events: Array<{ name: string; payload: Record<string, unknown> }>;
     close(): Promise<void>;
 }
 
@@ -49,6 +51,7 @@ async function makeHarness(
     const db = await createMigratedDb({ url: ':memory:' });
     const inbox = await makeInbox(async () => db);
     const stops: string[] = [];
+    const events: Array<{ name: string; payload: Record<string, unknown> }> = [];
     const memberIds = options.members ?? [MEMBER];
     const enabled = options.enabled ?? true;
     const fs = createNodeFileSystem();
@@ -69,6 +72,13 @@ async function makeHarness(
                 memberIds.map((instanceId) => ({ instanceId, executor: 'claude', enabled: true })),
         }),
         env: options.tokenVarUnset === true ? {} : { SPUR_A2A_TOKEN: TOKEN },
+        // A bus slice is enough here: the module only ever calls `emit` (1376 R4); the ledger
+        // proof through the real tap lives in `tests/mcp-e2e.test.ts`.
+        eventBus: () => ({
+            emit: (name: string, payload: Record<string, unknown>) => {
+                events.push({ name, payload });
+            },
+        }),
         logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
         bootConfig: () => ({
             a2a: { enabled, authEnv: enabled ? 'SPUR_A2A_TOKEN' : null },
@@ -81,6 +91,7 @@ async function makeHarness(
         db,
         inbox,
         stops,
+        events,
         close: async () => {
             await db.close();
         },
@@ -182,6 +193,20 @@ describe('a2a module — authentication (R5/R6)', () => {
         expect(res.headers.get('www-authenticate')).toContain('Bearer');
         const { messages } = await harness.inbox.list(MEMBER, 'in');
         expect(messages).toHaveLength(0);
+    });
+
+    test('a refused request emits auth.denied for surface a2a without token material (1376 R4, R5)', async () => {
+        await harness.app.request(memberUrl('message:send'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: { messageId: 'm-denied', role: 'ROLE_USER', parts: [{ text: 'hi' }] } }),
+        });
+        const denied = harness.events.find((event) => event.name === 'auth.denied');
+        if (denied === undefined) throw new Error('expected an auth.denied emit');
+        expect(denied.payload.surface).toBe('a2a');
+        expect(denied.payload.reason).toBe('missing');
+        expect(String(denied.payload.path)).toContain(`/a2a/members/${MEMBER}/`);
+        expect(JSON.stringify(denied.payload)).not.toContain(TOKEN);
     });
 
     test('a wrong bearer token is rejected on every route', async () => {

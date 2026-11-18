@@ -23,7 +23,7 @@ export interface BearerGuardOptions {
     /** The surface's 500 body builder for the misconfigured (unset token) case. */
     unconfigured: () => unknown;
     /** Refusal seam (1376 wires `auth.denied`); never receives token material. */
-    onDenied?: (denial: { reason: BearerDenyReason }) => void;
+    onDenied?: (denial: { reason: BearerDenyReason; path: string }) => void;
 }
 
 /** The guard a mount site holds: whether the token variable resolved, and the per-route authorize check. */
@@ -31,7 +31,7 @@ export interface BearerGuard {
     /** False when the token variable is unset: the mount site warns; every request gets 500. */
     configured: boolean;
     /** The per-route check: a refusal Response, or null when the request may proceed. */
-    authorize: (c: { req: { header(name: string): string | undefined } }) => Response | null;
+    authorize: (c: { req: { header(name: string): string | undefined; path: string } }) => Response | null;
 }
 
 /** The bearer token this surface accepts, from the variable `authEnv` names (R6). */
@@ -60,14 +60,15 @@ export function bearerGuard(options: BearerGuardOptions): BearerGuard {
     return {
         configured: token !== null,
         authorize: (c) => {
+            const path = c.req.path;
             if (token === null) {
-                options.onDenied?.({ reason: 'unset' });
+                options.onDenied?.({ reason: 'unset', path });
                 return Response.json(options.unconfigured(), { status: 500 });
             }
             const header = c.req.header('Authorization') ?? '';
             const provided = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : undefined;
-            if (provided === undefined) options.onDenied?.({ reason: 'missing' });
-            else if (!sameToken(provided, token)) options.onDenied?.({ reason: 'mismatch' });
+            if (provided === undefined) options.onDenied?.({ reason: 'missing', path });
+            else if (!sameToken(provided, token)) options.onDenied?.({ reason: 'mismatch', path });
             else return null;
             return Response.json(options.unauthenticated(), {
                 status: 401,

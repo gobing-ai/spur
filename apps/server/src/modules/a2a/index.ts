@@ -185,6 +185,10 @@ export const a2aModule: ServerModule = {
                     'INTERNAL',
                     'the A2A listener has no token configured; set the variable named by server.a2a.authEnv',
                 ),
+            // 1376 R4: one shared refusal event across both surfaces — no token material.
+            onDenied: ({ reason, path }) => {
+                ctx.eventBus()?.emit('auth.denied', { surface: 'a2a', reason, path });
+            },
         });
         // Enabled with an unreadable token variable is a misconfiguration, and mounting a surface
         // that refuses everyone is still better than a 404 the operator cannot tell from "off".

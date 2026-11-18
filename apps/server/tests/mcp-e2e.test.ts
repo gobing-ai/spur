@@ -12,7 +12,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { registerSystemEventTap } from '@gobing-ai/spur-app';
 import { getEnvVars, type ProjectEntry, setEnvVar } from '@gobing-ai/spur-config';
+import { SystemEventDao } from '@gobing-ai/spur-domain';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createApp } from '../src/bootstrap';
 import { createServerContext } from '../src/context';
@@ -31,8 +34,10 @@ let root = '';
 let upstream: ReturnType<typeof Bun.serve> | undefined;
 let gateway: GatewayHandle | undefined;
 let baseUrl = '';
+/** 1376: the catalog-driven tap persists the mcp/auth names the module emits onto `ctx.eventBus()`. */
+let eventDao: SystemEventDao;
 
-beforeAll(() => {
+beforeAll(async () => {
     root = mkdtempSync(join(tmpdir(), 'spur-mcp-e2e-'));
     mkdirSync(join(root, 'docs', 'tasks'), { recursive: true });
     mkdirSync(join(root, '.spur', 'context'), { recursive: true });
@@ -51,13 +56,17 @@ beforeAll(() => {
         SPUR_MCP_ENABLED: 'true',
         SPUR_MCP_AUTH_ENV: TOKEN_VAR,
     };
+    const bus = new EventBus<Record<string, (event: unknown) => void>>();
     const ctx = createServerContext(mockRuntime(), {
         cwd: root,
         fs: createNodeFileSystem(root),
         dbUrl: ':memory:',
         env,
         bootConfig: serverBootstrapConfig(env),
+        eventsBus: bus,
     });
+    eventDao = new SystemEventDao(await ctx.getDb());
+    await registerSystemEventTap(bus, eventDao, { warn: () => {}, debug: () => {} }, { diagnosticEnabled: false });
     const app = createApp(mockRuntime(), { ctx });
     const up = Bun.serve({ port: 0, hostname: '127.0.0.1', idleTimeout: 0, fetch: app.fetch });
     upstream = up;
@@ -415,5 +424,76 @@ terminalStates:
         } finally {
             rmSync(wfRoot, { recursive: true, force: true });
         }
+    });
+});
+
+/**
+ * 1376 — the embedded MCP surface is observable: every tool call, resource read and auth refusal
+ * lands one cataloged row in the `system_events` ledger through the real tap (no mocked bus).
+ * Payload assertions double as the R5 leak check: argument values and the token never appear.
+ */
+describe('1376: mcp events reach the system_events ledger', () => {
+    /** One row per emitted name, parsed down to the persisted `data` (the v2 envelope's payload). */
+    async function rowsFor(name: string): Promise<Array<{ payload: Record<string, unknown>; raw: string }>> {
+        const rows = await eventDao.query({ name, limit: 20 });
+        return rows.map((row) => {
+            const raw = row.payload_json ?? '';
+            const parsed = JSON.parse(raw === '' ? '{}' : raw) as { data?: Record<string, unknown> };
+            return { payload: parsed.data ?? {}, raw };
+        });
+    }
+
+    test('a successful tool call emits mcp.tool.called with metadata only (R2, R5)', async () => {
+        const res = await mcpPost(rpc('tools/call', { name: 'task_show', arguments: { wbs: '9001' } }), authHeaders());
+        expect(res.status).toBe(200);
+        const [row] = await rowsFor('mcp.tool.called');
+        if (row === undefined) throw new Error('expected an mcp.tool.called row');
+        expect(row.payload.tool).toBe('task_show');
+        expect(row.payload.argKeys).toEqual(['wbs']);
+        expect(row.payload.outcome).toBe('ok');
+        expect(row.payload.wbs).toBe('9001');
+        expect(typeof row.payload.durationMs).toBe('number');
+        // R5: key names, never values; no token, no header.
+        expect(row.raw).not.toContain(TOKEN);
+        expect(row.raw).not.toContain('E2E probe task body');
+    });
+
+    test('an unknown tool emits mcp.tool.failed with errorCode unknown_tool (R2)', async () => {
+        const res = await mcpPost(rpc('tools/call', { name: 'no_such_tool', arguments: {} }), authHeaders());
+        // 1374's adapter maps a non-protocol throw to 500 INTERNAL_ERROR; 1376 adds the event, not a status.
+        expect(res.status).toBe(500);
+        const [row] = await rowsFor('mcp.tool.failed');
+        if (row === undefined) throw new Error('expected an mcp.tool.failed row');
+        expect(row.payload.tool).toBe('no_such_tool');
+        expect(row.payload.errorCode).toBe('unknown_tool');
+        expect(row.payload.outcome).toBe('error');
+    });
+
+    test('missing required arguments emit mcp.tool.failed with errorCode invalid_arguments (R2)', async () => {
+        await mcpPost(rpc('tools/call', { name: 'task_show', arguments: {} }), authHeaders());
+        const rows = await rowsFor('mcp.tool.failed');
+        const codes = rows.map((row) => row.payload.errorCode);
+        expect(codes).toContain('invalid_arguments');
+    });
+
+    test('a resource read emits mcp.resource.read (R3)', async () => {
+        const res = await mcpPost(rpc('resources/read', { uri: 'spur://context/learnings.md' }), authHeaders());
+        expect(res.status).toBe(200);
+        const [row] = await rowsFor('mcp.resource.read');
+        if (row === undefined) throw new Error('expected an mcp.resource.read row');
+        expect(row.payload.uri).toBe('spur://context/learnings.md');
+        expect(row.payload.outcome).toBe('ok');
+        expect(typeof row.payload.durationMs).toBe('number');
+    });
+
+    test('a refused request emits auth.denied without token material (R4, R5)', async () => {
+        const res = await mcpPost(rpc('tools/list'), { 'Content-Type': 'application/json' });
+        expect(res.status).toBe(401);
+        const rows = await rowsFor('auth.denied');
+        const mcpRow = rows.find((row) => row.payload.surface === 'mcp');
+        if (mcpRow === undefined) throw new Error('expected an auth.denied row for surface mcp');
+        expect(mcpRow.payload.reason).toBe('missing');
+        expect(mcpRow.payload.path).toBe('/mcp');
+        expect(mcpRow.raw).not.toContain(TOKEN);
     });
 });

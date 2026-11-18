@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Emit MCP tool, resource and auth.denied events
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:15.946Z
-updated_at: "2026-11-18T05:36:40.336Z"
+updated_at: "2026-11-18T08:17:57.805Z"
 feature_id: J94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 4
 
 dependencies: ["1375"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1376. Emit MCP tool, resource and auth.denied events
@@ -28,18 +30,18 @@ The embedded MCP endpoint (B9, ADR-152) emits no system event. A tool call, a re
 
 ### Requirements
 
-- [ ] R1. Catalog `mcp.tool.called`, `mcp.tool.failed`, `mcp.resource.read` (source `mcp`) and `auth.denied` (source `api`) in `event-names.ts`, each with an event-specific presenter in `SYSTEM_EVENT_PRESENTERS`.
-- [ ] R2. Around `McpDispatcher.callTool` (`mcp/index.ts:116`), emit `mcp.tool.called` on success or `mcp.tool.failed` on throw. Payload: `tool`, `argKeys` (sorted key names), `durationMs`, `outcome` (`ok` | `error`), `errorCode` and `error` on failure, and `runId` / `wbs` when the arguments or result carry them.
-- [ ] R3. Around `McpDispatcher.readResource` (`mcp/index.ts:151`), emit `mcp.resource.read` with `uri`, `durationMs`, `outcome` and `errorCode` on failure.
-- [ ] R4. Wire `bearerGuard`'s `onDenied` (from 1375) on both the MCP and A2A mounts to emit `auth.denied` with `surface` (`mcp` | `a2a`), `reason` (`missing` | `mismatch` | `unset`) and `path`.
-- [ ] R5. No payload carries an argument value, header or token. `mcp.tool.failed.error` passes through the `redacted` payload policy.
+- [x] R1. Catalog `mcp.tool.called`, `mcp.tool.failed`, `mcp.resource.read` (source `mcp`) and `auth.denied` (source `api`) in `event-names.ts`, each with an event-specific presenter in `SYSTEM_EVENT_PRESENTERS`.
+- [x] R2. Around `McpDispatcher.callTool` (`mcp/index.ts:116`), emit `mcp.tool.called` on success or `mcp.tool.failed` on throw. Payload: `tool`, `argKeys` (sorted key names), `durationMs`, `outcome` (`ok` | `error`), `errorCode` and `error` on failure, and `runId` / `wbs` when the arguments or result carry them.
+- [x] R3. Around `McpDispatcher.readResource` (`mcp/index.ts:151`), emit `mcp.resource.read` with `uri`, `durationMs`, `outcome` and `errorCode` on failure.
+- [x] R4. Wire `bearerGuard`'s `onDenied` (from 1375) on both the MCP and A2A mounts to emit `auth.denied` with `surface` (`mcp` | `a2a`), `reason` (`missing` | `mismatch` | `unset`) and `path`.
+- [x] R5. No payload carries an argument value, header or token. `mcp.tool.failed.error` passes through the `redacted` payload policy.
 
 Out of scope: A2A message/cancel events (1377), Board browser proof (1378), per-request access logs.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Every MCP tool call and resource read emits a 5W1H event (req: R1, R2, R3, R5)
-- [ ] AC2 — Refused authentication is observable without leaking the token (req: R4, R5)
+- [x] AC1 — Every MCP tool call and resource read emits a 5W1H event (req: R1, R2, R3, R5)
+- [x] AC2 — Refused authentication is observable without leaking the token (req: R4, R5)
 
 Test layer: real `createServerContext` app, tap and `SystemEventDao` (no mock of `mcpModule` or the bus), in `apps/server/tests/mcp-e2e.test.ts` and `apps/server/tests/modules/a2a/routes.test.ts`.
 
@@ -90,18 +92,78 @@ Give the argument-validation throws a tagged error class only if a message-prefi
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/middleware/bearer-guard.ts:26` |
+| `apps/server/src/middleware/bearer-guard.ts:34` |
+| `apps/server/src/middleware/bearer-guard.ts:63` |
+| `apps/server/src/middleware/bearer-guard.ts:65` |
+| `apps/server/src/middleware/bearer-guard.ts:70` |
+| `apps/server/src/modules/a2a/index.ts:188` |
+| `apps/server/src/modules/mcp/index.ts:117` |
+| `apps/server/src/modules/mcp/index.ts:197` |
+| `apps/server/src/modules/mcp/index.ts:254` |
+| `apps/server/src/modules/mcp/index.ts:343` |
+| `apps/server/tests/mcp-e2e.test.ts:15` |
+| `apps/server/tests/mcp-e2e.test.ts:17` |
+| `apps/server/tests/mcp-e2e.test.ts:258` |
+| `apps/server/tests/mcp-e2e.test.ts:37` |
+| `apps/server/tests/mcp-e2e.test.ts:40` |
+| `apps/server/tests/mcp-e2e.test.ts:59` |
+| `apps/server/tests/mcp-e2e.test.ts:66` |
+| `apps/server/tests/mcp-e2e.test.ts:68` |
+| `apps/server/tests/middleware/bearer-guard.test.ts:9` |
+| `apps/server/tests/modules/a2a/routes.test.ts:198` |
+| `apps/server/tests/modules/a2a/routes.test.ts:26` |
+| `apps/server/tests/modules/a2a/routes.test.ts:54` |
+| `apps/server/tests/modules/a2a/routes.test.ts:75` |
+| `apps/server/tests/modules/a2a/routes.test.ts:94` |
+| `docs/design/event-tracking.md:373` |
+| `packages/app/src/services/event-names.ts:1947` |
+| `packages/app/src/services/event-names.ts:25` |
+| `packages/app/src/services/event-names.ts:416` |
+| `packages/app/src/services/event-names.ts:97` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — catalog `mcp.tool.called`, `mcp.tool.failed`, `mcp.resource.read` (source `mcp`) + `auth.denied` (source `api`), each with an event-specific presenter | MET | `packages/app/src/services/event-names.ts:420-425` (entries), `:1949,1968,1989,2002` (presenters); `SYSTEM_EVENT_PRESENTERS` is `satisfies Record<SystemEventName, …>` so exhaustiveness is compiler-enforced; `packages/app/tests/services/event-names.test.ts` 36/36 incl. the two-sided §11 gate |
+| R2 — emit `mcp.tool.called` / `mcp.tool.failed` around `McpDispatcher.callTool` with `tool`, sorted `argKeys`, `durationMs`, `outcome`, `errorCode`+`error` on failure, `runId`/`wbs` when carried | MET | `apps/server/src/modules/mcp/index.ts:116-146` (wrapper), `:255` (`correlation`), `:267` (`toolErrorCode`); `apps/server/tests/mcp-e2e.test.ts:275-310` |
+| R3 — emit `mcp.resource.read` with `uri`, `durationMs`, `outcome`, `errorCode` on failure | MET | `apps/server/src/modules/mcp/index.ts:196-215`; `apps/server/tests/mcp-e2e.test.ts:308` |
+| R4 — wire `onDenied` on both mounts with `surface`, `reason`, `path` | MET | `apps/server/src/modules/mcp/index.ts:344`, `apps/server/src/modules/a2a/index.ts:189`; path supplied by the guard (`apps/server/src/middleware/bearer-guard.ts:63,70`); `tests/mcp-e2e.test.ts:318` (mcp), `tests/modules/a2a/routes.test.ts:198` (a2a) |
+| R5 — no payload carries an argument value, header or token; `mcp.tool.failed.error` under `redacted` | MET | `mcp.tool.failed` policy `redacted` (`event-names.ts:421`); payloads built from key NAMES only (`index.ts:255`); leak assertions on the raw stored row: `tests/mcp-e2e.test.ts:286-287,327` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — every MCP tool call and resource read emits a 5W1H event (R1,R2,R3,R5) | MET | test | `apps/server/tests/mcp-e2e.test.ts` 13/13 through the real gateway + real tap → `system_events` ledger |
+| AC2 — refused authentication is observable without leaking the token (R4,R5) | MET | test | `tests/mcp-e2e.test.ts:318` (mcp 401 → `auth.denied`), `tests/modules/a2a/routes.test.ts:198` (a2a 401 → same name); both assert the token never appears |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:16:27.375Z todo → wip (system)
+- 2026-11-18T08:17:56.148Z wip → testing (system)
+- 2026-11-18T08:17:57.802Z testing → done (system)
+
