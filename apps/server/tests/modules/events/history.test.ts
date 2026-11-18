@@ -427,3 +427,100 @@ describe('GET /api/events/history', () => {
         expect(captured.name).toBeUndefined();
     });
 });
+
+/**
+ * 1378 R4 — the read API returns each protocol event's presenter output, so the Board renders a
+ * sentence without any event-name branch in `apps/web`. Rows are produced the real way (bus → catalog
+ * tap → `SystemEventDao`), never hand-inserted, so this fails if a presenter or catalog entry regresses.
+ */
+describe('GET /api/events/history — protocol events (1378 R4)', () => {
+    const PROTOCOL_EVENTS: Array<{ name: string; payload: Record<string, unknown>; summary: string }> = [
+        {
+            name: 'mcp.tool.called',
+            payload: { tool: 'task_show', argKeys: ['wbs'], durationMs: 12, outcome: 'ok', wbs: '1375' },
+            summary: '[mcp] task_show ok 12ms',
+        },
+        {
+            name: 'mcp.tool.failed',
+            payload: {
+                tool: 'task_show',
+                argKeys: [],
+                durationMs: 3,
+                outcome: 'error',
+                errorCode: 'invalid_arguments',
+                error: 'wbs is required',
+            },
+            summary: '[mcp] task_show failed 3ms',
+        },
+        {
+            name: 'mcp.resource.read',
+            payload: { uri: 'spur://context/learnings.md', durationMs: 4, outcome: 'ok' },
+            summary: '[mcp] read spur://context/learnings.md 4ms',
+        },
+        {
+            name: 'auth.denied',
+            payload: { surface: 'mcp', reason: 'missing', path: '/mcp' },
+            summary: '[auth] mcp denied (missing)',
+        },
+        {
+            name: 'a2a.message.received',
+            payload: {
+                member: 'proj-coder',
+                messageId: 'm-1',
+                requestKey: 'a2a:proj-coder:m-1',
+                outcome: 'accepted',
+                inboxMessageId: 'msg_1',
+            },
+            summary: '[a2a] proj-coder received m-1 (accepted)',
+        },
+        {
+            name: 'a2a.task.cancelled',
+            payload: { member: 'proj-coder', taskId: 'msg_1', runStopped: true },
+            summary: '[a2a] proj-coder cancelled msg_1 (run stopped)',
+        },
+    ];
+
+    test('each protocol event renders its presenter summary through the ledger', async () => {
+        const { createMigratedDb, SystemEventDao } = await import('@gobing-ai/spur-domain');
+        const { registerSystemEventTap } = await import('@gobing-ai/spur-app');
+        const { EventBus } = await import('@gobing-ai/ts-infra');
+        const db = await createMigratedDb({ url: ':memory:' });
+        const dao = new SystemEventDao(db as never);
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const tap = registerSystemEventTap(
+            bus,
+            dao,
+            { warn: () => {}, debug: () => {} },
+            {
+                diagnosticEnabled: false,
+            },
+        );
+        try {
+            for (const event of PROTOCOL_EVENTS) await bus.emit(event.name, event.payload);
+            await tap.flush();
+
+            const app = new Hono();
+            eventsModule.mount(app, {
+                cwd: '/workspace/acme',
+                systemEventProjectContext: () => ({ name: 'acme', root: '/workspace/acme' }),
+                systemEventSecretValues: () => [],
+                systemEventDao: async () => dao,
+            } as unknown as ServerContext);
+
+            const res = await app.fetch(new Request('http://localhost/api/events/history?limit=50'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                events: Array<{ eventName: string; payload: { presentation?: { summary?: string } } }>;
+            };
+            const byName = new Map(body.events.map((event) => [event.eventName, event]));
+            for (const expected of PROTOCOL_EVENTS) {
+                const row = byName.get(expected.name);
+                if (row === undefined) throw new Error(`no ledger row returned for ${expected.name}`);
+                expect(row.payload.presentation?.summary, expected.name).toBe(expected.summary);
+            }
+        } finally {
+            tap.unsubscribe();
+            await db.close();
+        }
+    });
+});

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Render protocol events in the Board System Events view
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:15.947Z
-updated_at: "2026-11-18T05:37:13.624Z"
+updated_at: "2026-11-18T08:26:58.069Z"
 feature_id: J94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 1.5
 
 dependencies: ["1376", "1377"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1378. Render protocol events in the Board System Events view
@@ -28,15 +30,15 @@ Protocol events from 1376/1377 must read as sentences in the Board's System Even
 
 ### Requirements
 
-- [ ] R2. The Board System Events view renders each protocol event (`mcp.tool.called`, `mcp.tool.failed`, `mcp.resource.read`, `auth.denied`, `a2a.message.received`, `a2a.task.cancelled`) through its presenter summary and fields. No change in `apps/web` adds an event-name branch.
-- [ ] R3. A browser check against a seeded database captures a screenshot artifact under `docs/tasks5/artifacts/1378/`.
-- [ ] R4. The history/system-events read API returns the presenter output for those names. A server test asserts this, so the proof is repeatable without a browser.
+- [x] R2. The Board System Events view renders each protocol event (`mcp.tool.called`, `mcp.tool.failed`, `mcp.resource.read`, `auth.denied`, `a2a.message.received`, `a2a.task.cancelled`) through its presenter summary and fields. No change in `apps/web` adds an event-name branch.
+- [x] R3. A browser check against a seeded database captures a screenshot artifact under `docs/tasks5/artifacts/1378/`.
+- [x] R4. The history/system-events read API returns the presenter output for those names. A server test asserts this, so the proof is repeatable without a browser.
 
 Out of scope: authoring presenters (1376/1377) and any Board redesign.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Protocol events read as sentences in the Board (req: R2, R3, R4)
+- [x] AC1 — Protocol events read as sentences in the Board (req: R2, R3, R4)
 
 Test layer: a server read-API test (repeatable) plus a browser screenshot artifact (human-verifiable).
 
@@ -68,18 +70,48 @@ Test layer: a server read-API test (repeatable) plus a browser screenshot artifa
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/tests/modules/events/history.test.ts:430` |
+| `docs/tasks5/artifacts/1378/system-events-protocol.png:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R2 — the Board renders each protocol event through its presenter summary and fields; no event-name branch in `apps/web` | MET | Browser proof: `docs/tasks5/artifacts/1378/system-events-protocol.png` — rows for `mcp.resource.read`, `auth.denied`, `a2a.message.received`, `a2a.task.cancelled`, `mcp.tool.called`, `mcp.tool.failed`, each showing its summary (`[mcp] task_show ok 12ms`, `[auth] mcp denied (missing)`, `[a2a] proj-coder cancelled msg_1 (run stopped)`, …), severity and outcome. Switch-free guard: `rg -n "mcp\.tool |
+| R3 — a browser check against a seeded database captures an artifact under `docs/tasks5/artifacts/1378/` | MET | `docs/tasks5/artifacts/1378/system-events-protocol.png` (full-page capture of Observability → System Events, 8 rows) |
+| R4 — the history read API returns the presenter output for those names, asserted by a server test | MET | `apps/server/tests/modules/events/history.test.ts` new case `GET /api/events/history — protocol events (1378 R4)`: emits through the real `EventBus` → `registerSystemEventTap` → `SystemEventDao`, then asserts `payload.presentation.summary` per name; file 18/18, full server suite unaffected |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — protocol events read as sentences in the Board (R2,R3,R4) | MET | test | `apps/server/tests/modules/events/history.test.ts` (repeatable API proof) + `docs/tasks5/artifacts/1378/system-events-protocol.png` (human-verifiable) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:26:25.905Z todo → wip (system)
+- 2026-11-18T08:26:55.860Z wip → testing (system)
+- 2026-11-18T08:26:58.063Z testing → done (system)
+
