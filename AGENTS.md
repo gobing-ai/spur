@@ -35,6 +35,7 @@ All product work goes through the harness unless the operator explicitly overrid
 | Batch-refine tasks under a feature | `/sp:dev-refine --all --feature <id> --auto` | Hand-looping task refinement |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw corpus writes |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags |
+| Corpus reads/writes when the session exposes `sp_*` MCP tools | the `sp_*` tool (map: `plugins/sp/skills/spur-cli/references/mcp-tools.md`); otherwise the CLI verb unchanged | Assuming the CLI is unavailable, or re-implementing the guard in prose |
 | Create/edit/list tasks or features | **`spur task` / `spur feature`** | Direct-writing corpus files |
 | Verify requirements / AC | `/sp:dev-verify` | Self-reported done |
 | Review (SECUA + traceability + architecture) | `/sp:dev-review` or **`sp:super-reviewer`** | Unstructured LGTM |

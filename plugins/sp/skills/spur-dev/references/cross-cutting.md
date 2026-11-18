@@ -16,6 +16,14 @@ Laws are, what `--auto` does). [glossary.md](glossary.md) owns **term definition
 like *spine*, *gate*, or *verdict* means). A rule below may use a glossary term by name; it does
 not redefine it.
 
+## MCP-first tool preference (B92, task 1394)
+
+When the session exposes the `sp_*` MCP tools, use them for the corpus reads and writes they cover;
+when it does not, use the CLI verb unchanged. Presence is the signal — never the agent's identity —
+so this stays one rule across every platform. Map and CLI-only gaps:
+[spur-cli mcp-tools](../../spur-cli/references/mcp-tools.md); which agents see the tools:
+[mcp-agent-adoption](../../../../../docs/design/mcp-agent-adoption.md).
+
 ## Inline-default execution surface
 
 > **This section is the single source of truth for `--agent` value semantics, the executor

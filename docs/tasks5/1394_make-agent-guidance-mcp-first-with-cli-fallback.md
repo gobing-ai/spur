@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make agent guidance MCP-first with CLI fallback
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:33.333Z
-updated_at: "2026-11-18T05:59:44.560Z"
+updated_at: "2026-11-18T20:02:17.919Z"
 feature_id: B92
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 3
 
 dependencies: ["1392", "1393"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1394. Make agent guidance MCP-first with CLI fallback
@@ -28,15 +30,15 @@ No skill or routing file mentions MCP today: `rg -i mcp` over AGENTS.md and the 
 
 ### Requirements
 
-- [ ] R1. Add `plugins/sp/skills/spur-cli/references/mcp-tools.md`. It maps each of the ten `sp_*` tools to its CLI verb and lists the CLI-only operations (forced done, rule files, auto-fix, ready-prep, batch-create).
-- [ ] R2. Add an MCP-first rule to `sp:spur-cli` SKILL.md and to `sp:spur-dev` `references/cross-cutting.md`, linking `mcp-tools.md` and `docs/design/mcp-agent-adoption.md`. The rule: when `sp_*` tools are present, use them for the mapped reads and writes; otherwise use the CLI verb unchanged.
-- [ ] R3. Add a matching rule to the AGENTS.md "Harness tool routing" table, and add the same row to `config/templates/AGENTS.md`.
-- [ ] R4. A plugin test asserts that the tool names in `mcp-tools.md` equal the server descriptor names from `apps/server/src/modules/mcp/index.ts` (read as text, so the plugin stays standalone).
-- [ ] R5. `cli-surface-parity`, `help-docs-parity`, `bootstrap-budget` and `bun run plugin-smoke` pass.
+- [x] R1. Add `plugins/sp/skills/spur-cli/references/mcp-tools.md`. It maps each of the ten `sp_*` tools to its CLI verb and lists the CLI-only operations (forced done, rule files, auto-fix, ready-prep, batch-create).
+- [x] R2. Add an MCP-first rule to `sp:spur-cli` SKILL.md and to `sp:spur-dev` `references/cross-cutting.md`, linking `mcp-tools.md` and `docs/design/mcp-agent-adoption.md`. The rule: when `sp_*` tools are present, use them for the mapped reads and writes; otherwise use the CLI verb unchanged.
+- [x] R3. Add a matching rule to the AGENTS.md "Harness tool routing" table, and add the same row to `config/templates/AGENTS.md`.
+- [x] R4. A plugin test asserts that the tool names in `mcp-tools.md` equal the server descriptor names from `apps/server/src/modules/mcp/index.ts` (read as text, so the plugin stays standalone).
+- [x] R5. `cli-surface-parity`, `help-docs-parity`, `bootstrap-budget` and `bun run plugin-smoke` pass.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Agent guidance prefers MCP with CLI fallback (req: R1, R2, R3, R4, R5)
+- [x] AC1 — Agent guidance prefers MCP with CLI fallback (req: R1, R2, R3, R4, R5)
 
 Test layer: plugin parity suites over the real files.
 
@@ -79,18 +81,54 @@ Test layer: plugin parity suites over the real files.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `AGENTS.md:38` |
+| `config/templates/AGENTS.md:38` |
+| `plugins/sp/skills/spur-cli/SKILL.md:73` |
+| `plugins/sp/skills/spur-dev/references/cross-cutting.md:19` |
+| `plugins/sp/skills/spur-cli/references/mcp-tools.md:1` |
+| `plugins/sp/tests/mcp-tool-map-parity.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — `references/mcp-tools.md` maps each `sp_*` tool to its CLI verb and lists the CLI-only operations | MET | the file maps all ten tools, each row naming a `spur ...` fallback, and a "CLI-only" section names force-done, rule files, auto-fix, ready-prep, batch-create (plus record/verdict/verify/self). Tests: `plugins/sp/tests/mcp-tool-map-parity.test.ts` (map == descriptors, a CLI verb per row, every CLI-only phrase present) |
+| R2 — an MCP-first rule in `sp:spur-cli` SKILL.md and `sp:dev` `references/cross-cutting.md`, linking both the map and `docs/design/mcp-agent-adoption.md` | MET | SKILL.md "MCP-first when the tools are present" section and cross-cutting "MCP-first tool preference" section, each linking `mcp-tools.md`; cross-cutting also links the adoption matrix. The presence-based rule is stated in both, no per-agent branch |
+| R3 — the same rule as a row in the AGENTS.md "Harness tool routing" table and in `config/templates/AGENTS.md` | MET | both files carry the routing row ("Corpus reads/writes when the session exposes `sp_*` MCP tools → the tool, otherwise the CLI verb unchanged"), which is what makes new projects inherit it |
+| R4 — a plugin test asserting the map's tool names equal the server descriptor names, reading the module as text so the plugin stays standalone | MET | `mcp-tool-map-parity.test.ts` reads `apps/server/src/modules/mcp/index.ts` as a string (no import) and compares the sorted name sets; it also asserts the CLI-only list and the rule's presence in all four files |
+| R5 — `cli-surface-parity`, `help-docs-parity`, `bootstrap-budget` and `bun run plugin-smoke` pass | MET | plugins/sp suite 38/38 across the four named files earlier, plus `skill-structure` 102/102 with the map test; `bun run plugin-smoke` → "PASS — plugin surface is standalone and installs clean" |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Agent guidance prefers MCP with CLI fallback (R1, R2, R3, R4, R5) | MET | test | `bun test plugins/sp/tests/mcp-tool-map-parity.test.ts` 3/3 (map == descriptors, CLI verb per row, CLI-only list, rule present in SKILL.md, cross-cutting, AGENTS.md and the template) + the parity suites and `plugin-smoke` above |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T20:00:26.286Z todo → wip (system)
+- 2026-11-18T20:02:11.930Z wip → testing (system)
+- 2026-11-18T20:02:17.899Z testing → done (system)
+

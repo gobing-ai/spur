@@ -70,6 +70,13 @@ Each noun's per-topic detail lives one level deeper under `references/<noun>/` (
 `references/tasks/verbs.md`, `references/tasks/section-editing.md`, `references/features/acceptance-criteria.md`,
 `references/rules/operations.md`, `references/workflows/authoring-workflows.md`).
 
+## MCP-first when the tools are present
+
+If the harness exposes the `sp_*` MCP tools, prefer them for the corpus reads and writes they cover;
+otherwise run the CLI verb unchanged. The two paths hit the same services, so a refusal (for example
+`GUARD_DENIED` on a `done` transition) is identical either way. The tool→verb map and the operations
+that stay CLI-only are in [mcp-tools](references/mcp-tools.md).
+
 ## Lifecycle playbooks
 
 Authorable nouns carry a `## Lifecycle playbook` (rules: `## Lifecycle map`) in one shared stage
