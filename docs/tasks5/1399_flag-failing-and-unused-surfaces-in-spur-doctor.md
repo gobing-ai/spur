@@ -4,7 +4,7 @@ name: Flag failing and unused surfaces in spur-doctor
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:36.438Z
-updated_at: "2026-11-18T08:43:04.450Z"
+updated_at: "2026-11-18T22:35:51.716Z"
 feature_id: I61
 priority: P2
 tags:
@@ -117,14 +117,14 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 — `surfaceUsageSummary(db, {since, until, inventory})` returning per-item calls from `history_skill_call` (any status) plus `zeroUse[]` | MET | `packages/domain/src/analytics/surface-usage.ts:59` (one grouped `SELECT` over `skill_name IN (inventory)`, window bounded by the same `buildTimeRangeClauses` the other analytics use), types `:20-45`; `packages/domain/tests/analytics/surface-usage.test.ts` 4/4 (used+unused, short window, unbounded/empty inventory, unreadable plane) |
-| R2 — inventory built in `history-service` from the plugin `commands/` and `skills/` dirs via `findPluginsSpCommandsDir`, names as E93 records them (`sp:<name>`), optional `HistoryArtifact.surfaceUsage` | MET | `packages/app/src/services/history-service.ts:1983` (`surfaceInventory()`, reuses the resolver import at `:17`), wired at `:942` beside `protocolUsageSummary`; artifact field `packages/domain/src/analytics/artifact.ts:249`; digest `'set'` entries `artifact-digest.ts:72-74` (compiler exhaustiveness guard still passes) |
+| R2 — inventory built in `history-service` from the plugin `commands/` and `skills/` dirs via `findPluginsSpCommandsDir`, names as E93 records them (`sp:<name>`), optional `HistoryArtifact.surfaceUsage` | MET | `packages/app/src/services/history-service.ts:1983` (`surfaceInventory()`, reuses the resolver import at `:17`), wired at `:942` beside `protocolUsageSummary`; artifact field `packages/domain/src/analytics/artifact.ts:249`; digest `'set'` entries `packages/domain/src/analytics/artifact-digest.ts:72-76` (compiler exhaustiveness guard still passes) |
 | R3 — two finding keys with thresholds: `reliability:mcp-tool:<tool>:failure-rate` (`calls >= 20 && failureRate >= 0.2`) and `coverage:<kind>:<name>:zero-use` (item in `zeroUse`, window ≥ 30d), each citing the artifact path | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` new "Surface findings" table cites `protocolUsage.tools[]` / `surfaceUsage.zeroUse[]` with both thresholds; structure-gate fixture `packages/app/tests/services/history-anatomy.test.ts` (new case) proves both keys pass the closed-category gate |
-| R4 — window < 30d renders zero-use as `not comparable (window < 30d)` with no findings; MCP tool zero-use stays a telemetry gap naming the reason; no `request` evidence read as non-use | MET | `surface-usage.ts:16,60-62` (`comparable` false ⇒ `zeroUse: []`), renderer `render-forensics.ts:468` (emits `not comparable (window < 30d …)` and returns before any zero-use table); tests `surface-usage.test.ts:76-90` and `render-forensics.test.ts` (short-window case asserts no zero-use table); contract states the MCP telemetry-gap rule and that a `request`-only row counts as use |
+| R4 — window < 30d renders zero-use as `not comparable (window < 30d)` with no findings; MCP tool zero-use stays a telemetry gap naming the reason; no `request` evidence read as non-use | MET | `packages/domain/src/analytics/surface-usage.ts:16,60-62` (`comparable` false ⇒ `zeroUse: []`), renderer `packages/domain/src/analytics/render-forensics.ts:468` (emits `not comparable (window < 30d …)` and returns before any zero-use table); tests `packages/domain/tests/analytics/surface-usage.test.ts:76-90` and `packages/domain/tests/analytics/render-forensics.test.ts` (short-window case asserts no zero-use table); contract states the MCP telemetry-gap rule and that a `request`-only row counts as use |
 | R5 — no change to the doctor reflection map; one line that these keys feed H85 | MET | `plugins/sp/skills/spur-doctor/SKILL.md` (H85 paragraph added after the closed-class list; the six-row reflection map is untouched) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Doctor flags failing and unused surfaces (R1,R2,R3,R4,R5) | MET | test | `surface-usage.test.ts` 4/4, `render-forensics.test.ts` 35/35, `history-anatomy.test.ts` 69/69; workspace coverage run reports `surface-usage.ts 100.00% funcs / 100.00% lines`; domain workspace 1495 pass; `spur-doctor` skill structure tests pass in the pipeline gate |
+| AC1 — Doctor flags failing and unused surfaces (R1,R2,R3,R4,R5) | MET | test | `packages/domain/tests/analytics/surface-usage.test.ts` 4/4, `packages/domain/tests/analytics/render-forensics.test.ts` 35/35, `packages/app/tests/services/history-anatomy.test.ts` 69/69; workspace coverage run reports `packages/domain/src/analytics/surface-usage.ts 100.00% funcs / 100.00% lines`; domain workspace 1495 pass; `spur-doctor` skill structure tests pass in the pipeline gate |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

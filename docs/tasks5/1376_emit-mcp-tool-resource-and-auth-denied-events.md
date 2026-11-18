@@ -4,7 +4,7 @@ name: Emit MCP tool, resource and auth.denied events
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:15.946Z
-updated_at: "2026-11-18T08:17:57.805Z"
+updated_at: "2026-11-18T22:35:49.126Z"
 feature_id: J94
 priority: P1
 tags:
@@ -136,15 +136,15 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 — catalog `mcp.tool.called`, `mcp.tool.failed`, `mcp.resource.read` (source `mcp`) + `auth.denied` (source `api`), each with an event-specific presenter | MET | `packages/app/src/services/event-names.ts:420-425` (entries), `:1949,1968,1989,2002` (presenters); `SYSTEM_EVENT_PRESENTERS` is `satisfies Record<SystemEventName, …>` so exhaustiveness is compiler-enforced; `packages/app/tests/services/event-names.test.ts` 36/36 incl. the two-sided §11 gate |
-| R2 — emit `mcp.tool.called` / `mcp.tool.failed` around `McpDispatcher.callTool` with `tool`, sorted `argKeys`, `durationMs`, `outcome`, `errorCode`+`error` on failure, `runId`/`wbs` when carried | MET | `apps/server/src/modules/mcp/index.ts:116-146` (wrapper), `:255` (`correlation`), `:267` (`toolErrorCode`); `apps/server/tests/mcp-e2e.test.ts:275-310` |
-| R3 — emit `mcp.resource.read` with `uri`, `durationMs`, `outcome`, `errorCode` on failure | MET | `apps/server/src/modules/mcp/index.ts:196-215`; `apps/server/tests/mcp-e2e.test.ts:308` |
-| R4 — wire `onDenied` on both mounts with `surface`, `reason`, `path` | MET | `apps/server/src/modules/mcp/index.ts:344`, `apps/server/src/modules/a2a/index.ts:189`; path supplied by the guard (`apps/server/src/middleware/bearer-guard.ts:63,70`); `tests/mcp-e2e.test.ts:318` (mcp), `tests/modules/a2a/routes.test.ts:198` (a2a) |
-| R5 — no payload carries an argument value, header or token; `mcp.tool.failed.error` under `redacted` | MET | `mcp.tool.failed` policy `redacted` (`event-names.ts:421`); payloads built from key NAMES only (`index.ts:255`); leak assertions on the raw stored row: `tests/mcp-e2e.test.ts:286-287,327` |
+| R2 — emit `mcp.tool.called` / `mcp.tool.failed` around `McpDispatcher.callTool` with `tool`, sorted `argKeys`, `durationMs`, `outcome`, `errorCode`+`error` on failure, `runId`/`wbs` when carried | MET | `apps/server/src/modules/mcp/index.ts:208-238` (wrapper), `:347` (`correlation`), `:365` (`toolErrorCode`); `apps/server/tests/mcp-e2e.test.ts:284-319` |
+| R3 — emit `mcp.resource.read` with `uri`, `durationMs`, `outcome`, `errorCode` on failure | MET | `apps/server/src/modules/mcp/index.ts:288-307`; `apps/server/tests/mcp-e2e.test.ts:317` |
+| R4 — wire `onDenied` on both mounts with `surface`, `reason`, `path` | MET | `apps/server/src/modules/mcp/index.ts:577`, `apps/server/src/modules/a2a/index.ts:189`; path supplied by the guard (`apps/server/src/middleware/bearer-guard.ts:63,70`); `apps/server/tests/mcp-e2e.test.ts:327` (mcp), `apps/server/tests/modules/a2a/routes.test.ts:198` (a2a) |
+| R5 — no payload carries an argument value, header or token; `mcp.tool.failed.error` under `redacted` | MET | `mcp.tool.failed` policy `redacted` (`packages/app/src/services/event-names.ts:423`); payloads built from key NAMES only (`apps/server/src/modules/mcp/index.ts:309`); leak assertions on the raw stored row: `apps/server/tests/mcp-e2e.test.ts:295-296,336` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 — every MCP tool call and resource read emits a 5W1H event (R1,R2,R3,R5) | MET | test | `apps/server/tests/mcp-e2e.test.ts` 13/13 through the real gateway + real tap → `system_events` ledger |
-| AC2 — refused authentication is observable without leaking the token (R4,R5) | MET | test | `tests/mcp-e2e.test.ts:318` (mcp 401 → `auth.denied`), `tests/modules/a2a/routes.test.ts:198` (a2a 401 → same name); both assert the token never appears |
+| AC2 — refused authentication is observable without leaking the token (R4,R5) | MET | test | `apps/server/tests/mcp-e2e.test.ts:327` (mcp 401 → `auth.denied`), `apps/server/tests/modules/a2a/routes.test.ts:198` (a2a 401 → same name); both assert the token never appears |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

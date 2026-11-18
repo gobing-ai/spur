@@ -4,7 +4,7 @@ name: Add protocol tool usage to the history-anatomy report
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:36.436Z
-updated_at: "2026-11-18T08:36:58.379Z"
+updated_at: "2026-11-18T22:35:50.947Z"
 feature_id: I61
 priority: P2
 tags:
@@ -126,15 +126,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — `protocolUsageSummary(db, {since, until})` returning `ProtocolUsage` with `tools[]`, `resources[]`, `byActor[]`, `a2a[]`, `authDenied[]` | MET | `packages/domain/src/analytics/protocol-usage.ts:110` (single windowed `SELECT` over the six 1376/1377 names, folded in TS), types at `:17-97`, exported via `analytics/index.ts`; `packages/domain/tests/analytics/protocol-usage.test.ts` (5 cases: tools/percentiles, resources+actors+a2a+auth, multi-entry ordering, unreadable plane, empty window) |
-| R2 — nearest-rank p50/p95 over `payload.durationMs`; a row without a numeric duration counts in `durationUnmeasured` and is excluded, never 0 | MET | `protocol-usage.ts:244` (`nearestRank`), `:161-168` (measured vs `unmeasured`); assertions `protocol-usage.test.ts:69-73` (p50 10, p95 30 over `[10,30]`, `durationUnmeasured` 1) |
-| R3 — `history-service` calls it beside `pairingSummary` over the same window; optional `HistoryArtifact.protocolUsage`; arrays registered `'set'` in `artifact-digest.ts` | MET | `packages/app/src/services/history-service.ts:934` (same selector window, same `Promise.all`), artifact field `artifact.ts:243`, digest `artifact-digest.ts:67-71`; the `ArtifactArrayKey` exhaustiveness guard (`:84-88`) compiles, and `artifact-digest.test.ts` new case proves order-independence |
-| R4 — `renderForensics` adds a "Protocol usage" block; empty window renders `not available (no protocol events in window)`, never zeros | MET | `render-forensics.ts:407` (`### Protocol Usage`, wired at `:37` inside section 8 after Bottleneck Ranking); `not available` for both an absent artifact field and an empty window; `render-forensics.test.ts` 3 new cases (table values, empty window, absent block) |
-| R5 — `report-contract.md` and `operations.md` section 8 cites `protocolUsage`; missing `protocolUsage` is a section-6 telemetry gap; no section added or renamed | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` (section-8 paragraph cites `protocolUsage`, states the section-6 gap rule), `operations.md` (protocol-usage note); the frozen 12-section list is untouched (plugin structure tests 34+ invariants pass in the gate log) |
+| R1 — `protocolUsageSummary(db, {since, until})` returning `ProtocolUsage` with `tools[]`, `resources[]`, `byActor[]`, `a2a[]`, `authDenied[]` | MET | `packages/domain/src/analytics/protocol-usage.ts:136` (single windowed `SELECT` over the six 1376/1377 names, folded in TS), types at `:17-123`, exported via `packages/domain/src/analytics/index.ts`; `packages/domain/tests/analytics/protocol-usage.test.ts` (5 cases: tools/percentiles, resources+actors+a2a+auth, multi-entry ordering, unreadable plane, empty window) |
+| R2 — nearest-rank p50/p95 over `payload.durationMs`; a row without a numeric duration counts in `durationUnmeasured` and is excluded, never 0 | MET | `packages/domain/src/analytics/protocol-usage.ts:300` (`nearestRank`), `:189-196` (measured vs `unmeasured`); assertions `packages/domain/tests/analytics/protocol-usage.test.ts:69-73` (p50 10, p95 30 over `[10,30]`, `durationUnmeasured` 1) |
+| R3 — `history-service` calls it beside `pairingSummary` over the same window; optional `HistoryArtifact.protocolUsage`; arrays registered `'set'` in `packages/domain/src/analytics/artifact-digest.ts` | MET | `packages/app/src/services/history-service.ts:937` (same selector window, same `Promise.all`), artifact field `packages/domain/src/analytics/artifact.ts:244`, digest `packages/domain/src/analytics/artifact-digest.ts:67-71`; the `ArtifactArrayKey` exhaustiveness guard (`:89-93`) compiles, and `packages/domain/tests/analytics/artifact-digest.test.ts` new case proves order-independence |
+| R4 — `renderForensics` adds a "Protocol usage" block; empty window renders `not available (no protocol events in window)`, never zeros | MET | `packages/domain/src/analytics/render-forensics.ts:408` (`### Protocol Usage`, wired at `:37` inside section 8 after Bottleneck Ranking); `not available` for both an absent artifact field and an empty window; `packages/domain/tests/analytics/render-forensics.test.ts` 3 new cases (table values, empty window, absent block) |
+| R5 — `plugins/sp/skills/history-anatomy/references/report-contract.md` and `plugins/sp/skills/history-anatomy/references/operations.md` section 8 cites `protocolUsage`; missing `protocolUsage` is a section-6 telemetry gap; no section added or renamed | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` (section-8 paragraph cites `protocolUsage`, states the section-6 gap rule), `plugins/sp/skills/history-anatomy/references/operations.md` (protocol-usage note); the frozen 12-section list is untouched (plugin structure tests 34+ invariants pass in the gate log) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Daily report shows protocol tool usage (R1,R2,R3,R4,R5) | MET | test | `packages/domain/tests/analytics/protocol-usage.test.ts` 5/5 + `render-forensics.test.ts` 28/28 + `artifact-digest.test.ts` 4/4; workspace coverage run reports `protocol-usage.ts 100.00% funcs / 100.00% lines`; `history-service.test.ts` 72/72 |
+| AC1 — Daily report shows protocol tool usage (R1,R2,R3,R4,R5) | MET | test | `packages/domain/tests/analytics/protocol-usage.test.ts` 5/5 + `packages/domain/tests/analytics/render-forensics.test.ts` 28/28 + `packages/domain/tests/analytics/artifact-digest.test.ts` 4/4; workspace coverage run reports `packages/domain/src/analytics/protocol-usage.ts 100.00% funcs / 100.00% lines`; `packages/app/tests/services/history-service.test.ts` 72/72 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

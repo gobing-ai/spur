@@ -4,7 +4,7 @@ name: Feed repeated tool failures to rule-scan as candidates
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:36.439Z
-updated_at: "2026-11-18T08:48:08.037Z"
+updated_at: "2026-11-18T22:35:52.327Z"
 feature_id: I61
 priority: P2
 tags:
@@ -112,15 +112,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — `protocolUsage.failureClusters[]`: `{tool, errorCode, count, firstAt, lastAt, sampleEventIds (max 5)}` for pairs with `count >= 3`, count-descending | MET | `packages/domain/src/analytics/protocol-usage.ts:74,77` (constants), `:213-233` (fold), `:288-296` (filter + order); `protocol-usage.test.ts` 7/7 — cluster threshold with a pair under it and an out-of-window row that must not lift it, the 5-id cap, `firstAt`/`lastAt`, and count-descending order over two clusters |
+| R1 — `protocolUsage.failureClusters[]`: `{tool, errorCode, count, firstAt, lastAt, sampleEventIds (max 5)}` for pairs with `count >= 3`, count-descending | MET | `packages/domain/src/analytics/protocol-usage.ts:74,77` (constants), `:213-233` (fold), `:288-296` (filter + order); `packages/domain/tests/analytics/protocol-usage.test.ts` 7/7 — cluster threshold with a pair under it and an out-of-window row that must not lift it, the 5-id cap, `firstAt`/`lastAt`, and count-descending order over two clusters |
 | R2 — finding key `repetition:mcp-tool:<tool>:<errorCode>` per cluster citing `sampleEventIds` | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` new row in the surface-findings table (anchored on `protocolUsage.failureClusters[]`, `count >= 3`, anchored on `sampleEventIds`); structure-gate fixture in `packages/app/tests/services/history-anatomy.test.ts` proves the key passes the closed-category gate (69/69) |
 | R3 — rule-scan procedure reads `spur history analyze --since <30d> --json` → `protocolUsage.failureClusters`, maps each cluster to a candidate with `evidence: count + sample event ids`, and the route list gains `not-a-rule` (→ task carrying the finding key) | MET | `plugins/sp/skills/spur-cli/references/rules/operations.md` § scan step 2 (event-evidence paragraph naming the command, the cluster fields and the key) and step 5 route list (`add |
 | R4 — the scan doc restates that candidates are proposals and rules are written only by `add` on confirmation | MET | same file, output-contract paragraph: "The list is a **proposal set**: no candidate is applied by the scan, and a rule file is written only by `add` after the operator confirms it (R4)"; the pre-existing propose-only preamble is retained |
-| Anti-patterns — no error-message text, no automatic `add`, no argument-value clustering | MET | clusters carry `errorCode` only (`protocol-usage.ts:213`, `:221`); a test asserts the cluster JSON never contains the message text; the doc forbids authoring in scan |
+| Anti-patterns — no error-message text, no automatic `add`, no argument-value clustering | MET | clusters carry `errorCode` only (`packages/domain/src/analytics/protocol-usage.ts:213`, `:221`); a test asserts the cluster JSON never contains the message text; the doc forbids authoring in scan |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Repeated tool failures become rule candidates (R1,R2,R3,R4) | MET | test | `protocol-usage.test.ts` 7/7 (domain proof of the cluster semantics), `history-anatomy.test.ts` 69/69 (key passes the gate); the procedure itself is documentation — no executable surface exists, as the task states |
+| AC1 — Repeated tool failures become rule candidates (R1,R2,R3,R4) | MET | test | `packages/domain/tests/analytics/protocol-usage.test.ts` 7/7 (domain proof of the cluster semantics), `packages/app/tests/services/history-anatomy.test.ts` 69/69 (key passes the gate); the procedure itself is documentation — no executable surface exists, as the task states |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

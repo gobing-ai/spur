@@ -4,7 +4,7 @@ name: Rename built-in MCP harness tools to the sp namespace
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:24.290Z
-updated_at: "2026-11-18T07:48:01.617Z"
+updated_at: "2026-11-18T22:35:53.611Z"
 feature_id: B91
 priority: P1
 tags:
@@ -93,14 +93,14 @@ Test layer: `apps/server/tests/mcp-e2e.test.ts`, which runs a real serve app thr
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 rename five tools (descriptors + cases) | MET | test: e2e `tools/call sp_task_show` green (apps/server/tests/mcp-e2e.test.ts:148); static-ref: descriptors apps/server/src/modules/mcp/index.ts:33-76, cases index.ts:130-145 |
-| R2 old names refused, no alias; list never shows them | MET | test: refusal case asserts rename hint (apps/server/tests/mcp-e2e.test.ts:164); map index.ts:89-94, default-branch throw index.ts:156-158; static-ref: tools/list advertises only `sp_*` (apps/server/tests/modules/mcp-module.test.ts:462) |
-| R3 grammar verified vs MCP 2026-07-28; deliberate narrowness cited | MET | static-ref: `docs/design/embedded-mcp-server.md:65-67` — `[a-z0-9_]` kept deliberately narrower than spec SHOULD-set, cited https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-names (fetched this run) |
-| R4 ADR-152 dated amendment + §4 table | MET | static-ref: `docs/00_ADR.md:2957-2961` (`Amended: 2026-11-17 (task 1379)` + Decision names), `docs/design/embedded-mcp-server.md:61-67` |
+| R1 | MET | `packages/app/src/services/mcp-builtin-tools.ts:10-14` (five `sp_` names); real-app call `apps/server/tests/mcp-e2e.test.ts:168` |
+| R2 | MET | refusal `apps/server/src/modules/mcp/index.ts:520`, classified `unknown_tool` at `apps/server/src/modules/mcp/index.ts:683`; test `apps/server/tests/mcp-e2e.test.ts:180-184` |
+| R3 | MET | spec URL + deliberate `[a-z0-9_]` note at `docs/design/embedded-mcp-server.md:75-77` (https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-names) |
+| R4 | MET | ADR-152 amendment `docs/00_ADR.md:2969-2970`; tool table `docs/design/embedded-mcp-server.md:75` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 built-ins carry the `sp` namespace in every project | MET | test | refusal hint maps every legacy name (apps/server/src/modules/mcp/index.ts:89-94); `BUILTIN_TOOL_NAMES` export index.ts:98; e2e suite green |
+| AC1 — Built-in harness tools carry the sp namespace | MET | test | `apps/server/tests/mcp-e2e.test.ts:168`, `apps/server/tests/mcp-e2e.test.ts:180`; command `(cd apps/server && bun test tests/mcp-e2e.test.ts)` → 24 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

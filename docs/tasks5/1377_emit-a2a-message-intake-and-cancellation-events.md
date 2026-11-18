@@ -4,7 +4,7 @@ name: Emit A2A message intake and cancellation events
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:15.947Z
-updated_at: "2026-11-18T08:21:37.085Z"
+updated_at: "2026-11-18T22:35:49.741Z"
 feature_id: J94
 priority: P1
 tags:
@@ -111,14 +111,14 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — add `'a2a'` to `SystemEventSource` and catalog `a2a.message.received` / `a2a.task.cancelled` with presenters | MET | `packages/app/src/services/event-names.ts:26` (source), `:106` (profile), `:431-432` (entries), `:2023,2044` (presenters); `SYSTEM_EVENT_PRESENTERS` is `satisfies Record<SystemEventName,…>`; `event-names.test.ts` 36/36 incl. the §11 two-sided gate |
-| R2 — emit `a2a.message.received` per authenticated well-formed send with `member`, `messageId`, `requestKey`, `outcome` (`accepted`/`replayed`/`conflict`), `inboxMessageId` when present | MET | `apps/server/src/modules/a2a/index.ts:241-247` (send: `sent.replayed ? 'replayed' : 'accepted'`, `inboxMessageId: sent.message.id`), `:252-257` (409 conflict path); tests `tests/modules/a2a/routes.test.ts:482,502,511` |
-| R3 — emit `a2a.task.cancelled` on the accepted cancel path with `member`, `taskId`, `runStopped` | MET | `apps/server/src/modules/a2a/index.ts:318-332` (`runStopped` true after stop, false in the catch); test `tests/modules/a2a/routes.test.ts:519` |
-| R4 — no message body text in any payload | MET | payloads built from ids/keys only (`index.ts:241-257,332`); leak assertions on the stored row `tests/modules/a2a/routes.test.ts:494,533` |
+| R1 — add `'a2a'` to `SystemEventSource` and catalog `a2a.message.received` / `a2a.task.cancelled` with presenters | MET | `packages/app/src/services/event-names.ts:26` (source), `:106` (profile), `:431-432` (entries), `:2023,2044` (presenters); `SYSTEM_EVENT_PRESENTERS` is `satisfies Record<SystemEventName,…>`; `packages/app/tests/services/event-names.test.ts` 36/36 incl. the §11 two-sided gate |
+| R2 — emit `a2a.message.received` per authenticated well-formed send with `member`, `messageId`, `requestKey`, `outcome` (`accepted`/`replayed`/`conflict`), `inboxMessageId` when present | MET | `apps/server/src/modules/a2a/index.ts:247-253` (send: `sent.replayed ? 'replayed' : 'accepted'`, `inboxMessageId: sent.message.id`), `:258-263` (409 conflict path); tests `apps/server/tests/modules/a2a/routes.test.ts:482,502,511` |
+| R3 — emit `a2a.task.cancelled` on the accepted cancel path with `member`, `taskId`, `runStopped` | MET | `apps/server/src/modules/a2a/index.ts:324-338` (`runStopped` true after stop, false in the catch); test `apps/server/tests/modules/a2a/routes.test.ts:519` |
+| R4 — no message body text in any payload | MET | payloads built from ids/keys only (`apps/server/src/modules/a2a/index.ts:249-260,340`); leak assertions on the stored row `apps/server/tests/modules/a2a/routes.test.ts:494,533` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A2A message intake and cancellation emit events (R1,R2,R3,R4) | MET | test | `tests/modules/a2a/routes.test.ts` 28/28 through a real `EventBus` + catalog tap + `SystemEventDao` (ledger rows, not an array); `bun run a2a-serve-e2e` exit 0 — the real `a2a` CLI proves the cancel path still completes |
+| AC1 — A2A message intake and cancellation emit events (R1,R2,R3,R4) | MET | test | `apps/server/tests/modules/a2a/routes.test.ts` 28/28 through a real `EventBus` + catalog tap + `SystemEventDao` (ledger rows, not an array); `bun run a2a-serve-e2e` exit 0 — the real `a2a` CLI proves the cancel path still completes |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

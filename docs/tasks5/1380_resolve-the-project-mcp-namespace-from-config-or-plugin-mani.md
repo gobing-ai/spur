@@ -4,7 +4,7 @@ name: Resolve the project MCP namespace from config or plugin manifest
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:24.292Z
-updated_at: "2026-11-18T08:14:35.560Z"
+updated_at: "2026-11-18T22:35:54.255Z"
 feature_id: B91
 priority: P1
 tags:
@@ -105,14 +105,14 @@ The manifest scan lists `plugins/` children and reads `<child>/plugin.json`. Zer
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 config key + env mapping, fail-closed grammar | MET | static-ref: `packages/config/src/index.ts:23` (`SPUR_MCP_NAMESPACE`), `:27` (`MCP_NAMESPACE_PATTERN`), `:1374-1384` (schema + error naming variable and regex), `:1467` (env mapping); test: `packages/config/tests/config.test.ts:107` (invalid value fails load) |
-| R2 `resolveMcpNamespace` with `config → plugin-manifest → none` | MET | static-ref: `packages/app/src/services/mcp-namespace.ts:18-69`, exported `packages/app/src/index.ts:569`; test: 6 resolver cases `packages/app/tests/services/mcp-namespace.test.ts:29-95` (config wins, single manifest, ambiguous→none, depth-2→none, bad grammar→none, missing/malformed→none) |
-| R3 registry `namespace()` + `server/discover` field, resolved once | MET | static-ref: `apps/server/src/modules/mcp/protocol.ts:59` (interface), `:163-174` (discover, omitted when null), `apps/server/src/modules/mcp/index.ts:117-138` (resolve at construction); test: `apps/server/tests/mcp-e2e.test.ts:229` (manifest `kk` + `SPUR_MCP_NAMESPACE` override, omit when unconfigured) |
-| R4 document key + resolution order + discover field | MET | static-ref: `docs/design/configuration-contracts.md:130`, `docs/design/embedded-mcp-server.md:34-49` |
+| R1 | MET | schema `packages/config/src/index.ts:1388`, env map `packages/config/src/index.ts:23` + `packages/config/src/index.ts:1496`; tests `packages/config/tests/config.test.ts:98`, `packages/config/tests/config.test.ts:107` |
+| R2 | MET | `packages/app/src/services/mcp-namespace.ts:6` (source union), `packages/app/src/services/mcp-namespace.ts:18`, manifest branch `packages/app/src/services/mcp-namespace.ts:71`; tests `packages/app/tests/services/mcp-namespace.test.ts:29`, `packages/app/tests/services/mcp-namespace.test.ts:41` |
+| R3 | MET | registry `apps/server/src/modules/mcp/protocol.ts:59`, discover `apps/server/src/modules/mcp/protocol.ts:171`, impl `apps/server/src/modules/mcp/index.ts:247`; e2e `apps/server/tests/mcp-e2e.test.ts:147`, `apps/server/tests/mcp-e2e.test.ts:279` |
+| R4 | MET | `docs/design/configuration-contracts.md:130`; `docs/design/embedded-mcp-server.md:41-45` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 namespace resolves config then plugin manifest (R1–R4) | MET | test | `packages/app/tests/services/mcp-namespace.test.ts` 6/6 pass; `packages/config/tests/config.test.ts` 16/16; `apps/server` modules+e2e 390/390 |
+| AC1 — Project namespace resolves from config then plugin manifest | MET | test | `apps/server/tests/mcp-e2e.test.ts:279`, `packages/app/tests/services/mcp-namespace.test.ts:29`; mcp-e2e 24/0, app services suite green |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

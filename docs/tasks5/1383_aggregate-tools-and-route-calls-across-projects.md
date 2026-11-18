@@ -4,7 +4,7 @@ name: Aggregate tools and route calls across projects
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:25.889Z
-updated_at: "2026-11-18T19:27:36.433Z"
+updated_at: "2026-11-18T22:35:56.121Z"
 feature_id: K41
 priority: P1
 tags:
@@ -128,12 +128,12 @@ Each entry cites the first changed line per file (`file:line`).
 | R1 — `tools/list` returns the five `sp_*` built-ins once, each input schema extended with a required `project`, plus every local project's exposed workflow tools under its manifest namespace; no project started for a list | MET | `packages/app/src/services/project-gateway.ts` `mcpRegistry.listTools` (built-ins mapped with `project` prepended to `required`; workflow tools from `resolveExposedWorkflowTools` over `<project>/config/workflows`). Tests: `apps/server/tests/gateway-mcp-routing.test.ts` (each built-in appears once, `required` contains `project`, both namespaces listed) and `packages/app/tests/services/project-gateway-mcp.test.ts` (schema merge keeps `wbs`). Listing is file-only: `mcpRoutes` never calls `ensureUpstream` |
 | R2 — a namespace resolved for 2+ local projects is reported in discover `diagnostics` (`namespace-collision`, naming the projects), its tools withheld from the list, and a call refused naming the projects | MET | `collidingNamespaces` + `discoverExtras` collision row + `callTool` refusal; tests in both files (tool absent from `tools/list`, diagnostic reason `namespace-collision`, call rejected with the namespace and both project names) |
 | R3 — `tools/call` resolves a built-in through its `project` argument or a workflow tool through its namespace, starts the project through the shared `ensureUpstream`, POSTs the JSON-RPC call to `/<prefix>/mcp` via the gateway's dial path with `Authorization: Bearer <project token>`, returns the upstream body unchanged, and strips `project` before forwarding | MET | `callTool` implementation; `apps/server/tests/gateway-mcp-routing.test.ts` asserts the upstream saw `{wbs:'1383'}` (selector stripped), `Bearer <token>`, the protocol-version header, and `alphaspace_deploy` reaching the started project. The upstream `result` is returned as-is (never reshaped) |
-| R5 — unknown/ambiguous `project`, missing project token, upstream 401/5xx each produce a tool error naming cause and remedy; token values never appear | MET | four distinct messages in `callTool`; tests cover all five cases and assert the token string is absent from every message (`gateway-mcp-routing.test.ts` unknown project / missing token / 401 / 502; app test repeats 401 + 5xx plus the "needs a project argument" case) |
+| R5 — unknown/ambiguous `project`, missing project token, upstream 401/5xx each produce a tool error naming cause and remedy; token values never appear | MET | four distinct messages in `callTool`; tests cover all five cases and assert the token string is absent from every message (`apps/server/tests/gateway-mcp-routing.test.ts` unknown project / missing token / 401 / 502; app test repeats 401 + 5xx plus the "needs a project argument" case) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — tools/list aggregates local projects by namespace (R1, R2) | MET | test | `gateway-mcp-routing.test.ts` (built-ins once + both workflow tools; collision withheld) and `project-gateway-mcp.test.ts` (schema shape) |
-| AC2 — tools/call routes to the owning project and starts it on demand (R3, R5) | MET | test | `gateway-mcp-routing.test.ts` drives a real gateway listener against real upstream HTTP servers (start-on-demand + forwarded wire shape), and the app test asserts the exact forwarded body/headers |
+| AC1 — tools/list aggregates local projects by namespace (R1, R2) | MET | test | `apps/server/tests/gateway-mcp-routing.test.ts` (built-ins once + both workflow tools; collision withheld) and `packages/app/tests/services/project-gateway-mcp.test.ts` (schema shape) |
+| AC2 — tools/call routes to the owning project and starts it on demand (R3, R5) | MET | test | `apps/server/tests/gateway-mcp-routing.test.ts` drives a real gateway listener against real upstream HTTP servers (start-on-demand + forwarded wire shape), and the app test asserts the exact forwarded body/headers |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

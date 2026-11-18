@@ -4,7 +4,7 @@ name: Expose opted-in workflows as namespaced MCP tools
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:24.293Z
-updated_at: "2026-11-18T08:33:48.651Z"
+updated_at: "2026-11-18T22:35:54.855Z"
 feature_id: B91
 priority: P1
 tags:
@@ -120,16 +120,16 @@ R1 was already landed before this run (`@gobing-ai/ts-*` 0.8.0 catalog pin; engi
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 engine `metadata` key + catalog pin | MET | static-ref: root `package.json:39-40` pins `@gobing-ai/ts-*` 0.8.0; `node_modules/@gobing-ai/ts-dual-workflow-engine/dist/schema.js` carries `metadata` (published 0.8.0, pre-landed before this run) |
-| R2 opted-in workflow listed as `<namespace>_<name>`, description + per-var schema | MET | static-ref: `packages/app/src/services/mcp-workflow-tools.ts:36-42` (name derivation), `:96-186` (resolver); `apps/server/src/modules/mcp/index.ts:99-115` (descriptor), `:159-176` (discovery); test: `apps/server/tests/mcp-e2e.test.ts` `kk_daily_report` listed with `{target: {type:'string', default:'default-target'}}` and `additionalProperties: false`, unexposed `hidden-flow` absent; resolver cases `packages/app/tests/services/mcp-workflow-tools.test.ts:57-140` |
-| R3 call runs `WorkflowService.run(file, {vars})`; undeclared args → `invalid_arguments` | MET | static-ref: `apps/server/src/modules/mcp/index.ts:178-197`; test: e2e refuses `{bogus:'x'}` with `invalid_arguments` and runs `{target:'today'}` to a real `done` run with a runId |
-| R4 validate refuses no-namespace / built-in collision / duplicate; list omits them | MET | static-ref: `packages/app/src/services/workflow-inspect-ops.ts:221-231` (validate hook), `:417-441` (issues→errors), `packages/app/src/services/mcp-builtin-tools.ts:10-16`; test: `packages/app/tests/services/workflow-inspect-ops.test.ts` R4(a)/R4(b)/R4(c) all fail validate with reason + remedy; resolver test asserts neither duplicate is listed |
-| R5 document `metadata.mcp` and the workflow tools | MET | static-ref: `docs/design/workflow-composition-contract.md:73-95`, `docs/design/embedded-mcp-server.md:69-80` |
+| R1 | MET | @gobing-ai/ts-dual-workflow-engine `src/schema.ts` line 96 and line 217 (`metadata: z.record(...).optional()`); catalog pin `package.json:40` (0.8.0) |
+| R2 | MET | `packages/app/src/services/mcp-workflow-tools.ts:4`; tests `packages/app/tests/services/mcp-workflow-tools.test.ts:67`, `packages/app/tests/services/mcp-workflow-tools.test.ts:74`, `packages/app/tests/services/mcp-workflow-tools.test.ts:87` |
+| R3 | MET | argument guard `apps/server/src/modules/mcp/index.ts:287-291`; e2e `apps/server/tests/mcp-e2e.test.ts:336`, `apps/server/tests/mcp-e2e.test.ts:426` |
+| R4 | MET | validate `packages/app/src/services/workflow-inspect-ops.ts:438`; runtime omission `packages/app/src/services/mcp-workflow-tools.ts:137-146`; tests `packages/app/tests/services/workflow-inspect-ops.test.ts:210`, `packages/app/tests/services/workflow-inspect-ops.test.ts:220`, `packages/app/tests/services/workflow-inspect-ops.test.ts:229` |
+| R5 | MET | `docs/design/workflow-composition-contract.md:73`; `docs/design/embedded-mcp-server.md:103` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 an opted-in workflow becomes a namespaced tool | MET | test | `apps/server/tests/mcp-e2e.test.ts` (list + call + run), `packages/app/tests/services/mcp-workflow-tools.test.ts` (8 cases) |
-| AC2 collisions refused at validate time | MET | test | `packages/app/tests/services/workflow-inspect-ops.test.ts` R4(a)(b)(c) |
+| AC1 — An opted-in workflow becomes a namespaced MCP tool | MET | test | `apps/server/tests/mcp-e2e.test.ts:336`; mcp-e2e 24/0 |
+| AC2 — Tool-name collisions are refused at validate time | MET | test | `packages/app/tests/services/workflow-inspect-ops.test.ts:220`, `packages/app/tests/services/workflow-inspect-ops.test.ts:229` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

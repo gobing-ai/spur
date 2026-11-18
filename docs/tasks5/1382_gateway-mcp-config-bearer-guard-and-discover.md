@@ -4,7 +4,7 @@ name: Gateway MCP config, bearer guard and discover
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:25.886Z
-updated_at: "2026-11-18T19:13:58.253Z"
+updated_at: "2026-11-18T22:35:55.511Z"
 feature_id: K41
 priority: P1
 tags:
@@ -126,13 +126,13 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 — `server.gateway.mcp: {enabled, authEnv?}` in the schema, mapped from `SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`; `enabled` without `authEnv` fails the load like `server.mcp` | MET | `packages/config/src/index.ts` schema (`gateway.mcp`, default off) + `superRefine` issue path `gateway.mcp.authEnv` + env mapping in `buildConfigFromEnv`; tests `packages/config/tests/config.test.ts` (off by default, env mapping, load failure message, and the gateway/project token variables stay distinct) |
-| R2 — when enabled, root `POST /mcp` answers through `bearerGuard` (realm `spur-gateway-mcp`): 401 missing/wrong, 500 unset; disabled ⇒ 404, never a proxy | MET | `apps/server/src/gateway.ts` `withGatewayMcp` composes the guard + `handleMcpHttpRequest`; `packages/app/src/services/project-gateway.ts` matches `/mcp` **before** prefix routing and 404s without a handler. Tests `apps/server/tests/gateway-mcp.test.ts` over a real listener: 404 disabled, 401 with `spur-gateway-mcp` challenge, 401 wrong token, 500 `INTERNAL_ERROR` unset; `project-gateway-edge.test.ts` asserts `ensureUpstream` is never called for `/mcp` |
-| R3 — `server/discover` at the root returns `projects` (local entries with `name`/`prefix`/resolved `namespace` or null) and `diagnostics` naming each excluded remote entry with `remote-not-proxied (ADR-151)` + the `spur projects add <path>` remedy | MET | `apps/server/src/modules/mcp/protocol.ts` — additive `discoverExtras()`; `gateway.ts` builds `projects` via `resolveProjectPrefix` + `resolveMcpNamespace({configured: undefined})` (manifest only, per the closed Q&A) and `diagnostics` for non-local hosts. Test asserts `alpha` (manifest namespace), `beta` (null), `gamma` absent + diagnostic with reason and remedy |
-| R4 — `mcp` in `RESERVED_PREFIX_SEGMENTS`; root `/mcp` exempt from `gatewayGuard`'s CSRF check, host allowlist intact | MET | `packages/config/src/projects.ts` reserved list; `project-gateway.ts` guard exempts `segments[0] === 'mcp'` before the CSRF branch. Tests: the reserved-segment suite iterates the constant (so `mcp` is covered by construction) and `project-gateway-edge.test.ts` asserts a cross-origin POST to `/mcp` passes the CSRF check while an unlisted host still gets 421 |
+| R2 — when enabled, root `POST /mcp` answers through `bearerGuard` (realm `spur-gateway-mcp`): 401 missing/wrong, 500 unset; disabled ⇒ 404, never a proxy | MET | `apps/server/src/gateway.ts` `withGatewayMcp` composes the guard + `handleMcpHttpRequest`; `packages/app/src/services/project-gateway.ts` matches `/mcp` **before** prefix routing and 404s without a handler. Tests `apps/server/tests/gateway-mcp.test.ts` over a real listener: 404 disabled, 401 with `spur-gateway-mcp` challenge, 401 wrong token, 500 `INTERNAL_ERROR` unset; `packages/app/tests/services/project-gateway-edge.test.ts` asserts `ensureUpstream` is never called for `/mcp` |
+| R3 — `server/discover` at the root returns `projects` (local entries with `name`/`prefix`/resolved `namespace` or null) and `diagnostics` naming each excluded remote entry with `remote-not-proxied (ADR-151)` + the `spur projects add <path>` remedy | MET | `apps/server/src/modules/mcp/protocol.ts` — additive `discoverExtras()`; `apps/server/src/gateway.ts` builds `projects` via `resolveProjectPrefix` + `resolveMcpNamespace({configured: undefined})` (manifest only, per the closed Q&A) and `diagnostics` for non-local hosts. Test asserts `alpha` (manifest namespace), `beta` (null), `gamma` absent + diagnostic with reason and remedy |
+| R4 — `mcp` in `RESERVED_PREFIX_SEGMENTS`; root `/mcp` exempt from `gatewayGuard`'s CSRF check, host allowlist intact | MET | `packages/config/src/projects.ts` reserved list; `packages/app/src/services/project-gateway.ts` guard exempts `segments[0] === 'mcp'` before the CSRF branch. Tests: the reserved-segment suite iterates the constant (so `mcp` is covered by construction) and `packages/app/tests/services/project-gateway-edge.test.ts` asserts a cross-origin POST to `/mcp` passes the CSRF check while an unlisted host still gets 421 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Gateway MCP has its own bearer token (R1, R2, R4) | MET | test | `apps/server/tests/gateway-mcp.test.ts` 5/5 (real `startGateway` listener) + `packages/config/tests/config.test.ts` + `project-gateway-edge.test.ts` 21/21 |
+| AC1 — Gateway MCP has its own bearer token (R1, R2, R4) | MET | test | `apps/server/tests/gateway-mcp.test.ts` 5/5 (real `startGateway` listener) + `packages/config/tests/config.test.ts` + `packages/app/tests/services/project-gateway-edge.test.ts` 21/21 |
 | AC2 — Remote entries are excluded with a remedy (R3) | MET | test | discover case above: `gamma` absent from `projects`, present in `diagnostics` with the reason and the remedy string |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
