@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Apply approved surface cuts and trim agent guidance
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:39.500Z
-updated_at: "2026-11-18T06:16:05.379Z"
+updated_at: "2026-11-18T20:16:41.433Z"
 feature_id: H85
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 4
 
 dependencies: ["1403", "1394"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1404. Apply approved surface cuts and trim agent guidance
@@ -33,21 +35,21 @@ Approved cuts reduce token load and routing ambiguity. 1394 adds the MCP-first r
 
 ### Requirements
 
-- [ ] R1. For each approved `delete`: remove the file or directory and every reference that `rg -n "(/)?sp:<name>\b"` finds outside `docs/tasks*`, `docs/features/` and `CHANGELOG.md`.
-- [ ] R2. For each approved `merge:<target>`: move any unique content into the target, delete the source, and repoint references to the target.
-- [ ] R3. Update AGENTS.md "Harness tool routing" and `config/templates/AGENTS.md` together, so they reference only surviving surfaces. Apply only the `sp:spur-cli` trims that the approval names.
-- [ ] R4. The following pass, and `superskill install sp --dry-run` shows no stale entries for cut names:
+- [x] R1. For each approved `delete`: remove the file or directory and every reference that `rg -n "(/)?sp:<name>\b"` finds outside `docs/tasks*`, `docs/features/` and `CHANGELOG.md`.
+- [x] R2. For each approved `merge:<target>`: move any unique content into the target, delete the source, and repoint references to the target.
+- [x] R3. Update AGENTS.md "Harness tool routing" and `config/templates/AGENTS.md` together, so they reference only surviving surfaces. Apply only the `sp:spur-cli` trims that the approval names.
+- [x] R4. The following pass, and `superskill install sp --dry-run` shows no stale entries for cut names:
   - `cli-surface-parity`
   - `help-docs-parity`
   - `skill-structure`
   - `bootstrap-budget`
   - `bun run plugin-smoke`
   - `bun run spur-check`
-- [ ] R5. Add one CHANGELOG line per cut naming the replacement, if there is one.
+- [x] R5. Add one CHANGELOG line per cut naming the replacement, if there is one.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Approved cuts land with parity intact (req: R1, R2, R3, R4, R5)
+- [x] AC1 — Approved cuts land with parity intact (req: R1, R2, R3, R4, R5)
 
 Test layer: existing plugin parity suites and plugin-smoke over the real tree, plus a `superskill install sp --dry-run` artifact.
 
@@ -61,6 +63,16 @@ Test layer: existing plugin parity suites and plugin-smoke over the real tree, p
 
 - **Consent for removing slash commands?** The 1403 approval entry is the consent. The AGENTS.md public-surface rule covers `spur` nouns and verbs, which this task doesn't touch.
 - **Deprecation period?** No. Cuts are zero-use by evidence, so there's nobody to warn. A merge's CHANGELOG line names the replacement.
+
+#### Q&A entry — 2026-11-18T12:16:00.000Z
+
+- **Approved cuts at execution time: none.** 1403's approval entry is the consent source this task
+  consumes, and it reads "pending operator review: none". No file was removed and no guidance row was
+  changed. To land cuts, an operator adds them to that entry (or states them in the run invocation) and
+  this task is re-run; every other surface is already prepared for it (the report's rows carry
+  `lifetimeCalls`/`lastCallAt` and a prior-use risk list).
+- **Why not apply the report anyway?** The report is evidence, not consent. 18 of its 42 delete
+  candidates were used before the 30-day window, so the curation decision is the operator's.
 
 ### Design
 
@@ -90,18 +102,70 @@ Test layer: existing plugin parity suites and plugin-smoke over the real tree, p
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Precondition check (R1/R2 consent source).** Task 1403's Q&A records the approval entry this task
+consumes, and it reads: *"Approved cuts (pending operator review): none."* The report proposed 42
+`delete` rows and 0 `merge` rows; **no row was approved**, and the operator never supplied a cut list
+in the batch invocation. With an empty approved set there is nothing to delete, nothing to merge and
+no reference to repoint, so no file was removed and no guidance row changed.
+
+| Requirement | Outcome with an empty approval set |
+| --- | --- |
+| R1 — delete each approved file + every `rg` reference | vacuously satisfied: zero approved deletes |
+| R2 — merge each approved `merge:<target>` | vacuously satisfied: zero approved merges |
+| R3 — update AGENTS.md + `config/templates/AGENTS.md` for surviving surfaces; apply only named `sp:spur-cli` trims | nothing named, so both files are unchanged and still reference only live surfaces |
+| R4 — parity suites pass; `superskill install sp --dry-run` shows no stale cut names | verified on the unchanged tree (below) |
+| R5 — one CHANGELOG line per cut | vacuously satisfied: zero cuts, zero lines |
+
+**Verification run for R4** (unchanged tree, so this is a clean baseline rather than a post-cut check):
+
+- `plugins/sp` suite — `cli-surface-parity`, `help-docs-parity`, `skill-structure`, `bootstrap-budget`:
+  134 tests, 0 fail.
+- `bun run plugin-smoke`: PASS (plugin surface standalone and installs clean).
+- `HOME=<fixture> superskill install sp --dry-run`: zero matches for the cut candidates that appear in
+  1403's proposal (`sp:dev-wrapall`, `sp:dev-job-dump`, `sp:dev-next`, `sp:rule-refine`) — no stale entry
+  in any adapted target.
+
+**Why nothing was cut.** The cuts are a public-surface change for agents. 1403 deliberately left the
+approval column empty (18 of its 42 delete candidates had calls before the 30-day window, e.g.
+`sp:dev-wrapall` at 21 lifetime calls), and this task's Q&A makes that approval entry the sole consent
+source. Applying the report's proposals without it would substitute a report for a decision.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — for each **approved** `delete`, remove the file and every `rg` reference | MET | 1403's approval entry — the consent source 1404's Q&A names — reads "Approved cuts (pending operator review): none". Zero approved deletes ⇒ no file removed, no reference repointed. Recorded in the task's Solution table |
+| R2 — for each **approved** `merge:<target>`, move unique content and repoint | MET | zero approved merges (1403 proposed none) |
+| R3 — update AGENTS.md + `config/templates/AGENTS.md` for surviving surfaces; only the named `sp:spur-cli` trims | MET | nothing was named, so both files are untouched and still reference only live surfaces (1394 added the MCP row to both, in this same batch) |
+| R4 — the parity suites pass and a superskill dry-run shows no stale entries for cut names | MET | `plugins/sp` `cli-surface-parity` + `help-docs-parity` + `skill-structure` + `bootstrap-budget` = 134 tests / 0 fail; `bun run plugin-smoke` PASS; `HOME=<fixture> superskill install sp --dry-run` matches none of the proposed cut names (`sp:dev-wrapall`, `sp:dev-job-dump`, `sp:dev-next`, `sp:rule-refine`) |
+| R5 — one CHANGELOG line per cut, naming the replacement | MET | zero cuts ⇒ zero lines (a line for a cut that did not happen would be a false record) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Approved cuts land with parity intact (R1, R2, R3, R4, R5) | MET | command | the approved set is empty, so "land" is trivially true; parity intact is the substantive half and is proven by `bun test plugins/sp/tests/{cli-surface-parity,help-docs-parity,skill-structure,bootstrap-budget}.test.ts` (134/134) + `bun run plugin-smoke` (PASS) + the dry-run scan above. Recorded in the task's Solution and Q&A |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T20:16:18.253Z todo → wip (system)
+- 2026-11-18T20:16:39.956Z wip → testing (system)
+- 2026-11-18T20:16:41.427Z testing → done (system)
+
