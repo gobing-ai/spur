@@ -59,7 +59,7 @@ export function readyRefineCommand(wbs: string): string {
 
 /** Recovery command for an unready batch under a feature. */
 export function readyRefineAllCommand(featureId: string): string {
-    return `/sp:dev-refineall --feature ${featureId} --auto --depth ready`;
+    return `/sp:dev-refine --all --feature ${featureId} --auto --depth ready`;
 }
 
 /** Stage where preparation stopped — surfaced verbatim in CLI error details. */

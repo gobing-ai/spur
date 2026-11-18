@@ -108,7 +108,7 @@ surface is already resolved and name the trigger / `operator override`. A comman
 inside that subprocess boundary runs its backing skill in that process; it must not spawn another
 `spur agent run` for the same trigger. This prevents recursive dispatch.
 
-**Pipeline wrappers (`dev-run`, `dev-runall`, `dev-idea`, `dev-plan`)** — the orchestrator is a loop; its *stages* do the
+**Pipeline wrappers (`dev-run`, `dev-run --all`, `dev-idea`, `dev-plan`)** — the orchestrator is a loop; its *stages* do the
 model-bearing work. Interactive omit/`inline` therefore uses the
 engine loop: `spur workflow run <file> --vars '{"executor":"host",…}'` executes every guard and
 deterministic action on the engine and pauses with one work item per model stage, which this session
@@ -123,14 +123,14 @@ meaningless.
 
 **Fleet executor (0942, ADR-126, opt-in).** A workflow run may opt its `agent.run` stages into the
 agent fleet control plane by mapping the pipeline selector to `executor: 'fleet'` (dev-run /
-dev-runall `--agent fleet`). The stage dispatches to a fleet member through the fleet coordination
+dev-run --all `--agent fleet`). The stage dispatches to a fleet member through the fleet coordination
 surface instead of spawning a subprocess; a subprocess fallback happens only when the run declares
 `executorFallback: 'traditional'`, and an unavailable fleet otherwise fails the stage explicitly
 (0937 `failed-agent`). This is an additional `agent.run` transport — it does not change the
 `--agent` selector semantics documented above, and the interactive driver never resolves to it.
 
 **Interactive task pipelines invert control into the host session (ADR-047 amendment).**
-`dev-run --mode full` and sequential `dev-runall` with omitted `--agent` or explicit `--agent
+`dev-run --mode full` and sequential `dev-run --all` with omitted `--agent` or explicit `--agent
 inline` run the existing `task-pipeline.yaml` on the host executor — the engine loop above
 (`spur workflow run … executor=host` → work item → `spur workflow continue`), with no subprocess —
 and never redirect silently to `agent.default`. Interactive **omit** is
@@ -245,7 +245,7 @@ stage is required, select the subprocess path (`--agent auto` or `--agent <name>
 
 ## Shared startup contract (task 0814 R1/R3/R4/R6/R7/R8)
 
-The workflow-backed dev commands (`dev-run`, `dev-runall`, `dev-refineall`, `dev-verifyall`) share one
+The workflow-backed dev commands (`dev-run`, `dev-run --all`, `dev-refine --all`, `dev-verify --all`) share one
 startup order. The order is load-bearing and applies on both the host executor and the subprocess
 path. Runs that resolve a workflow definition publish the generated plan as their first action
 (1105 R1); skill-only operations (refine/verify batches with no nested workflow) display their owned
@@ -273,7 +273,7 @@ procedure and do not fabricate a workflow YAML.
    `assertInventoryIdentity`. Drift or projection failure stops the run before any
    comprehensive/model work — never execute with a misleading plan.
 
-**Bootstrap rows without a generated plan (1105 R1).** `dev-refineall` and `dev-verifyall` have no
+**Bootstrap rows without a generated plan (1105 R1).** `dev-refine --all` and `dev-verify --all` have no
 workflow plan (their phases are map I13 fog), so until phases exist they keep publishing a compact
 host-preparation checklist immediately, never copied workflow states: A Quick readiness, B Prepare
 Git, C Publish workflow plan, D Comprehensive checking.
@@ -673,7 +673,7 @@ invariants that keep the pipeline set coherent as new ones are added.
 | --- | --- | --- | --- |
 | `idea-pipeline.yaml` | Ideation + planning (vague idea or known slug → feature + AC + task batch) | `/sp:dev-idea`, `/sp:dev-plan` | `handoff`, `cancelled` |
 | `task-pipeline.yaml` | Execution (one task → done) | `/sp:dev-run` | `done`, `failed` |
-| `wrapup-pipeline.yaml` | Wrap-up (completed tasks → learning + metrics + doc-sync) | `/sp:dev-wrap`, `/sp:dev-wrapall` | `done`, `skipped` |
+| `wrapup-pipeline.yaml` | Wrap-up (completed tasks → learning + metrics + doc-sync) | `/sp:dev-wrap`, `/sp:dev-wrap --all` | `done`, `skipped` |
 | `feature-lifecycle.yaml` | Feature status FSM (entity lifecycle, not a phase pipeline) | `spur feature update` | `done`, `cancelled` |
 | `task-lifecycle.yaml` | Task status FSM (entity lifecycle, not a phase pipeline) | `spur task update` | `done`, `cancelled` |
 
@@ -686,7 +686,7 @@ not replace them.
 A pipeline may invoke another workflow through a command wrapper or `spur workflow run` **only at a
 phase boundary** — it must NOT inline another pipeline's state graph. Concretely:
 
-- The feature-level batch entry (`/sp:dev-runall --feature <id>`) dispatches `task-pipeline.yaml`
+- The feature-level batch entry (`/sp:dev-run --all --feature <id>`) dispatches `task-pipeline.yaml`
   per task through the CLI command wrapper, not by inlining the task graph (feature roster →
   execution boundary).
 - `idea-pipeline.yaml`'s `handoff` state may output a command for the operator to run
@@ -812,7 +812,7 @@ engine owns no persisted `paused` checkpoint status.
 
 **Read checkpoints when:**
 
-- `/sp:dev-run --continue` or `/sp:dev-runall --continue` is used.
+- `/sp:dev-run --continue` or `/sp:dev-run --all --continue` is used.
 - The operator asks to resume a task or feature.
 - A workflow run is paused and later continued (`spur workflow continue <run-id>`). Resume
   validates freshness in the run's recorded launch workdir (0784 R1/R3): artifacts resolve relative

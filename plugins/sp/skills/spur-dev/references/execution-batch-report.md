@@ -61,7 +61,7 @@ The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `no
 plus the resume-only `recheck` (stale/mismatched evidence — pipeline re-run), `not-admitted`
 (post-freeze selector match, never executed — task 0919 BC-1/BC-2), and the parallel-only
 `integration-conflict` (rebase conflict retained for manual integration — task 0931 R4,
-[§ Parallel isolation](#parallel-isolation---mode-parallel)).
+[§ Parallel isolation](#parallel-isolation---schedule-parallel)).
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
@@ -155,7 +155,7 @@ a wall-span line from the first start to the last end. No run block reuses a bat
 ## Step 6 — Batch wrap (`--wrap` / `--wrap-pr` / `--next`) (F96 task 0952 R1)
 
 Run **once for the batch**, after the Step 5 report — never per task (dev-operations.md §runall
-agrees; the old "per task" flag-row wording in dev-runall.md was a contradiction, now fixed).
+agrees; the old "per task" flag-row wording in dev-run.md was a contradiction, now fixed).
 `--wrap` and `--wrap-pr` are mutually exclusive; passing both is rejected.
 
 The wrap receives only what it would accept:

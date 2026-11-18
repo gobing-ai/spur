@@ -42,7 +42,7 @@ in this corpus it is 76% one value (0493 measurement).
 `docs/features/**`. The only path from a structure proposal to a changed tree is
 `/sp:dev-feature-change` (dry-run → confirm → apply). Ranking runs are read-only; the sole exception is
 `--task`, which after an **operator confirm** (interactive, or auto-accepted under `--auto`)
-dispatches `/sp:dev-plan` and `/sp:dev-refineall` — commands that write `docs/tasks*/` through their
+dispatches `/sp:dev-plan` and `/sp:dev-refine --all` — commands that write `docs/tasks*/` through their
 own gates. This skill still creates no tasks itself.
 
 ## When to Use
@@ -95,7 +95,7 @@ Run the steps in order. Each step's depth lives in its reference; this file is t
    decline). **With `--auto`:** auto-accept the offered target (rank-1 for bare `--task`, or the
    explicit id) — the flag is operator pre-consent to take the ranking's recommendation — then
    proceed without a HITL pause. Route on the tier step 4 already assigned: T3 with zero tasks →
-   `/sp:dev-plan --feature <id>` then `/sp:dev-refineall --feature <id> --auto --depth ready`; T1 →
+   `/sp:dev-plan --feature <id>` then `/sp:dev-refine --all --feature <id> --auto --depth ready`; T1 →
    refineall only; T3 with invalid AC, T2, and T4 stop with their reason. **This skill creates no
    tasks itself** — the dispatched commands own decomposition and its schema gate. Forward `--auto`
    into the dispatched children. Full contract:

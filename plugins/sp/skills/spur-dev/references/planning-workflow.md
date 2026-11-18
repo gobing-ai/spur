@@ -273,8 +273,8 @@ missing title match. After batch creation, `handoff-finalize`:
 3. Refreshes the feature roster with `spur feature refresh --feature <id> --json`.
 4. Checks each created task (`spur task check <wbs> --json`) and writes
    `.spur/run/<runId>-idea-handoff.md` with exactly **one** next command:
-   `/sp:dev-refineall --feature <id> --auto --depth ready` when any task is unready
-   (runall is then omitted), otherwise `/sp:dev-runall --feature <id> --auto`. The terminal
+   `/sp:dev-refine --all --feature <id> --auto --depth ready` when any task is unready
+   (runall is then omitted), otherwise `/sp:dev-run --all --feature <id> --auto`. The terminal
    handoff note points at this report.
 
 **Ready preparation (ready-prepare, 0788).** The input is the `.wbs` array in
@@ -319,8 +319,8 @@ tasks that already have content:
 ```text
 /sp:dev-refine <wbs>          # single task — fills blank Design/AC/Plan if L3 gaps
 /sp:dev-refine <wbs> --depth ready    # evaluate + correct an existing/filed task, then promote to todo
-/sp:dev-refineall --feature X --auto
-/sp:dev-refineall --feature X --auto --depth ready   # implement-ready freeze (no L3-only SKIP)
+/sp:dev-refine --all --feature X --auto
+/sp:dev-refine --all --feature X --auto --depth ready   # implement-ready freeze (no L3-only SKIP)
 ```
 
 Under `--auto` + **`--depth standard`** (default), refine **SKIP**s when target sections
@@ -356,21 +356,21 @@ time. Design written against a stale snapshot of the codebase rots; design writt
 `implement` reflects current reality. Refine `0042`, run `0042`; refine `0043`, run `0043`.
 
 **Batch refine (optional pre-pass).** When an operator wants every planning-side task under a
-feature filled before a runall, use `/sp:dev-refineall --feature <id> --auto` (batch counterpart
+feature filled before a runall, use `/sp:dev-refine --all --feature <id> --auto` (batch counterpart
 of `/sp:dev-refine`). It reuses the same per-task refine operation, freezes the set, topo-sorts by
 `dependencies[]`, and emits a batch report — see [dev-operations.md](dev-operations.md) § refineall.
 This does **not** replace just-in-time refine before each implement; it is a bulk pre-pass when the
 feature's tasks are still `backlog`/`todo` placeholders. Prefer `--auto` for batch scale.
-`/sp:dev-refineall` takes no `--next`; chain with `/sp:dev-runall --feature <id>` afterwards.
+`/sp:dev-refine --all` takes no `--next`; chain with `/sp:dev-run --all --feature <id>` afterwards.
 
 **Refine arguments** (defined on the `/sp:dev-refine` entry point, passed through verbatim; also
-shared flags on `/sp:dev-refineall`):
+shared flags on `/sp:dev-refine --all`):
 
 | Argument | Effect |
 |----------|--------|
 | `--focus <mode>` | Narrows the gap analysis to a subset of domain hints. Values `all`, `requirements`, `background`, `constraints`, `acceptance`, `quick` — hint table in [dev-operations.md](dev-operations.md) § refine. Default `all`. Under `--depth ready` it only orders the work. |
 | `--depth <standard\|ready>` | Spec depth bar. `standard` (default) = L3 structural completeness + L3 SKIP under `--auto`. `ready` = audit + implement-ready freeze + promote to `todo` (never L3-only SKIP). See [flag-glossary.md](flag-glossary.md#flag-depth). |
-| `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. **Required for practical batch use** via `dev-refineall`. |
+| `--auto` | Skip interactive Q&A — synthesize improvements from the task content alone. Use for well-scoped tasks where the agent can fill gaps without operator input. **Required for practical batch use** via `dev-refine --all`. |
 
 **Pre-synthesis skip gate (under `--auto` + `--depth standard`).** Before synthesizing, run `spur task check <wbs> --json`. When the **refine target sections** show no L3 findings, emit a structured SKIP instead of calling the synthesis agent. **Not applied when `--depth ready`.**
 

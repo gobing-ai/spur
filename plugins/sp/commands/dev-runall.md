@@ -1,14 +1,16 @@
 ---
-description: Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report
+description: Deprecated one-release redirect — use `/sp:dev-run --all`
 requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "--tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--wrap-pr] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
-# Dev Runall
+# dev-runall (deprecated redirect)
 
-Wraps the **sp:spur-dev** skill.
+**Deprecated (task 1390, feature H84).** A batch is a **scope**, not a different operation:
+`/sp:dev-run --all` is the authoritative surface, and the `sp:spur-dev` operation (`runall`) it
+dispatches is unchanged.
 
 ## Argument Flags
 
@@ -34,88 +36,11 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
+```text
+/sp:dev-run --all <forwarded arguments>
 ```
-/sp:dev-runall --tasks <selector> [--feature <id>] [--mode <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline|auto|name>] [--json] [--wrap] [--wrap-pr] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
-```
-
-Flags: `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`,
-or `ready`), `--feature <id>` (sugar for `feature:<id>`; when the effective selector is
-feature-derived, `dev-runall` runs `spur feature check <id> --fix --json` then `spur feature check <id> --strict --json` **once** before
-resolving tasks — a non-zero strict check aborts the batch with verdict `aborted` and the
-structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.scenario-unverified` and `L4.verifying-incomplete-tasks`
-(expected pre-run states of a not-yet-run or reopened feature) are reported verbatim but do not abort (the non-aborting set is
-`NON_ABORTING_PREFLIGHT_CODES` behind `spur task preflight --classify-feature`; `--fix` repairs land in the report's `autoRepairs`) —
-any other strict error aborts), `--mode`
-`<sequential|parallel|auto>` (default `sequential`; `parallel` fans out a proven-independent subset —
-see `execution-worktree.md` § parallel; `auto` picks one per batch — see below), `--concurrency <n>`
-(parallel-mode worker bound — at most <n> task pipelines at once, default 2; a dependent task starts
-only after its in-set dependencies are **integrated** onto the base ref), `--keep-going`
-(batch failure policy — skip a failed task's in-batch dependents, continue independents; default
-halts on first failure, and `--auto` implies `--keep-going`), `--auto`
-(sets `profile=auto` on each per-task run, skipping the HITL approve gate; makes the batch
-unattended, so it also implies `--keep-going`), `--agent <inline|auto|name>`
-(names who runs the pipeline's stages — interactive sequential omit/`inline` uses the host driver;
-`auto` or a name is merged into each per-task `vars.agent` and `vars.implementAgent`; `fleet` maps each task run to `executor: 'fleet'` instead (fleet dispatch, 0942); parallel mode
-retains isolated subprocesses, ADR-047), `--json` (emit the
-report as JSON), `--wrap` (trigger
-`wrapup-pipeline.yaml` after the batch completes; mutually exclusive with `--wrap-pr`), `--wrap-pr`
-(run batch wrap hop, commit close-out writes, push worktree branch to remote origin, and open a Pull Request
-targeting the base ref; mutually exclusive with `--wrap`), `--next`
-(chain each task to terminal status, then run the wrap hop **once for the batch** — see below),
-`--worktree` `[<name>]` (run the batch in an isolated git worktree —
-FF-merge onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form
-creates a fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
-`execution-worktree.md` + `execution-worktree-landing.md`).
-
-**`--mode auto` (smart scheduling).** Ordering is always dependency-correct — every mode
-topo-sorts the frozen set with `spur task batch-plan order` (deterministic, never hand-sorted). `auto`
-additionally reads that schedule's dependency waves (tasks declaring the same file are serialized)
-and decides once, before the first task: `parallel` when some wave holds ≥2 independent tasks and
-`--concurrency` ≥2; otherwise `sequential` in the host session. `--worktree` or explicit
-`--agent inline` pins `sequential`. The batch report records `mode: auto → <resolved>` and why.
-Default stays `sequential`: parallel costs ~N× tokens, worktree setup and subprocess executors, which
-a dependency chain never pays back. Rules: execution-batch.md § 2.4a.
-
-**`--worktree` and parallel mode.** `--worktree --mode parallel` is **rejected** — parallel mode
-already isolates each task in its own worktree (see `execution-worktree.md`), and
-reuse mode (`--worktree <name>`) has no per-task meaning. Run parallel batches without
-`--worktree`, or run them sequentially with it.
-
-**`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes (task
-statuses, kanban) land in the worktree copy; your main tree still shows pre-run statuses until the
-FF-merge on success. This is expected, not a bug.
-
-**`--next` (batch-once wrap).** `--next`
-is chain-to-completion with propagation. On `dev-runall`, each task in the batch runs its
-`task-pipeline.yaml` to terminal status (the pipeline already drives precheck → implement → gate ⇄ remediate →
-review → done); when the batch is complete, the wrap hop runs **once
-for the batch** — mirroring the batch-once shippable gate `dev-verifyall` uses — rather than once
-per task. Without `--next`, `--wrap` is wrap-without-chaining (the single batch wraps without
-advancing the feature lifecycle). **was: `--next` deliberately omitted; the old no-`--next` rationale argued against the old per-task-transition meaning and does not carry.**
-
-**Three orthogonal axes** (do not confuse): `--keep-going`
-= batch failure policy (does a failure halt the batch or skip dependents?);
-`--continue` = resume from
-checkpoint against the batch's original frozen identity — persisted plan membership, worktree
-marker, identity-filtered checkpoints as hints (execution-batch-continuation.md, task
-0919); `--next`
-= chain each task to terminal status + batch-once wrap. See `dev-operations.md` § runall for the
-full distinction.
 
 ## Implementation
 
-- **Bootstrap reads (1128):** before the first dispatch, read [SKILL.md § Bootstrap reads](../skills/spur-dev/SKILL.md#bootstrap-reads) and load only that mode's files — the section whose trigger has not fired is on demand.
-- **Publish the visible batch plan first (1105):** publish `A Prepare batch` (A1–A4) and `Z Batch
-  report` before the first task, then one letter per task from `spur task batch-plan waves` after
-  freeze/order and digit children from `spur task batch-plan-children` at task start —
-  [execution-batch.md](../skills/spur-dev/references/execution-batch.md#27-visible-batch-plan-1105-r3)
-  § 2.7 Visible batch plan.
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface). Interactive sequential omit/`inline` keeps the orchestrator in the host session through the engine loop (`spur workflow run --vars '{"executor":"host"}'` → work item → `spur workflow continue`); the resolved selector applies uniformly — eligible `agent.run` stages dispatch once to a native subagent with host fallback (0508). `--agent auto`, a name, or parallel mode retains the isolated per-task workflow boundary.
-- Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — publish the generated plan first, quick readiness before isolation, digest binding, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8; 1105 R1).
-- Interactive sequential omit/inline, and `--mode auto` without an explicit executor: `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS")` — auto resolves in the host after freeze/order (§ 2.4a) and hands a parallel resolution to the `runall` path with the frozen explicit WBS list.
-- Explicit executor (any mode, including `auto`) or parallel mode: `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
-- After the batch report, print the [execution summary](../skills/spur-dev/references/dev-operations.md#execution-summary) over every attempted run unless
-  `--no-summary`.
-- A failed task's report row names the decision row that ended it (`failure-class` or
-  `review-failure-class` = `stop`, or approval `DENIED`) per
-  [reporting a run](../skills/spur-dev/references/decision-points.md#reporting-a-run); the batch failure policy then applies unchanged.
+- Dispatch the batch operation the replacement names — `Skill(skill="sp:spur-dev", args="runall-inline <forwarded flags>")` for interactive sequential omit/`inline`, otherwise `runall` (→ `sp:super-planner`).
+- The workflow YAML, the batch driver and the operation name are unchanged; only the command surface moved.

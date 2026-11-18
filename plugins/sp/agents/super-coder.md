@@ -50,7 +50,7 @@ do not inline their runbooks.
 
 ## When NOT to use
 
-- **Batch orchestration** - "run all tasks", "drive the batch", `/sp:dev-runall` -> `sp:super-planner`.
+- **Batch orchestration** - "run all tasks", "drive the batch", `/sp:dev-run --all` -> `sp:super-planner`.
 - **Review** - "review this", "check the code", SECUA review -> `sp:super-reviewer`.
 - **Corpus CLI work** - batch task/feature updates -> `sp:expert-spur`.
 - **Single-step routing** - "what single step next?" -> `/sp:dev-next` (`sp:next-router`).

@@ -70,7 +70,7 @@ the live inventory; when it and this table disagree, the CLI wins and this table
 
 ## Reporting a run
 
-After a task-pipeline run settles, `/sp:dev-run`, `/sp:dev-runall` and `sp:super-planner` report
+After a task-pipeline run settles, `/sp:dev-run`, `/sp:dev-run --all` and `sp:super-planner` report
 its decision points under the execution summary, one line per row, plus the approval token:
 
 ```bash

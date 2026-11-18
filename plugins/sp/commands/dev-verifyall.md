@@ -1,14 +1,16 @@
 ---
-description: Verify a batch of tasks against their requirements and Acceptance Criteria — batch traceability check producing per-task verdicts and a summary report
+description: Deprecated one-release redirect — use `/sp:dev-verify --all`
 requires: [cli:spur, local-fs]
 role: reviewer
 argument-hint: "--tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
-# Dev Verifyall
+# dev-verifyall (deprecated redirect)
 
-Wraps the **sp:spur-dev** and **sp:code-verification** skills.
+**Deprecated (task 1390, feature H84).** A batch is a **scope**, not a different operation:
+`/sp:dev-verify --all` is the authoritative surface, and the `sp:spur-dev` operation (`verifyall`) it
+dispatches is unchanged.
 
 ## Argument Flags
 
@@ -31,45 +33,11 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
+```text
+/sp:dev-verify --all <forwarded arguments>
 ```
-/sp:dev-verifyall --tasks <selector> [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]
-```
-
-Flags: `--tasks <selector>` (required unless `--feature`), `--feature <id>` (sugar for
-`feature:<id>`), shared verify flags (`--agent`, `--fix`,
-`--focus`, `--bdd`,
-`--auto`, `--force`),
-`--next` (per-task lifecycle chaining — see below),
-`--json`, `--skip-shippable`, `--worktree` `[<name>]` (run the batch in an isolated git worktree — FF-merge
-onto the base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a
-fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
-`execution-batch.md` § Worktree isolation).
-**`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes (task
-statuses, verdicts) land in the worktree copy; your main tree still shows pre-run statuses until
-the FF-merge on success. Expected, not a bug.
-
-**`--next` (per-task lifecycle chaining):** `--next`
-is chain-to-completion with propagation. For each task whose verdict is **PASS**, the chain's first
-hop transitions `testing → done` through the FSM with the `--as done` Review L3 guard honored;
-a task whose verdict is **PARTIAL** or **FAIL** does **not** transition (it stays `testing` as
-review-pending) — that task's chain halts, reporting the verdict. One task's non-PASS never blocks
-another task's transition — each task's verdict is its own, and each task's chain is independent.
-Transitions run **before** the shippable gate (R3), so `spur feature check` observes the final
-statuses. Do not confuse with `--keep-going`
-(batch failure policy, dev-runall) or `--continue`
-(resume from checkpoint) — see the glossary. **was: `--next` chain-ish (per-task transition, undefined formally).**
-
-**Shippable readiness** (feature-level): when `--fix all` and a feature context exists
-(`--feature` or a unique shared `feature_id` across the set), after all per-task verifies the
-orchestrator runs **one** `spur feature check <id> --as done --strict` and emits `Shippable: PASS|FAIL|N/A`.
-A FAIL means the batch is **not clean** (rollup at least PARTIAL) even if every task AC PASSed.
-Default **on** with `--fix all`. Opt out only with **`--skip-shippable`** (alias `--skip-shipable`).
-Without `--fix all`, shippable is not evaluated (optional note: use `--fix all` for ship gate).
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — bootstrap checklist, quick readiness before isolation, workflow inventory before YAML, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8).
-- Batch orchestration: `Skill(skill="sp:spur-dev", args="verifyall $ARGUMENTS")`
-- Per-task verification (inner): `Skill(skill="sp:code-verification", args="verify <wbs> $SHARED_FLAGS")`
-- Shippable gate: once after the batch (same skill § Shippable readiness gate)
+- Dispatch `Skill(skill="sp:spur-dev", args="verifyall <forwarded flags>")`; its inner per-task leg is `verify`.
+- The workflow YAML and the operation name are unchanged; only the command surface moved.

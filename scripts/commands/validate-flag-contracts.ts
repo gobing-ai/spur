@@ -124,7 +124,7 @@ function glossaryEntries(glossaryRaw: string): GlossaryEntry[] {
 /**
  * A glossary declaring-commands claim: a parenthetical in the first paragraph listing ≥2
  * distinct backticked `dev-*` names. Single-name parentheticals are explanatory mentions
- * (e.g. `--feature` "feature-advancing commands (`dev-wrapall`)"), not enumerations —
+ * (e.g. `--feature` "feature-advancing commands (`dev-wrap --all`)"), not enumerations —
  * excluded by the ≥2 rule.
  */
 function glossaryDeclaringClaims(glossaryRaw: string): Map<string, Set<string>> {

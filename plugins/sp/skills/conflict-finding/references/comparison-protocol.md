@@ -70,7 +70,7 @@ Join keys, in priority order:
 | Dependencies               | declared deps in task/feature                                | task depends-on another task                         |
 | AC titles                  | acceptance-criteria titles shared between task/feature       | feature AC title repeated in task AC                 |
 | Paths                      | same file or dir referenced in multiple pillars              | `docs/04_DESIGN.md` mentioned in task Solution       |
-| Symbols / commands / flags | same symbol, command, flag name                              | `dev-find-conflict`, `--resolve`                     |
+| Symbols / commands / flags | same symbol, command, flag name                              | `dev-find conflict`, `--resolve`                     |
 | DTO / schema / config keys | same key name across config + source + docs                  | `--pillar`, a config field                           |
 | Normalized domain terms    | a normalized term (case/plural-insensitive) shared by claims | `authority`, `freshness`, `coverage`                 |
 

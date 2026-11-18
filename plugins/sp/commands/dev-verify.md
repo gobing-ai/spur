@@ -2,7 +2,7 @@
 description: Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence
 requires: [cli:spur, local-fs]
 role: reviewer
-argument-hint: "<wbs> [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]"
+argument-hint: "[<wbs>] [--all] [--tasks <selector>] [--feature <id>] [--agent <inline|auto|name>] [--fix <none|blockers-first|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
@@ -14,7 +14,12 @@ Wraps the **sp:code-verification** skill.
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `<wbs>` | Task WBS to verify. | required |
+| `<wbs>` | Task WBS to verify. Exclusive with `--all`. | required unless `--all` |
+| `--all` | Batch scope: verify every task in the resolved set, one verdict per task plus a batch summary (the former `/sp:dev-verify --all`). Exclusive with `<wbs>`. | off |
+| `--tasks` `<selector>` | Batch selector. Requires `--all`. | — |
+| `--feature` `<id>` | Batch selector sugar. Requires `--all`. | omitted |
+| `--json` | Emit the batch report as structured JSON. | off |
+| `--worktree` `[<name>]` | Run the batch in an isolated worktree. Requires `--all`. | off |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing verification. | omit |
 | `--fix` `<none\|blockers-first\|all>` | Auto-fix policy on findings. | none |
 | `--focus` `<lens>` | Verification lens. | omitted |
@@ -40,7 +45,11 @@ See `sp:code-verification` § Shippable readiness gate.
 ## Implementation
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
+- **Batch scope (`--all`, task 1390):** `--all` dispatches the former `dev-verify --all` operation —
+  `Skill(skill="sp:spur-dev", args="verifyall $ARGUMENTS-without---all")`, whose inner per-task leg is
+  `verify`, plus the same once-after-the-batch shippable gate. Every former `dev-verify --all` flag keeps its
+  meaning; `--all` and `<wbs>` are mutually exclusive.
+- Single task: `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
 
 **Flags:**
 

@@ -241,7 +241,7 @@ findings, unresolved, coverage, cost, remediation, errors`.
 
 ### Claude Code
 
-- Invoke via `/sp:dev-find-conflict …` or `Skill(skill="sp:conflict-finding", args="…")`.
+- Invoke via `/sp:dev-find conflict …` or `Skill(skill="sp:conflict-finding", args="…")`.
 - Prefer structured tools for discovery; read full artifacts only for candidate subjects.
 
 ### Codex / OpenClaw / OpenCode / Antigravity / Pi
@@ -251,16 +251,16 @@ findings, unresolved, coverage, cost, remediation, errors`.
 
 ## Shipped command
 
-### `/sp:dev-find-conflict`
+### `/sp:dev-find conflict`
 
 Thin wrapper: `Skill(skill="sp:conflict-finding", args="$ARGUMENTS")`.
 
 ```
-/sp:dev-find-conflict
-/sp:dev-find-conflict --scope docs/00_ADR.md
-/sp:dev-find-conflict --tasks 0486,0487 --pillar tasks --mode full
-/sp:dev-find-conflict --feature H11 --resolve
-/sp:dev-find-conflict --scope apps/cli --resolve --auto --json
+/sp:dev-find conflict
+/sp:dev-find conflict --scope docs/00_ADR.md
+/sp:dev-find conflict --tasks 0486,0487 --pillar tasks --mode full
+/sp:dev-find conflict --feature H11 --resolve
+/sp:dev-find conflict --scope apps/cli --resolve --auto --json
 ```
 
 ## Common rationalizations

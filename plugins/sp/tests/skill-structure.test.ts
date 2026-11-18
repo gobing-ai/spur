@@ -270,14 +270,15 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
     test('R21b — shippable readiness gate on verify/verifyall (default with --fix all)', () => {
         const verifyCmd = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-verify.md'), 'utf8');
-        const verifyallCmd = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-verifyall.md'), 'utf8');
+        // 1390: `--all` is the batch scope now, so one file owns both forms; the redirect
+        // forwards the same flags instead of re-declaring them.
+        const verifyallCmd = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-verify.md'), 'utf8');
         const skill = readFileSync(join(SKILLS_DIR, 'code-verification', 'SKILL.md'), 'utf8');
         const ops = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md'), 'utf8');
 
-        for (const text of [verifyCmd, verifyallCmd]) {
-            expect(text).toContain('--skip-shippable');
-            expect(text).toMatch(/--skip-shipable/);
-        }
+        expect(verifyCmd).toContain('--skip-shippable');
+        expect(verifyCmd).toMatch(/--skip-shipable/);
+        expect(verifyallCmd).toContain('/sp:dev-verify --all');
         expect(skill).toContain('### Step 13 — Shippable readiness gate');
         expect(skill).toContain('Shippable: PASS');
         expect(skill).toContain('Shippable: FAIL');
@@ -542,22 +543,25 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     test('R29 — parallel batch contracts are not internally contradictory', () => {
         const superPlanner = readFileSync(join(AGENTS_DIR, 'super-planner.md'), 'utf8');
         const executionBatch = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'), 'utf8');
-        const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-runall.md'), 'utf8');
+        // 1390: the batch command was folded into `dev-run --all`; the contract follows it.
+        const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-run.md'), 'utf8');
 
         expect(superPlanner).toContain('sp:parallel-execution');
         expect(superPlanner).not.toContain('Never run tasks in parallel (v1)');
         expect(executionBatch).toContain('optional parallel fan-out');
-        expect(devRunall).toContain('--mode <sequential|parallel|auto>');
+        expect(devRunall).toContain('--schedule <sequential|parallel|auto>');
         expect(devRunall).toContain('--feature <id>');
         expect(executionBatch).toContain('spur task batch-plan order --tasks');
-        expect(executionBatch).toContain('### 2.4a `--mode auto` resolution');
+        expect(executionBatch).toContain('### 2.4a `--schedule auto` resolution');
     });
 
-    test('R30 — dev-idea, dev-wrap, dev-wrapall command docs exist and delegate to correct workflows', () => {
+    test('R30 — dev-idea, dev-wrap, dev-wrap --all command docs exist and delegate to correct workflows', () => {
         for (const [cmd, workflow] of [
             ['dev-idea', 'idea-pipeline'],
             ['dev-wrap', 'wrapup-pipeline'],
-            ['dev-wrapall', 'wrapup-pipeline'],
+            // 1390: `dev-wrapall` is a one-release redirect; it names its replacement, and the
+            // workflow contract lives on the merged base command asserted above.
+            ['dev-wrapall', '/sp:dev-wrap --all'],
         ] as const) {
             const path = join(PLUGIN_ROOT, 'commands', `${cmd}.md`);
             const text = readFileSync(path, 'utf8');
@@ -929,7 +933,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // evidence-anchor rules moved into the body (condensed) and the references/ dir is gone.
             // 1288 R10: +394 B identical ADR-147 Search-routing block (task AC: body placement,
             // same wording in all four locating skills; hybrid-search design §4 Skills).
-            wayfinder: 27_133,
+            wayfinder: 27_139,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
             // 1288 R10: +388 B identical ADR-147 Search-routing block (task AC: body placement,
@@ -1767,7 +1771,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // R2: brainstorm never charts — its scope check stops and recommends /sp:dev-find-way.
         const brainstorm = readFileSync(join(SKILLS_DIR, 'brainstorm', 'SKILL.md'), 'utf8');
         expect(brainstorm).toContain('## Scope Check');
-        expect(brainstorm).toContain('/sp:dev-find-way');
+        expect(brainstorm).toContain('/sp:dev-find way');
         expect(brainstorm).not.toContain('sp:wayfinder');
 
         // R3: wayfinding has its own command; dev-brainstorm is generic. Isolation is always
@@ -2005,11 +2009,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const plannerDesc = fm(planner).toLowerCase();
         const coderDesc = fm(coder).toLowerCase();
         // Planner description carries orchestration triggers, not build triggers.
-        expect(plannerDesc).toMatch(/run all tasks|drive the batch|dev-runall|execution orchestration/);
+        expect(plannerDesc).toMatch(/run all tasks|drive the batch|dev-run --all|execution orchestration/);
         expect(plannerDesc).not.toMatch(/\bimplement\b|\bwrite the code\b|\bdebug this\b/);
         // Coder description carries build triggers, not orchestration triggers.
         expect(coderDesc).toMatch(/\bimplement\b|\bwrite the code\b|\bfix this bug\b|\bdebug\b/);
-        expect(coderDesc).not.toMatch(/run all tasks|drive the batch|dev-runall/);
+        expect(coderDesc).not.toMatch(/run all tasks|drive the batch|dev-run --all/);
 
         // R7 / AC "cite the shared housekeeping and dispatch-surface references": both agents cite
         // the done-time housekeeping reference and the dispatch-surface reference by path.
@@ -2103,7 +2107,8 @@ describe('task 0510 — batch-run hardening (feature preflight, changed-path mat
     const executionBatch = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'execution-batch.md'), 'utf8');
     const codeImpl = readFileSync(join(SKILLS_DIR, 'code-implementation', 'SKILL.md'), 'utf8');
     const crossCutting = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'cross-cutting.md'), 'utf8');
-    const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-runall.md'), 'utf8');
+    // 1390: the batch surface (and its feature preflight contract) is `dev-run --all`.
+    const devRunall = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-run.md'), 'utf8');
     const devOps = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'dev-operations.md'), 'utf8');
 
     test('R2 — feature-derived strict preflight runs before task resolution and aborts on failure', () => {
@@ -2197,8 +2202,8 @@ describe('task 0519 — idea-pipeline planning guidance names canonical artifact
         expect(step).toContain('spur feature refresh --feature <id> --json');
         expect(step).toContain('spur task check <wbs> --json');
         expect(step).toContain('exactly **one** next command');
-        expect(step).toContain('/sp:dev-refineall --feature <id> --auto --depth ready');
-        expect(step).toContain('otherwise `/sp:dev-runall --feature <id> --auto`');
+        expect(step).toContain('/sp:dev-refine --all --feature <id> --auto --depth ready');
+        expect(step).toContain('otherwise `/sp:dev-run --all --feature <id> --auto`');
     });
 });
 

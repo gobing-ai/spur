@@ -33,10 +33,10 @@ flowchart LR
   P -->|handoff| CB
   CB -->|/sp:dev-refine| R[/sp:dev-refine<br/>fill AC / Design / Plan/]
   R -->|/sp:dev-run| X[/sp:dev-run<br/>task-pipeline.yaml/]
-  CB -->|/sp:dev-runall| XA[/sp:dev-runall<br/>batch driver + super-planner/]
+  CB -->|/sp:dev-run --all| XA[/sp:dev-run --all<br/>batch driver + super-planner/]
   X -->|done| D([Task done])
   XA -->|done| D
-  D -->|/sp:dev-wrap or /sp:dev-wrapall| W[/sp:dev-wrap / -wrapall<br/>wrapup-pipeline.yaml/]
+  D -->|/sp:dev-wrap or /sp:dev-wrap --all| W[/sp:dev-wrap / -wrapall<br/>wrapup-pipeline.yaml/]
   W -->|done| S([Shipped + synced])
 ```
 
@@ -57,20 +57,20 @@ The `sp` plugin provides **41 commands** across planning, execution, operations/
 | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `/sp:dev-next`          | Router           | **Status-aware router** — inspect a task WBS or feature frontier, pick the single best next `/sp:dev-*` step, and dispatch it (`--dry-run` to preview, `--once` to stop child's chain) | `sp:next-router`                                 |
 | `/sp:dev-brainstorm`    | Planning         | Grilling interview → options with trade-offs → land an artifact (`--task` or `--feature`)                                                                                              | `sp:brainstorm`                                  |
-| `/sp:dev-find-way`      | Planning         | Wayfinder: chart a multi-session map, or resolve one ticket — always in an isolated git worktree + branch (`--worktree`, `--wrap`)                                                     | `sp:wayfinder`                                   |
+| `/sp:dev-find way`      | Planning         | Wayfinder: chart a multi-session map, or resolve one ticket — always in an isolated git worktree + branch (`--worktree`, `--wrap`)                                                     | `sp:wayfinder`                                   |
 | `/sp:dev-plan`          | Planning         | Feature → BDD AC → `feature check` gate → decompose → `batch-create` gate → optional design doc (`--design`/`--auto`)                                                                  | `sp:spur-dev` (planning)                         |
 | `/sp:dev-idea`          | Planning         | Unified entry: vague idea → feature + AC + task batch (the `idea-pipeline.yaml` workflow). Stops at handoff — no task execution.                                                       | `spur workflow run idea-pipeline.yaml`           |
 | `/sp:dev-refine`        | Planning→Exec    | Fill a task's AC / Design / Plan just-in-time via Q&A                                                                                                                                  | `sp:spur-dev`                                    |
-| `/sp:dev-refineall`     | Planning (Batch) | Batch-refine tasks under a feature or selector before runall                                                                                                                           | `sp:spur-dev` (`refineall`)                      |
+| `/sp:dev-refine --all`     | Planning (Batch) | Batch-refine tasks under a feature or selector before runall                                                                                                                           | `sp:spur-dev` (`refineall`)                      |
 | `/sp:dev-run`           | Execution        | Run a task: full pipeline, or `--mode implement` for just the code                                                                                                                     | `sp:spur-dev` (execution)                        |
-| `/sp:dev-runall`        | Exec (Batch)     | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report)                                                   | `sp:spur-dev` (`runall` op → `sp:super-planner`) |
+| `/sp:dev-run --all`        | Exec (Batch)     | Run a **batch** of tasks through their pipelines in dependency-correct order (set resolve → topo-sort → per-task run → batch report)                                                   | `sp:spur-dev` (`runall` op → `sp:super-planner`) |
 | `/sp:dev-unit`          | Execution        | Generate or extend tests until unit target is met; measure coverage                                                                                                                    | `sp:code-testing`                                |
 | `/sp:dev-review`        | Execution        | Multi-dimensional review (functional traceability + SECUA framework + architectural depth; WBS mode writes `Review`, Path mode is advisory)                                            | `sp:code-verification`                           |
 | `/sp:dev-verify`        | Execution        | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict                                                                                                                          | `sp:code-verification`                           |
-| `/sp:dev-verifyall`     | Exec (Batch)     | Batch-verify tasks against requirements and AC, producing consolidated report                                                                                                          | `sp:code-verification`                           |
+| `/sp:dev-verify --all`     | Exec (Batch)     | Batch-verify tasks against requirements and AC, producing consolidated report                                                                                                          | `sp:code-verification`                           |
 | `/sp:dev-refresh`       | Execution        | Refresh feature status by feature ID, task WBS, or batch sweep via `spur feature sync`                                                                                                 | `spur feature sync`                              |
 | `/sp:dev-feature-change` | Planning         | Restructure feature tree from a mapping file (CLI-gated moves + task edges)                                                                                                            | `sp:spur-cli` / inline procedure                 |
-| `/sp:dev-find-next`     | Planning         | Rank the feature frontier ("which feature next?") with evidence; emits tree-defect proposals for `dev-feature-change`                                                                  | `sp:next-feature`                                |
+| `/sp:dev-find next`     | Planning         | Rank the feature frontier ("which feature next?") with evidence; emits tree-defect proposals for `dev-feature-change`                                                                  | `sp:next-feature`                                |
 | `/sp:dev-fixall`        | Hygiene          | Systematically loop lint, typecheck, and test checks until clean across working tree                                                                                                   | inline                                           |
 | `/sp:dev-refactor`      | Hygiene          | Lens-routed refactoring (`--focus api\|architect\|tests\|ui\|auto`) with a preservation contract; breaking changes pause for approval                                              | `sp:code-refactoring`                            |
 | `/sp:dev-simplify`      | Hygiene          | Simplify recently-changed code for clarity without changing behavior                                                                                                                   | `sp:code-simplification`                         |
@@ -78,18 +78,18 @@ The `sp` plugin provides **41 commands** across planning, execution, operations/
 | `/sp:dev-daily`         | Operations       | Generate a daily summary report from agent usage data, git history, and notes (honors `SP_DAILY_SUMMARY_NO_PROMPT`)                                                                    | `sp:daily-summary`                               |
 | `/sp:dev-handover`      | Operations       | Write an honest handover doc when blocked (`docs/handover/<date>-<slug>.md` SSOT + non-destructive task pointer append)                                                                | `sp:spur-dev` (`dev-operations.md`)              |
 | `/sp:dev-dogfood`       | Operations       | Drive a command/skill/CLI end-to-end, fix-within-budget, emit a structured report                                                                                                      | `sp:dogfood-testing`                             |
-| `/sp:dev-find-issue`    | Operations       | Generate the daily/ad-hoc history-anatomy report over already-imported history; no import or task creation                                                                            | `sp:history-anatomy`                             |
+| `/sp:dev-find issue`    | Operations       | Generate the daily/ad-hoc history-anatomy report over already-imported history; no import or task creation                                                                            | `sp:history-anatomy`                             |
 | `/sp:dev-review-session` | Operations      | Review the active conversation inline: outcomes, resolved/open issues with evidence, bounded improvement proposals, and next actions                                                  | `sp:session-review`                              |
 | `/sp:dev-arch`          | Operations       | Survey codebase for shallow modules and deepening opportunities                                                                                                                        | `sp:code-improvement`                            |
 | `/sp:dev-reverse`       | Operations       | Depth-driven codebase reverse engineering / HLD generation / audit                                                                                                                     | `sp:reverse-engineering`                         |
-| `/sp:dev-find-conflict` | Operations       | Authority-aware semantic audit across source, tasks, features, and authority docs; routes confirmed repairs to owner surfaces                                                          | `sp:conflict-finding`                            |
+| `/sp:dev-find conflict` | Operations       | Authority-aware semantic audit across source, tasks, features, and authority docs; routes confirmed repairs to owner surfaces                                                          | `sp:conflict-finding`                            |
 | `/sp:dev-pr-review`     | Operations       | Review GitHub PRs with Codex; collect and fix findings (`full\|submit\|collect\|fix\|rerun\|status\|rules`)                                                                           | `sp:pr-reviewing`                                |
 | `/sp:dev-fixgha`        | Operations       | Find failing GitHub Actions runs via `gh`, fix root causes, commit, push, and re-verify until green (optional context/filter argument)                                              | inline                                           |
 | `/sp:dev-gtd`           | Operations       | Quality gate → fix → commit → push → `gh` verify in one flow (`--act` for local CI simulation, `--no-push`)                                                                          | inline                                           |
 | `/sp:dev-gitmsg`        | Operations       | Draft Conventional-Commits message from staged changes                                                                                                                                 | inline                                           |
 | `/sp:dev-changelog`     | Operations       | Generate a changelog from commit history                                                                                                                                               | inline                                           |
 | `/sp:dev-wrap`          | Wrap-up          | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition + branch cleanup                                                                           | `spur workflow run wrapup-pipeline.yaml`         |
-| `/sp:dev-wrapall`       | Wrap-up          | Wrap up a batch of completed tasks (learnings, doc-sync, feature transition, optional branch cleanup)                                                                                  | `spur workflow run wrapup-pipeline.yaml`         |
+| `/sp:dev-wrap --all`       | Wrap-up          | Wrap up a batch of completed tasks (learnings, doc-sync, feature transition, optional branch cleanup)                                                                                  | `spur workflow run wrapup-pipeline.yaml`         |
 | `/sp:rule-scan`         | Authoring        | Discover recurring anti-patterns worth codifying as constraint rules                                                                                                                   | `sp:spur-cli`                                    |
 | `/sp:rule-add`          | Authoring        | Author a validated, smoke-tested constraint rule                                                                                                                                       | `sp:spur-cli`                                    |
 | `/sp:rule-refine`       | Authoring        | Refine a constraint rule or preset, then re-verify it                                                                                                                                  | `sp:spur-cli`                                    |
@@ -179,12 +179,12 @@ Use this when you don't want to think about the brainstorm/plan split. `/sp:dev-
 runs the full idea-pipeline in one command — brainstorm → feature-create → AC →
 feature-check → system-design (conditional) → design-approval → decompose → batch-create
 → handoff. It **stops at handoff** — tasks are created but not executed. Pick up with
-`/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) or `/sp:dev-run <wbs>`.
+`/sp:dev-run --all --feature <id>` (or `--tasks feature:<id>`) or `/sp:dev-run <wbs>`.
 
 ```bash
 /sp:dev-idea "add a --dry-run flag to spur history import" --auto
 # → emits feature id + task WBS list at handoff
-# → next: /sp:dev-runall --feature <id>  OR  /sp:dev-run <first-wbs>
+# → next: /sp:dev-run --all --feature <id>  OR  /sp:dev-run <first-wbs>
 ```
 
 `--design` forces the system-design step; `--skip-design` skips it (brainstorm design
@@ -275,9 +275,9 @@ Any non-PASS verdict **stops the chain** and leaves the task at its current stat
 findings written to `## Testing` / `## Review` — you fix and re-run, you never get a
 silent bad `done`.
 
-After `done`, **wrap up** with `/sp:dev-wrap <wbs>` (or `/sp:dev-wrapall --feature <id>`
+After `done`, **wrap up** with `/sp:dev-wrap <wbs>` (or `/sp:dev-wrap --all --feature <id>`
 for the whole feature) to capture learnings, sync docs, and (optionally) advance the
-feature and clean up the branch. For `/sp:dev-runall --wrap`/`--next` the wrap runs
+feature and clean up the branch. For `/sp:dev-run --all --wrap`/`--next` the wrap runs
 **once for the batch** over the `done` subset: unfinished tasks are listed in the batch
 report with their recovery commands, the feature advances only when the whole frozen set
 finished, and an empty done subset skips the wrap with a reason.
@@ -322,20 +322,20 @@ completion unattended: `spur workflow run config/workflows/feature-dev.yaml --va
 
 **Run a batch of tasks in dependency order.** When you have a set of tasks ready to
 execute (not a whole feature's lifecycle — just "run these tasks through their
-pipelines"), `/sp:dev-runall` is the batch driver. It resolves the set, topo-sorts by
+pipelines"), `/sp:dev-run --all` is the batch driver. It resolves the set, topo-sorts by
 dependencies, runs each through `task-pipeline.yaml`, and emits a batch report. The batch
 orchestrator is `sp:super-planner`; it owns the spaces _between_ task runs (set resolution,
 ordering, failure policy), never the steps inside a single task:
 
 ```bash
 # Run every ready task through its pipeline (stop on first failure).
-/sp:dev-runall --tasks ready
+/sp:dev-run --all --tasks ready
 
 # Run a feature's tasks unattended, skipping the per-task HITL gate.
-/sp:dev-runall --feature A1 --auto
+/sp:dev-run --all --feature A1 --auto
 
 # Run a batch unattended, then wrap up the whole batch (with optional branch cleanup).
-/sp:dev-runall --feature A1 --auto --wrap --merge
+/sp:dev-run --all --feature A1 --auto --wrap --merge
 ```
 
 ---
@@ -344,7 +344,7 @@ ordering, failure policy), never the steps inside a single task:
 
 When tasks reach `done`, **wrap up** to capture learnings, sync docs, and (optionally)
 advance the feature and clean up the branch. `/sp:dev-wrap` is the single-task wrap;
-`/sp:dev-wrapall` is the batch wrap (filter by `--feature`, `--since`, `--status`).
+`/sp:dev-wrap --all` is the batch wrap (filter by `--feature`, `--since`, `--status`).
 
 ```bash
 # Single task: learnings, metrics, doc-sync
@@ -354,27 +354,27 @@ advance the feature and clean up the branch. `/sp:dev-wrap` is the single-task w
 /sp:dev-wrap 0042 --auto --merge
 
 # Batch wrap of every done task in feature A1 (advances the feature through legal lifecycle edges)
-/sp:dev-wrapall --feature A1 --auto
+/sp:dev-wrap --all --feature A1 --auto
 
 # Batch wrap of tasks updated since 2026-07-01
-/sp:dev-wrapall --since 2026-07-01 --auto
+/sp:dev-wrap --all --since 2026-07-01 --auto
 
 # Batch wrap with branch cleanup
-/sp:dev-wrapall --feature A1 --auto --merge
+/sp:dev-wrap --all --feature A1 --auto --merge
 ```
 
 **Wrap-up contract:**
 
 - Task statuses are **NOT** mutated.
 - For feature transition (`backlog → active → verifying → done`), use
-  `/sp:dev-wrapall --feature <id>` (only the batch path advances features through the
+  `/sp:dev-wrap --all --feature <id>` (only the batch path advances features through the
   lifecycle).
 - Branch cleanup (`--merge`) is an **irreversible HITL gate** — always pauses, even under
   `--auto`. The operator must explicitly confirm.
 - Project-level doc-sync runs **once per batch**, not per task.
 
 You can chain wrap-up onto execution: `/sp:dev-run <wbs> --auto --wrap` and
-`/sp:dev-runall --tasks ... --wrap` both run `wrapup-pipeline.yaml` after the execution
+`/sp:dev-run --all --tasks ... --wrap` both run `wrapup-pipeline.yaml` after the execution
 pipeline reaches `done`.
 
 ---
@@ -441,8 +441,8 @@ usable executor).
 > other commands, its `--agent` sets the agent the **testee** runs under (forwarded into
 > the testee invocation), not the driver. The driver always runs in the current session.
 >
-> **Exception — `/sp:dev-runall --agent` pins the step executor, not the orchestrator.**
-> `dev-runall` runs N pipelines; each `agent.run` step resolves to the `--agent` value
+> **Exception — `/sp:dev-run --all --agent` pins the step executor, not the orchestrator.**
+> `dev-run --all` runs N pipelines; each `agent.run` step resolves to the `--agent` value
 > (threaded into every per-task `vars.agent`). But `sp:super-planner` is always the batch
 > orchestrator — it runs the loop in its own context and is never replaced by `--agent`.
 > Same dual-surface contract as `dev-run`, scaled across the batch.
@@ -450,7 +450,7 @@ usable executor).
 **Design package on `/sp:dev-plan` / `/sp:dev-idea` (unified `--skip-design`)** —
 **default:** author per-task `### Design` in the batch **and** the feature satellite when the
 seam heuristic (or `--design`) says so. **`--skip-design`:** skip the satellite **and** leave
-task Design blank (scaffold only); `/sp:dev-refine` / `dev-refineall` is the fallback.
+task Design blank (scaffold only); `/sp:dev-refine` / `dev-refine --all` is the fallback.
 **`--design`** forces the feature satellite (`docs/design/<slug>.md` + `04` index row) on; task
 Design still defaults on unless skip. With `--auto` the seam heuristic decides satellite authorship
 unless force/skip:
@@ -465,7 +465,7 @@ recommendation still pauses. `--skip-design` skips system-design (brainstorm des
 always recorded). Interactive gates are asked as select-an-option prompts with the recommended
 choice first.
 
-**`--auto` on `/sp:dev-wrap` / `/sp:dev-wrapall`** — routes around objective
+**`--auto` on `/sp:dev-wrap` / `/sp:dev-wrap --all`** — routes around objective
 confirmations. **`branch-cleanup` (when `--merge` is set) is irreversible and always
 pauses**, even under `--auto`.
 
@@ -491,8 +491,8 @@ pauses**, even under `--auto`.
    `spur feature update`). The one exception: `--merge` is **irreversible** and always
    pauses for confirmation.
 6. **Least privilege by design (R10).** Workflow, planning, and verification wrappers
-   (`dev-idea`, `dev-wrap`, `dev-wrapall`, `dev-verify`, `dev-verifyall`, `dev-plan`,
-   `dev-refine`, `dev-runall`) omit direct `Write`/`Edit` tools in frontmatter
+   (`dev-idea`, `dev-wrap`, `dev-wrap --all`, `dev-verify`, `dev-verify --all`, `dev-plan`,
+   `dev-refine`, `dev-run --all`) omit direct `Write`/`Edit` tools in frontmatter
    `allowed-tools`. They mutate strictly via `spur` CLI verbs (`spur task update --section --from-file`)
    or workflow execution, ensuring wrapper agents cannot bypass corpus ownership gates.
 

@@ -180,9 +180,9 @@ function checkRequires(list: Entity[]): string[] {
 }
 
 describe('runtime-requires (task 1291 / feature I14 R1, R2)', () => {
-    test('89 sp entities are collected (42 skills, 43 commands, 4 agents)', () => {
-        expect(entities.length).toBe(89);
-        expect(byPath.size).toBe(89);
+    test('90 sp entities are collected (42 skills, 44 commands, 4 agents)', () => {
+        expect(entities.length).toBe(90);
+        expect(byPath.size).toBe(90);
     });
 
     test('R2a/AC1: every entity declares a valid, sorted, deduped requires list containing local-fs', () => {
@@ -217,8 +217,10 @@ describe('runtime-requires (task 1291 / feature I14 R1, R2)', () => {
             const key = [...deriveRequires(entity.path)].sort().join(',');
             groups[key] = (groups[key] ?? 0) + 1;
         }
+        // 1390: the four *all commands are one-release redirects and still document CLI usage,
+        // so the group membership is unchanged from the 2026-11-04 snapshot.
         expect(groups).toEqual({
-            'cli:spur,local-fs': 70,
+            'cli:spur,local-fs': 71,
             'cli:gh,local-fs': 2,
             'cli:gh,cli:spur,local-fs': 2,
             'local-fs': 15,

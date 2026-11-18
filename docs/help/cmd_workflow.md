@@ -345,7 +345,7 @@ spur workflow summary (--progress <[label=]file>... | --rollup <[label=]file>...
 | `--since <iso>` | Measure from this instant |
 | `--markdown` | Render the Markdown table instead of JSON |
 
-The measured execution summary `/sp:dev-run` and `/sp:dev-runall` print: the host transcript
+The measured execution summary `/sp:dev-run` and `/sp:dev-run --all` print: the host transcript
 windowed by each state visit's attempt timestamps, per stage time, operator wait, tool calls,
 tokens (total / non-cached) and the actor split, with driver overhead as its own row. `--rollup`
 renders one row per run plus the batch total (and the wall span when runs overlap). Without a host

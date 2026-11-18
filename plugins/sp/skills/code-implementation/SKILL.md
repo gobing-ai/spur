@@ -47,7 +47,7 @@ When this skill is entered via `/sp:dev-run --mode implement <wbs>` (the form
 2. **NEVER invoke** `spur workflow run` for `task-pipeline.yaml` (or any full task pipeline).
 3. **NEVER invoke** `/sp:dev-run` **without** an explicit `--mode implement`. Omitting the mode
    defaults to full pipeline and **recurses** into another `implement` step (bug-742).
-4. Do **not** call `/sp:dev-runall`, `/sp:dev-verify`, or other lifecycle stages from inside this
+4. Do **not** call `/sp:dev-run --all`, `/sp:dev-verify`, or other lifecycle stages from inside this
    skill — the pipeline (or `--next` chain) owns those hops.
 
 The structural guard is the slash form itself (`--mode implement`). Prose in the workflow YAML

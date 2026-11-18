@@ -37,7 +37,7 @@ parse → resolve → signals → lookup → shape argv → dispatch or stop.
 - Hygiene forks (unit gap, lint red, rule findings) need a deterministic first hop.
 
 Do **not** use this skill to: reimplement `task-pipeline.yaml`, bypass lifecycle guards, batch a
-feature (that is `/sp:dev-runall` — a deliberate aperture), or pick among multi-candidate forks
+feature (that is `/sp:dev-run --all` — a deliberate aperture), or pick among multi-candidate forks
 silently (that is a HITL stop).
 
 ## Inputs
@@ -142,7 +142,7 @@ but redundant. See the glossary entry for the disambiguation in full.
 ## Non-routes (summary — full table in routing-table §6)
 
 Never: reimplement the pipeline inside the router; default `todo` to `--mode full`; infer targets
-from git/chat; auto-`--merge` on wrap; auto-author rules; use `dev-runall` as the feature default;
+from git/chat; auto-`--merge` on wrap; auto-author rules; use `dev-run --all` as the feature default;
 bypass lifecycle guards (`--no-lifecycle`) to force progress; select a `deprecated` task for any
 lifecycle hop (TABLE A A10 — frozen work has no forward step; un-deprecate or cancel it first).
 

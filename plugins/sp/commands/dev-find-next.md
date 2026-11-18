@@ -8,6 +8,11 @@ allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 
 # Dev Find Next
 
+> **Deprecated (task 1391, feature H84).** This command is a one-release redirect.
+> Use `/sp:dev-find next` — one routing command with a lens table. The lens skill, its
+> flags and its behavior are unchanged; this file adds no validation and no default.
+
+
 Wraps the **sp:next-feature** skill — a prompt-first prioritizer that ranks the open feature frontier
 by **derived** importance and urgency, shows its evidence per candidate, gates unactionable features
 instead of ranking them, and emits tree structure defects as proposals only.
@@ -39,7 +44,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 **`--task` — confirm, then dispatch.** The command offers the rank-1 candidate (or the id you pass),
 then routes on the tier the ranking already assigned: a **T3** feature with valid AC and no tasks
-goes to `/sp:dev-plan --feature <id>` and then `/sp:dev-refineall --feature <id> --auto --depth ready`;
+goes to `/sp:dev-plan --feature <id>` and then `/sp:dev-refine --all --feature <id> --auto --depth ready`;
 a **T1** feature (open tasks already exist) goes to refineall only, never a second decomposition;
 **T2** (blocked), **T4** (stale-done), and T3 with invalid AC stop with their reason. The command
 creates no tasks itself — decomposition and its schema gate belong to `/sp:dev-plan`.
@@ -63,6 +68,8 @@ schema and are applied only through `/sp:dev-feature-change` (dry-run → confir
 
 ## Implementation
 
+- **Redirect dispatch (1391):** `/sp:dev-find next $ARGUMENTS` — the
+  lens is prepended and every other argument passes through verbatim.
 Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface), then invoke the next-feature skill, forwarding all arguments:
 
 ```text

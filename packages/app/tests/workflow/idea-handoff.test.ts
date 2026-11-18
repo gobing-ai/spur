@@ -134,7 +134,7 @@ describe('finalizeIdeaHandoff', () => {
 
         expect(res.ok).toBe(true);
         expect(res.wbsList).toEqual(['0601', '0602']);
-        expect(res.nextCommand).toContain('/sp:dev-runall --feature D5');
+        expect(res.nextCommand).toContain('/sp:dev-run --all --feature D5');
 
         expect(executedCommands.some((c) => c.args?.includes('deps') && c.args?.includes('0602'))).toBe(true);
         expect(executedCommands.some((c) => c.args?.includes('refresh'))).toBe(true);
@@ -234,7 +234,7 @@ describe('finalizeIdeaHandoff', () => {
         });
 
         expect(res.ok).toBe(true);
-        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        expect(res.nextCommand).toContain('/sp:dev-refine --all --feature D5 --auto --depth ready');
         const report = await fs.readFile(res.reportPath);
         expect(report).toContain('UNREADY');
         expect(report).toContain('/sp:dev-refine 0601 --auto --depth ready');
@@ -271,7 +271,7 @@ describe('finalizeIdeaHandoff', () => {
         });
 
         expect(res.ok).toBe(true);
-        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        expect(res.nextCommand).toContain('/sp:dev-refine --all --feature D5 --auto --depth ready');
         const report = await fs.readFile(res.reportPath);
         expect(report).toContain('planning digest stale');
 
@@ -332,7 +332,7 @@ describe('finalizeIdeaHandoff', () => {
             processExecutor: evidenceAwareExecutor({ '0601': taskPath }),
         });
         expect(res.ok).toBe(true);
-        expect(res.nextCommand).toContain('/sp:dev-runall --feature D5');
+        expect(res.nextCommand).toContain('/sp:dev-run --all --feature D5');
 
         // A genuine post-preparation Requirements edit still degrades to refine.
         const editedBody = postDepsBody.replace('Requirements body.', 'Changed requirements after preparation.');
@@ -343,7 +343,7 @@ describe('finalizeIdeaHandoff', () => {
             processExecutor: evidenceAwareExecutor({ '0601': taskPath }),
         });
         expect(res2.ok).toBe(true);
-        expect(res2.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        expect(res2.nextCommand).toContain('/sp:dev-refine --all --feature D5 --auto --depth ready');
         const report2 = await fs.readFile(res2.reportPath);
         expect(report2).toContain('planning digest stale');
 
@@ -381,7 +381,7 @@ describe('finalizeIdeaHandoff', () => {
         });
 
         expect(res.ok).toBe(true);
-        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        expect(res.nextCommand).toContain('/sp:dev-refine --all --feature D5 --auto --depth ready');
         const report = await fs.readFile(res.reportPath);
         expect(report).toContain('UNREADY');
         expect(report).toContain('no path:line citation');
@@ -417,7 +417,7 @@ describe('finalizeIdeaHandoff', () => {
         });
 
         expect(res.ok).toBe(true);
-        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D64 --auto --depth ready');
+        expect(res.nextCommand).toContain('/sp:dev-refine --all --feature D64 --auto --depth ready');
         const report = await fs.readFile(res.reportPath);
         expect(report).toContain('UNREADY');
         expect(report).toContain('feature drift — task feature_id O != run feature D64');

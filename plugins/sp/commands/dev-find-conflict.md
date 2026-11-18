@@ -8,6 +8,11 @@ allowed-tools: ["Bash", "Read", "Write", "Grep", "Glob", "Skill"]
 
 # Dev Find Conflict
 
+> **Deprecated (task 1391, feature H84).** This command is a one-release redirect.
+> Use `/sp:dev-find conflict` — one routing command with a lens table. The lens skill, its
+> flags and its behavior are unchanged; this file adds no validation and no default.
+
+
 Wraps the **sp:conflict-finding** skill — a prompt-first, authority-aware indexed audit across the four
 pillars (source code, task files, feature files, project authority files) with confirmed,
 owner-routed remediation.
@@ -58,6 +63,8 @@ Superskill capability lifecycle) — never direct writes.
 
 ## Implementation
 
+- **Redirect dispatch (1391):** `/sp:dev-find conflict $ARGUMENTS` — the
+  lens is prepended and every other argument passes through verbatim.
 Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface), then invoke the conflict-finding skill, forwarding all arguments:
 
 ```

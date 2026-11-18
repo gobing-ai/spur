@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H84"
 name: "sp command consolidation: --all batch variants and one dev-find lens command"
-status: backlog
+status: active
 priority: P1
 tags: []
 created_at: "2026-11-18T05:29:30.590Z"
-updated_at: "2026-11-18T05:55:08.552Z"
+updated_at: "2026-11-18T20:08:21.427Z"
 ---
 
 # H84: sp command consolidation: --all batch variants and one dev-find lens command
@@ -57,7 +57,7 @@ Feature: sp command consolidation: --all batch variants and one dev-find lens co
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1391 | Merge the dev-find-* commands into dev-find <lens> | todo |
-| 1390 | Fold the *all commands into --all on their base commands | todo |
+| 1390 | Fold the *all commands into --all on their base commands | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -67,3 +67,6 @@ Expected surface: 43 → 36 commands once the one-release redirects are removed 
 Phase 1 of the protocol-surfaces roadmap (2026-11-17 planning session).
 
 ## History
+
+- 2026-11-18T20:08:21.427Z backlog → active (system)
+

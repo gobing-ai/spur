@@ -100,7 +100,8 @@ list this README is checked against.
 | `dev-idea`       | Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, system-design, decompose, batch-create, handoff |
 | `dev-plan`       | Plan a feature from a written description — intake → feature create → AC generation → decomposition → batch-create                                                              |
 | `dev-brainstorm` | Interactive solution design — heuristic discovery interview followed by structured ideation with trade-offs and confidence scoring                                              |
-| `dev-find-way`   | Wayfinder — chart a multi-session investigation map, or resolve one map ticket; always in an isolated git worktree + branch (`--worktree`, `--wrap`)                             |
+| `dev-find` | Find things — one routing command for four lenses: `conflict` (authority-aware semantic audit), `issue` (history-anatomy diagnostic report), `next` (feature frontier prioritizer), `way` (Wayfinder, worktree-isolated) |
+| `dev-find-way`   | **Deprecated redirect** → `/sp:dev-find way`: Wayfinder — chart a multi-session investigation map, or resolve one map ticket; always in an isolated git worktree + branch (`--worktree`, `--wrap`)                             |
 | `dev-refine`     | Refine task requirements via structured Q&A — clarify scope, elicit missing details, tighten acceptance criteria; `--depth ready` audits and corrects existing claims, freezes the spec, promotes to todo |
 
 #### Lifecycle — execution
@@ -108,7 +109,7 @@ list this README is checked against.
 | Command             | What it does                                                                                                                                    |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dev-next`          | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
-| `dev-run`           | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)                               |
+| `dev-run`           | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement); `--all` runs a whole batch (`--schedule`, `--tasks`/`--feature`) |
 | `dev-review`        | Multi-dimensional review for a task or path (traceability, SECUA, architecture); `--triage` fixes small findings, files the rest as tasks       |
 | `dev-pr-review`     | GitHub Codex PR review — prepare/reuse a PR, request `@codex review`, collect findings, validate/fix/re-review (fix mode); workflow-backed spine |
 | `dev-verify`        | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence         |
@@ -121,10 +122,16 @@ list this README is checked against.
 
 | Command         | What it does                                                                                                                                                           |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dev-runall`    | Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via task-pipeline.yaml, emit a batch report              |
-| `dev-refineall` | Batch-refine tasks (feature or selector) — planning-half bulk fill of Background/Requirements/AC/Design/Plan before runall; `--depth ready` audits, corrects, freezes and promotes each task |
-| `dev-verifyall` | Batch-verify tasks against requirements and AC — resolves a set, runs per-task verification, produces consolidated PASS/PARTIAL/FAIL summary report                    |
-| `dev-wrapall`   | Wrap up a batch of completed tasks — learnings, metrics, doc-sync, feature transition, optional branch cleanup                                                         |
+The batch variants are `--all` on their base commands (`dev-run --all`, `dev-refine --all`,
+`dev-verify --all`, `dev-wrap --all`). The four former commands below are one-release redirects
+(task 1390, feature H84).
+
+| Command           | What it does                                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev-runall`      | **Deprecated redirect** → `/sp:dev-run --all`. `--mode <sequential\|parallel\|auto>` becomes `--schedule`; every other flag passes through.                            |
+| `dev-refineall`   | **Deprecated redirect** → `/sp:dev-refine --all`.                                                                                                                       |
+| `dev-verifyall`   | **Deprecated redirect** → `/sp:dev-verify --all`.                                                                                                                       |
+| `dev-wrapall`     | **Deprecated redirect** → `/sp:dev-wrap --all`.                                                                                                                          |
 
 #### Lifecycle — operations and hygiene
 
@@ -256,11 +263,11 @@ plugins/sp/
 │   │   └── references/session-formats.md
 │   ├── conflict-finding/            # Authority-aware four-pillar semantic conflict audit
 │   │   └── references/{authority-resolution.md, comparison-protocol.md, finding-contract.md, remediation-routing.md}
-│   ├── next-feature/                # Prompt-first feature frontier prioritizer (backs /sp:dev-find-next)
+│   ├── next-feature/                # Prompt-first feature frontier prioritizer (backs /sp:dev-find next)
 │   │   └── references/{signal-derivation.md, ranking-rubric.md, proposal-contract.md, handoff-routing.md}
 │   ├── redesign-web-ui/             # Existing-UI visual upgrade past generic AI defaults
 │   │   └── references/{audit-checklist, upgrade-techniques}.md
-│   ├── history-anatomy/             # Diagnostic interpretation owner over already-imported history (backs /sp:dev-find-issue)
+│   ├── history-anatomy/             # Diagnostic interpretation owner over already-imported history (backs /sp:dev-find issue)
 │   │   └── references/{modes.md, report-contract.md, operations.md}
 │   ├── session-review/              # Inline, report-only review of the active coding-agent session
 │   ├── sys-architecture/            # Architecture / ADR judgment competency
@@ -338,7 +345,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `sp-bot-bootstrap`          | 1.0   | Grok Bot toolchain bootstrap — POSIX `sh` check/setup pair installing `bun` plus the three sp CLIs; idempotent after a computer recreate; Team Setup Script variant (1292, feature I14 R4) |
 | `dogfood-testing`           | 1.2   | Dogfood backbone — drives a testee end-to-end with bounded auto-fix, a live monitor ledger, and a structured report; @1.2 adds footer-mandatory reports, 7-check finalize-or-abort, and the `validate-report` CLI; backs `/sp:dev-dogfood` |
 | `next-router`               | 1.0   | Status→command router — resolve a task WBS or feature frontier, TABLE A/B/C lookup with light-gate short-circuit, single dispatch or HITL stop; backs `/sp:dev-next`                                                                       |
-| `parallel-execution`        | 1.0   | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-runall --mode parallel\|auto`                                                                                                           |
+| `parallel-execution`        | 1.0   | Fan-out decision framework — when to parallelize, four proven fan-out patterns, and result synthesis; backs `/sp:dev-run --all --schedule parallel\|auto`                                                                                                           |
 | `sys-debugging`             | 1.0   | Structured debugging protocol — reproduce→isolate→root cause→fix→regression test; "ask the debugger before the LLM" principle                                                                                                              |
 | `branch-workflow`           | 1.0   | Branch-lifecycle discipline — create→worktree→commit→self-review→merge→cleanup; git worktree patterns for parallel branches                                                                                                                |
 | `test-driven-development`   | 1.0.0 | TDD workflow companion — red-green-refactor cycle, behavior-first test design, AAA structure, data builders, mock-at-boundary anti-patterns                                                                                                |
@@ -348,9 +355,9 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `doc-evolve`                | 1.1   | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons                                                                          |
 | `reverse-engineering`       | 1.1   | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse`                                                                                    |
 | `issue-finding`             | 2.0   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; **legacy path** — superseded by `history-anatomy` for indexed reporting; backs no current command; directly invocable as sp:issue-finding |
-| `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
+| `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find conflict`             |
 | `fleet-join`                | 1.0   | Guest fleet occupancy — join as a live guest occupant, loop `spur agent wait --inbox` to pull work, reply through `spur message reply`, then leave; G73 (task 1081)                                                                          |
-| `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find-next` |
+| `next-feature`              | 1.0   | Prompt-first feature frontier prioritizer — sync-first precondition, B3 actionability gate (cited, never restated), tiered rubric over measured signals, D1–D4 defect proposals conforming to the restructure map schema; backs `/sp:dev-find next` |
 | `pr-reviewing`              | 2.0.0 | GitHub Codex PR review — PR prepare/reuse, `@codex review` request with per-HEAD dedupe, bounded polling, findings normalization, validated fix + re-review; direct `spur builder pr-status`/`pr-check`/`pr-open`/`pr-review` sequence; backs `/sp:dev-pr-review`     |
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 | `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, twelve-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
@@ -366,7 +373,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
 
-`sp:issue-finding` remains packaged and directly invocable as the **legacy path**; `/sp:dev-find-issue` resolves to `sp:history-anatomy`. No logic is shared between them. This coexistence is _bounded_, not permanent — the retirement gate below is the contract:
+`sp:issue-finding` remains packaged and directly invocable as the **legacy path**; `/sp:dev-find issue` resolves to `sp:history-anatomy`. No logic is shared between them. This coexistence is _bounded_, not permanent — the retirement gate below is the contract:
 
 - **Parity fixtures** the new contract must cover before retirement is considered: typed history analysis; daily and focused range selection; repeated-work and error reporting; evidence and confidence; remediation proposals; performance analysis; process observations; positive patterns.
 - **Intentional exclusions, not gaps:** raw history-file parsing and task creation are deliberately out of scope for `history-anatomy`; a missing parity item is checked against this list before it counts as a gap.
@@ -598,7 +605,7 @@ the hard gate that the soft skill cannot enforce on its own.
 ```mermaid
 graph TB
     subgraph "User entry points"
-        CMD["Commands<br/>Slash-command wrappers<br/>/sp:dev-plan, /sp:dev-runall, /sp:dev-review-session, /sp:rule-add, ..."]
+        CMD["Commands<br/>Slash-command wrappers<br/>/sp:dev-plan, /sp:dev-run --all, /sp:dev-review-session, /sp:rule-add, ..."]
         AGENT["Agents<br/>4 subagents<br/>expert-spur, super-coder, super-planner, super-reviewer"]
         HOOK["PreToolUse hook<br/>Write|Edit matcher"]
     end
@@ -701,7 +708,7 @@ pipeline owns one lifecycle phase:
 | `task-lifecycle.yaml`       | Task status FSM                   | `spur task update`                |
 | `task-pipeline.yaml`        | Single-task execution             | `/sp:dev-run`                     |
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
-| `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
+| `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrap --all` |
 
 > 1251 (D66): the PR-review and wayfinder-investigate spines were retired — the PR sequencing
 > lives in the `spur builder pr-status | pr-check | pr-open | pr-review` verbs, and the wayfinder

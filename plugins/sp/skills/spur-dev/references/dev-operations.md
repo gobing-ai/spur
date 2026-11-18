@@ -23,7 +23,7 @@ The `Skill()` commands back onto six skills: `sp:spur-dev` (planning + execution
 `sp:code-verification` (SECUA review + traceability), `sp:parallel-execution` (fan-out / parallel batch),
 and `sp:brainstorm` (structured ideation). The `runall` operation (#13) is `sp:spur-dev`'s batch entry — it delegates the driver loop to the
 `sp:super-planner` agent (the batch orchestrator) per [execution-batch.md](execution-batch.md).
-Parallel task batches are `dev-runall --mode parallel|auto` (`dev-parallel` retired 2026-10-10). `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated
+Parallel task batches are `dev-run --all --mode parallel|auto` (`dev-parallel` retired 2026-10-10). `dev-brainstorm` carries the two artifact exits — `--task` (one task) and `--feature` (validated
 feature with BDD AC; the front-half entry that hands off to `dev-plan`). The 4 `inline` commands
 cover git tooling and operational utilities that have no natural skill home — creating a skill for
 each would be scope creep for one-liner procedures.
@@ -32,10 +32,10 @@ each would be scope creep for one-liner procedures.
 > backbone skill (which owns the 4-phase dogfood protocol, the live ledger, and the report template);
 > it does not map to a numbered dev-\* operation. See its command file and the backing skill for details.
 
-> **`dev-find-issue`** is not in this table. It is a thin `Skill()` wrapper over
-> **`sp:history-anatomy`** for daily/ad-hoc imported-history forensics: fixed twelve-section report,
+> **`dev-find issue`** (row 12b above) is a lens, not a separate operation: it is a thin `Skill()`
+> wrapper over **`sp:history-anatomy`** for daily/ad-hoc imported-history forensics: fixed twelve-section report,
 > baseline comparison, cache branch, independent validation, and atomic publication. It never
-> imports history or creates a task. See `plugins/sp/commands/dev-find-issue.md` and
+> imports history or creates a task. See `plugins/sp/commands/dev-find.md` and
 > `plugins/sp/skills/history-anatomy/SKILL.md`.
 
 > **`dev-review-session`** is not in this table. It is a thin `Skill()` wrapper over
@@ -46,12 +46,12 @@ each would be scope creep for one-liner procedures.
 > imports no history. Use it before the active session ends; use history-anatomy for ended sessions,
 > cross-agent windows, trends, or quantitative forensics.
 
-> **`dev-find-conflict`** is not in this table. It is a thin `Skill()` wrapper over
-> **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional confirmed,
-> owner-routed remediation). Standalone audit — not a spine pipeline stage. Audit mode is read-only;
+> **`dev-find conflict`** (row 12b above) is a lens, not a separate operation: a thin `Skill()`
+> wrapper over **`sp:conflict-finding`** (authority-aware four-pillar semantic audit → optional
+> confirmed, owner-routed remediation). Standalone audit — not a spine pipeline stage. Audit mode is read-only;
 > `--resolve` opens a proposal/confirmation workflow that routes each approved repair through its
 > owner surface (`spur task`/`spur feature`, `sp:doc-evolve`, the Spur dev lifecycle, or the
-> Superskill capability lifecycle). See `plugins/sp/commands/dev-find-conflict.md` and
+> Superskill capability lifecycle). See `plugins/sp/commands/dev-find.md` and
 > `plugins/sp/skills/conflict-finding/SKILL.md`.
 
 > **`dev-next`** is likewise not a numbered spine operation. It is a thin `Skill()` wrapper over the
@@ -59,11 +59,11 @@ each would be scope creep for one-liner procedures.
 > above (refine/run/verify/unit/wrap/…) via TABLE A/B/C; it never implements an operation itself.
 > See `plugins/sp/skills/next-router/references/routing-table.md` for the routing SSOT.
 >
-> **Batch consumer (task 0279):** `sp:super-planner` / `/sp:dev-runall` **consumes** TABLE A STOP rows
+> **Batch consumer (task 0279):** `sp:super-planner` / `/sp:dev-run --all` **consumes** TABLE A STOP rows
 > for preflight + one-shot recovery (`spur task preflight`) but keeps
 > `task-pipeline.yaml` as the happy path. Do **not** deep-merge batch orchestration into a loop of
 > `/sp:dev-next`. Single-task "what's next?" stays `/sp:dev-next`; multi-task execution stays
-> `/sp:dev-runall` → super-planner.
+> `/sp:dev-run --all` → super-planner.
 
 ## Operation map
 
@@ -71,10 +71,11 @@ each would be scope creep for one-liner procedures.
 | --- | ---------- | ------------------- | ----------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | unit       | `dev-unit`          | `Skill()`         | `sp:code-testing`                                                                  | `<target> [--coverage <pct>] [--agent <inline\|auto\|name>] [--auto]`                                                                                                                                  |
 | 2   | review     | `dev-review`        | `Skill()`         | `sp:code-verification` (`review`) + `sp:functional-review` + `sp:code-improvement` | `[--tasks <selector> \| --feature <id>[,<id>] \| --scope <path>[,<path>]] [--agent <inline\|auto\|name>] [--focus <dims>] [--triage] [--worktree [<name>]] [--auto]`                                                                                              |
-| 3   | verify     | `dev-verify`        | `Skill()`         | `sp:code-verification` (`verify`)                                                  | `<wbs> [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--skip-shippable]`                                                     |
+| 3   | verify     | `dev-verify`        | `Skill()`         | `sp:code-verification` (`verify`) / `sp:spur-dev` (`verifyall`)                                   | `<wbs> [--all] [--tasks <selector>] [--feature <id>] [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]` |
 | 3a  | verifyall  | `dev-verifyall`     | `Skill()` → agent | `sp:spur-dev` (`verifyall`)                                                        | `--tasks <selector> [--feature <id>] [--agent <inline\|auto\|name>] [--fix <none\|blockers-first\|all>] [--focus <lens>] [--bdd] [--auto] [--force] [--next] [--json] [--skip-shippable] [--worktree [<name>]]` |
-| 4   | run        | `dev-run`           | `Skill()`         | `sp:spur-dev` (`run` / `implement`)                                                | `<wbs> [--mode <full\|implement>] [--agent <inline\|auto\|name>] [--auto] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary]`                                                                                              |
-| 5   | refine     | `dev-refine`        | `Skill()`         | `sp:spur-dev` (`refine`)                                                           | `<wbs> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--next]`                                                                           |
+| 4   | run        | `dev-run`           | `Skill()`         | `sp:spur-dev` (`run` / `implement` / `runall`)                                                     | `[<wbs>] [--all] [--tasks <selector>] [--feature <id>] [--mode <full\|implement>] [--schedule <sequential\|parallel\|auto>] [--concurrency <n>] [--keep-going] [--agent <inline\|auto\|name>] [--auto] [--json] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]` |
+| 13  | runall     | `dev-runall`        | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-planner`                                      | `--tasks <selector> [--feature <id>] [--mode <sequential\|parallel\|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline\|auto\|name>] [--json] [--wrap] [--wrap-pr] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]`                      |
+| 5   | refine     | `dev-refine`        | `Skill()`         | `sp:spur-dev` (`refine` / `refineall`)                                                             | `[<wbs>] [--all] [--feature <id>] [--tasks <selector>] [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json] [--next] [--worktree [<name>]]` |
 | 5a  | refineall  | `dev-refineall`     | `Skill()`         | `sp:spur-dev` (`refineall`)                                                        | `--feature <id> \| --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard\|ready>] [--agent <inline\|auto\|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]` |
 | 6   | plan       | `dev-plan`          | `Skill()`         | host executor (`idea-pipeline`) or async workflow                                  | `"<description>" [--feature <id>] [--parent <feature-id>] [--skip-design] [--agent <inline\|auto\|name>] [--auto]`                                                                   |
 | 7   | docs       | _(no thin wrapper)_ | `Skill()`         | `sp:doc-evolve`                                                                    | `"<change description>"`                                                                                                                                                                               |
@@ -85,9 +86,9 @@ each would be scope creep for one-liner procedures.
 | 11a | job-dump   | `dev-job-dump`      | `Skill()`         | `sp:spur-dev` (`job-dump`) | `--file <path>` |
 | 11b | job-resume | `dev-job-resume`    | `Skill()`         | `sp:spur-dev` (`job-resume`) | `--file <path>` |
 | 12  | brainstorm | `dev-brainstorm`    | `Skill()`         | `sp:brainstorm` (`dev-brainstorm`)                                                 | `<topic> [--depth <basic\|detailed\|comprehensive>] [--options <n>] [--agent <inline\|auto\|name>] [--skip-discovery] [--task [<feature-id>]] [--feature [<parent-id>]] [--next]`          |
-| 12a | find-way   | `dev-find-way`      | `Skill()`         | `sp:wayfinder` (worktree-isolated)                                                 | `<idea> \| <feature-id> [<wbs>] [--agent <inline\|auto\|name>] [--auto] [--worktree [<name>]] [--wrap]` |
-| 13  | runall     | `dev-runall`        | `Skill()` → agent | `sp:spur-dev` (`runall`) → `sp:super-planner`                                      | `--tasks <selector> [--feature <id>] [--mode <sequential\|parallel\|auto>] [--concurrency <n>] [--keep-going] [--auto] [--agent <inline\|auto\|name>] [--json] [--wrap] [--wrap-pr] [--next] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]`                      |
-| 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `<wbs> [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                                                                 |
+| 12a | find-way   | `dev-find way`      | `Skill()`         | `sp:wayfinder` (worktree-isolated) — deprecated redirect to `dev-find way`           | `<idea> \| <feature-id> [<wbs>] [--agent <inline\|auto\|name>] [--auto] [--worktree [<name>]] [--wrap]` |
+| 12b | find       | `dev-find`          | `Skill()`         | `sp:conflict-finding` / `sp:history-anatomy` / `sp:next-feature` / `sp:wayfinder` by lens | `<conflict\|issue\|next\|way> [--tasks <selector>] [--feature <id>] [--scope <path>] [--pillar <source\|tasks\|features\|authority\|all>] [--mode <adaptive\|full>] [--resolve] [--date <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--output <path>] [--task [<feature-id>]] [--agent <inline\|auto\|name>] [--auto] [--json] [--worktree [<name>]] [--wrap]` |
+| 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline; one task, or the `--all` batch set)                          | `[<wbs>] [--all] [--since <iso>] [--feature <id>] [--status <s>] [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]` |
 | 15  | wrapall    | `dev-wrapall`       | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `[--since <iso>] [--feature <id>] [--status <s>] [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                        |
 | 16  | idea       | `dev-idea`          | `Skill()`         | host executor (`idea-pipeline`) or async workflow                                  | `"<idea>" \| --from-file <path> [--skip-design] [--agent <inline\|auto\|name>] [--auto]`                                                                                                                              |
 | 17  | refactor   | `dev-refactor`      | `Skill()`         | `sp:code-refactoring` skill (thin wrapper, ADR-032)                                | `[<description>] [--scope <path>] [--focus <api\|architect\|tests\|ui\|auto>] [--fix <none\|blockers-first\|all>] [--check <cmd>] [--agent <inline\|auto\|name>] [--auto]`                                                                                          |
@@ -170,7 +171,7 @@ Produced by the run's own terminal close (1146 R1), not by a trailing step: the 
 job is to print that file's contents under an `### Execution summary` heading, and to pass `--no-summary`
 through to `inline close`. `--no-summary` is an `inline close` flag: anywhere else it is a usage error.
 
-`/sp:dev-runall` shows one summary per run — each produced by that run's own close, so each window is its own
+`/sp:dev-run --all` shows one summary per run — each produced by that run's own close, so each window is its own
 `runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:
 
 ```
@@ -360,8 +361,8 @@ check receipt (`receipt.runId === runId`), otherwise `n/a (<reason>)`. Any value
   7. **Cross-task proposals (`--depth ready` only).** After the per-task pass, list two kinds of proposals in the report: tasks whose remaining issues overlap another set member (same root cause or file set → name the merge target; tasks that only share a step, such as one upstream release, or that fix two layers of one failure → propose ordering or a shared step, not a merge), and tasks with no `feature_id` (name the candidate owning feature with evidence). These are proposals only. Refineall merges, cancels or links a task only when the operator's `--description` names that task and the action (e.g. `cancel 0273 and merge its issues into 0269; link 0260 to G11`). That explicit directive is the confirmation the [feature-link helper](feature-link-helper.md) requires. A merge moves the surviving issues with their fixes into the target through CLI section updates, records the merge in both tasks' correction blocks, then cancels the source. Run directives before the per-task pass, so each target is refined with its merged content.
 - **Per-task outcome vocabulary:** `refined` (synthesis wrote sections) | `SKIP` (already meets the active depth bar under `--auto`) | `cancelled` (no valid issue left, or merged away by directive) | `failed` | `skipped` (dep failed under `--keep-going`) | `not-attempted` (halted) | `blocked` (unmet out-of-set dep).
 - **Batch verdict:** `clean` (all attempted tasks `refined`, `SKIP` or `cancelled`) | `halted` (a failure stopped the batch) | `aborted` (cycle / unknown selector / empty set after filter).
-- **`--next` is not accepted** (dropped by feature H8, 2026-07-31 — see `plugins/sp/commands/dev-refineall.md` for the removal record). Chain execution explicitly: refineall, then `/sp:dev-runall --feature <id>`.
-- **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refineall --feature <id> --auto`. For implement handoffs, or to re-audit a feature's filed tasks: `/sp:dev-refineall --feature <id> --auto --depth ready`.
+- **`--next` is not accepted** (dropped by feature H8, 2026-07-31 — see `plugins/sp/commands/dev-refine.md` for the removal record). Chain execution explicitly: refineall, then `/sp:dev-run --all --feature <id>`.
+- **`--auto` recommendation:** Batch refine without `--auto` requires per-task interactive Q&A and does not scale. Default operator path: `/sp:dev-refine --all --feature <id> --auto`. For implement handoffs, or to re-audit a feature's filed tasks: `/sp:dev-refine --all --feature <id> --auto --depth ready`.
 - **Delegation:** `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")` → per task `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")` (shared flags include `--depth` when set).
 
 ### 6. plan
@@ -468,13 +469,13 @@ gate commands, pending questions and approval requirements.>
   Report the new task WBS and file path; the task lands at `todo`, ready for `/sp:dev-refine`.
 
 - **Delegation:** `Skill(skill="sp:brainstorm", args="dev-brainstorm --context <decision-tree> --options <n>")`
-- **Scope boundary:** brainstorm never charts a multi-session map. A foggy destination stops the run with a recommendation to use `/sp:dev-find-way` (§ 12a).
+- **Scope boundary:** brainstorm never charts a multi-session map. A foggy destination stops the run with a recommendation to use `/sp:dev-find way` (§ 12a).
 
 ### 12a. find-way
 
 - **Purpose:** Wayfinding — chart a multi-session investigation map for a foggy destination (`<idea>`), or resolve exactly one ticket of an existing map (`<feature-id> [<wbs>]`).
 - **Isolation (mandatory):** every invocation runs in a git worktree + branch per [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name) as a run of one — marker `command: dev-find-way`, `selector` `chart:<slug>` or `<feature-id>:<wbs>`, branch `sp/wayfind-<slug|wbs>-<short-id>`. Omitted `--worktree` equals bare `--worktree` (create); `--worktree <name>` adopts. No in-place or branch-switch mode.
-- **Parallel sessions:** frontier selection excludes tickets held by other `dev-find-way` markers (`active`/`retained`) in the invoking tree's `.spur/run/`, because a `wip` claim is invisible outside its worktree until the merge.
+- **Parallel sessions:** frontier selection excludes tickets held by other `dev-find way` markers (`active`/`retained`) in the invoking tree's `.spur/run/`, because a `wip` claim is invisible outside its worktree until the merge.
 - **`--wrap`:** work mode only — `/sp:dev-wrap <wbs>` inside the worktree after the ticket reaches `done`, before the WT-3b commit; skipped with a reason in chart mode.
 - **Delegation:** `Skill(skill="sp:wayfinder", args="$ARGUMENTS")` inside the worktree.
 
@@ -482,7 +483,7 @@ gate commands, pending questions and approval requirements.>
 
 - **Purpose:** Run a batch of tasks through their pipelines in dependency-correct order — resolve a set, topo-sort, run each via `task-pipeline.yaml`, inspect verdicts, apply the failure policy, emit a batch report.
 - **Inputs:** `--tasks <selector>` (required — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`). `--mode <sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset per `execution-batch.md` § Parallel Execution). `--keep-going` skips a failed task's in-batch dependents and continues independents (default off; `--auto` implies `--keep-going`, so an unattended batch never stops for a human — 1318 R1). `--auto` sets `profile=auto` on each per-task run (skips the HITL approve gate). `--feature <id>` is sugar for `--tasks feature:<id>`; when the effective selector is feature-derived, the batch runs `spur feature check <id> --fix --json` then `spur feature check <id> --strict --json` **once** before task resolution — a non-zero strict check aborts with verdict `aborted`, zero attempted tasks, and the structured findings (task 0510 R2); scoped: `L4.scenario-unverified` and `L4.verifying-incomplete-tasks` (expected pre-run states of a not-yet-run or reopened feature) are reported verbatim but do not abort — the non-aborting set is `NON_ABORTING_PREFLIGHT_CODES` behind `spur task preflight --classify-feature` and `--fix` repairs are listed under `autoRepairs` — any other strict error aborts. Explicit WBS/status/`ready` selectors add no feature check. The orchestrator loop itself continues in this session; interactive sequential omit/`inline` uses the host driver — host-controlled with eligible `agent.run` stages dispatching once to a native subagent and host fallback (task 0508) — while `--agent auto`/a name, parallel mode, and headless invocation keep the isolated per-task workflow subprocess boundary. `--agent <inline|auto|name>` pins the executor for the per-task stages (see [SSOT](cross-cutting.md#inline-default-execution-surface)); the value crosses into per-task `vars.agent`, not the orchestrator. `--json` emits the report as JSON. `--wrap` triggers `wrapup-pipeline.yaml` **once for the batch** over the `done` subset only (execution-batch.md Step 6: `vars.feature` only when every frozen task is `done`/`cancelled`; empty done subset skips with a reason), `--wrap-pr` runs the batch-once wrap hop, pushes to `origin`, and creates a Pull Request via `gh pr create` (`WT-PR`; mutually exclusive with `--wrap`), `--next` chains each task to terminal status then runs the same batch-once wrap, `--continue` resumes from checkpoint. `--no-summary` skips the [execution summary](#execution-summary) printed after the batch report (one row per attempted run).
-- **Three orthogonal axes (do not confuse):** `--keep-going` = batch failure policy (halt vs skip dependents); `--continue` = resume from checkpoint against the batch's original frozen identity (execution-batch.md § Batch continuation, task 0919); `--next` = per-task lifecycle chaining (advance status on a verdict — `dev-verify`/`dev-verifyall` only). `routing-table.md` offers `--continue` and `--next` as competing options for the same situation only when the batch was interrupted mid-run; otherwise they address different problems.
+- **Three orthogonal axes (do not confuse):** `--keep-going` = batch failure policy (halt vs skip dependents); `--continue` = resume from checkpoint against the batch's original frozen identity (execution-batch.md § Batch continuation, task 0919); `--next` = per-task lifecycle chaining (advance status on a verdict — `dev-verify`/`dev-verify --all` only). `routing-table.md` offers `--continue` and `--next` as competing options for the same situation only when the batch was interrupted mid-run; otherwise they address different problems.
 - **Backing:** `sp:spur-dev` skill, `runall` operation → delegates the driver loop to the **`sp:super-planner`** agent (the batch orchestrator).
 - **Behavior:** The orchestrator reads [execution-batch.md](execution-batch.md) and drives: resolve selector → freeze set → topo-sort by `dependencies[]` (Kahn, WBS-ascending tie-break; cycle aborts) → resolve out-of-set deps by status (done → allow, else → block subtree) → run each task via `spur workflow run task-pipeline.yaml --async` + `spur workflow trace` polling → inspect terminal state + `.spur/run/<wbs>-verdict.json` → stop-the-batch default or `--keep-going` subtree skip → emit batch report. Per-task pipeline is invoked **verbatim** — no new FSM, no step edits. `--auto`/`--agent` are the only flags that cross the orchestrator→pipeline boundary (both into per-task `--vars`).
 - **Delegation:** `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` → `sp:super-planner` agent.
@@ -827,3 +828,8 @@ host instructions does not add one. An opt-in gate is explicit: `gitmsg --check 
   **path**, not by pasting their content into the handover body. The handover is a pointer document;
   restating content it can instead link to makes it stale the moment the source changes.
 - **Invariants:** The handover is honest — rejected approaches are recorded so the next agent doesn't retry them. The blocker is specific, not "it doesn't work." No quality gate runs — cite gate results already on record.
+
+The former `dev-run --all`, `dev-refine --all`, `dev-verify --all` and `dev-wrap --all` commands are
+one-release redirects (task 1390, feature H84): a batch is a scope, so pass `--all` to
+`dev-run` / `dev-refine` / `dev-verify` / `dev-wrap`. The operations (`runall`, `refineall`,
+`verifyall`, `wrapall`) and their workflow YAML are unchanged.

@@ -8,7 +8,7 @@ const EXECUTION_BATCH = join(REFERENCES, 'execution-batch.md');
 const EXECUTION_BATCH_REPORT = join(REFERENCES, 'execution-batch-report.md');
 const FLAG_GLOSSARY = join(REFERENCES, 'flag-glossary.md');
 const DEV_OPERATIONS = join(REFERENCES, 'dev-operations.md');
-const DEV_RUNALL = join(ROOT, 'plugins', 'sp', 'commands', 'dev-runall.md');
+const DEV_RUNALL = join(ROOT, 'plugins', 'sp', 'commands', 'dev-run.md');
 
 // 1318 — an unattended batch must not stop for a human, and `--agent auto` must be resolved once
 // per batch instead of once per task. The batch driver is the skill-defined loop in
@@ -29,7 +29,7 @@ describe('task 1318 — auto batch failure policy and the executor pin', () => {
             ['execution-batch-report.md', report],
             ['flag-glossary.md', glossary],
             ['dev-operations.md', devOperations],
-            ['dev-runall.md', devRunall],
+            ['dev-run.md', devRunall],
         ] as const) {
             expect(`${name}: ${doc}`).toContain(name);
             expect(doc).toContain('`--auto` implies `--keep-going`');

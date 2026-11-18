@@ -224,7 +224,7 @@ describe('execution-batch spec contract (task 0984 — cited run evidence surviv
     });
 });
 
-const RUNALL = readFileSync(join(import.meta.dir, '../../commands/dev-runall.md'), 'utf8');
+const RUNALL = readFileSync(join(import.meta.dir, '../../commands/dev-run.md'), 'utf8');
 const GLOSSARY = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/flag-glossary.md'), 'utf8');
 
 describe('execution-batch spec contract (task 0477 — worktree isolation lifecycle)', () => {
@@ -268,7 +268,7 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
     });
 
     test('R8.1 — --worktree --mode parallel is rejected in the command doc and WT-7', () => {
-        expect(RUNALL).toContain('`--worktree --mode parallel` is **rejected**');
+        expect(RUNALL).toContain('`--worktree --schedule parallel` is **rejected**');
         expect(SPEC).toContain('**`--mode parallel`** is rejected when combined with `--worktree`');
     });
 
@@ -701,7 +701,7 @@ write_marker
     /** WT-3-like fields seeded onto the active marker to prove write_marker read-modify-write (F1). */
     const MARKER_SEED = {
         id: 'wt4-proof',
-        command: 'dev-runall',
+        command: 'dev-run --all',
         selector: 'feature:WT4',
         createdAt: '2026-01-01T00:00:00Z',
         adopted: true,
@@ -1131,7 +1131,7 @@ describe('execution-batch spec contract (task 1132 R4/R5 — auto-fix-first gate
 
     test('1132 R5/AC6 — --auto gets ONE refine pass, then the task is skipped and the batch continues', () => {
         expect(SPEC).toContain('**Semantic precheck failure under `--auto` (1132 R5).**');
-        expect(SPEC).toContain('one** `/sp:dev-refineall --auto` refinement pass');
+        expect(SPEC).toContain('one** `/sp:dev-refine --all --auto` refinement pass');
         // The bound is explicit (exactly one), the fallback is a reported skip, and independence
         // is stated — the three clauses R5 asks for.
         expect(SPEC).toContain('(exactly one — never');
@@ -1140,7 +1140,7 @@ describe('execution-batch spec contract (task 1132 R4/R5 — auto-fix-first gate
         // Non-auto behavior is unchanged (halt), so the rule is not a blanket softening.
         expect(SPEC).toContain('unchanged halt behavior');
         // The driver loop carries the same branch, so the prose is not merely descriptive.
-        expect(SPEC).toContain('/sp:dev-refineall --auto pass');
+        expect(SPEC).toContain('/sp:dev-refine --all --auto pass');
     });
 });
 

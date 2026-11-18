@@ -31,8 +31,8 @@ All product work goes through the harness unless the operator explicitly overrid
 | ------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------ |
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task/pipeline |
-| Batch or parallel task runs | `/sp:dev-runall [--mode parallel\|auto]`, **`sp:super-planner`** | Unordered multi-task work |
-| Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping task refinement |
+| Batch or parallel task runs | `/sp:dev-run --all [--mode parallel\|auto]`, **`sp:super-planner`** | Unordered multi-task work |
+| Batch-refine tasks under a feature | `/sp:dev-refine --all --feature <id> --auto` | Hand-looping task refinement |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw corpus writes |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags |
 | Create/edit/list tasks or features | **`spur task` / `spur feature`** | Direct-writing corpus files |
@@ -42,7 +42,7 @@ All product work goes through the harness unless the operator explicitly overrid
 | Constraint gate / rule authoring | `spur rule`; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run` |
 | Workflow author / run | `spur workflow`; `/sp:workflow-add`, `/sp:workflow-refine` | Ad-hoc shell lifecycle |
 | Docs drift / sync / lessons | **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md` | Patching derived docs over authority |
-| Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrapall` | Skipping learnings/doc sync |
+| Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrap --all` | Skipping learnings/doc sync |
 | Session index / memory | **`sp:indexed-context`** + `.spur/context/` | Full-tree rereads |
 | Install / sync a plugin across coding agents | `superskill install <plugin>` | Hand-copying adapters |
 | Capability authoring / quality lifecycle | `superskill <noun> --help` | Bypassing lifecycle gates |
@@ -177,7 +177,7 @@ Do not bypass hooks or suppress findings to force green.
 **Gate scope:** the gate verifies code changes. Scribe commands — `/sp:dev-gitmsg`,
 `/sp:dev-changelog`, `/sp:dev-handover`, `/sp:dev-job-dump` — produce text or a commit and run no
 gate (`bun run gate`, lint, typecheck, tests, `spur-check`) unless asked: `gitmsg --check <cmd>`, or
-`/sp:dev-gtd --no-push` for gate → fix → commit. Commands that own a gate (`dev-run`, `dev-runall`,
+`/sp:dev-gtd --no-push` for gate → fix → commit. Commands that own a gate (`dev-run`, `dev-run --all`,
 `dev-fixall`, `dev-gtd`, `dev-fixgha`, `dev-unit`, `--check` loops) run exactly what their
 contract names — no extra completion-gate pass on top.
 

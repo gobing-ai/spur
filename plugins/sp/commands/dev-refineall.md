@@ -1,18 +1,16 @@
 ---
-description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report; --depth ready audits, corrects and promotes each task
+description: Deprecated one-release redirect — use `/sp:dev-refine --all`
 requires: [cli:spur, local-fs]
 role: planner
 argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]"
-allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
+allowed-tools: ["Bash", "Read", "Skill"]
 ---
 
-# Dev Refineall
+# dev-refineall (deprecated redirect)
 
-Wraps the **sp:spur-dev** skill. Batch counterpart of `/sp:dev-refine` — same per-task refine
-operation, applied to a resolved set (typically every task under a feature). Pass
-`--depth ready` to force an implement-ready freeze on every task (does not L3-SKIP). Each task's
-existing claims are audited against the current tree and corrected, and passing tasks are promoted
-`backlog → todo`. Use it to re-audit a feature's filed or stale tasks as well as before handoff.
+**Deprecated (task 1390, feature H84).** A batch is a **scope**, not a different operation:
+`/sp:dev-refine --all` is the authoritative surface, and the `sp:spur-dev` operation (`refineall`) it
+dispatches is unchanged.
 
 ## Argument Flags
 
@@ -34,44 +32,11 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
+```text
+/sp:dev-refine --all <forwarded arguments>
 ```
-/sp:dev-refineall --feature <id> [shared refine flags…] [--depth <standard|ready>] [--agent <inline|auto|name>] [--worktree [<name>]]
-/sp:dev-refineall --tasks <selector> [shared refine flags…] [--depth <standard|ready>] [--agent <inline|auto|name>] [--worktree [<name>]]
-```
-
-Flags: `--feature` (sugar for `feature:<id>`), `--tasks <selector>`, shared refine flags
-(`--focus`, `--description`, `--depth`, `--agent`, `--auto`),
-plus `--keep-going`,
-`--status` (default `backlog` + `todo`),
-`--json`, `--worktree` `[<name>]` (run the batch in an isolated git worktree — FF-merge onto the base ref on
-full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree, `<name>`
-form adopts an existing worktree by name/path/branch; see `execution-batch.md` § Worktree
-isolation). Prefer `--auto` for batch
-scale. Full procedure: `plugins/sp/skills/spur-dev/references/dev-operations.md` § refineall.
-**`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes land in the
-worktree copy; your main tree still shows pre-run statuses until the FF-merge on success. Expected,
-not a bug.
-
-**Depth:** default `standard` keeps the cheap L3 SKIP gate under `--auto`. Use
-`--depth ready` when handing a feature to another implementer (frozen Design/Requirements/Plan),
-or when the tasks' existing content is in doubt; thread `--depth` into each per-task refine. Ready
-report rows add corrections count, dropped issues, status before → after, and failed checklist ids.
-Each task's issues are triaged one by one: invalid ones are dropped with their fixes, and a task
-with no valid issue left is `cancelled`. The ready report also proposes merges between overlapping
-tasks, ordering or a shared step for complementary ones, and owning features for tasks without a
-`feature_id`. It executes neither unless
-`--description` names the task and action, for example
-`--description "cancel 0273 and merge its issues into 0269; link 0260 and 0274 to G11"`.
-
-> **`--next` dropped** (feature H8, 2026-07-31). Batch-level chaining was a token bomb — each refine
-> hop is an LLM call, and a large feature means N refine chains fanned out at once. For batch
-> chaining, run `/sp:dev-refineall` first (this command, no `--next`), then
-> `/sp:dev-runall --feature <id> --next` which chains each task's run → verify → wrap sequentially.
-> **was: `--next` declared with a self-contradicting "avoid --next" warning.**
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — bootstrap checklist, quick readiness before isolation, workflow inventory before YAML, comprehensive checks at owning boundaries (task 0814 R1/R3/R4/R7/R8).
-- Batch orchestration: `Skill(skill="sp:spur-dev", args="refineall $ARGUMENTS")`
-- Per-task refine (inner): `Skill(skill="sp:spur-dev", args="refine <wbs> $SHARED_FLAGS")`
+- Dispatch `Skill(skill="sp:spur-dev", args="refineall <forwarded flags>")`; its inner per-task leg is `refine`.
+- The workflow YAML and the operation name are unchanged; only the command surface moved.

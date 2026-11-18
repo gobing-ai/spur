@@ -21,22 +21,22 @@ runs a parallel process.
 | `/sp:dev-next` | Router | Status-aware router: pick and dispatch the single best next step (`--dry-run` previews) |
 | `/sp:dev-idea` | Planning | Unified entry: vague idea → feature + acceptance criteria + task batch; stops at handoff |
 | `/sp:dev-brainstorm` | Planning | Grilling interview → options with trade-offs → landed artifact (`--task` or `--feature`) |
-| `/sp:dev-find-way` | Planning | Wayfinder for foggy destinations: chart a map, or resolve one ticket — always in its own git worktree + branch |
+| `/sp:dev-find way` | Planning | Wayfinder for foggy destinations: chart a map, or resolve one ticket — always in its own git worktree + branch |
 | `/sp:dev-plan` | Planning | Feature → BDD acceptance criteria → check gate → decomposed task batch |
 | `/sp:dev-refine` | Planning→Exec | Fill one task's acceptance criteria, design, and plan just-in-time via Q&A |
 | `/sp:dev-run` | Execution | Run one task through its full pipeline; `--mode implement` for just the code step |
-| `/sp:dev-runall` | Exec (batch) | Run a batch of tasks through their pipelines in dependency order (`--feature <id>`) |
+| `/sp:dev-run --all` | Exec (batch) | Run a batch of tasks through their pipelines in dependency order (`--feature <id>`) |
 | `/sp:dev-unit` | Execution | Generate or extend tests until the unit target is met |
 | `/sp:dev-review` | Execution | Multi-dimensional review of a task or a code path |
 | `/sp:dev-verify` | Execution | Map requirements → evidence; emit a PASS/PARTIAL/FAIL verdict |
-| `/sp:dev-verifyall` | Exec (batch) | Batch-verify tasks into one consolidated report |
+| `/sp:dev-verify --all` | Exec (batch) | Batch-verify tasks into one consolidated report |
 | `/sp:dev-fixall` | Hygiene | Loop lint, typecheck, and tests until the working tree is clean |
 | `/sp:dev-simplify` | Hygiene | Simplify recently changed code for clarity without changing behavior |
 | `/sp:dev-debug` | Operations | Systematic debugging: reproduce → isolate → root cause → minimal fix → regression test |
 | `/sp:dev-daily` | Operations | Daily summary report from agent usage data, git history, and notes |
 | `/sp:dev-handover` | Operations | Write an honest handover doc when blocked instead of stalling silently |
 | `/sp:dev-wrap` | Wrap-up | Wrap one completed task: learnings, metrics, doc-sync (`--merge` adds branch cleanup) |
-| `/sp:dev-wrapall` | Wrap-up | Batch wrap-up; the only path that advances the feature lifecycle |
+| `/sp:dev-wrap --all` | Wrap-up | Batch wrap-up; the only path that advances the feature lifecycle |
 | `/sp:spur-init` | Bootstrap | Initialize a new Spur project, then customize for stack and scope |
 
 ## Two paths from idea to prototype
@@ -48,7 +48,7 @@ feature:
 /sp:dev-brainstorm "Users can reset their password via email" --feature --next
 # → feature + acceptance criteria (gated by spur feature check)
 # → /sp:dev-plan decomposes (gated by spur task batch-create)
-/sp:dev-runall --feature F7 --auto
+/sp:dev-run --all --feature F7 --auto
 ```
 
 **Path B — the idea is one deliverable.** Fast lane, no feature ceremony:
@@ -71,8 +71,8 @@ verdict **stops the chain** with findings written into the task — there is no 
 
 ```text
 /sp:dev-run 0061 --auto        # full pipeline, HITL gates auto-confirmed
-/sp:dev-runall --feature F7 --auto
-/sp:dev-runall --feature F7 --mode auto  # fan out only when dependency waves allow
+/sp:dev-run --all --feature F7 --auto
+/sp:dev-run --all --feature F7 --mode auto  # fan out only when dependency waves allow
 ```
 
 `--auto` skips objective confirmations only. Irreversible gates (branch cleanup, merges) always
@@ -82,7 +82,7 @@ pause for a human.
 
 ```text
 /sp:dev-wrap 0061 --auto           # learnings, metrics, doc-sync for one task
-/sp:dev-wrapall --feature F7 --auto
+/sp:dev-wrap --all --feature F7 --auto
 ```
 
 Wrap-up consumes completed tasks and never mutates task status; the feature lifecycle advances

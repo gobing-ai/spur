@@ -2,7 +2,7 @@
 description: Wrap up a single completed task — learnings, metrics, doc-sync, optional branch cleanup
 requires: [cli:spur, local-fs]
 role: coder
-argument-hint: "<wbs> [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
+argument-hint: "[<wbs>] [--all] [--since <iso>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
@@ -14,7 +14,11 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `<wbs>` | Task WBS to wrap. | required |
+| `<wbs>` | Task WBS to wrap. Exclusive with `--all`. | required unless `--all` |
+| `--all` | Batch scope: wrap every completed task in the resolved set (the former `/sp:dev-wrap --all`). Exclusive with `<wbs>`. | off |
+| `--since` `<iso>` | Batch filter: tasks completed since this instant. Requires `--all`. | — |
+| `--feature` `<id>` | Batch filter by feature. Requires `--all`. | omitted |
+| `--status` `<s>` | Batch filter by task status. Requires `--all`. | — |
 | `--agent` `<inline\|auto\|name>` | Who runs the wrap's model-bearing steps. Wrap is workflow-backed (headless): `omit` and `--agent inline` resolve identically per task 0687 — tier substitution under objective trigger 3 (durable auditable run record required) with a warning naming the substituted executor; `auto` tier-resolves an executor; a name pins that executor into `vars.agent`. | inline |
 | `--auto` | Skip objective HITL gates. | off |
 | `--merge` | Merge the wrap branch. | off |
@@ -29,6 +33,10 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 ## Implementation
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- **Batch scope (`--all`, task 1390):** `--all` selects the former `dev-wrap --all` set (no `<wbs>`), and the
+  same workflow runs over it — the batch and single-task forms are one implementation (`wrapup-pipeline.yaml`
+  takes the resolved task set). `--all` and `<wbs>` are mutually exclusive; `--since`/`--status` narrow the
+  batch set.
 - Wrap stays **workflow-backed** — `spur workflow run wrapup-pipeline.yaml` is the only implementation; there is no inline wrap driver.
 - Resolve the executor **before** launching the workflow:
   - `--agent <name>` → pass the name unchanged into `vars.agent`.

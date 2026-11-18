@@ -49,7 +49,7 @@ function extractFlags(text: string): Set<string> {
 }
 
 /** Parse the numbered command table in dev-operations.md.
- *  Returns a map of command-name (e.g. "dev-runall") -> table-row flags Set.
+ *  Returns a map of command-name (e.g. "dev-run --all") -> table-row flags Set.
  *  Only rows whose first column is a numeric table index (`<n>` or `<n><letter>`,
  *  e.g. `13` or `5a`) are matched — incidental `|`-prefixed rows elsewhere in the
  *  file (failure-mode tables, etc.) that mention `dev-<name>` must NOT clobber. */
@@ -110,21 +110,19 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         });
     }
 
-    test('R8 — the three drift defects 0397 fixes are closed (dev-verifyall --next, dev-runall --mode/--continue)', () => {
-        // dev-verifyall argument-hint must now include --next
-        const verifyall = readFileSync(join(COMMANDS_DIR, 'dev-verifyall.md'), 'utf8');
-        expect(argumentHint(verifyall)).toContain('--next');
+    test('R8 — the 0397 drift defects stay closed on the merged surface (task 1390)', () => {
+        // 1390: the former dev-verify --all hint lives on dev-verify --all now, and the former
+        // dev-run --all hint on dev-run --all. The drift defects tracked their flags, so they are
+        // asserted against the merged hints — the surface moved, the invariants did not.
+        const verify = readFileSync(join(COMMANDS_DIR, 'dev-verify.md'), 'utf8');
+        expect(argumentHint(verify)).toContain('--next');
 
-        // dev-runall argument-hint must include --mode and --continue
-        const runall = readFileSync(join(COMMANDS_DIR, 'dev-runall.md'), 'utf8');
-        const runallHint = argumentHint(runall);
-        expect(runallHint).toContain('--mode');
-        expect(runallHint).toContain('--continue');
-
-        // dev-runall now carries --next (task 0401 R5: batch-once wrap). The old
-        // "deliberate asymmetry" no longer holds — --next means chain-to-completion
-        // with a batch-once wrap hop, which dev-runall supports.
-        expect(runallHint).toContain('--next');
+        const runHint = argumentHint(readFileSync(join(COMMANDS_DIR, 'dev-run.md'), 'utf8'));
+        expect(runHint).toContain('--mode');
+        expect(runHint).toContain('--continue');
+        // --next means chain-to-completion with a batch-once wrap hop; --all carries it.
+        expect(runHint).toContain('--next');
+        expect(runHint).toContain('--all');
     });
     // ---------- task 0412 (feature H81): glossary membership from ALL 28 dev commands ----------
     //
@@ -197,15 +195,18 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         );
         // 0885: dev-refactor joins the mode-aware set (references the inline-default contract).
         // dev-find-way joins it (wayfinder split out of dev-brainstorm).
-        // dev-parallel retired (folded into dev-runall --mode parallel|auto).
-        expect(agentCommands.length).toBe(26);
+        // dev-parallel retired (folded into dev-run --all --mode parallel|auto).
+        // 1390: the merged base commands declare --agent, and the four one-release redirects
+        // keep declaring it because they forward the identical flags.
+        expect(agentCommands.length).toBe(27);
     });
 
     // ---------- compatibility alias owning-contract assertions ----------
     //
     const COMPAT_ALIASES: Array<{ command: string; flag: string; doc: string }> = [
         { command: 'dev-verify', flag: '--skip-shipable', doc: 'typo-tolerant alias of --skip-shippable' },
-        { command: 'dev-verifyall', flag: '--skip-shipable', doc: 'typo-tolerant alias of --skip-shippable' },
+        // 1390: the alias lives on the merged base command; the redirect forwards it unchanged.
+        { command: 'dev-verify', flag: '--skip-shipable', doc: 'typo-tolerant alias of --skip-shippable' },
     ];
     for (const { command, flag, doc } of COMPAT_ALIASES) {
         test(`R6 — ${command} documents compatibility alias ${flag}`, () => {
@@ -231,7 +232,9 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
 
     // dev-run joined the set: it drives a whole task pipeline (a batch of one), unlike dev-next
     // which dispatches a single step and stays excluded below.
-    const WORKTREE_COMMANDS = ['dev-runall', 'dev-refineall', 'dev-verifyall', 'dev-run', 'dev-review'];
+    // 1390: the batch variants became `--all` on their base commands, so the placeholder is
+    // pinned on the base commands (dev-run already carried it) plus dev-review.
+    const WORKTREE_COMMANDS = ['dev-run', 'dev-refine', 'dev-verify', 'dev-review'];
     for (const command of WORKTREE_COMMANDS) {
         test(`R7 — ${command} documents optional --worktree name as [<name>]`, () => {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
@@ -252,18 +255,18 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
 
     // ---------- task 0931 (feature H1): --concurrency, the parallel worker bound ----------
     //
-    // --concurrency is dev-runall-only and deliberately stays OUT of the argument-hint: the
+    // --concurrency is dev-run --all-only and deliberately stays OUT of the argument-hint: the
     // R8 gate derives membership from hints, and the dev-operations.md row (out of this task's
     // scope) would drift. It is documented in the command's Argument Flags table + flag notes
     // and defined once in flag-glossary.md.
 
-    test('0931 — dev-runall documents --concurrency <n> in its Argument Flags table and flag notes', () => {
-        const raw = readFileSync(join(COMMANDS_DIR, 'dev-runall.md'), 'utf8');
+    test('0931 — dev-run documents --concurrency <n> in its Argument Flags table and flag notes', () => {
+        // 1390: the parallel worker bound rides on dev-run --all, not a separate command.
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-run.md'), 'utf8');
         expect(raw).toMatch(/\| `--concurrency` `<n>` \|[^\n]+\| 2 \|/);
-        expect(raw).toContain('`--concurrency <n>`\n(parallel-mode worker bound');
-        // Only dev-runall carries it.
+        // Only dev-run carries it, plus its one-release redirect which forwards every flag.
         for (const file of commandFiles) {
-            if (file === 'dev-runall.md') continue;
+            if (file === 'dev-run.md' || file === 'dev-runall.md') continue;
             const other = readFileSync(join(COMMANDS_DIR, file), 'utf8');
             expect(other.includes('--concurrency'), `${file} unexpectedly declares --concurrency`).toBe(false);
         }
@@ -325,7 +328,7 @@ describe('task 1022 — dev-review contract hygiene', () => {
         // The stale glossary list no longer claims to be the review/verify vocabulary
         // (dev-reverse keeps its own reconstruction lens list).
         const glossary = readFileSync(GLOSSARY_PATH, 'utf8');
-        expect(glossary).not.toContain('`dev-verify`/`dev-verifyall` (`all|stack|');
+        expect(glossary).not.toContain('`dev-verify`/`dev-verify --all` (`all|stack|');
         expect(reviewRaw).toContain('[code-verification/SKILL.md](../skills/code-verification/SKILL.md)');
     });
 
@@ -491,5 +494,72 @@ describe('task 1032 — dev-review P4 advisory sweep', () => {
     test('R8 — nested --scope collapses to the ancestor; positional beside a selector exits 2', () => {
         expect(reviewRaw).toContain('`--scope apps,apps/cli` → `apps`');
         expect(reviewRaw).toMatch(/positional beside an explicit selector[^\n]*exit 2/);
+    });
+});
+
+// ---------- task 1391 (feature H84): dev-find <lens> routing shell ----------
+
+describe('task 1391 — dev-find routes four lenses and the old names redirect', () => {
+    const findRaw = readFileSync(join(COMMANDS_DIR, 'dev-find.md'), 'utf8');
+
+    test('R1 — the lens table names all four lenses and their skills', () => {
+        for (const [lens, skill] of [
+            ['conflict', 'sp:conflict-finding'],
+            ['issue', 'sp:history-anatomy'],
+            ['next', 'sp:next-feature'],
+            ['way', 'sp:wayfinder'],
+        ] as const) {
+            expect(findRaw, `dev-find must dispatch the ${lens} lens`).toContain(skill);
+            expect(findRaw, `dev-find must document the ${lens} lens`).toMatch(new RegExp(`\\b${lens}\\b`));
+        }
+        // An unknown or missing lens prints the table and stops — no dispatch, no side effect.
+        expect(findRaw).toContain('An unknown or missing lens prints the lens table and stops');
+    });
+
+    test('R2 — the way lens keeps the worktree lifecycle and --wrap preamble verbatim', () => {
+        const wayRaw = readFileSync(join(COMMANDS_DIR, 'dev-find-way.md'), 'utf8');
+        for (const line of [
+            'Worktree lifecycle: [execution-batch.md § Worktree isolation]',
+            'the skill owns charting, ticket resolution, fog graduation and the one-ticket-per-session rule',
+            '/sp:dev-wrap <wbs> [--agent <value>]',
+            'inside the worktree before WT-3b',
+        ]) {
+            expect(findRaw, `dev-find must carry the moved way preamble: ${line}`).toContain(line);
+            expect(wayRaw, `dev-find-way must still carry it for its redirect: ${line}`).toContain(line);
+        }
+    });
+
+    test('R3 — the description carries the union of the four trigger sets', () => {
+        // Auto-invocation reads these phrases; a lens whose triggers were dropped becomes unfindable.
+        for (const trigger of [
+            'find conflict',
+            'semantic conflict',
+            'stale projection',
+            'find historical issues',
+            'post-mortem',
+            'history-anatomy',
+            'find next',
+            'which feature',
+            'what should I work on',
+            'wayfind',
+            'chart a course',
+            'multi-session investigation',
+        ]) {
+            expect(findRaw, `dev-find description must keep the trigger "${trigger}"`).toContain(trigger);
+        }
+    });
+
+    test('R4 — the four former commands are one-release redirects naming their lens', () => {
+        for (const [command, lens] of [
+            ['dev-find-conflict', 'conflict'],
+            ['dev-find-issue', 'issue'],
+            ['dev-find-next', 'next'],
+            ['dev-find-way', 'way'],
+        ] as const) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
+            expect(raw, `${command} must announce the deprecation`).toContain('one-release redirect');
+            expect(raw, `${command} must name /sp:dev-find ${lens}`).toContain(`/sp:dev-find ${lens}`);
+            expect(raw, `${command} must dispatch the same action`).toContain(`/sp:dev-find ${lens} $ARGUMENTS`);
+        }
     });
 });

@@ -26,7 +26,7 @@ separate active-context review surface and consumes only the placement rule.
 
 ```text
 /sp:dev-dogfood <testee> [...]     # §6 findings may carry an optional class tag
-/sp:dev-find-issue [...]           # section 9 candidates may carry a retro signal
+/sp:dev-find issue [...]           # section 9 candidates may carry a retro signal
 ```
 
 `Skill(skill="sp:issue-finding")` stays the legacy coexistence path and is out of edit scope.

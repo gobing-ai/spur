@@ -19,7 +19,7 @@ see_also:
 - **Re-read per state** — this file (Steps 1–5, WT-6/WT-7), [execution-batch-report.md](execution-batch-report.md)
   at Step 5, [execution-worktree.md](execution-worktree.md) for a worktree start,
   [execution-worktree-landing.md](execution-worktree-landing.md) at batch end,
-  [execution-worktree.md](execution-worktree.md) for `--mode parallel`,
+  [execution-worktree.md](execution-worktree.md) for `--schedule parallel`,
   [execution-batch-continuation.md](execution-batch-continuation.md) for `--continue`.
 - **Never re-derive the plan** — the frozen plan is the persisted report; a new selector match is
   `not-admitted`, not a plan change.
@@ -29,7 +29,7 @@ see_also:
 
 ## What this file owns
 
-`/sp:dev-runall` runs a **set** of task files through their pipelines in one operation, in
+`/sp:dev-run --all` runs a **set** of task files through their pipelines in one operation, in
 dependency-correct order. This file owns the batch algorithm: selector resolution, set freeze,
 topological ordering, the per-task run loop, optional parallel fan-out, the failure policy, and the
 report shape.
@@ -47,7 +47,7 @@ HITL surfacing, per-task verdict inspection, and continue/halt decisions need ju
 that a flat FSM cannot express.
 
 ```
-/sp:dev-runall ─┬─ interactive sequential omit/inline → host batch loop → inline YAML driver (task N)
+/sp:dev-run --all ─┬─ interactive sequential omit/inline → host batch loop → inline YAML driver (task N)
                 └─ explicit/parallel/headless → sp:super-planner → spur workflow run (task N)
                                                                        └─ agent.run spawns vars.agent
 ```
@@ -143,7 +143,7 @@ bun run apps/cli/src/index.ts feature check <id> --strict --json
 format defects are repaired in place and never reach the strict verdict. A finding that survives
 `--fix` is semantic, and the two profiles diverge:
 
-- **`--auto`:** the task gets **one** `/sp:dev-refineall --auto` refinement pass (exactly one — never
+- **`--auto`:** the task gets **one** `/sp:dev-refine --all --auto` refinement pass (exactly one — never
 a loop). If the re-run precheck still fails, the task is marked **skipped** with its findings
 recorded in the batch report, and independent tasks keep running. The batch does not abort.
 - **without `--auto`:** unchanged halt behavior — the batch stops on the failing task (`--keep-going`
@@ -227,7 +227,7 @@ spur task batch-plan order --tasks <tasks.json> [--concurrency <n>]
 ```
 
 `order` is the execution plan; a non-null `cycle` is the abort below. `waves`, `overlaps`, `mode`
-and `reason` feed `--mode auto` (§ 2.4a) and the batch report. The verb implements Kahn's
+and `reason` feed `--schedule auto` (§ 2.4a) and the batch report. The verb implements Kahn's
 algorithm (ADR-130 glue over `scheduleBatch` in `packages/app/src/workflow/plan-projection.ts`):
 
 1. Seed the queue with zero-indegree nodes, **sorted WBS-ascending** (deterministic tie-break).
@@ -246,9 +246,9 @@ dependency order (`overlaps[]` records each), so overlap never creates a cycle a
 overlapping tasks in the same wave (`sp:parallel-execution` row 3). It only matters under parallel
 execution; sequential order stays a valid topological order either way.
 
-### 2.4a `--mode auto` resolution
+### 2.4a `--schedule auto` resolution
 
-`--mode auto` is decided **once, here, by the active orchestrator** (the host session, or
+`--schedule auto` is decided **once, here, by the active orchestrator** (the host session, or
 `sp:super-planner` when an explicit executor is set), after freeze, Step 2.3 blocking and
 the § 2.4 schedule, and before any task runs:
 
@@ -262,7 +262,7 @@ the § 2.4 schedule, and before any task runs:
 - **Sequential resolution** continues the Step 3 loop with the frozen `order` (host-inline, or
   subprocess per task under an explicit executor).
 - **Parallel resolution** hands off to the explicit/parallel path as
-  `runall --tasks <order as comma WBS list> --mode parallel` plus the operator's other flags. The
+  `runall --tasks <order as comma WBS list> --schedule parallel` plus the operator's other flags. The
   explicit list carries the frozen membership, so the feature preflight (Step 1) is not re-run.
 - `--defer-gate` survives only a parallel resolution; a sequential one drops it.
 - The batch report records `mode: auto → <resolved>` with the script's `reason`, the widest wave,
@@ -343,7 +343,7 @@ for wbs in plan:                                       # default sequential mode
         report += skipped(wbs, reason); continue       # only relevant under --keep-going
     task check <wbs> --fix; task check <wbs> --precheck   # 1132 R4/R5 — repair first, then judge
     if precheck fails on semantic findings:
-        if --auto: one /sp:dev-refineall --auto pass; still failing → report += skipped(wbs, findings); continue
+        if --auto: one /sp:dev-refine --all --auto pass; still failing → report += skipped(wbs, findings); continue
         else:      HALT (unchanged non-auto behavior)
     preflight = spur task preflight <wbs>              # Step 2.6 — TABLE A STOP
     if preflight.action == skip:
@@ -375,7 +375,7 @@ emit batch report (per-task outcome + preflight skips + recovery hints + autoRep
 ```
 
 Parallel mode keeps the same lifecycle but swaps the inner loop for the per-task-worktree fan-out
-specified in [§ Parallel isolation](#parallel-isolation---mode-parallel): take the zero-edge,
+specified in [§ Parallel isolation](#parallel-isolation---schedule-parallel): take the zero-edge,
 non-overlapping frontier from the § 2.4 schedule's waves; **preflight each** selected task; run each ready task's `task-pipeline.yaml`
 invocation in its own create-mode worktree; integrate by rebase + `--ff-only` as tasks finish;
 recovery stays **sequential** (one WBS). If any decision-framework check fails, serialize and
@@ -639,11 +639,11 @@ Before launching a full `spur-check:full`:
 | 0510 R2 (feature-derived strict preflight) | Step 1 — "Feature-derived strict preflight (R2, task 0510)" |
 | 0510 R5 (metadata-only host controller) | Step 3.4 + projected `task show` / trace snippets in Step 1, 2.3, 3.1 |
 
-## Parallel isolation (`--mode parallel`)
+## Parallel isolation (`--schedule parallel`)
 
 Parallel mode is engine-owned (G76 1341/1342/1343): the fleet tick opens one lane per write
 dispatch, the integration queue rebases, gates and fast-forwards each finished lane, and this
-driver only ticks — see [execution-worktree.md](execution-worktree.md) § `--mode parallel`.
+driver only ticks — see [execution-worktree.md](execution-worktree.md) § `--schedule parallel`.
 Nothing in this file runs `git worktree` or a landing merge.
 
 ## Subagent execution disciplines

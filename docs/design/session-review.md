@@ -35,7 +35,7 @@ discard the evidence plane being reviewed.
 | --- | --- | --- |
 | `/sp:dev-review-session` | Discoverability, optional focus, one inline skill invocation | Review logic, history import, persistence |
 | `sp:session-review` | Evidence rules, issue-state classification, compact report contract | Workflow launch, delegation, mutation |
-| `sp:history-anatomy` / `/sp:dev-find-issue` | Imported-history daily/ad-hoc forensics | Active-conversation review |
+| `sp:history-anatomy` / `/sp:dev-find issue` | Imported-history daily/ad-hoc forensics | Active-conversation review |
 | `wrapup-pipeline.yaml` / `/sp:dev-wrap` | Task lifecycle wrap-up | Arbitrary session review |
 
 ## Evidence and report contract

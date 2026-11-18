@@ -2,7 +2,7 @@
 description: Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)
 requires: [cli:spur, local-fs]
 role: coder
-argument-hint: "<wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary]"
+argument-hint: "[<wbs>] [--all] [--tasks <selector>] [--feature <id>] [--mode <full|implement>] [--schedule <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--agent <inline|auto|name>] [--auto] [--json] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]"
 allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill"]
 ---
 
@@ -14,7 +14,15 @@ Wraps the **sp:spur-dev** and **sp:code-implementation** skills.
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `<wbs>` | Task WBS to run. | required |
+| `<wbs>` | Task WBS to run. Exclusive with `--all`. | required unless `--all` |
+| `--all` | Batch scope: run every task in the resolved set through `task-pipeline.yaml` in dependency order (the former `/sp:dev-run --all`). Exclusive with `<wbs>`. | off |
+| `--tasks` `<selector>` | Batch selector — explicit WBS list, status pseudo-list, `feature:<id>`, or `ready`. Requires `--all`. | — |
+| `--feature` `<id>` | Sugar for `--tasks feature:<id>`, plus the preflight feature check. Requires `--all`. | omitted |
+| `--schedule` `<sequential\|parallel\|auto>` | Batch execution order. Formerly `dev-run --all --mode`; `--mode` keeps its per-task meaning here. | sequential |
+| `--concurrency` `<n>` | Parallel-mode worker bound: at most `<n>` task pipelines at once (task 0931); a dependent starts only after its in-set dependencies are integrated onto the base ref. No-op in sequential mode. | 2 |
+| `--keep-going` | Batch failure policy: continue past per-task failures (implied by `--auto`). | off |
+| `--json` | Emit the batch report as structured JSON. | off |
+| `--defer-gate` | Opt-in parallel-batch gate policy (task 1111): each task's `gate` state writes `DEFERRED` and one integrated full gate runs on the base ref before the feature sync. Requires a parallel schedule; dropped with a note otherwise. | off |
 | `--mode` `<full\|implement>` | Full pipeline or single implement step. | full |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing stages. omit and explicit `--agent inline` resolve identically (task 0687): eligible stages dispatch once to a native subagent with host-session fallback (0508 eligibility); otherwise every stage executes in the invoking session. `auto` or a name keeps subprocess dispatch.. The opt-in `fleet` selector (0942) maps the run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
 | `--auto` | Skip objective HITL confirmations. | off |
@@ -29,7 +37,52 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
-/sp:dev-run <wbs> [--mode <full|implement>] [--agent <inline|auto|name>] [--auto] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary]
+/sp:dev-run [<wbs>] [--all] [--tasks <selector>] [--feature <id>] [--mode <full|implement>] [--schedule <sequential|parallel|auto>] [--concurrency <n>] [--keep-going] [--agent <inline|auto|name>] [--auto] [--json] [--next] [--wrap] [--wrap-pr] [--continue] [--worktree [<name>]] [--no-summary] [--defer-gate]
+
+
+`--all` runs the batch operation the former `/sp:dev-run --all` command dispatched — same operation
+name, same args, same workflow YAML; only the command surface moved (task 1390).
+
+**Selectors and the feature preflight.** `--tasks <selector>` takes an explicit WBS list, a status
+pseudo-list, `feature:<id>`, or `ready`; `--feature <id>` is sugar for `feature:<id>`. When the
+effective selector is feature-derived, run `spur feature check <id> --fix --json` then
+`spur feature check <id> --strict --json` **once**, before any task-list resolution, freeze — before `task list`
+— and before any task pipeline action (task 0510 R2). A non-zero strict check aborts the batch with verdict `aborted` and the structured findings (`--fix` repairs land in the report's `autoRepairs`).
+`L4.scenario-unverified` and `L4.verifying-incomplete-tasks` — the expected pre-run states of a
+not-yet-run or reopened feature — are reported verbatim but do not abort (the non-aborting set is
+`NON_ABORTING_PREFLIGHT_CODES` behind `spur task preflight --classify-feature`); any other strict
+error aborts. Explicit WBS lists, status pseudo-lists, and `ready` selectors add no feature preflight.
+
+**`--schedule auto`.** Ordering is always dependency-correct: every schedule topo-sorts the frozen
+set with `spur task batch-plan order` (deterministic, never hand-sorted). `auto` additionally reads
+that schedule's dependency waves (tasks declaring the same file are serialized) and decides once,
+before the first task: `parallel` when some wave holds ≥2 independent tasks and `--concurrency` ≥2;
+otherwise `sequential` in the host session. `--worktree` or explicit `--agent inline` pins
+`sequential`. The batch report records `schedule: auto → <resolved>` and why. The default stays
+`sequential`: parallel costs ~N× tokens, worktree setup and subprocess executors, which a dependency
+chain never pays back (rules: `execution-batch.md` § 2.4a).
+
+**`--worktree` and a parallel schedule.** `--worktree --schedule parallel` is **rejected** —
+parallel mode already isolates each task in its own worktree, and reuse mode (`--worktree <name>`) has no
+per-task meaning. Run parallel batches without `--worktree`, or run them sequentially with it.
+
+**`--next` (batch-once wrap).** Each task runs `task-pipeline.yaml` to terminal status, then the
+wrap hop runs **once for the batch** — mirroring the batch-once shippable gate `dev-verify --all`
+uses — rather than once per task. Without `--next`, `--wrap` wraps without advancing the feature
+lifecycle.
+
+**`--agent auto` pins one executor per batch.** With `--agent auto`, the first run's implement
+`result.executor` is pinned for every later task in the frozen set; only a `failed-agent` ending
+re-resolves it, exactly once (task 1318 R2/R3).
+
+**Three orthogonal axes.** `--keep-going` is the batch failure policy (halt, or skip a failed task's
+in-batch dependents and continue independents; `--auto` implies `--keep-going`). `--continue` resumes an
+interrupted batch against its frozen identity — persisted plan membership, worktree marker,
+identity-filtered checkpoints as hints (`execution-batch-continuation.md`, task 0919). `--next`
+chains each task to terminal status plus the batch-once wrap.
+
+**Corpus visibility.** While the batch runs in a worktree, corpus writes (task statuses, kanban) land
+in the worktree copy; the invoking tree keeps the pre-run statuses until the FF-merge on success.
 
 ## Implementation
 
@@ -43,6 +96,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
   step 1 / [engine run setup](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) step 5.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Apply the [shared startup contract](../skills/spur-dev/references/cross-cutting.md#shared-startup-contract-task-0814-r1r3r4r6r7r8) — publish the generated plan first, quick readiness before isolation, digest binding, comprehensive checks at their owning boundaries (task 0814 R1/R3/R4/R7/R8; 1105 R1).
+- **Batch scope (`--all`, task 1390):** `--all` dispatches the former `dev-run --all` operation — interactive sequential omit/`--agent inline` uses `Skill(skill="sp:spur-dev", args="runall-inline $ARGUMENTS-without---all")`, otherwise `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS-without---all")` (→ `sp:super-planner`). Every former `dev-run --all` flag keeps its meaning except `--mode`, which is `--schedule` here. `--all` and `<wbs>` are mutually exclusive; without either, the per-task pipeline below runs. The batch driver, `execution-batch.md` and the workflow YAML stay unchanged — only the command surface moved.
 - Full pipeline (default `--mode full`): interactive omit/`--agent inline` runs
   [the engine loop](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)
   with `executor=host` — `spur workflow run` returns a work item, this session performs it, and

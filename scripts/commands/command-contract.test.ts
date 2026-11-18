@@ -345,12 +345,13 @@ describe('(b) frontmatter schema — description, argument-hint, allowed-tools',
         }
     });
 
-    test('43 command files exist with unique basenames', () => {
+    test('44 command files exist with unique basenames', () => {
         const files = listCommandFiles();
         // 1041: dev-job-dump and dev-job-resume added; dev-find-way split out of dev-brainstorm.
-        expect(files.length).toBe(43);
+        // 1391: dev-find merges the four find lenses into one routing command.
+        expect(files.length).toBe(44);
         const names = new Set(files.map((f) => f.replace(/\.md$/, '')));
-        expect(names.size).toBe(43);
+        expect(names.size).toBe(44);
     });
 });
 
@@ -433,10 +434,8 @@ describe('(d) allowed-tools coherence — Skill <-> Skill() call', () => {
 // ─── (e) validator integration — no violations on the real corpus ───────────
 
 describe('(e) validator integration — corpus is clean after the 28-file migration (task 0412)', () => {
-    test('validate() reports zero violations across all 43 commands', () => {
+    test('validate() reports zero violations across all 44 commands', () => {
         const result = validate(ROOT);
-        // 1041: dev-job-dump and dev-job-resume added; dev-find-way split out of dev-brainstorm.
-        expect(result.fileCount).toBe(43);
         expect(result.violations).toEqual([]);
     });
 });

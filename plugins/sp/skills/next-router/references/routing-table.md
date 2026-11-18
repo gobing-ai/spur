@@ -13,7 +13,7 @@ dispatcher: resolve target → load corpus → apply primary table → optional 
 
 ## Batch consumers (task 0279)
 
-`sp:super-planner` (via `/sp:dev-runall`) **reads** TABLE A STOP preconditions for:
+`sp:super-planner` (via `/sp:dev-run --all`) **reads** TABLE A STOP preconditions for:
 
 1. **Preflight** — skip pipeline launch when A2/A7/A8/A9 would stop `dev-next` (`spur task preflight`).
 2. **One-shot recovery** — after a failed pipeline, map status → primary hop (A1/A3/A5/A6/A7) at most once.
@@ -84,7 +84,7 @@ When input is a feature id:
 | B3 | Feature has ≥1 frontier task | task list under feature | **Recurse TABLE A** on chosen task | per A | per A | Frontier = open (`backlog`\|`todo`\|`wip`\|`testing`\|`blocked`), unblocked (all `dependencies[]` done), prefer WBS-ascending among `todo` then `backlog` then `wip` then `testing` then `blocked` |
 | B4 | No frontier tasks AND `feature.status == backlog` AND AC placeholder/invalid | `feature check` / AC body | `/sp:dev-plan` continuation is not WBS-shaped — **STOP** with: run `/sp:dev-plan --feature <id>` or fix AC then `spur feature check <id>` | no | no | Planning-half entry needs a description; do not invent idea text |
 | B5 | No frontier tasks AND feature has valid AC but zero tasks | feature + empty task roster | **STOP** with: `/sp:dev-plan --feature <id>` (decompose/batch-create) | no | no | Avoid auto-running plan without operator description confirmation in v1 |
-| B6 | No frontier tasks AND all child tasks `done` AND feature in `active`\|`verifying` | task list all done | `/sp:dev-wrapall --feature <id>` (`--agent <value>` preserved when the originating command supplied it; omission remains omission) | no | no | Advances feature via wrapall guards; `--merge` never auto |
+| B6 | No frontier tasks AND all child tasks `done` AND feature in `active`\|`verifying` | task list all done | `/sp:dev-wrap --all --feature <id>` (`--agent <value>` preserved when the originating command supplied it; omission remains omission) | no | no | Advances feature via wrapall guards; `--merge` never auto |
 | B7 | No frontier tasks AND mixed terminal only (any combination drawn from `cancelled`, `done`, `deprecated`) | statuses | **STOP** — print summary; suggest feature status update manually | no | no | |
 | B8 | `feature.status == blocked` | feature status | **STOP** — print feature blocked; do not pick tasks | no | no | |
 
@@ -189,7 +189,7 @@ Without `--once`, leave table `--next` intact so refine→run→verify chain run
 | Infer target from git dirty / chat | Locked out of v1 signals |
 | Auto `--merge` on wrap | Irreversible |
 | Auto `rule-add` | Authoring needs human judgment |
-| `dev-runall` as default for feature | Batch is a deliberate aperture; feature path picks **one** frontier task |
+| `dev-run --all` as default for feature | Batch is a deliberate aperture; feature path picks **one** frontier task |
 | Lifecycle bypass (`--no-lifecycle`) to force progress | Guards are the product |
 
 ## 7. Worked scenarios (stress tests)
@@ -206,7 +206,7 @@ runs `/sp:dev-next 0042` again → A5 → implement.
 B3 frontier filter drops blocked-by-dep; WBS-ascending picks lowest ready todo → A3.
 
 **S4 — All tasks done, feature active**
-B6 → `/sp:dev-wrapall --feature F`.
+B6 → `/sp:dev-wrap --all --feature F`.
 
 **S5 — testing, verify would fail on tests**
 A6 → C5/C3 → unit first if verdict says so; else verify.

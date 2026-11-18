@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { readRunbook, referencePath } from './helpers/runbook-parts';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
-const DEV_RUNALL = join(ROOT, 'plugins', 'sp', 'commands', 'dev-runall.md');
+const DEV_RUNALL = join(ROOT, 'plugins', 'sp', 'commands', 'dev-run.md');
 const FLAG_GLOSSARY = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
 const SUPER_PLANNER = join(ROOT, 'plugins', 'sp', 'agents', 'super-planner.md');
 const PLUGIN_SP = join(ROOT, 'plugins', 'sp');

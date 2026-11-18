@@ -381,7 +381,7 @@ to the remote repository and opens a GitHub Pull Request:
    ```bash
    # Compose PR title and body from task / batch metadata:
    # For single task (dev-run): title="feat(<wbs>): <title>", body cites verification PASS & Solution.
-   # For batch (dev-runall): title="feat(<feature-id>): <feature-summary>" or "feat(batch): <selector> (<n> tasks)".
+   # For batch (dev-run --all): title="feat(<feature-id>): <feature-summary>" or "feat(batch): <selector> (<n> tasks)".
    PR_URL=$(gh pr create --base "$BASE_REF" --head "$BRANCH" --title "$PR_TITLE" --body "$PR_BODY") \
      || { echo "WT-PR halt: gh pr create failed" >&2; exit 1; }
    echo "WT-PR: Pull Request opened at $PR_URL"

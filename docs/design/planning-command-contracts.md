@@ -110,12 +110,12 @@ dev commands. Full shapes:
 
 <a id="131-spdev-find-conflict--authority-aware-conflict-audit-feature-h11-task-0486"></a>
 
-#### 1.3.1 `/sp:dev-find-conflict` — authority-aware conflict audit (feature H11, task 0486)
+#### 1.3.1 `/sp:dev-find conflict` — authority-aware conflict audit (feature H11, task 0486)
 
 Thin wrapper over the `sp:conflict-finding` skill. Standalone audit, not a spine pipeline stage.
 
 ```text
-/sp:dev-find-conflict [--tasks <selector> | --feature <id>[,<id>] | --scope <path>[,<path>]]  # default: whole project
+/sp:dev-find conflict [--tasks <selector> | --feature <id>[,<id>] | --scope <path>[,<path>]]  # default: whole project
     [--pillar <source|tasks|features|authority|all>]   # default all
     [--mode <adaptive|full>]                            # default adaptive
     [--resolve]                                         # default off
@@ -162,14 +162,14 @@ dependency, CLI noun, workflow, or dedicated subagent. SSOT:
 
 <a id="132-spdev-find-next--feature-frontier-prioritizer-feature-h12-tasks-0497-0498"></a>
 
-#### 1.3.2 `/sp:dev-find-next` — feature frontier prioritizer (feature H12, tasks 0497, 0498)
+#### 1.3.2 `/sp:dev-find next` — feature frontier prioritizer (feature H12, tasks 0497, 0498)
 
 Thin wrapper over the `sp:next-feature` skill. Standalone report, not a spine pipeline stage.
 Answers "which feature should we work on now?" — the target-omitted case `sp:next-router`
 declares out of v1 (routing-table §0 step 1c); within-target routing stays `/sp:dev-next`'s.
 
 ```text
-/sp:dev-find-next
+/sp:dev-find next
     [--task [<feature-id>]]                             # default omitted
     [--agent <inline|auto|name>]                        # default omitted
     [--auto]                                            # default off

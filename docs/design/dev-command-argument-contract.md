@@ -104,6 +104,31 @@ commands. Numbered-operation parity remains a separate bidirectional check for c
 in `dev-operations.md`. Compatibility aliases use explicit owning-contract assertions instead of
 canonical hint counts.
 
+## Batch scope on the base commands (task 1390)
+
+A batch is a **scope**, not a different operation, so the four former batch commands are flags on
+their base commands and the `sp:spur-dev` operation names (`runall`, `refineall`, `verifyall`,
+`wrapall`) stay unchanged:
+
+| Base command | Batch form | Former command |
+| --- | --- | --- |
+| `dev-run` | `--all` + `--schedule <sequential\|parallel\|auto>` | `dev-runall` |
+| `dev-refine` | `--all` | `dev-refineall` |
+| `dev-verify` | `--all` | `dev-verifyall` |
+| `dev-wrap` | `--all` | `dev-wrapall` |
+
+`--all` is an explicit switch, mutually exclusive with `<wbs>`, so a mistyped WBS can never silently
+become a batch. **`--mode` keeps its per-task meaning** (`full|implement`) and the batch schedule is
+`--schedule`; `dev-runall` rewrote `--mode` into `--schedule` for one release. The four former
+commands remain as one-release redirects: same flags, same operation, forwarding every argument
+unchanged, and no surface of their own (`Argument Flags` documents what they forward).
+
+Parity holds through the move: each redirect keeps its `dev-operations.md` row and its glossary
+declarations, so both spellings are catalogued while the overlap lasts; the merged base rows carry
+the union of both flag sets. The detector surface follows the same rule — `dev-<base> --all` classifies
+exactly as the `dev-<base>all` token did (`packages/app/src/services/dogfood/pipeline-detect.ts`), and
+`--all` alone is never a pipeline token.
+
 ## Audited reconciliation set
 
 The implementation audit must resolve these evidenced inconsistencies before changing public
@@ -112,7 +137,7 @@ syntax:
 | Surface | Required disposition |
 | --- | --- |
 | `dev-review` target | Keep optional; correct the detailed operation contract |
-| `dev-runall --next` | Retain; remove stale detailed prose denying the flag |
+| `dev-run --all --next` | Retain; remove stale detailed prose denying the flag |
 | `dev-wrap* --dry-run` | Retain and add to detailed inputs/defaults |
 | `dev-fixall` validation command / `--max-retry` | Retain and add to detailed inputs/defaults |
 | `dev-debug` input flags | Retain; add the missing backing-skill input contract |

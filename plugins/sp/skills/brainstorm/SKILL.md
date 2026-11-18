@@ -70,7 +70,7 @@ Activate sp:brainstorm when:
 - Task creation without ideation (use `sp:spur-dev` instead)
 - Fact-checking or verification only (use `sp:source-driven-development` instead)
 - Task file operations (use `sp:spur-cli` instead)
-- Multi-session investigation when the destination itself is foggy (recommend `/sp:dev-find-way`; see [Scope Check](#scope-check-end-of-phase-1))
+- Multi-session investigation when the destination itself is foggy (recommend `/sp:dev-find way`; see [Scope Check](#scope-check-end-of-phase-1))
 
 ## Core Principles
 
@@ -323,9 +323,9 @@ Before ideation, ask: **"Can this be spec'd in one session, or is the destinatio
 Fog signals: the topic touches ≥3 subsystems or unknown boundaries; key decisions depend on research
 not yet done; the operator can name the goal but not the solution's shape; repeated "it depends"
 answers. When they dominate, **stop** — do not ideate toward a destination that isn't there. Report
-the resolved decision tree and recommend `/sp:dev-find-way "<topic>"`, which owns multi-session
+the resolved decision tree and recommend `/sp:dev-find way "<topic>"`, which owns multi-session
 investigation maps. Brainstorm never charts a map itself.
 
 ---
 
-**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:source-driven-development`. Delegate synthesis/research inline (escalate to `spur agent run` only on a subprocess trigger). Delegate task creation to `sp:spur-dev`. When the destination itself is foggy, stop and recommend `/sp:dev-find-way` — never force a spec that isn't ready.
+**Remember:** Ideation ≠ Research. Generate approaches with trade-offs. Delegate verification to `sp:source-driven-development`. Delegate synthesis/research inline (escalate to `spur agent run` only on a subprocess trigger). Delegate task creation to `sp:spur-dev`. When the destination itself is foggy, stop and recommend `/sp:dev-find way` — never force a spec that isn't ready.

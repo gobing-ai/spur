@@ -26,7 +26,7 @@ rows, HITL gates and terminal states.
 > `task-pipeline.yaml`. For **batch** execution (a set of tasks in dependency-correct order), see
 > **[execution-batch.md](execution-batch.md)** — it layers set resolution, topological ordering, a
 > failure policy, and a batch report on top of this same verbatim pipeline, driven by the
-> `sp:super-planner` orchestrator via `/sp:dev-runall`.
+> `sp:super-planner` orchestrator via `/sp:dev-run --all`.
 
 This file owns **how operations sequence** in the pipeline. What each operation *does*
 (`implement`, `unit`, `review`, `verify`) is defined once in

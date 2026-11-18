@@ -19,11 +19,11 @@ Read with `--worktree` at batch start (task 1128 R1).
 
 ## Worktree isolation (`--worktree [<name>]`)
 
-When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
+When a batch command (`dev-run --all`, `dev-refine --all`, `dev-verify --all`) is invoked with
 [`--worktree [<name>]`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an
 isolated git worktree instead of the operator's working directory. This section owns the worktree
 lifecycle for the sequential batch loop. `--mode parallel` no longer uses this file at all — see
-[§ parallel mode](#-mode-parallel--engine-owned-g76-134113421343); `--worktree --mode parallel` is
+[§ parallel mode](#-mode-parallel--engine-owned-g76-134113421343); `--worktree --schedule parallel` is
 rejected there (parallel mode already isolates each task in its own worktree).
 
 **Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
@@ -33,8 +33,8 @@ all subsequent tools, agents, task/feature writes, and run artifacts use the con
 tree's cwd. A stale or empty selector, an unsupported mode, or an invalid target creates no tree and
 no marker (WT-2/WT-7), and the required Git safety checks (WT-1) still precede creation.
 
-> **Command wiring (task 0814 R3).** The four task-set worktree commands (`dev-run`, `dev-runall`,
-> `dev-refineall`, `dev-verifyall`) each call `quickReadiness` with their operation (`run`/`refine`/
+> **Command wiring (task 0814 R3).** The four task-set worktree commands (`dev-run`, `dev-run --all`,
+> `dev-refine --all`, `dev-verify --all`) each call `quickReadiness` with their operation (`run`/`refine`/
 > `verify`), the resolved selector/status, and the filtered-set size **before** WT-1/WT-2. The
 > admission outcome gates the tree: an invalid/empty selector, unsupported mode, or a target that
 > quickReadiness marks `blocked`/`invalid` creates no tree and no marker (WT-2/WT-7); a
@@ -62,11 +62,11 @@ resolve before the tree is cut). Under `--triage` the findings are bucketed acro
 (identical `file:line` findings deduped). WT-4 success reads as "every direct fix passed its check and the
 project gate is green"; anything else takes WT-5. Contract: [dev-operations.md § 2. review](dev-operations.md#2-review).
 
-**Wayfinding `dev-find-way` (run of one, mandatory).** `/sp:dev-find-way` always runs this
-lifecycle — an omitted flag is create mode, never in-place. Marker `command` is `dev-find-way`,
+**Wayfinding `dev-find way` (run of one, mandatory).** `/sp:dev-find way` always runs this
+lifecycle — an omitted flag is create mode, never in-place. Marker `command` is `dev-find way`,
 `selector` is `chart:<destination-slug>` or `<feature-id>:<wbs>`, branch is
 `sp/wayfind-<slug|wbs>-<short-id>`. It skips `quickReadiness` (admission is "the feature/ticket
-resolves and no other `dev-find-way` marker holds the ticket"). WT-4 success reads as "the map
+resolves and no other `dev-find way` marker holds the ticket"). WT-4 success reads as "the map
 checks clean (chart) or the one ticket reached `done` (work)"; anything else takes WT-5. Contract:
 [dev-operations.md § 12a. find-way](dev-operations.md#12a-find-way).
 
@@ -320,7 +320,7 @@ terminal transition (merged / retained). The marker is written to the **invoking
   "branch": "sp/<command>-<selector-slug>-<short-id>",
   "baseRef": "feat/example",
   "baseSha": "<sha-at-creation>",
-  "command": "dev-runall",
+  "command": "dev-run --all",
   "selector": "feature:H1",
   "createdAt": "<iso-8601>",
   "status": "active"
@@ -350,7 +350,7 @@ Reuse mode resolves the marker by the resolved worktree's `path` (not by `comman
 
 - **Existing marker for that path** → adopt it in place: update `command`/`selector` to the current
   invocation, set `status` to `active`, set `adopted: true` + `adoptedAt`, **preserve `baseRef` and
-  `baseSha`**. This makes cross-command resume — `dev-runall` halted, now `dev-verifyall` over the
+  `baseSha`**. This makes cross-command resume — `dev-run --all` halted, now `dev-verify --all` over the
   same tree — a supported path (R5.2).
 - **No marker** (hand-made or foreign worktree) → synthesize one with `baseRef` = the invoking
   tree's current HEAD ref, `baseSha` = `git merge-base <baseRef> <BRANCH>`, `adopted: true`.
@@ -444,7 +444,7 @@ fallback, because `<name>` was explicit and unambiguous intent.
   the flag.
 - **`--mode parallel`** is rejected when combined with `--worktree` — parallel mode already
   isolates each task in its own worktree
-  ([§ Parallel isolation](#parallel-isolation---mode-parallel)), and reuse mode
+  ([§ Parallel isolation](#parallel-isolation---schedule-parallel)), and reuse mode
   (`--worktree <name>`) has no per-task meaning.
 - **`--mode implement`** is rejected when combined with `--worktree` on `dev-run` — that mode *is*
   the pipeline's implement stage (bug-742) and runs in whatever tree the driver set up; a second

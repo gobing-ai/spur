@@ -36,8 +36,8 @@ All product development work goes through the harness by default.
 | ------ | ---------- | -------- |
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task / no pipeline |
-| Batch or parallel task runs | `/sp:dev-runall` (host sequential; `--mode parallel\|auto` → **`sp:super-planner`**) | Unordered multi-task thrash |
-| Batch-refine tasks under a feature | `/sp:dev-refineall --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
+| Batch or parallel task runs | `/sp:dev-run --all` (host sequential; `--mode parallel\|auto` → **`sp:super-planner`**) | Unordered multi-task thrash |
+| Batch-refine tasks under a feature | `/sp:dev-refine --all --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw Write/Edit on corpus files |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags from memory |
 | Create/edit/list tasks or features | **`spur task` / `spur feature`** (`--section --from-file`) | Direct-writing task/feature corpus files |
@@ -47,7 +47,7 @@ All product development work goes through the harness by default.
 | Constraint gate / rule authoring | **`spur rule`**; `/sp:rule-scan`, `/sp:rule-add`, `/sp:rule-refine` | Skipping `spur rule run` |
 | Workflow author / run | **`spur workflow`**; `/sp:workflow-add`, `/sp:workflow-refine` | Ad-hoc shell as the lifecycle |
 | Docs drift / sync / lessons | Skill **`sp:doc-evolve`** + `docs/99_PROJECT_CONSTITUTION.md` | Patching derived docs over authority |
-| Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrapall` | Skipping learnings / doc sync |
+| Wrap completed work | `/sp:dev-wrap`, `/sp:dev-wrap --all` | Skipping learnings / doc sync |
 | Session index / memory | Skill **`sp:indexed-context`** + `.spur/context/` | Full-tree re-reads every turn |
 | Install / sync a plugin across coding agents | **`superskill install <plugin>`** | Hand-copying per-platform adapters |
 | Capability authoring / quality lifecycle | **`superskill <noun> --help`** (`agent`, `skill`, `command`, `hook`, `magent`) | Bypassing the noun's validation / evaluation gates |
@@ -65,7 +65,7 @@ All product development work goes through the harness by default.
    capability lifecycle → Superskill. Do not hand-maintain per-platform adapters Superskill generates.
 6. **Run dev skills inline by default** — direct model-bearing `/sp:dev-*` commands execute in the
    current coding-agent session. Interactive `/sp:dev-run --mode full` and sequential
-   `/sp:dev-runall` with omit/`--agent inline` interpret `task-pipeline.yaml` in-session; `--agent
+   `/sp:dev-run --all` with omit/`--agent inline` interpret `task-pipeline.yaml` in-session; `--agent
    auto`, a name, parallel/headless execution, direct `spur agent run`, and engine-driven workflow
    `agent.run` remain subprocess surfaces.
 
@@ -150,7 +150,7 @@ _(Fill from package manifests / README — or during `sp:doc-evolve` customize.)
 **Gate scope:** the gate verifies code changes. Scribe commands — `/sp:dev-gitmsg`,
 `/sp:dev-changelog`, `/sp:dev-handover`, `/sp:dev-job-dump` — produce text or a commit and run no
 gate (lint, typecheck, tests) unless asked: `gitmsg --check <cmd>`, or `/sp:dev-gtd --no-push` for
-gate → fix → commit. Commands that own a gate (`dev-run`, `dev-runall`, `dev-fixall`, `dev-gtd`,
+gate → fix → commit. Commands that own a gate (`dev-run`, `dev-run --all`, `dev-fixall`, `dev-gtd`,
 `dev-fixgha`, `dev-unit`, `--check` loops) run exactly what their contract names — no extra
 completion-gate pass on top.
 
@@ -167,8 +167,8 @@ spur <noun> <verb> … --json
 spur <noun> --help
 ```
 
-**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, findconflict, dogfood, reverse, arch,
-…) are indexed in the project plugin README (`plugins/sp/README.md` when present).
+**Long-tail:** Additional `/sp:dev-*` commands (handover, gitmsg, fixall, find (lenses: conflict, issue,
+next, way), dogfood, reverse, arch, …) are indexed in the project plugin README (`plugins/sp/README.md` when present).
 
 **Outside spur-cli:** For nouns without a reference file, use only `spur <noun> --help` and
 `docs/04_DESIGN.md`; never guess flags. Agent/message/self/projects references live under

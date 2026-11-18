@@ -8,6 +8,11 @@ allowed-tools: ["Bash", "Read", "Skill"]
 
 # Dev Find Issue
 
+> **Deprecated (task 1391, feature H84).** This command is a one-release redirect.
+> Use `/sp:dev-find issue` — one routing command with a lens table. The lens skill, its
+> flags and its behavior are unchanged; this file adds no validation and no default.
+
+
 Wraps the **sp:history-anatomy** skill — the independent owner of diagnostic interpretation over
 already-imported history. The skill resolves the mode contract (daily is the default and uses the
 current local calendar day; ad-hoc requires a focus plus two ordered bounds), owns the report
@@ -45,6 +50,8 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
+- **Redirect dispatch (1391):** `/sp:dev-find issue $ARGUMENTS` — the
+  lens is prepended and every other argument passes through verbatim.
 Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 
 ```

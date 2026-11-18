@@ -37,7 +37,7 @@ const EXCLUDED_COMMANDS = ['dev-changelog', 'dev-daily', 'dev-gitmsg', 'dev-fixa
 
 // 0676 R1/R2: engine-driven headless surfaces must not present `inline` as usable.
 // They either omit it from the advertised options (this set) or document the stable
-// rejection explicitly (dev-wrap/dev-wrapall shape, covered by their own docs).
+// rejection explicitly (dev-wrap/dev-wrap --all shape, covered by their own docs).
 const HEADLESS_NO_INLINE_ADVERTISED = ['dev-find-issue'] as const;
 
 describe('task 0406 / H82 — unified --agent execution-surface contract', () => {
@@ -160,7 +160,9 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
     });
 
     test('0506 R1 — wrap commands are workflow-backed, selector-preserving, and report the subprocess override', () => {
-        const WRAP_COMMANDS = ['dev-wrap', 'dev-wrapall'];
+        // 1390: the wrap surface is one file — `dev-wrap` with `--all`; the former `dev-wrapall`
+        // redirect only forwards `--agent`, so the override contract is asserted on its owner.
+        const WRAP_COMMANDS = ['dev-wrap'];
         for (const command of WRAP_COMMANDS) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
 
@@ -186,19 +188,25 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: must merge the executor into vars.agent`).toContain('vars.agent');
         }
 
-        // Selector preservation through run/runall wrap handoffs and next-router A8/B6 routes.
-        for (const command of ['dev-run', 'dev-runall']) {
+        // Selector preservation through the run wrap handoff and the next-router A8/B6 routes.
+        for (const command of ['dev-run']) {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
             expect(raw, `${command}: wrap handoff must preserve --agent`).toContain('--agent');
             expect(raw, `${command}: wrap handoff must name the wrap hop`).toMatch(/wrap/);
+        }
+        for (const redirect of ['dev-wrapall', 'dev-runall']) {
+            const raw = readFileSync(join(COMMANDS_DIR, `${redirect}.md`), 'utf8');
+            expect(raw, `${redirect}: the redirect must still declare --agent so it forwards intact`).toContain(
+                '--agent',
+            );
         }
         const routing = readFileSync(
             join(ROOT, 'plugins', 'sp', 'skills', 'next-router', 'references', 'routing-table.md'),
             'utf8',
         );
         expect(routing, 'A8 must preserve --agent into dev-wrap').toContain('/sp:dev-wrap <wbs>` (`--agent');
-        expect(routing, 'B6 must preserve --agent into dev-wrapall').toContain(
-            '/sp:dev-wrapall --feature <id>` (`--agent',
+        expect(routing, 'B6 must preserve --agent into dev-wrap --all').toContain(
+            '/sp:dev-wrap --all --feature <id>` (`--agent',
         );
     });
 
@@ -251,11 +259,10 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 
         // Pipeline wrappers propagate --agent to vars.agent — a structural marker in the
-        // command files, asserted here so the passthrough cannot silently regress.
-        for (const command of ['dev-run', 'dev-runall']) {
-            const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');
-            expect(raw, `${command}: must document vars.agent propagation`).toContain('vars.agent');
-        }
+        // command files, asserted here so the passthrough cannot silently regress. 1390: the
+        // batch wrapper is `dev-run --all`, so the marker lives on `dev-run`.
+        const runCommand = readFileSync(join(COMMANDS_DIR, 'dev-run.md'), 'utf8');
+        expect(runCommand, 'dev-run: must document vars.agent propagation').toContain('vars.agent');
     });
 
     test('the inline trade-off is explicit', () => {

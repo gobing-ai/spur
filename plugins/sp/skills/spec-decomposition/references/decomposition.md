@@ -151,7 +151,7 @@ non-empty `design` field — chosen approach + one-line reason, rejected alterna
 key signatures (not code dumps). This is the capable-first cost path: lock the box once at create.
 
 **`--skip-design`:** leave `design` empty (scaffold only). Refine is the **fallback** that fills
-blank Design before implement (`/sp:dev-refine` / `dev-refineall`).
+blank Design before implement (`/sp:dev-refine` / `dev-refine --all`).
 
 ## Template-variant selection
 

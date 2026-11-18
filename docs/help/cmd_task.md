@@ -522,7 +522,7 @@ spur task verifyall-aggregate [options]
 | `--from-file <path>` | JSON array of `{wbs,outcome[,reason]}` rows |
 | `--json` | Output machine-readable JSON |
 
-Deterministic batch rollup for `/sp:dev-verifyall` (replaces agent-discretion prose). Outcomes:
+Deterministic batch rollup for `/sp:dev-verify --all` (replaces agent-discretion prose). Outcomes:
 `PASS` / `PARTIAL` / `FAIL` / `NOT-STARTED` / `UNKNOWN`.
 
 ## spur task run-link

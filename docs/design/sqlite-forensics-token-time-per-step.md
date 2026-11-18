@@ -9,7 +9,7 @@ tags: [system, history]
 
 # SQLite-Sourced Session Forensics — Token/Time Per Step Analysis
 
-**Date:** 2026-08-17 · **Data source:** `.spur/spur.db` (imported history plane, all coding agents) · **Purpose:** prep for the new `/sp:dev-find-issue` (SQLite data plane, replacing ad-hoc JSONL parsing)
+**Date:** 2026-08-17 · **Data source:** `.spur/spur.db` (imported history plane, all coding agents) · **Purpose:** prep for the new `/sp:dev-find issue` (SQLite data plane, replacing ad-hoc JSONL parsing)
 
 This replicates the issue + token/time-per-step analysis we ran yesterday (tasks 0568–0575) via the slash command, but **reads from SQLite** instead of raw JSONL. Every number below was derived directly from `history_message` / `history_tool_call` / `phase_runs`.
 
@@ -97,9 +97,9 @@ of I0; F7 is already shipped.** Task column filled after conversion.
 | **F4** | Expose **per-step (per-message) token/time** in the analyze artifact: top-N steps by tokens and by duration, per model, plus per-step cache efficiency. SQLite already holds this at message granularity; the artifact aggregates it away. | `history-service.ts` analyze + artifact schema | **0581** |
 | **F5** | Rank context-bloat: aggregate fresh-vs-cached input per session/step so I4's 354M-token waste surfaces as an ordered list rather than a one-off query. | analyze artifact + forensics renderer | **0581** |
 | **F6** | Mapper fidelity for the broken sources: codex roles (I5), claude usage (I7), `tool_name` pollution (I8), grok meta ratio (I9), and the epoch-0 sentinel (I1 upstream half). | importer mappers | **0580** |
-| **F7** | ~~Drive `/sp:dev-find-issue` from the typed data plane only.~~ **Already shipped** — task 0556 (`done`) made the command report-first over the data plane and removed `--use-history`; task 0492 (`done`) fixed the command/skill split. No task. | — | — |
+| **F7** | ~~Drive `/sp:dev-find issue` from the typed data plane only.~~ **Already shipped** — task 0556 (`done`) made the command report-first over the data plane and removed `--use-history`; task 0492 (`done`) fixed the command/skill split. No task. | — | — |
 
-## 5. Design notes for the new `/sp:dev-find-issue`
+## 5. Design notes for the new `/sp:dev-find issue`
 
 1. **Per-step granularity is the differentiator.** SQLite retains per-message tokens/duration/model/role — the analyze artifact currently aggregates them away. The new command should emit a per-step section (`top steps by tokens`, `by duration`, `cache-efficiency`), which is what makes this better than yesterday's JSONL approach (no raw parsing, typed and indexed).
 2. **Honesty tiers by source** must be part of the report (High/Medium/Low fidelity per source) so the 8 sections don't silently show empty Tool/Time rows for claude/agy/codex.

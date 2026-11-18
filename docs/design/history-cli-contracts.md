@@ -456,7 +456,7 @@ predates the pairings field; re-run spur history analyze)` in place of the missi
 never a throw, never a fabricated row. Registered in `REPORT_MODES` as `pairings`; unknown mode
 names keep failing with `UnknownReportModeError` naming the registered set.
 
-**Report-first surface (task 0556, superseded 0661):** `/sp:dev-find-issue` was the report-first
+**Report-first surface (task 0556, superseded 0661):** `/sp:dev-find issue` was the report-first
 entry over the forensics renderer + `sp:issue-finding`. **As of HA-S1 (0661) it is a thin forwarder
 to `sp:history-anatomy`** with the reduced surface `[<focus>] [--mode <daily|ad-hoc>] [--date
 <YYYY-MM-DD>] [--since <RFC3339>] [--until <RFC3339>] [--recompute] [--agent <inline|auto|name>]
@@ -486,7 +486,7 @@ Timing comes only from visible session evidence, renders as `M:SS` or `H:MM:SS`,
 waits from execution bottlenecks, and uses `n/a` rather than estimates. It launches no workflow or
 agent, imports no history, performs no baseline/cache/publication step, and mutates nothing.
 Historical, cross-agent, recurrence, trend, and quantitative questions stay on
-`/sp:dev-find-issue`.
+`/sp:dev-find issue`.
 
 **Artifact-digest ownership boundary (task 0669).** The semantic artifact digest and its ranked-
 versus-set canonicalization rules live in **`packages/domain/src/analytics/artifact-digest.ts`**,

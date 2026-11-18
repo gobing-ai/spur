@@ -50,7 +50,7 @@ bottlenecks", "post-mortem", "what went wrong", "why was this slow"
 
 **Use PROACTIVELY after:**
 
-- A batch task execution (`/sp:dev-runall`) that took longer than expected
+- A batch task execution (`/sp:dev-run --all`) that took longer than expected
 - A pipeline run with excessive compactions, test runs, or guard failures
 - Any agent session where the operator suspects inefficiency or waste
 
@@ -372,7 +372,7 @@ With `--create-task`, include `"task": { "wbs": "…", "file": "…", "status": 
 
 ## Platform Notes
 
-- **Claude Code** — invoke via `/sp:dev-find-issue …` or `Skill(skill="sp:issue-finding",
+- **Claude Code** — invoke via `/sp:dev-find issue …` or `Skill(skill="sp:issue-finding",
   args="…")`. Prefer structured tools for file discovery; parse JSONL with Read/Grep only on the
   fallback path.
 - **Other platforms** (Codex / OpenClaw / OpenCode / Antigravity / Pi) — follow the 4-phase
@@ -384,17 +384,17 @@ With `--create-task`, include `"task": { "wbs": "…", "file": "…", "status": 
 
 ## Shipped command
 
-### `/sp:dev-find-issue`
+### `/sp:dev-find issue`
 
 Thin wrapper: `Skill(skill="sp:issue-finding", args="$ARGUMENTS")`.
 
 ```
-/sp:dev-find-issue
-/sp:dev-find-issue "test-loop spinning"
-/sp:dev-find-issue --sessions "~/.omp/agent/sessions/-xprojects-spur-new/2026-07-29T*" --feature H51
-/sp:dev-find-issue --category test-loop,guard
-/sp:dev-find-issue --create-task "J4 batch bottlenecks" --template meta --priority P1
-/sp:dev-find-issue --json --source claude --since 2026-07-28
+/sp:dev-find issue
+/sp:dev-find issue "test-loop spinning"
+/sp:dev-find issue --sessions "~/.omp/agent/sessions/-xprojects-spur-new/2026-07-29T*" --feature H51
+/sp:dev-find issue --category test-loop,guard
+/sp:dev-find issue --create-task "J4 batch bottlenecks" --template meta --priority P1
+/sp:dev-find issue --json --source claude --since 2026-07-28
 ```
 
 ## Common rationalizations
@@ -426,7 +426,7 @@ A tiny synthetic OMP session lives under
 fallback parser without real operator logs (explicit `--sessions` is fallback condition 2):
 
 ```
-/sp:dev-find-issue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl
+/sp:dev-find issue --sessions plugins/sp/skills/issue-finding/examples/session-test-loop.jsonl
 ```
 
 Expect at least the `test-loop` category (and whatever else the expected-findings file lists).

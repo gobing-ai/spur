@@ -90,6 +90,24 @@ function tokenMatches(testee: string, token: string): boolean {
     return re.test(testee);
 }
 
+/** `--all` on a base dev command is the batch scope the former `*all` commands carried (task 1390). */
+const BATCH_SCOPE_BASES = ['run', 'wrap', 'refine', 'verify'] as const;
+
+/**
+ * The base dev command this step scopes to a batch with `--all`, or null.
+ *
+ * `--all` is deliberately not a standalone token: `spur task list --all` and
+ * `rg --all` must stay non-pipeline-driving. The token is part of the *combination* —
+ * exactly the shape the retired `dev-<base>all` commands had (task 1390 R4).
+ */
+function batchScopeBase(step: string): (typeof BATCH_SCOPE_BASES)[number] | null {
+    if (!tokenMatches(step, '--all')) return null;
+    for (const base of BATCH_SCOPE_BASES) {
+        if (tokenMatches(step, `dev-${base}`)) return base;
+    }
+    return null;
+}
+
 /**
  * Returns whether the testee string is pipeline-driving (contains any of the
  * pipeline-driving tokens as a distinct hyphen-word). Machine-checked
@@ -100,6 +118,8 @@ export function detectPipelineDriving(testee: string): boolean {
     if (typeof testee !== 'string' || testee.length === 0) {
         return false;
     }
+    // A batch scope classifies exactly as the `dev-<base>all` token it replaced.
+    if (batchScopeBase(testee) !== null) return true;
     return PIPELINE_TOKENS.some((token) => tokenMatches(testee, token));
 }
 
@@ -115,6 +135,9 @@ export function detectPipelineDriving(testee: string): boolean {
  */
 export function isImplementHeavyStep(step: string): boolean {
     if (typeof step !== 'string' || step.length === 0) return false;
+    // `--all` on run/wrap is exactly as heavy as the `runall`/`wrapall` token was (task 1390 R4).
+    const batch = batchScopeBase(step);
+    if (batch === 'run' || batch === 'wrap') return true;
     // Explicit non-mutating surfaces win unless a mutating token co-occurs.
     const nonMutatingOnly =
         tokenMatches(step, 'dev-verify') || tokenMatches(step, 'dev-review') || tokenMatches(step, 'dev-unit');

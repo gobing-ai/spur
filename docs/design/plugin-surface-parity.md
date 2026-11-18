@@ -87,7 +87,7 @@ the same maintenance pass:
 - Batch ordering must be encoded with existing `spur task deps` after creation when the batch schema
   cannot express it; prose-only ordering is not a dependency.
 - Handoff refreshes the feature roster and routes check-failing tasks to
-  `/sp:dev-refineall --feature <id> --depth ready` before any `/sp:dev-runall` recommendation.
+  `/sp:dev-refine --all --feature <id> --depth ready` before any `/sp:dev-run --all` recommendation.
 
 These are workflow/skill/test changes only. Adding fields to the task-batch schema or changing the
 public CLI surface remains out of scope and requires separate operator consent.

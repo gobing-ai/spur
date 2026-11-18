@@ -1,6 +1,6 @@
 ---
 name: wayfinder
-description: "Chart a multi-session investigation map when the destination is too foggy to spec in one session. Creates a spur feature as the map, decomposes specifiable questions into spur tasks, and resolves them one at a time until the route becomes visible. Triggers: wayfind, chart a course, multi-session investigation, /sp:dev-find-way."
+description: "Chart a multi-session investigation map when the destination is too foggy to spec in one session. Creates a spur feature as the map, decomposes specifiable questions into spur tasks, and resolves them one at a time until the route becomes visible. Triggers: wayfind, chart a course, multi-session investigation, /sp:dev-find way."
 requires: [cli:spur, local-fs]
 license: Apache-2.0
 version: 1.0.0
@@ -58,7 +58,7 @@ Activate sp:wayfinder when:
 | "multi-session investigation" | User expects multiple sessions to reach clarity |
 | "find the way to X" | Destination is named but the route is unknown |
 | "explore the solution space" | Open-ended exploration before committing |
-| `/sp:dev-find-way` | The command entry — charting or one-ticket resolution in an isolated worktree |
+| `/sp:dev-find way` | The command entry — charting or one-ticket resolution in an isolated worktree |
 
 **NOT for:**
 - A clear spec that just needs decomposition (use `sp:spec-decomposition` instead)
@@ -81,7 +81,7 @@ The map is a `spur feature` — its description IS the map body. sp already has 
 
 A decision filed as a task sits in the feature's Tasks table looking like queued work, gets handed to an implementing agent, and is either stalled on or invented. Resolve open questions in conversation with the operator; record the answer in **`## Decisions so far`**; then create tasks for whatever work the answer implies.
 
-**Shippable destinations:** If the map destination is a **shippable implementation** (code lands, not design-doc-only), research and prototype tickets alone are not “feature done.” After investigation tickets close, graduate implement work into tasks; close the map only when `/sp:dev-verifyall --feature <id> --fix all` reports **`Shippable: PASS`** (or use `--skip-shippable` only for deliberate non-ship audits). Per-task research PASS is not enough — see `sp:code-verification` Step 13.
+**Shippable destinations:** If the map destination is a **shippable implementation** (code lands, not design-doc-only), research and prototype tickets alone are not “feature done.” After investigation tickets close, graduate implement work into tasks; close the map only when `/sp:dev-verify --all --feature <id> --fix all` reports **`Shippable: PASS`** (or use `--skip-shippable` only for deliberate non-ship audits). Per-task research PASS is not enough — see `sp:code-verification` Step 13.
 
 ### 2. The Destination Fixes the Scope
 
@@ -111,7 +111,7 @@ Two modes. Either way, **never resolve more than one ticket per session.**
 
 Invoked when the operator has a loose idea and the destination itself is foggy. Charting IS one session's work — do not also resolve tickets.
 
-0. **Worktree first.** Run in an isolated git worktree on its own branch — `/sp:dev-find-way` does this (`sp/wayfind-<slug>-<short-id>`, FF-merged on success). Never `git checkout -b` in a shared tree: it switches the checkout under every other agent using it. The `corpus.ungraduated-fog` gate measures `merge-base(origin/main, HEAD)..(working tree)`, so it **cannot fire at all** on the default branch — how the 2026-08-07 incident shipped.
+0. **Worktree first.** Run in an isolated git worktree on its own branch — `/sp:dev-find way` does this (`sp/wayfind-<slug>-<short-id>`, FF-merged on success). Never `git checkout -b` in a shared tree: it switches the checkout under every other agent using it. The `corpus.ungraduated-fog` gate measures `merge-base(origin/main, HEAD)..(working tree)`, so it **cannot fire at all** on the default branch — how the 2026-08-07 incident shipped.
 1. **Name the destination.** Run a discovery interview (one question at a time, always with a recommendation) to pin down what this map is finding its way to — the spec, decision, or change. The destination fixes the scope, so it's settled first.
 2. **Map the frontier breadth-first.** Fan out across the whole space rather than deep on any one thread, surfacing open decisions and the first steps takeable now. Use the decision-brief format for each HITL choice (see `../spur-dev/references/decision-brief.md`).
 3. **Create the map as a spur feature.** `spur feature create "<destination>"`. The feature description carries:
@@ -131,7 +131,7 @@ Invoked when the operator has a loose idea and the destination itself is foggy. 
 
 Invoked when a map already exists (operator provides the feature ID). A ticket is **optional** — without one, pick the next frontier ticket, not the operator's preference.
 
-0. **Worktree first.** Same rule as charting (`sp/wayfind-<wbs>-<short-id>`): steps 6 and 7 remove fog from the map, and the gate that checks the removal measures the branch, not the commit. The `wip` claim lands only in the worktree until the merge, so `/sp:dev-find-way` excludes tickets held by other active `dev-find-way` worktree markers when picking the frontier.
+0. **Worktree first.** Same rule as charting (`sp/wayfind-<wbs>-<short-id>`): steps 6 and 7 remove fog from the map, and the gate that checks the removal measures the branch, not the commit. The `wip` claim lands only in the worktree until the merge, so `/sp:dev-find way` excludes tickets held by other active `dev-find way` worktree markers when picking the frontier.
 1. **Load the map** — the feature description (the low-res view), not every task body. Read the destination and Decisions-so-far to orient.
 2. **Pick the first frontier ticket.** Query: `spur task list --feature <id> --status todo` — the first open, unblocked, unclaimed task. If the operator named one, use it instead.
 3. **Claim it.** `spur task update <wbs> wip` — before any work.
@@ -150,7 +150,7 @@ Invoked when a map already exists (operator provides the feature ID). A ticket i
    — no task is claimed, and it does not consume the session's one ticket.
 
    **Boundary.** A resolution authors research/specification sections — it never implements, so
-   never invoke `/sp:dev-run` or `/sp:dev-runall` from one. Work from local reads and the `spur`
+   never invoke `/sp:dev-run` or `/sp:dev-run --all` from one. Work from local reads and the `spur`
    CLI; no network search, no MCP tools. Write Solution/Testing/Review with
    `spur task update <wbs> --section <name> --from-file <path>`, keeping the existing Requirements
    and AC.
@@ -208,9 +208,9 @@ Ruling something out of scope is a scoping act, not a step on the route. When a 
 
 ## Invocation
 
-### From `/sp:dev-find-way` (primary)
+### From `/sp:dev-find way` (primary)
 
-`/sp:dev-find-way "<idea>"` charts; `/sp:dev-find-way <feature-id> [<wbs>]` resolves one ticket. The command owns the worktree lifecycle and dispatches here. `/sp:dev-brainstorm` never charts: when its scope check finds a foggy destination it stops and recommends `/sp:dev-find-way` — the operator decides.
+`/sp:dev-find way "<idea>"` charts; `/sp:dev-find way <feature-id> [<wbs>]` resolves one ticket. The command owns the worktree lifecycle and dispatches here. `/sp:dev-brainstorm` never charts: when its scope check finds a foggy destination it stops and recommends `/sp:dev-find way` — the operator decides.
 
 ### Direct invocation
 

@@ -63,7 +63,9 @@ describe('batch and command publish-first (task 1105 R3/R4) — spec pins', () =
     });
 
     test('AC2 — each workflow dev command publishes the plan as its first Implementation bullet', () => {
-        for (const cmd of ['dev-run', 'dev-runall', 'dev-idea', 'dev-plan']) {
+        // 1390: the batch command folded into `dev-run --all`, so the plan-first contract is
+        // asserted once on the merged command (its first bullet is unchanged) plus the others.
+        for (const cmd of ['dev-run', 'dev-idea', 'dev-plan']) {
             const md = readFileSync(join(COMMANDS_DIR, `${cmd}.md`), 'utf8');
             const impl = md.indexOf('## Implementation');
             expect(impl).toBeGreaterThan(0);

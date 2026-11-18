@@ -113,7 +113,7 @@ limitations.
 ➡️ **[How to Use the `sp:dev-*` Slash Commands for Daily Software Development](./how_to_use_dev_slash_commands_for_daily_software_development.md)**
 — the `sp` plugin layer: take a vague idea to a verified prototype via
 `/sp:dev-brainstorm` → `/sp:dev-plan` → `/sp:dev-idea` → `/sp:dev-refine` → `/sp:dev-run` →
-`/sp:dev-verify` → `/sp:dev-wrap`/`/sp:dev-wrapall`, the `--next` chain, the `--auto` and
+`/sp:dev-verify` → `/sp:dev-wrap`/`/sp:dev-wrap --all`, the `--next` chain, the `--auto` and
 `--agent` contracts, and the autonomous pipeline.
 
 **Adding a UI module to the Spur Board:**

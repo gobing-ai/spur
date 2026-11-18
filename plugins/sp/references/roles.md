@@ -62,7 +62,7 @@ roles:
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2
-    commands: [dev-plan, dev-refine, dev-brainstorm, dev-find-way, dev-idea, dev-runall, dev-next, dev-job-resume, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
+    commands: [dev-plan, dev-refine, dev-brainstorm, dev-find-way, dev-idea, dev-find, dev-runall, dev-next, dev-job-resume, dev-arch, dev-refineall, dev-find-next, dev-feature-change]
     stages: [plan, refine, brainstorm]
 ```
 
@@ -94,7 +94,7 @@ must not sit below the highest `min_tier` among its folded stages.
 **Placement notes (directory closure, task 0535).** The decided four-row table listed 31 commands.
 The current command inventory comes from `plugins/sp/commands/`; `dev-history-load`
 was removed in HA-S1 0661. The six additions to the original mapping were placed by the
-same stage logic: `dev-refineall` folds `refine` → planner; `dev-find-next` is planning-side
+same stage logic: `dev-refine --all` folds `refine` → planner; `dev-find-next` is planning-side
 frontier work → planner; `dev-feature-change` is planning-half corpus surgery on the feature tree →
 planner; `dev-gtd` is the execution/delivery flow → coder; `dev-find-conflict` and `dev-find-issue`
 are audits/analysis → reviewer (same reasoning as `rule-scan`). Later additions: `dev-pr-review` is review orchestration —

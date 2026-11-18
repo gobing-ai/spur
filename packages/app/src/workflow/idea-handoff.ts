@@ -456,8 +456,8 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
 
         const anyFailed = checkResults.some((c) => !c.pass);
         const nextCommand = anyFailed
-            ? `/sp:dev-refineall --feature ${featureId} --auto --depth ready`
-            : `/sp:dev-runall --feature ${featureId} --auto`;
+            ? `/sp:dev-refine --all --feature ${featureId} --auto --depth ready`
+            : `/sp:dev-run --all --feature ${featureId} --auto`;
 
         const reportLines = [
             '# Idea pipeline handoff report',

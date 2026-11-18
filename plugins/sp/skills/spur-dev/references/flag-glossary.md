@@ -77,7 +77,7 @@ inline is the default selector and omitted/explicit `inline` resolve identically
 the concrete coding-agent tool; `executor` remains the domain-layer role and is not a command flag.
 `inline` and `auto` are reserved values — config validation rejects an executor claiming either.
 
-**Fleet executor (0942, ADR-126, opt-in).** On the pipeline selectors (`dev-run`, `dev-runall`),
+**Fleet executor (0942, ADR-126, opt-in).** On the pipeline selectors (`dev-run`, `dev-run --all`),
 `--agent fleet` maps the workflow run to the executor var `executor: 'fleet'`: every `agent.run`
 stage dispatches through the agent fleet control plane instead of spawning a subprocess, with a
 subprocess fallback only when the run declares `executorFallback: 'traditional'`; otherwise an
@@ -112,9 +112,9 @@ command) runs the next step **once**; `--next` (the flag) makes any command it i
 going**. Neither is renamed.
 
 **Redefinition (breaking).** Before this entry (feature H8, task 0399, 2026-07-31) `--next` carried
-four incompatible meanings across seven commands: chain-ish (`dev-verify`, `dev-verifyall`), a
+four incompatible meanings across seven commands: chain-ish (`dev-verify`, `dev-verify --all`), a
 mode selector (`dev-run` → implement-only), a deprecated no-op (`dev-review`), and undeclared
-declarations never explained (`dev-refine`, `dev-refineall`, `dev-brainstorm`). Task 0401 reconciled
+declarations never explained (`dev-refine`, `dev-refine --all`, `dev-brainstorm`). Task 0401 reconciled
 all seven against this single definition. Existing `dev-run --next` invocations selecting
 implement-only mode are the only genuinely breaking case; the replacement is `--mode implement`.
 
@@ -138,7 +138,7 @@ Only declared where the command already has at least one HITL gate the flag can 
 taste gates (idea-eval, design-approval) — every gate there is reversible corpus writes. A gate
 without an actionable recommendation (missing eval recommendation, FAIL design check) still pauses.
 
-**Batch policy** (`dev-runall`): `--auto` implies `--keep-going` — an unattended batch never stops
+**Batch policy** (`dev-run --all`): `--auto` implies `--keep-going` — an unattended batch never stops
 for a human. With `--agent auto` the driver also pins ONE executor for the batch — `Executor pin:
 <name>`, read from the first run's implement `result.executor` — and only a `failed-agent` ending
 re-resolves it, exactly once (1318 R1–R3).
@@ -147,7 +147,7 @@ re-resolves it, exactly once (1318 R1–R3).
 
 **Anchor:** `#flag-keep-going`.
 
-Batch operation only (`dev-refineall`, `dev-runall`). When a task in the batch
+Batch operation only (`dev-refine --all`, `dev-run --all`). When a task in the batch
 fails, skip its in-batch dependents and continue the independent ones, instead of the default
 halt-on-first-failure. Never silently retried; the failure is still reported.
 
@@ -157,7 +157,7 @@ the first failure, run without `--auto`.
 
 ### `--defer-gate` — opt-in parallel-batch gate policy (task 1111 / H15)
 
-**Applies to:** `/sp-dev-runall --mode parallel`, and `--mode auto` when it resolves to parallel.
+**Applies to:** `/sp-dev-run --all --mode parallel`, and `--mode auto` when it resolves to parallel.
 **Default:** off — every task pipeline runs its own FULL project gate inside its worktree.
 
 With `--defer-gate`, each task's `gate` state (every visit) runs the **light tier** (changed-scope
@@ -188,18 +188,18 @@ Sequential and inline batches never set the var. ADR-124 carries the dated clari
 
 **Anchor:** `#flag-concurrency`.
 
-`dev-runall` under `--mode parallel` (task 0931), or `--mode auto` resolved to parallel: at most `<n>` task pipelines run at once
+`dev-run --all` under `--schedule parallel` (task 0931), or `--schedule auto` resolved to parallel: at most `<n>` task pipelines run at once
 (default 2, `n ≥ 1`). A dependent task starts only after every in-set dependency has been
 **integrated** onto the base ref — see
-[execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---mode-parallel).
-Ignored in sequential mode; `--concurrency 1` pins `--mode auto` to sequential. Each worker is one more concurrent quality gate; raise it only when
+[execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---schedule-parallel).
+Ignored in sequential mode; `--concurrency 1` pins `--schedule auto` to sequential. Each worker is one more concurrent quality gate; raise it only when
 the host has the CPU for it.
 
 ### `--continue` — resume an interrupted batch from checkpoint
 
 **Anchor:** `#flag-continue`.
 
-Resume a batch (`dev-runall`) or task (`dev-run`) that was interrupted mid-run, picking up from the
+Resume a batch (`dev-run --all`) or task (`dev-run`) that was interrupted mid-run, picking up from the
 recorded checkpoint rather than restarting. Orthogonal to `--next` (lifecycle chaining) and
 `--keep-going` (failure policy): the three axes address different problems and `routing-table.md`
 offers `--continue` and `--next` as competing options only when the batch was interrupted mid-run.
@@ -208,9 +208,9 @@ offers `--continue` and `--next` as competing options only when the batch was in
 
 **Anchor:** `#flag-wrap`.
 
-After the main step completes, run the wrap hop (learnings, metrics, doc-sync). On `dev-runall`
+After the main step completes, run the wrap hop (learnings, metrics, doc-sync). On `dev-run --all`
 with `--next`, wrap runs **once for the batch** after every task reaches terminal status, mirroring
-the batch-once shippable gate `dev-verifyall` uses. Without `--next`, `--wrap` is wrap-without-
+the batch-once shippable gate `dev-verify --all` uses. Without `--next`, `--wrap` is wrap-without-
 chaining — the single task or batch wraps without advancing the lifecycle. On `dev-find-way` it
 wraps the one resolved ticket inside the worktree before the merge, and is skipped in chart mode.
 Mutually exclusive with `--wrap-pr`.
@@ -223,7 +223,7 @@ After the main step completes, run the wrap hop (learnings, metrics, doc-sync) a
 then push the worktree or dedicated task branch to `origin` and open a Pull Request targeting the base ref using
 `gh pr create`. Mutually exclusive with `--wrap` (specifying both exits 2). Full mode only; requires
 `--worktree` or execution on a dedicated non-base branch (refuses execution directly on `main`).
-On `dev-runall`, PR creation runs **once for the batch** over the `done` subset. When used with
+On `dev-run --all`, PR creation runs **once for the batch** over the `done` subset. When used with
 `--worktree`, leaves the local base branch unmodified and records the PR URL in the worktree marker.
 
 ### `--force` — bypass a named guard
@@ -240,7 +240,7 @@ or irreversible HITL gates.
 **Anchor:** `#flag-feature`.
 
 Scope the operation to all tasks under a feature id (`^[A-Z][1-9]*$`). On feature-advancing
-commands (`dev-wrapall`) it also advances the feature through legal lifecycle edges with guards
+commands (`dev-wrap --all`) it also advances the feature through legal lifecycle edges with guards
 honored. On `dev-review` and `dev-find-conflict` it takes a comma list (`--feature <id>[,<id>]`) —
 sugar for the union of the `feature:<id>` sets, resolved once and frozen.
 
@@ -259,9 +259,9 @@ fix loop. A command without `--check` in its contract runs no gate.
 
 Constrain the operation to a named subset of dimensions — review dimensions on `dev-review`
 (vocabulary SSOT: [code-verification/SKILL.md](../../code-verification/SKILL.md) review mode —
-`dev-verify`/`dev-verifyall` keep their SECUA-only lens set), a refactor lens set on
+`dev-verify`/`dev-verify --all` keep their SECUA-only lens set), a refactor lens set on
 `dev-refactor` (`api|architect|tests|ui|auto`), a refine focus mode on
-`dev-refine`/`dev-refineall` (`all|requirements|background|constraints|acceptance|quick` —
+`dev-refine`/`dev-refine --all` (`all|requirements|background|constraints|acceptance|quick` —
 [dev-operations.md](dev-operations.md) § refine), or a reconstruction lens on `dev-reverse`
 (`all|stack|dependencies|data|flows|api|security|quality|performance`).
 Narrowing reduces token cost; omitting runs
@@ -271,8 +271,7 @@ all dimensions.
 
 **Anchor:** `#flag-scope`.
 
-Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-fixall`,
-`dev-find-conflict`, `dev-gitmsg`, `dev-gtd`, `dev-refactor`, `dev-review`, `dev-simplify`) to
+Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-find`, `dev-find-conflict`, `dev-fixall`, `dev-gitmsg`, `dev-gtd`, `dev-refactor`, `dev-review`, `dev-simplify`) to
 bound the working set. On `dev-review` and `dev-find-conflict` it takes a comma list of paths —
 normalized, nested and duplicate paths merged; `dev-review` runs one advisory sub-review per
 surviving path, `dev-find-conflict` seeds one audit with all of them.
@@ -281,11 +280,43 @@ surviving path, `dev-find-conflict` seeds one audit with all of them.
 
 **Anchor:** `#flag-all`.
 
-Drop the default narrowing and operate on the full set (`dev-gitmsg`, `dev-refresh`). On
-`dev-gitmsg` the default set is the git index, and `--all` widens it to every change in the tree —
-unstaged **and untracked**; on `dev-refresh` the default is one feature or task, and `--all` sweeps
-every feature. An explicit `--scope <path>` still bounds the result, and always wins over
-auto-discovery.
+Two senses, one rule: drop the default narrowing and operate on the full set. Declared by
+`dev-gitmsg`, `dev-refresh`, `dev-run`, `dev-refine`, `dev-verify` and `dev-wrap`.
+
+- **Batch scope** (`dev-run`, `dev-refine`, `dev-verify`, `dev-wrap`, task 1390): run the operation
+  over a task *set* instead of one `<wbs>` — the former `dev-run --all` / `dev-refine --all` /
+  `dev-verify --all` / `dev-wrap --all` commands. `--all` is an explicit switch, mutually exclusive with
+  `<wbs>`, so a mistyped WBS can never silently become a batch. The batch selectors
+  (`--tasks`, `--feature`, `--status`, `--since`) narrow it; with none, the operation keeps its
+  former default set.
+- **Domain widening** (`dev-gitmsg`, `dev-refresh`): on `dev-gitmsg` the default set is the git
+  index and `--all` widens it to every change in the tree — unstaged **and untracked**; on
+  `dev-refresh` the default is one feature or task and `--all` sweeps every feature. An explicit
+  `--scope <path>` still bounds the result and always wins over auto-discovery.
+
+### `--pillar <source|tasks|features|authority|all>` — audit pillar selection
+
+**Anchor:** `#flag-pillar`.
+
+On the conflict lens (`dev-find conflict`, formerly `dev-find-conflict`): which pillar pair the
+authority-aware audit compares. `all` (the default) walks every pair; naming one pillar bounds the
+audit to conflicts that touch it, which is how a focused re-audit stays cheap after a scoped fix.
+
+### `--recompute` — ignore the cache branch and recompute
+
+**Anchor:** `#flag-recompute`.
+
+On the issue lens (`dev-find issue`, formerly `dev-find-issue`): bypass the history-anatomy cache
+branch and recompute the report from the imported history. Use it after a re-import or when the
+cached branch no longer matches the data; the default reuses the cache.
+
+### `--resolve` — open the confirmation workflow for repairs
+
+**Anchor:** `#flag-resolve`.
+
+On the conflict lens (`dev-find conflict`, formerly `dev-find-conflict`): a confirmed finding may be
+routed to its owner surface through the confirmation workflow. Without the flag the lens is
+read-only — it reports and never mutates.
 
 ### `--dry-run` — print the plan without executing
 
@@ -298,12 +329,12 @@ is the contract; divergence between `--dry-run` and the real run is a bug.
 
 **Anchor:** `#flag-tasks`.
 
-Batch operation (`dev-find-conflict`, `dev-refineall`, `dev-review`, `dev-runall`, `dev-verifyall`). An
+Batch operation (`dev-find`, `dev-find-conflict`, `dev-refine`, `dev-refineall`, `dev-review`, `dev-run`, `dev-runall`, `dev-verify`, `dev-verifyall`). An
 explicit selector — WBS list, status pseudo-list (`todo`, `wip`), `feature:<id>`, or `ready` —
 resolving to the set the batch runs over. On `dev-review` and `dev-find-conflict` the selector is restricted to the
 review-safe forms: comma WBS list and `feature:<id>` — status pseudo-lists and `ready` are
-rejected (they select work to do, not work to review). Required on `dev-runall` and
-`dev-verifyall`, where `--feature` is an optional restrictor. On `dev-refineall` it is instead
+rejected (they select work to do, not work to review). Required on `dev-run --all` and
+`dev-verify --all`, where `--feature` is an optional restrictor. On `dev-refine --all` it is instead
 one of a required pair — supply exactly one of `--feature` or `--tasks`.
 
 ### `--mode <kind>` — select an execution mode
@@ -311,7 +342,7 @@ one of a required pair — supply exactly one of `--feature` or `--tasks`.
 **Anchor:** `#flag-mode`.
 
 Select an execution mode: `full|implement` on `dev-run` (full pipeline vs implement-only),
-`sequential|parallel|auto` on `dev-runall` (serial, fanned-out independent subset, or chosen from the
+`sequential|parallel|auto` on `dev-run --all` (serial, fanned-out independent subset, or chosen from the
 frozen batch's dependency waves — see [execution-batch.md § 2.4](execution-batch.md#24-topological-sort)),
 the reconstruction depth
 `briefing|structure|architecture|design|full` on `dev-reverse`, and `daily|ad-hoc` on
@@ -331,13 +362,13 @@ fixed 24-hour offset.
 **Anchor:** `#flag-task`.
 
 Connect the current command's result to task work, or narrow a history analysis to one task
-(`dev-brainstorm`, `dev-debug`, `dev-dogfood`, `dev-find-next`). The value and
+(`dev-brainstorm`, `dev-debug`, `dev-dogfood`, `dev-find`, `dev-find-next`). The value and
 the effect are per-command — this flag is a family, not one behavior:
 
 - `dev-brainstorm` `[<feature-id>]` — **creates** one task from the chosen approach, landing at
   `todo` ready for refine. Optional feature id scopes it.
 - `dev-find-next` `[<feature-id>]` — after confirm, dispatches the planning half on the ranked
-  winner (`/sp:dev-plan` to decompose, then `/sp:dev-refineall --depth ready` to freeze
+  winner (`/sp:dev-plan` to decompose, then `/sp:dev-refine --all --depth ready` to freeze
   implement-ready). Creates no task itself. Interactive by default; with `--auto`, auto-accepts the
   offered target (rank-1 or the explicit id) and forwards `--auto` to the children. Optional feature
   id names the target instead of offering rank 1.
@@ -350,7 +381,7 @@ the effect are per-command — this flag is a family, not one behavior:
 **Anchor:** `#flag-since`.
 
 Lower bound on a range: a git ref on `dev-changelog`, or an ISO date on `dev-find-issue` and
-`dev-wrapall` (filters done
+`dev-wrap --all` (filters done
 tasks by `updated_at >= date`).
 
 ### `--fix <policy>` — remediation policy
@@ -385,21 +416,21 @@ retain their own `--source` handling.
 
 **Anchor:** `#flag-status`.
 
-Filter the operation by task status (`dev-wrapall` default `done`; `dev-refineall` to target a
+Filter the operation by task status (`dev-wrap --all` default `done`; `dev-refine --all` to target a
 specific status slice).
 
 ### `--skip-shippable` — skip the shippable check
 
 **Anchor:** `#flag-skip-shippable`.
 
-Skip the shippable guard on verify-family commands (`dev-verify`, `dev-verifyall`). Used when
+Skip the shippable guard on verify-family commands (`dev-verify`, `dev-verify --all`). Used when
 verifying a task whose artifact is intentionally not yet shippable (e.g. a doc-only task).
 
 ### `--no-summary` — skip the execution summary
 
 **Anchor:** `#flag-no-summary`.
 
-Skip the measured execution summary that run commands (`dev-run`, `dev-runall`) print by default
+Skip the measured execution summary that run commands (`dev-run`, `dev-run --all`) print by default
 once the run settles: per-stage (or per-run) time, operator wait, tool calls and total / non-cached
 tokens from the host transcript. Procedure: [dev-operations.md § Execution summary](dev-operations.md#execution-summary).
 
@@ -424,14 +455,14 @@ that are awkward to quote (0887 R7).
 
 **Anchor:** `#flag-output`.
 
-Write the command's result to a file path (`dev-daily`, `dev-find-issue`, `dev-reverse`) instead of
+Write the command's result to a file path (`dev-daily`, `dev-find`, `dev-find-issue`, `dev-reverse`) instead of
 stdout. On `dev-find-issue` (ad-hoc mode) an explicit path replaces the default run-directory write.
 
 ### `--merge` — trigger branch cleanup
 
 **Anchor:** `#flag-merge`.
 
-Trigger branch cleanup after wrap (`dev-wrap`, `dev-wrapall`). Irreversible HITL gate — always
+Trigger branch cleanup after wrap (`dev-wrap`, `dev-wrap --all`). Irreversible HITL gate — always
 pauses, even under `--auto`.
 
 ### `--max-retry <n>` — bound the retry loop
@@ -467,7 +498,7 @@ Argument Flags row states its own meaning and this entry records that they diffe
 
 **Anchor:** `#flag-description`.
 
-Supply a description (`dev-refine` / `dev-refineall` focus description). Used when the operator
+Supply a description (`dev-refine` / `dev-refine --all` focus description). Used when the operator
 wants to inject a specific framing rather than derive it from context. `dev-idea` takes its idea as
 a positional argument, not via this flag.
 
@@ -476,12 +507,12 @@ a positional argument, not via this flag.
 **Anchor:** `#flag-depth`.
 
 **Context-specific — two unrelated value sets; do not collapse them.** Declared on
-`dev-brainstorm`, `dev-refine`, and `dev-refineall`.
+`dev-brainstorm`, `dev-refine`, and `dev-refine --all`.
 
 **`dev-brainstorm`:** `--depth <basic|detailed|comprehensive>` — breadth vs depth of the ideation
 tree (default `detailed`). Unrelated to task-section readiness.
 
-**`dev-refine` / `dev-refineall`:** `--depth <standard|ready>` — how deep refine must take target
+**`dev-refine` / `dev-refine --all`:** `--depth <standard|ready>` — how deep refine must take target
 sections (Background, Requirements, Acceptance Criteria, Design, Plan) before SKIP/success.
 Orthogonal to `--focus` (which _narrows_ domains) and to `--mode` on other commands.
 
@@ -501,7 +532,7 @@ Full checklist: [dev-operations.md](dev-operations.md) § refine (depth ready).
 **Anchor:** `#flag-bdd`.
 
 Use the task's Gherkin scenarios as the verification lens on verify-family commands (`dev-verify`,
-`dev-verifyall`).
+`dev-verify --all`).
 
 ### `--triage` — fix small findings, file the rest as tasks
 
@@ -519,8 +550,7 @@ of `--fix auto` ([`--fix`](#flag-fix)).
 
 **Anchor:** `#flag-worktree`.
 
-Batch commands plus single-task `dev-run`, review triage and wayfinding (`dev-refineall`, `dev-runall`,
-`dev-verifyall`, `dev-run`, `dev-review`, `dev-find-way`): run the entire driver loop inside an isolated git
+Batch commands plus single-task `dev-run`, review triage and wayfinding (`dev-find`, `dev-find-way`, `dev-refine`, `dev-refineall`, `dev-review`, `dev-run`, `dev-runall`, `dev-verify`, `dev-verifyall`): run the entire driver loop inside an isolated git
 worktree instead of the operator's working directory. On `dev-review` the flag requires `--triage`
 and wraps the review-plus-triage pass
 ([dev-operations.md § 2. review](dev-operations.md#2-review)). On `dev-find-way` isolation is
@@ -552,7 +582,7 @@ merges but never removes. This keeps the continue-the-work loop stable — after
 swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev-next` does not get
 the flag (single _step_; not worth the worktree cost — unlike `dev-run`, which isolates a whole
 task pipeline), `--worktree --mode parallel` is rejected (parallel mode already isolates each task
-in its own worktree — [execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---mode-parallel)),
+in its own worktree — [execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---schedule-parallel)),
 and `--worktree --mode implement` is rejected on `dev-run` (that mode _is_ the pipeline's
 implement stage and runs in the driver's tree). The full lifecycle — name resolution, dirty-tree
 precheck, creation or adoption, crash-safe marker, merge-or-retain, and `--continue` re-entry — is

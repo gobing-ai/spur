@@ -8,6 +8,11 @@ allowed-tools: ["Bash", "Read", "Write", "Edit", "Skill", "AskUserQuestion"]
 
 # Dev Find Way
 
+> **Deprecated (task 1391, feature H84).** This command is a one-release redirect.
+> Use `/sp:dev-find way` — one routing command with a lens table. The lens skill, its
+> flags and its behavior are unchanged; this file adds no validation and no default.
+
+
 Wraps the **sp:wayfinder** skill.
 
 ## Argument Flags
@@ -75,6 +80,8 @@ invoking tree shows the pre-session state. Expected, not a bug.
 
 ## Implementation
 
+- **Redirect dispatch (1391):** `/sp:dev-find way $ARGUMENTS` — the
+  lens is prepended and every other argument passes through verbatim.
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - Worktree lifecycle: [execution-batch.md § Worktree isolation](../skills/spur-dev/references/execution-batch.md#worktree-isolation---worktree-name) — every host call pins the execution tree per its per-call tree-pin rule.
 - Inside the worktree: `Skill(skill="sp:wayfinder", args="$ARGUMENTS")` — the skill owns charting, ticket resolution, fog graduation and the one-ticket-per-session rule.

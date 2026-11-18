@@ -6,7 +6,7 @@
 > the live `--help` output and exercised on the real project corpus.
 > For the **slash-command layer** (the `sp` plugin) layered on top of these CLI verbs —
 > `/sp:dev-plan`, `/sp:dev-run`, `/sp:dev-verify`, `/sp:dev-wrap`, the batch family
-> `/sp:dev-runall` / `/sp:dev-verifyall` / `/sp:dev-wrapall`, the
+> `/sp:dev-run --all` / `/sp:dev-verify --all` / `/sp:dev-wrap --all`, the
 > status-aware router `/sp:dev-next`, and the `sp:super-planner` / `sp:super-coder` / `sp:super-reviewer` /
 > `sp:expert-spur` agents — see
 > [How to Use the `sp:dev-*` Slash Commands](./how_to_use_dev_slash_commands_for_daily_software_development.md).
@@ -674,9 +674,9 @@ never a parallel process.
 | Shortcut | Replaces (roughly) | When |
 | --- | --- | --- |
 | `/sp:dev-next <wbs\|feature-id>` | "which verb next?" guessing | You want the **single best next step** for a task or feature frontier. `sp:next-router` inspects status, applies light gates, and dispatches exactly one `/sp:dev-*` command (or stops with a reason). New — also backs the `--next` auto-chains. |
-| `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-planner`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
-| `/sp:dev-runall --feature <id> --mode auto` | Choosing sequential vs parallel by hand | Computes the batch's dependency waves (`batch-plan.mjs order`) and fans out per-task worktrees only when a wave holds ≥2 independent tasks; file overlap serializes. `--mode parallel` forces fan-out. |
-| `/sp:dev-verifyall` / `/sp:dev-wrapall` | Per-task verify/wrap loops | Batch-verify a feature's tasks, then batch-wrap (learnings, metrics, doc-sync, feature transition). |
+| `/sp:dev-run --all --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-planner`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
+| `/sp:dev-run --all --feature <id> --mode auto` | Choosing sequential vs parallel by hand | Computes the batch's dependency waves (`batch-plan.mjs order`) and fans out per-task worktrees only when a wave holds ≥2 independent tasks; file overlap serializes. `--mode parallel` forces fan-out. |
+| `/sp:dev-verify --all` / `/sp:dev-wrap --all` | Per-task verify/wrap loops | Batch-verify a feature's tasks, then batch-wrap (learnings, metrics, doc-sync, feature transition). |
 
 Single task? `/sp:dev-run <wbs>` (or delegate to `sp:super-planner` directly). Review-only?
 `sp:super-reviewer`. CLI corpus campaigns across many tasks/features/rules? `sp:expert-spur`.
@@ -731,7 +731,7 @@ spur task list --status wip          # what's already in flight (CLI)
 /sp:dev-run 0061
 
 # A batch, in dependency-correct order, unattended:
-/sp:dev-runall --feature F71 --auto
+/sp:dev-run --all --feature F71 --auto
 
 # As needed around the loop:
 /sp:dev-unit 0061 --coverage 90       # extend tests until the bar clears
@@ -747,7 +747,7 @@ Any non-PASS verdict **stops the chain** with findings written to `## Testing` /
 
 ```bash
 /sp:dev-wrap 0061 --auto              # learnings, metrics, doc-sync (single task)
-/sp:dev-wrapall --feature F71 --auto  # batch wrap; advances the feature lifecycle
+/sp:dev-wrap --all --feature F71 --auto  # batch wrap; advances the feature lifecycle
 /sp:dev-wrap 0061 --auto --merge      # + branch cleanup (IRREVERSIBLE — always pauses)
 /sp:dev-debug 0061                    # systematic debugging protocol (reproduce → isolate → root cause → fix)
 /sp:dev-daily                         # daily summary report generator (ccusage + git history)
@@ -756,7 +756,7 @@ Any non-PASS verdict **stops the chain** with findings written to `## Testing` /
 ```
 
 Wrap-up never mutates task status; it consumes completed tasks. Feature lifecycle
-advances only via `/sp:dev-wrapall --feature <id>`.
+advances only via `/sp:dev-wrap --all --feature <id>`.
 
 ### Stuck
 

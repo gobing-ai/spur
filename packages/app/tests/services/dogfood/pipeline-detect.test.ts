@@ -176,6 +176,45 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
     });
 });
 
+describe('task 1390 R4 — `--all` carries the batch scope the *all commands had', () => {
+    const positives: Array<[string, string]> = [
+        ['/sp:dev-run --all --tasks 1390,1391', 'dev-run --all'],
+        ['/sp:dev-refine --all --feature F95 --depth ready', 'dev-refine --all'],
+        ['/sp:dev-verify --all --tasks 1390,1391', 'dev-verify --all'],
+        ['/sp:dev-wrap --all --since 2026-01-01', 'dev-wrap --all'],
+    ];
+    for (const [input, label] of positives) {
+        test(`detectPipelineDriving: ${label}`, () => {
+            expect(detectPipelineDriving(input)).toBe(true);
+        });
+    }
+
+    // `--all` is a modifier, not a token: alone it must not classify anything.
+    const negatives: Array<[string, string]> = [
+        ['spur task list --all', 'task list --all'],
+        ['rg --all .', 'rg --all'],
+        ['/sp:dev-review 1390 --all', 'dev-review --all (not a batch base)'],
+        ['spur workflow list --all', 'workflow list --all'],
+    ];
+    for (const [input, label] of negatives) {
+        test(`detectPipelineDriving: ${label} stays non-driving`, () => {
+            expect(detectPipelineDriving(input)).toBe(false);
+        });
+    }
+
+    test('isImplementHeavyStep: --all is heavy on run/wrap, not on refine/verify', () => {
+        expect(isImplementHeavyStep('/sp:dev-run --all --tasks 1390,1391')).toBe(true);
+        expect(isImplementHeavyStep('/sp:dev-wrap --all --since 2026-01-01')).toBe(true);
+        expect(isImplementHeavyStep('/sp:dev-refine --all --feature F95')).toBe(false);
+        expect(isImplementHeavyStep('/sp:dev-verify --all --tasks 1390,1391')).toBe(false);
+    });
+
+    test('the retired spellings still classify for their one-release redirects', () => {
+        expect(detectPipelineDriving('/sp:dev-runall --tasks 1,2')).toBe(true);
+        expect(detectPipelineDriving('/sp:dev-refineall --feature F95')).toBe(true);
+    });
+});
+
 describe('dogfood implement-heavy + Phase 1.0 gate (task 0277 W8 + live CLI)', () => {
     test('isImplementHeavyStep — dev-run is heavy; dev-verify is not', () => {
         expect(isImplementHeavyStep('/sp:dev-run 0125 --auto')).toBe(true);

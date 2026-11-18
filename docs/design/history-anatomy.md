@@ -10,7 +10,7 @@ tags: [system, I8, history]
 
 # History anatomy: daily cache, ad-hoc diagnosis, and bounded migration
 
-**Area:** sp plugin > `sp:history-anatomy` skill, `/sp:dev-find-issue` command, `history-anatomy.yaml` workflow, `docs/report` daily cache, and the HA-S1 correction to the history analyze artifact + forensics renderer.
+**Area:** sp plugin > `sp:history-anatomy` skill, `/sp:dev-find issue` command, `history-anatomy.yaml` workflow, `docs/report` daily cache, and the HA-S1 correction to the history analyze artifact + forensics renderer.
 **Status:** built (I8 HA-S1; 0657–0661 — ADR-079 cache, ADR-080 bounded rankings).
 **Authority:** decisions in `00` (ADR-079 cache, ADR-080 bounded rankings); command/flag shapes in `04`; this satellite owns the report contract, cache contract, workflow shape, and migration gate. The history data plane itself remains [`history-data-processing.md`](history-data-processing.md) and [`sqlite-forensics-token-time-per-step.md`](sqlite-forensics-token-time-per-step.md); shared flag semantics remain `plugins/sp/skills/spur-dev/references/flag-glossary.md`. I9 environment-improvement projection (accepted design — ADR-084/085; not yet built) is [`environment-improvement-lens.md`](environment-improvement-lens.md) — retro names as section-9 signals, closed categories unchanged.
 
@@ -37,7 +37,7 @@ Baseline artifacts: `.spur/run/7fa52fa5-…-idea-eval-report.md` (idea evaluatio
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
-| `/sp:dev-find-issue` | Discoverability, argument hint, `reviewer` role, one skill invocation | Any analysis logic |
+| `/sp:dev-find issue` | Discoverability, argument hint, `reviewer` role, one skill invocation | Any analysis logic |
 | `sp:history-anatomy` | Mode validation, evidence policy, finding taxonomy, comparison semantics, report contract, `enrich` and `validate` rubrics | Cache branching, retry policy, publication |
 | `history-anatomy.yaml` | Cache decision, stage ordering, executor dispatch, two-pass correction budget, terminal status, atomic publication | Any finding, severity, or remediation judgment |
 | Cache helper (`.mjs` twin per ADR-065) | Normalized semantic digest, metadata comparison, structural checks, atomic replace | Anything interpretive |
@@ -48,8 +48,8 @@ Baseline artifacts: `.spur/run/7fa52fa5-…-idea-eval-report.md` (idea evaluatio
 ## Operator surface
 
 ```text
-/sp:dev-find-issue [--mode daily] [--date YYYY-MM-DD] [--recompute] [--agent <inline|auto|name>]
-/sp:dev-find-issue "<focus>" --mode ad-hoc --since <RFC3339> --until <RFC3339>
+/sp:dev-find issue [--mode daily] [--date YYYY-MM-DD] [--recompute] [--agent <inline|auto|name>]
+/sp:dev-find issue "<focus>" --mode ad-hoc --since <RFC3339> --until <RFC3339>
                    [--agent <inline|auto|name>] [--output <path>]
 ```
 
@@ -247,7 +247,7 @@ renders `Sessions | 20` — a false coverage claim, and one a daily report would
 
 ## Bounded coexistence and retirement
 
-Launch ships `sp:history-anatomy` and repoints `/sp:dev-find-issue`. `sp:issue-finding` stays
+Launch ships `sp:history-anatomy` and repoints `/sp:dev-find issue`. `sp:issue-finding` stays
 packaged and directly invocable, documented as the legacy path. No logic is copied from it into the
 new skill.
 

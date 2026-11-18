@@ -212,7 +212,7 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
     });
 
     describe('C1 — glossary membership error (drift #3)', () => {
-        test('--keep-going naming dev-verifyall (never declared it) → violation', () => {
+        test('--keep-going naming dev-verify --all (never declared it) → violation', () => {
             const violations = checkGlossaryMembership(GLOSSARY_KEEP_GOING_DRIFTED, KEEP_GOING_HINTS);
             expect(violations.length, JSON.stringify(violations, null, 2)).toBeGreaterThan(0);
             expect(violations[0]?.flag).toBe('--keep-going');
@@ -340,13 +340,13 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
                 '',
                 '| # | Operation | Command | Backing | Skill / Verb | Arg-hint |',
                 '| --- | ----------- | --------- | --------- | -------------- | ---------- |',
-                '| 15 | wrapall | `dev-wrapall` | `Skill()` | `spur workflow run` | `[--status <s>]` |',
+                '| 15 | wrapall | `dev-wrap --all` | `Skill()` | `spur workflow run` | `[--status <s>]` |',
                 '',
                 '### 15. wrapall',
                 '',
                 '- **Inputs:** `--status <s>` filters by task status.',
             ].join('\n');
-            const violations = checkDefaultsParity(new Map([['dev-wrapall', WRAPALL_TABLE_OMITTED]]), ops);
+            const violations = checkDefaultsParity(new Map([['dev-wrap --all', WRAPALL_TABLE_OMITTED]]), ops);
             expect(violations).toEqual([]);
         });
 
@@ -363,7 +363,7 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
                 '',
                 '**Anchor:** `#flag-feature`.',
                 '',
-                'On feature-advancing commands (`dev-wrapall`) it also advances the feature.',
+                'On feature-advancing commands (`dev-wrap --all`) it also advances the feature.',
             ].join('\n');
             const violations = checkGlossaryMembership(glossary, KEEP_GOING_HINTS);
             expect(violations).toEqual([]);

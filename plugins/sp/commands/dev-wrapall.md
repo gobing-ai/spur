@@ -1,14 +1,16 @@
 ---
-description: Wrap up a batch of completed tasks — learnings, metrics, doc-sync, optional branch cleanup
+description: Deprecated one-release redirect — use `/sp:dev-wrap --all`
 requires: [cli:spur, local-fs]
 role: coder
 argument-hint: "[--since <iso-date>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]"
 allowed-tools: ["Bash", "Read", "AskUserQuestion"]
 ---
 
-# Dev Wrapall
+# dev-wrapall (deprecated redirect)
 
-Wraps the **wrapup-pipeline.yaml** workflow.
+**Deprecated (task 1390, feature H84).** A batch is a **scope**, not a different operation:
+`/sp:dev-wrap --all` is the authoritative surface, and the `sp:spur-dev` operation (`wrapall`) it
+dispatches is unchanged.
 
 ## Argument Flags
 
@@ -26,27 +28,12 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Usage
 
-/sp:dev-wrapall [--since <iso-date>] [--feature <id>] [--status <s>] [--agent <inline|auto|name>] [--auto] [--merge] [--dry-run]
+```text
+/sp:dev-wrap --all <forwarded arguments>
+```
 
 ## Implementation
 
-- Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
-- Wrap stays **workflow-backed** — `spur workflow run wrapup-pipeline.yaml` is the only implementation; there is no inline wrap driver.
-- Resolve the executor **before** launching the workflow:
-  - `--agent <name>` → pass the name unchanged into `vars.agent`.
-  - `--agent auto` → tier-resolve a concrete executor first, then merge it into `vars.agent`.
-  - omit and explicit `--agent inline` resolve identically (task 0687): tier substitution plus one warning naming the resolved executor (headless surface).
-- Emit a pre-dispatch notice naming the override before `spur workflow run`, exactly:
-  `execution surface: subprocess`, `reason: trigger 3 — durable auditable run record required`, `requested agent: inline|auto|<name>` (explicit `inline` substitutes tier resolution and warns), `executor: <substituted-name>|<resolved-name>`.
-- The wrap workflow still creates its durable run record — the notice reports the override, it does not change the workflow.
-
-```bash
-AGENT=… # omit≡inline → tier-substituted executor + warning; auto tier-resolved; <name> unchanged
-echo "execution surface: subprocess; reason: trigger 3 — durable auditable run record required; requested agent: <inline|auto|name>; executor: $AGENT"
-VARS=$(jq -nc --arg tasks "$TASKS" --arg agent "$AGENT" --arg profile "$PROFILE" --arg merge "$MERGE" \
-  '{tasks:$tasks, agent:$agent, profile:$profile, merge:$merge}')
-spur workflow run wrapup-pipeline.yaml --vars "$VARS" [--dry-run]
-```
-
-The executor resolution is described in the bullets above; the snippet's `AGENT` variable carries
-the resolved name (omit ≡ explicit `inline`; both tier-substitute with a warning).
+- Run the one implementation the replacement names: `spur workflow run wrapup-pipeline.yaml` over the resolved batch set.
+- The workflow YAML and the operation name are unchanged; only the command surface moved. The batch
+  lifecycle is [execution-batch.md](../skills/spur-dev/references/execution-batch.md) § wrap.

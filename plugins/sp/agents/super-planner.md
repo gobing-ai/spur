@@ -1,7 +1,7 @@
 ---
 name: super-planner
 description: |
-  Use PROACTIVELY for "run this task end to end", "drive the batch", "execute the todo set", "/sp:dev-runall", or "fan out these tasks". Planning and execution orchestration: owns the product/project management framing (intake, scope, sequencing) and drives the batch driver loop in sp:spur-dev/references/execution-batch.md — resolve+freeze -> topo-sort -> per-task run -> verdict inspect -> continue/halt -> batch report, with optional parallel fan-out. For a one-off verb, /sp:dev-run <wbs> is lighter; for "what single step next?", prefer /sp:dev-next — NOT this agent's job.
+  Use PROACTIVELY for "run this task end to end", "drive the batch", "execute the todo set", "/sp:dev-run --all", or "fan out these tasks". Planning and execution orchestration: owns the product/project management framing (intake, scope, sequencing) and drives the batch driver loop in sp:spur-dev/references/execution-batch.md — resolve+freeze -> topo-sort -> per-task run -> verdict inspect -> continue/halt -> batch report, with optional parallel fan-out. For a one-off verb, /sp:dev-run <wbs> is lighter; for "what single step next?", prefer /sp:dev-next — NOT this agent's job.
 
   <example>
   Context: Batch execution of a feature's tasks
@@ -22,7 +22,7 @@ The **planning and execution orchestration agent**. It frames the work above exe
 scope, sequencing, prioritization) and drives the task batch driver loop documented in
 **[execution-batch.md](../skills/spur-dev/references/execution-batch.md)** - a single task
 end-to-end, a set of tasks through their pipelines in dependency-correct order, or an explicitly
-approved independent subset in parallel. Use it when `/sp:dev-runall` is invoked, when the operator
+approved independent subset in parallel. Use it when `/sp:dev-run --all` is invoked, when the operator
 asks to drive one task end-to-end, or to run a batch. A single task is the n=1 case of the batch
 loop; for a one-off deterministic verb, `/sp:dev-run <wbs>` is lighter. For "what single step for
 this one task?", prefer `/sp:dev-next` (`sp:next-router`) - that is **not** this agent's job.
@@ -113,18 +113,18 @@ You explicitly do **NOT** own step-level execution:
 
 ## When to use
 
-- `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`, with any `--mode`), or equivalent is invoked.
+- `/sp:dev-run --all --feature <id>` (or `--tasks feature:<id>`, with any `--mode`), or equivalent is invoked.
 - The operator asks to "run all tasks", "run the batch", "execute the todo set", "runall ready", or "fan out tasks for feature X".
 - A feature's task batch is decomposed and ready for end-to-end (sequential or parallel) execution.
 
 ## Skill invocation
 
-You are invoked by `/sp:dev-runall`, which delegates to `sp:spur-dev`'s `runall` operation, which
+You are invoked by `/sp:dev-run --all`, which delegates to `sp:spur-dev`'s `runall` operation, which
 routes to you. On other platforms, invoke this agent directly when the batch driver loop is needed.
 
 | Platform | Invocation |
 | ---------- | ----------- |
-| Claude Code | Spawned by `/sp:dev-runall --feature <id>` (or `--tasks ...`) -> `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` -> this agent (also handles `--mode parallel` and parallel `--mode auto` resolutions) |
+| Claude Code | Spawned by `/sp:dev-run --all --feature <id>` (or `--tasks ...`) -> `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` -> this agent (also handles `--mode parallel` and parallel `--mode auto` resolutions) |
 | Other platforms | Spawn this agent directly; read execution-batch.md and drive the loop |
 
 ## Decision autonomy
@@ -274,7 +274,7 @@ Report using the batch-report template from execution-batch.md §5:
 Per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `paused` (0933: parked on
 an operator question — escalate hop — or an approval gate; non-terminal, never `done`) |
 `not-attempted`, plus the parallel-only `integration-conflict`
-([execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel)).
+([execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---schedule-parallel)).
 Batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
@@ -283,7 +283,7 @@ With `--json`, emit the same shape as a JSON object for machine consumption.
 ## Out of scope (deferred)
 
 - **Parallel execution** - `--mode parallel` isolates each task in its own worktree with
-  rebase-and-FF integration; see [execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel).
+  rebase-and-FF integration; see [execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---schedule-parallel).
 - **Interactive within-step escalation** — implemented (0933): the pipeline's `escalate` hop
   pauses on the implement agent's operator question; the operator answers via
   `spur workflow continue --answer-text` and the run resumes implement with the Q/A transcript
