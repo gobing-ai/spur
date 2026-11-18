@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H85"
 name: "Usage-driven surface reduction of commands, skills and agent guidance"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-18T05:29:38.307Z"
-updated_at: "2026-11-18T06:16:05.922Z"
+updated_at: "2026-11-18T08:52:44.185Z"
 ---
 
 # H85: Usage-driven surface reduction of commands, skills and agent guidance
@@ -50,7 +50,7 @@ Feature: Usage-driven surface reduction of commands, skills and agent guidance
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1404 | Apply approved surface cuts and trim agent guidance | todo |
-| 1403 | Produce the usage-driven reduction report | todo |
+| 1403 | Produce the usage-driven reduction report | wip |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -60,3 +60,6 @@ Refine 2026-11-17: the 30-day gate is already met for commands and skills (histo
 Phase 2 of the protocol-surfaces roadmap (2026-11-17 planning session).
 
 ## History
+
+- 2026-11-18T08:52:44.185Z backlog → active (system)
+

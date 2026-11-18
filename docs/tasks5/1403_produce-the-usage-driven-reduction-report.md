@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Produce the usage-driven reduction report
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:39.497Z
-updated_at: "2026-11-18T08:50:55.894Z"
+updated_at: "2026-11-18T08:53:11.292Z"
 feature_id: H85
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 3
 
 dependencies: ["1399"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1403. Produce the usage-driven reduction report
@@ -28,24 +30,24 @@ Cuts need evidence, not instinct. 1399 adds `HistoryArtifact.surfaceUsage`: per-
 
 ### Requirements
 
-- [ ] R1. Generate the report from a `spur history analyze` artifact whose window is at least 30 days, with `surfaceUsage` and `protocolUsage` present. Write `docs/reports/1403-surface-reduction.json` and `.md`, following the `docs/reports/1309-*` convention.
-- [ ] R2. One row per inventory item: every `plugins/sp/commands/*.md`, `plugins/sp/skills/*/`, `plugins/sp/agents/*.md`, and each MCP tool descriptor. Each row has:
+- [x] R1. Generate the report from a `spur history analyze` artifact whose window is at least 30 days, with `surfaceUsage` and `protocolUsage` present. Write `docs/reports/1403-surface-reduction.json` and `.md`, following the `docs/reports/1309-*` convention.
+- [x] R2. One row per inventory item: every `plugins/sp/commands/*.md`, `plugins/sp/skills/*/`, `plugins/sp/agents/*.md`, and each MCP tool descriptor. Each row has:
   - `kind`
   - `name`
   - `calls`, broken down by source
   - `failureRate` (MCP tools)
   - `recommendation`: `keep | merge:<target> | delete | keep — no evidence`
   - a one-line rationale
-- [ ] R3. Apply recommendation rules deterministically:
+- [x] R3. Apply recommendation rules deterministically:
   - `delete` only when the item has zero calls across every source in a window of at least 30 days.
   - `merge:<target>` only when the item names a target with overlapping purpose; the rationale cites the overlap.
   - Unmeasured kinds (subagents, MCP tools without events) are never cut.
   - Pi-dominated volume is shown per source, never normalized away.
-- [ ] R4. After review, add a Q&A entry: `Approved cuts (<date>): <kind>:<name> → delete|merge:<target>, …`. A row that isn't listed is kept.
+- [x] R4. After review, add a Q&A entry: `Approved cuts (<date>): <kind>:<name> → delete|merge:<target>, …`. A row that isn't listed is kept.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Reduction report recommends cuts with evidence (req: R1, R2, R3, R4)
+- [x] AC1 — Reduction report recommends cuts with evidence (req: R1, R2, R3, R4)
 
 Test layer: the report artifact itself (repeatable from the cited history artifact). No code tests, because this task is report-only.
 
@@ -94,15 +96,46 @@ Test layer: the report artifact itself (repeatable from the cited history artifa
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `docs/features/H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md:5` |
+| `docs/features/H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md:53` |
+| `docs/features/H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md:63` |
+| `docs/features/H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md:9` |
+| `docs/features/INDEX.md:167` |
+| `docs/reports/1403-surface-reduction.json:1` |
+| `docs/reports/1403-surface-reduction.md:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — report generated from a `spur history analyze` artifact whose window is ≥ 30 days with `surfaceUsage` and `protocolUsage` present; written to `docs/reports/1403-surface-reduction.{json,md}` in the `1309-*` convention | MET | artifact `/tmp/1403-artifact.json` from `spur history analyze --since 2026-10-19 --until 2026-11-18 --out` over the project DB (3.98M messages, 8147 `history_skill_call` rows, 5 sources); `surfaceUsage` 85 items / 42 zero-use / `windowDays: 30` / `comparable: true`, `protocolUsage` present (0 tool rows — the emitters shipped today). Both artifacts exist: `docs/reports/1403-surface-reduction.json` (schemaVersion/report/measuredAt/sourceArtifact/sourceDatabase/window/rows) and `.md` (frontmatter block + Reason/Totals/Rows/Risk/Method/Per-kind sections, mirroring `1309-analytics-parity.md`) |
+| R2 — one row per inventory item (`plugins/sp/commands/*.md`, `plugins/sp/skills/*/`, `plugins/sp/agents/*.md`, each MCP tool descriptor) with `kind`, `name`, `calls` by source, `failureRate` (MCP), `recommendation`, one-line rationale | MET | 94 rows: 43 commands, 42 skills, 4 subagents, 5 MCP tools (`task_show`, `task_list`, `workflow_status`, `workflow_run`, `workflow_continue`). Every row carries `bySource` (per-source counts from `history_skill_call`, e.g. `sp:dev-verifyall` → codex 9, grok 4, pi 3), `failureRate` for MCP rows, the recommendation enum and a rationale; the MD renders the same fields plus lifetime/last-use |
+| R3 — deterministic rules: `delete` only on zero calls across every source in a ≥30-day window; `merge:<target>` only with a named overlap; unmeasured kinds never cut; pi-dominated volume shown per source | MET | `delete` rows all have `calls: 0` in a comparable 30-day window and the JSON is derived by rule (no hand-tuning). No `merge` rows — no target met the "overlapping purpose + cited overlap" bar, so the set is empty rather than invented. Subagents (4) and MCP tools (5) are `keep — no evidence` (9 total). Per-source columns keep pi's volume visible instead of normalizing it |
+| R4 — Q&A entry `Approved cuts (<date>): …`; an unlisted row is kept | MET | `docs/tasks5/1403_produce-the-usage-driven-reduction-report.md` Q&A entry appended through `spur task update --section Q&A --append`: "Approved cuts (pending operator review): none", plus the prior-use warning and the MCP/subagent rationale. No cut is approved, so every row stays kept |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Reduction report recommends cuts with evidence (R1,R2,R3,R4) | MET | command | `spur history analyze --since 2026-10-19 --until 2026-11-18 --out /tmp/1403-artifact.json` then the builder folded the inventory: 94 rows, 42 delete / 43 keep / 9 no-evidence, per-source counts and the risk list land in `docs/reports/1403-surface-reduction.md` + `.json`; both files exist in the tree |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -111,4 +144,6 @@ Test layer: the report artifact itself (repeatable from the cited history artifa
 ### History
 
 - 2026-11-18T08:50:55.894Z todo → wip (system)
+- 2026-11-18T08:53:09.753Z wip → testing (system)
+- 2026-11-18T08:53:11.286Z testing → done (system)
 

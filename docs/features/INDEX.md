@@ -164,7 +164,7 @@
         ├── [done] **H82**: Unified --agent execution-surface selector ([H82_unified-agent-execution-surface-selector.md](./H82_unified-agent-execution-surface-selector.md))
         ├── [done] **H83**: Run-scoped agent session affinity, live agent streaming, unified --agent inline ([H83_run-scoped-agent-session-affinity-live-agent-streaming-unified-agent-inline.md](./H83_run-scoped-agent-session-affinity-live-agent-streaming-unified-agent-inline.md))
         ├── [backlog] **H84**: sp command consolidation: --all batch variants and one dev-find lens command ([H84_sp-command-consolidation-all-batch-variants-and-one-dev-find-lens-command.md](./H84_sp-command-consolidation-all-batch-variants-and-one-dev-find-lens-command.md))
-        └── [backlog] **H85**: Usage-driven surface reduction of commands, skills and agent guidance ([H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md](./H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md))
+        └── [active] **H85**: Usage-driven surface reduction of commands, skills and agent guidance ([H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md](./H85_usage-driven-surface-reduction-of-commands-skills-and-agent-guidance.md))
     └── [done] **H9**: Executor selection: inline default, agent/executor naming, and working tier-based fallback ([H9_executor-selection-inline-default-agent-executor-naming-and-working-tier-based-fallback.md](./H9_executor-selection-inline-default-agent-executor-naming-and-working-tier-based-fallback.md))
 [verifying] **I**: sp plugin ([I_sp-plugin.md](./I_sp-plugin.md))
     ├── [done] **I1**: sp plugin hands-off ready ([I1_sp-plugin-hands-off-ready.md](./I1_sp-plugin-hands-off-ready.md))
