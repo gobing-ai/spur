@@ -4,7 +4,7 @@ name: Expose opted-in workflows as namespaced MCP tools
 status: todo
 template: feature-impl
 created_at: 2026-11-18T05:29:24.293Z
-updated_at: "2026-11-18T06:27:50.159Z"
+updated_at: "2026-11-18T07:22:49.300Z"
 feature_id: B91
 priority: P1
 tags:
@@ -58,6 +58,8 @@ Test layer: a real serve app with a fixture project in `apps/server/tests/mcp-e2
 
 - **Engine publish authorized (operator, 2026-11-17).** The engine side of R1 is done: commit `eab057fd` in `ts-libs` adds an optional `metadata` record to the state-machine and transition-flow root schemas and the def types. Tests show it round-trips, a non-object value is rejected, and other unknown root keys still fail.
 - **The release is not out yet, so Step 1 is blocked.** `ts-libs` `main` also has two new packages, `@gobing-ai/ts-decision-gemini` and `@gobing-ai/ts-decision-openai`, that were never published to npm (npm returns 404). The CI publish checks for that first and stops the whole release, so they must be bootstrapped by hand first. Once the release (`0.8.0`) is out, all Step 1 needs is to bump the root `workspaces.catalog` pin and run `bun install`. Don't start R2 or later before that.
+
+- **Step 1 is done (2026-11-17).** `@gobing-ai/ts-*` 0.8.0 is published, and the root `workspaces.catalog` pins it. The local ts-db patch has been moved to `patches/@gobing-ai%2Fts-db@0.8.0.patch`, unchanged: ts-db code is identical from 0.7.1 to 0.8.0, and without the patch `DbSyncTransaction` fails typecheck. The engine's `metadata` key is in `node_modules/@gobing-ai/ts-dual-workflow-engine/dist/schema.js`. Implementation starts at R2.
 
 ### Design
 
