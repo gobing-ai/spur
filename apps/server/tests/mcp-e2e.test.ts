@@ -530,7 +530,17 @@ describe('1392: guarded corpus write tools', () => {
         return call('sp_task_create', { title: `${title} ${token}`, ...extra });
     };
 
+    // ts-runtime's node FileSystem applies its root only in `resolve()`; readDir/readFile/exists
+    // take the context's relative planning folders against process.cwd(). Running this group from
+    // the scratch root keeps feature lookups and task writes inside it, never in the checkout.
+    let previousCwd = '';
+    beforeAll(() => {
+        previousCwd = process.cwd();
+        process.chdir(root);
+    });
+
     afterAll(() => {
+        process.chdir(previousCwd);
         // The service resolves its tasks folder from the runner's cwd, which is not always the
         // scratch root, so the sweep looks in both places instead of trusting one path.
         for (const dir of [join(root, 'docs', 'tasks'), join(process.cwd(), 'docs', 'tasks')]) {
