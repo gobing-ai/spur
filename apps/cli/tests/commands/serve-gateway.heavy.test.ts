@@ -1,6 +1,6 @@
 /**
  * Process-level proof for feature K4 R3 (and R4's adoption half): one gateway port routes each
- * local prefix to that project's own real `spur serve`, and a dead upstream is isolated to its own
+ * local prefix to that project's own real `spur self serve`, and a dead upstream is isolated to its own
  * prefix — alpha keeps answering while beta restarts or fails closed (502) under its own name.
  *
  * Heavy tier: binds real listeners and runs real serve + gateway processes.

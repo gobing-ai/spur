@@ -59,7 +59,7 @@ describe('agent run --agent <member> (1333 R1/R3)', () => {
         const output = captureOutput();
         const db = await createMigratedDb({ url: ':memory:' });
         const cwd = mkdtempSync(join(tmpdir(), 'spur-member-cold-'));
-        // No `spur serve` process answers the liveness probe.
+        // No `spur self serve` process answers the liveness probe.
         setAgentServerFetchForTesting(stubFetch(async () => new Response('{}', { status: 500 })));
         try {
             const ctx = createCliContext({ cwd, output, db, spurConfig: fleetConfig() });
@@ -480,8 +480,8 @@ describe('agent doctor — member delivery block (1333 R6/AC4)', () => {
             });
             const text = output.stdout.join('\n');
             expect(text).toContain('fleet members (delivery each takes now):');
-            expect(text).toMatch(/proj-coder\tcold\tnot live under spur serve/);
-            expect(text).toMatch(/proj-verifier\twarm\tlive under spur serve/);
+            expect(text).toMatch(/proj-coder\tcold\tnot live under spur self serve/);
+            expect(text).toMatch(/proj-verifier\twarm\tlive under spur self serve/);
             // P3: ONE liveness probe serves every member — not one per member.
             expect(probes).toBe(1);
             expect(typeof code).toBe('number');

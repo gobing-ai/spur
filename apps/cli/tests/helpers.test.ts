@@ -29,8 +29,8 @@ describe('cli test helpers', () => {
             const dir = await createTempProject();
             try {
                 // init so .spur/config.yaml exists — status.ok is Spur-config health, not package.json
-                await runCli(['init', '--name', 'fixture'], dir);
-                const result = await runCli(['status', '--json'], dir);
+                await runCli(['self', 'init', '--name', 'fixture'], dir);
+                const result = await runCli(['self', 'status', '--json'], dir);
                 expect(result.code).toBe(0);
                 expect(result.json).toBeDefined();
                 const payload = result.json as { ok?: boolean };
@@ -55,7 +55,7 @@ describe('cli test helpers', () => {
             const dir = await createTempProject();
             try {
                 // status without --json emits human text, not JSON
-                const result = await runCli(['status'], dir);
+                const result = await runCli(['self', 'status'], dir);
                 expect(result.json).toBeUndefined();
                 expect(result.stdout.length).toBeGreaterThan(0);
             } finally {

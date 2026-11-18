@@ -27,11 +27,11 @@ findings and the rejection of approach A stand.
   it. A fleet member declared with an Agent Card gets an A2A turn; the keyed inbox request stays the
   durable record.
 - **The main fix is daily-use weight, not wire speed.** The user addresses a member by name; Spur
-  picks warm inbox turn → A2A turn → cold subprocess. A dispatch works with no `spur serve` running.
+  picks warm inbox turn → A2A turn → cold subprocess. A dispatch works with no `spur self serve` running.
 - **Same-machine members stay off A2A.** `a2a server --exec` is a cold, in-memory, per-request
   spawn; putting it in front of local agents would undo ADR-145.
 - **The latency baseline is decoupled** (task 1331, P3). Performance work shipped in 0.4.34–0.4.35.
-- **Phase 2, undecided:** `spur serve` serving A2A, for cross-machine Spur fleets.
+- **Phase 2, undecided:** `spur self serve` serving A2A, for cross-machine Spur fleets.
 
 Owners: ADR-148, `docs/design/a2a-member-transport.md`, feature G8, tasks 1333 and 1334.
 

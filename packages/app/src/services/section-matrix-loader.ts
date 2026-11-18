@@ -8,7 +8,7 @@
  * copies, two validation policies. This module is the one owner.
  *
  * Resolution order:
- *   1. `.spur/tasks/section-matrix.yaml` (project-local, seeded by `spur init`)
+ *   1. `.spur/tasks/section-matrix.yaml` (project-local, seeded by `spur self init`)
  *   2. bundled / packaged `tasks/section-matrix.yaml` (data copied/generated from
  *      the canonical build-time matrix asset under the repo `config` `tasks` tree)
  *

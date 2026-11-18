@@ -14,7 +14,7 @@ import { defineConfig } from 'vite';
  *   `@hono/vite-build`. The local Bun-binary path stays `bun build --compile`
  *   (package.json `build`) and is unaffected by Vite.
  *
- * The standalone `src/index.ts` entry remains for `spur serve` / Docker (R5);
+ * The standalone `src/index.ts` entry remains for `spur self serve` / Docker (R5);
  * Vite is dev/CF-build only.
  */
 export default defineConfig({

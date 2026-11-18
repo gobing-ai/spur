@@ -108,7 +108,7 @@ function scaffold(root: string, name: string, members: string[]): void {
     );
 }
 function startServe(root: string, port: number) {
-    return Bun.spawn([CLI, 'serve', '--port', String(port), '--host', '127.0.0.1', '--no-open', '--no-logo'], {
+    return Bun.spawn([CLI, 'self', 'serve', '--port', String(port), '--host', '127.0.0.1', '--no-open', '--no-logo'], {
         cwd: root,
         stdout: 'pipe',
         stderr: 'pipe',

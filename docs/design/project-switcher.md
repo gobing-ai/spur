@@ -14,7 +14,7 @@ authority: derived (ADR wins on conflict)
 
 ## 1. Problem
 
-Operators run `spur serve --port N` per project root, memorize ports, and open separate browser tabs.
+Operators run `spur self serve --port N` per project root, memorize ports, and open separate browser tabs.
 There is no shared registry of known Spur projects and no board affordance to switch or auto-start
 another project.
 
@@ -26,10 +26,10 @@ another project.
 | Choice | Decision | Why |
 | --- | --- | --- |
 | Registry location | `~/.config/spur/projects.json` | User-global, survives per-project cwd; stable contract for future launchd |
-| Hub model | Every `spur serve` registers itself; any instance can list/start peers | No new daemon in this stage |
+| Hub model | Every `spur self serve` registers itself; any instance can list/start peers | No new daemon in this stage |
 | Port semantics | `port == 0` ⇒ stopped; `port > 0` ⇒ claimed listen port | Matches operator mental model in the idea brief |
 | Switch UX | Top-left project name → popup menu with running/stopped icons | Reuses existing identity surface (`LeftSidebar` + `/api/project`) |
-| Auto-start | Selecting a stopped project starts `spur serve` for that path | Required by feature AC R2 / R9 |
+| Auto-start | Selecting a stopped project starts `spur self serve` for that path | Required by feature AC R2 / R9 |
 | Launchd | Out of scope; registry + start/stop APIs stay daemon-agnostic | Future swap of hub for launchd agent without web redesign — **superseded by ADR-151**: `spur self install --daemon` keeps the one-port [project gateway](project-gateway.md) alive as a user LaunchAgent (the `spur self daemon install` spelling was removed, task 1387) |
 
 **Rejected (this stage):** standalone daemon (Approach 2 — overbuilt); client-only localStorage
@@ -79,7 +79,7 @@ absolute path (name is display-only, unique by convention).
 ### 3.2 Registry freshness, process reclamation, and worktree teardown (feature K3)
 
 When isolated worktrees are created for `--worktree` runs, execution-batch WT-2 (create mode) and
-the `branch-workflow` worktree steps register the path with `spur projects add`; `spur serve` also
+the `branch-workflow` worktree steps register the path with `spur projects add`; `spur self serve` also
 upserts its project root at startup. Nothing registers a bare `git worktree add` on its own. When the worktree is merged or deleted, the
 entry becomes stale and any lingering serve process becomes an orphaned background daemon.
 
@@ -150,7 +150,7 @@ three-tab contract); the roster reads `/api/project/fleet` rather than the retir
 ```
 packages/config     Zod schema for ProjectsFile + default path helper
 packages/app        ProjectRegistry service (list/get/upsert/setPort/allocatePort/withLock)
-apps/cli            spur serve lifecycle hooks; spur projects {add,remove,list,start,stop}
+apps/cli            spur self serve lifecycle hooks; spur projects {add,remove,list,start,stop}
 apps/server         GET /api/projects; POST /api/projects/start; optional POST .../stop
 apps/web            ProjectSwitcher + LeftSidebar integration
 ```
@@ -202,12 +202,12 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 | `add <path> [--name] [--host]` | Upsert entry by path **+ host**, preserving a port already recorded for that entry (re-adding must not wipe a live port); require a valid local Spur project root for local hosts |
 | `remove <name\|path> [--host]` | Drop entry (does not kill a running process — warn if port > 0); `--host` scopes the removal to one host's entry, since one path can be registered for a remote host and for `localhost` |
 | `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836/0858) also resolves each project's `agent.fleet` declaration, orchestrator binding and capacity under the same verb |
-| `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
+| `start <name\|path> [--port]` | Spawn `spur self serve` in project path (detached child); wait until health OK; update registry |
 | `stop <name\|path>` | Ownership-verified stop (1156): SIGTERM the registered port's listener only after it proves `service:spur` and the exact project path over loopback HTTP with a stable PID; refuse (exit 1, port preserved, never `Stopped`) for foreign/unverified listeners and for remote-host entries (another machine's serve — this CLI cannot verify or signal it); an absent listener is an idempotent success that sets port 0 |
 
 **Host is part of an entry's identity.** `upsert`, `setPort`, and `remove` all key on path **+ host**,
 so one path registered for a remote host and for `localhost` stays two independent entries. A
-path-only write let a local `spur serve` shutdown deregister (`setPort(path, 0)`) clear the live
+path-only write let a local `spur self serve` shutdown deregister (`setPort(path, 0)`) clear the live
 remote entry sharing that path, and `projects stop <remote-name>` reported `Stopped` while zeroing a
 port whose serve kept listening (2026-10-22, `knowledge-kit` @ `192.168.87.27:3003`).
 
@@ -217,7 +217,7 @@ zeroing it destroys the only record of where that serve runs. Remote liveness is
 request by `list` / `/api/projects`, which probe the entry's own host.
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
-resource; keep `spur serve` as the low-level launcher.
+resource; keep `spur self serve` as the low-level launcher.
 
 **Gateway navigation (K4, ADR-151).** Through the gateway every local project shares one browser
 origin, so the switcher navigates a local entry to `/<prefix>/board` on the current origin when
@@ -281,7 +281,7 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
   before selection. Unconfigured projects default to `rest`; Board reads never reset strategy.
   `rest` leaves queued input unstarted and permits running work to finish and reconcile.
 - The declared strategy is the source of truth at **serve start** (0859): when `agent.fleet` is
-  present — enabled or not — `spur serve` reconciles `agent.fleet.strategy` into the
+  present — enabled or not — `spur self serve` reconciles `agent.fleet.strategy` into the
   `project_strategy` row after config load and fleet resolution. The reconcile reads first and
   writes only on a real difference, so a restart with an unchanged declaration neither bumps
   `strategy_version` nor emits `strategy.changed`, and a project without the section is never
@@ -412,7 +412,7 @@ Hooks: keep `useProjectName()`; add `useProjectList()` with refresh on open.
 Shared `startProjectServe({ path, port?, detached: true })` in `packages/app` or CLI helper:
 
 - Resolve `spur` binary: `process.execPath` / argv0 when running bundled CLI; else `spur` on PATH.
-- Spawn: `spur serve --cwd <path> --port <n> --no-open` (no nested browser storms).
+- Spawn: `spur self serve --cwd <path> --port <n> --no-open` (no nested browser storms).
 - Do not block the hub event loop beyond health poll budget; surface errors to API/CLI.
 
 **Out of scope:** supervising children after hub exit (orphan serves keep running until stopped;
@@ -465,4 +465,4 @@ Launchd remains a future feature; no task in this batch.
 
 - Persist `pid` in `ProjectEntry` for more reliable stop (optional enhancement).
 - Port band config key in spur config vs hard-coded 3000–3999.
-- Whether `projects add` auto-runs on first `spur serve` without prior add (recommended: yes).
+- Whether `projects add` auto-runs on first `spur self serve` without prior add (recommended: yes).

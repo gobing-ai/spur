@@ -120,18 +120,11 @@
 | **wrapup** |   |   |   |   |   |   |   |   |   | ✅ |   |
 | **Verb count** | **10** | **14** | **5** | **11** | **15** | **6** | **6** | **4** | **9** | **24** | **17** |
 
-## Hidden Legacy Aliases
+## Legacy nouns — removed (task 1388)
 
-The five former standalone nouns stay registered over the same builders as `spur self <verb>` — hidden
-from the top-level help listing, still fully functional for scripts and workflow YAML.
-
-| Legacy noun | Canonical | Description |
-|---|---|---|
-| `spur init` | `spur self init` | Scaffold a Spur project |
-| `spur maintain` | `spur self maintain` | Run database maintenance |
-| `spur migrate` | `spur self migrate` | Run CLI schema migrations |
-| `spur serve` | `spur self serve` | Start local web server |
-| `spur status` | `spur self status` | Show project / Git status |
+The five former standalone nouns (`init`, `maintain`, `migrate`, `serve`, `status`) were hidden
+aliases of `spur self <verb>` and are **gone**: `init`, `maintain`, `migrate`, `serve` and
+`status` now exist only under `self`, and a top-level spelling fails as an unknown command.
 
 ## Summary
 

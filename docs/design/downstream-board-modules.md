@@ -251,7 +251,7 @@ the child owns its own navigation and state.
 ### 6.8 Restart, migration and troubleshooting
 
 - **Restart to change selection.** Config and native builds are read once before the listener opens.
-  After editing `.spur/config.yaml` or rebuilding a module, restart `spur serve` and reload the browser;
+  After editing `.spur/config.yaml` or rebuilding a module, restart `spur self serve` and reload the browser;
   there is no watcher or live replacement in v1.
 - **Disabled declarations load nothing.** `enabled: false` skips the module before any IO, but the
   declaration is still validated, so an ambiguous or colliding id is still an error.
@@ -266,7 +266,7 @@ the child owns its own navigation and state.
 ### 6.9 Base path under the project gateway (feature K4)
 
 A Board module is loaded and rendered under whatever base path the Board itself is mounted at: `/`
-for a direct per-port `spur serve`, or `/<prefix>/` behind the one-port project gateway
+for a direct per-port `spur self serve`, or `/<prefix>/` behind the one-port project gateway
 ([project-gateway.md](project-gateway.md) §5). The Board learns the base from
 `<meta name="spur-base">`; **the module must never hard-code `'/api'`, `'/board/…'` or `'/modules/…'`.**
 

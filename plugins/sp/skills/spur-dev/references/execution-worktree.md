@@ -161,7 +161,7 @@ spur projects add "../<repo>-<command>-<selector-slug>-<short-id>" --json >/dev/
 ```
 
 Reuse mode does not re-register: `projects add` rewrites `port` to `0`, which would clobber the
-port of a live serve in an adopted tree. A served tree is already registered by `spur serve`.
+port of a live serve in an adopted tree. A served tree is already registered by `spur self serve`.
 
 **Worktree root is outside `.spur/` (0948 R9).** The default create path is that
 sibling directory, which sits next to the repository and not under it. Do not

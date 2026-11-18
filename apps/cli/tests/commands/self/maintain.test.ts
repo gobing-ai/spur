@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
-import { main } from '../../src';
-import { formatMaintenanceResult } from '../../src/commands/maintain';
-import { createMigratedDbAdapter } from '../../src/context';
-import type { CommandOutput } from '../../src/output';
+import { main } from '../../../src';
+import { formatMaintenanceResult } from '../../../src/commands/self/maintain';
+import { createMigratedDbAdapter } from '../../../src/context';
+import type { CommandOutput } from '../../../src/output';
 
 function capturingOutput(): { output: CommandOutput; lines: string[] } {
     const lines: string[] = [];
@@ -50,12 +50,12 @@ describe('self maintain command', () => {
         expect(parsed.durationMs).toBeGreaterThanOrEqual(0);
     });
 
-    test('runs via legacy hidden top-level alias `spur maintain`', async () => {
+    test('runs via legacy hidden top-level alias `spur self maintain`', async () => {
         const cwd = process.cwd();
         const db = await createMigratedDbAdapter(cwd, {}, ':memory:');
         const { output, lines } = capturingOutput();
 
-        const exitCode = await main(['maintain', '--json'], { output, cwd, db });
+        const exitCode = await main(['self', 'maintain', '--json'], { output, cwd, db });
 
         expect(exitCode).toBe(0);
         const parsed = JSON.parse(lines.join(''));

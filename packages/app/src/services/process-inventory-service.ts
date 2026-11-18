@@ -177,7 +177,7 @@ function truncateCommand(command: string, max: number): string {
 }
 
 function shortLabel(command: string, source: ProcessInventorySource, pid: number): string {
-    if (source === 'serve') return 'spur serve';
+    if (source === 'serve') return 'spur self serve';
     const base = command.split(/\s+/)[0] ?? '';
     const leaf = base.includes('/') ? (base.split('/').pop() ?? base) : base;
     return leaf || `pid:${pid}`;

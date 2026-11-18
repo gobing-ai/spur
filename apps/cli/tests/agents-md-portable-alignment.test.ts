@@ -1,7 +1,7 @@
 /**
  * Portable AGENTS.md harness alignment (task 0242 R1).
  *
- * Fails when root AGENTS.md and the bundled AGENTS seed (spur init template)
+ * Fails when root AGENTS.md and the bundled AGENTS seed (spur self init template)
  * diverge on shared structure (H2 headings, routing Need keys, platform/long-tail anchors).
  */
 import { describe, expect, test } from 'bun:test';

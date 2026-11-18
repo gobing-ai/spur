@@ -105,7 +105,7 @@ describe('errors', () => {
             expect(remediation).toContain('only after that inspection');
             expect(remediation).not.toContain('stale');
             expect(remediation).not.toContain('kill');
-            expect(remediation).not.toContain('spur serve');
+            expect(remediation).not.toContain('spur self serve');
         });
     });
 });

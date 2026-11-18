@@ -22,11 +22,11 @@ import {
 } from '@gobing-ai/spur-config/loader';
 import type { SearchStatus } from '@gobing-ai/spur-contracts';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
-import { CLI_CONFIG } from '../config';
-import { SCAFFOLD_MANIFEST } from '../config/scaffold-manifest';
-import type { CliContext } from '../context';
-import { toEnvelopeJson } from '../output';
-import { SHARED_OPTIONS } from './shared-options';
+import { CLI_CONFIG } from '../../config';
+import { SCAFFOLD_MANIFEST } from '../../config/scaffold-manifest';
+import type { CliContext } from '../../context';
+import { toEnvelopeJson } from '../../output';
+import { SHARED_OPTIONS } from '../shared-options';
 
 /**
  * Bundled global-config filename, seeded as {@link GLOBAL_CONFIG_FILE} on first run.

@@ -69,10 +69,10 @@ project's actual stack and scope. Invoked by `sp:spur-init` after scaffolding.
 2. Read each doc in `docs/00`–`05` for any remaining template markers.
 3. For **`AGENTS.md`**, use the **`{kebab-case}`** token scheme only (task 0242). Do **not** use
    `{{ MUSTACHE }}` for AGENTS:
-   - `{project-name}` / `{project-description}` — already filled by `spur init` when scaffolding a
+   - `{project-name}` / `{project-description}` — already filled by `spur self init` when scaffolding a
      fresh file; do not leave these braces after customize.
    - Project-specific body slots (`## Stack & layout`, build commands, conventions) use HTML
-     comments + human stubs in the **bundled AGENTS seed** (spur init template) — replace those
+     comments + human stubs in the **bundled AGENTS seed** (spur self init template) — replace those
      stubs with stack/layout and lint/test/build commands detected from the project manifests.
 4. Keep portable harness sections aligned with the bundled AGENTS seed (H2 set + Harness tool
    routing Need keys — see `apps/cli/tests/fixtures/agents-md-portable-contract.ts`).

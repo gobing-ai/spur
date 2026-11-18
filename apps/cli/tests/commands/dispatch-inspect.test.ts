@@ -30,10 +30,10 @@ describe('CLI dispatch and status', () => {
         expect(helpOutput).toContain('--version');
         expect(helpOutput).not.toContain('workspace');
         // The four legacy standalone nouns are hidden from the top-level listing.
-        expect(helpOutput).not.toContain('spur init');
-        expect(helpOutput).not.toContain('spur migrate');
-        expect(helpOutput).not.toContain('spur serve');
-        expect(helpOutput).not.toContain('spur status');
+        expect(helpOutput).not.toContain('spur self init');
+        expect(helpOutput).not.toContain('spur self migrate');
+        expect(helpOutput).not.toContain('spur self serve');
+        expect(helpOutput).not.toContain('spur self status');
         expect(bannerText()).toContain('___');
 
         expect(await main(['version'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
@@ -67,7 +67,8 @@ describe('CLI dispatch and status', () => {
     test('renders command-scoped help for every existing command', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const commands = ['init', 'status', 'migrate', 'agent', 'message', 'rule', 'history', 'workflow'];
+        // Task 1388: init/status/migrate live only under `self`, so they are checked there.
+        const commands = ['agent', 'message', 'rule', 'history', 'workflow'];
 
         for (const command of commands) {
             // --help flag
@@ -101,18 +102,18 @@ describe('CLI dispatch and status', () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
         // init so .spur/config.yaml exists — status.ok is Spur-config health
-        await main(['init', '--name', 'fixture'], { cwd, output, dbUrl: ':memory:' });
+        await main(['self', 'init', '--name', 'fixture'], { cwd, output, dbUrl: ':memory:' });
         output.messages.length = 0;
         await Bun.write(join(cwd, 'sample.txt'), 'sample');
 
-        expect(await main(['status', 'sample.txt', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        expect(await main(['self', 'status', 'sample.txt', '--json'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         const status = JSON.parse(output.messages.at(-1) ?? '{}') as {
             target: { path: string; size: number; isFile: boolean; isDirectory: boolean };
         };
         expect(status.target).toEqual({ path: 'sample.txt', size: 6, isFile: true, isDirectory: false });
 
         output.messages.length = 0;
-        expect(await main(['status', 'missing.txt'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
+        expect(await main(['self', 'status', 'missing.txt'], { cwd, output, dbUrl: ':memory:' })).toBe(1);
         expect(output.errors.at(-1)).toContain('path does not exist');
     });
 
@@ -245,14 +246,14 @@ describe('startup banner policy (A31/0719)', () => {
     test('runCli renders the banner once by default; exact --no-logo suppresses it with output and exit status unchanged (R2/R4)', async () => {
         const dir = await createTempProject();
         try {
-            await runCliSubprocess(['init', '--name', 'fixture'], dir);
+            await runCliSubprocess(['self', 'init', '--name', 'fixture'], dir);
             // Human mode: the logo renders exactly once before command output.
-            const human = await runCliSubprocess(['status'], dir);
+            const human = await runCliSubprocess(['self', 'status'], dir);
             expect(human.code).toBe(0);
             expect(human.stdout.split(bannerFirstLine)).toHaveLength(2);
 
             // Explicit suppression: logo absent, command output and exit code intact.
-            const suppressed = await runCliSubprocess(['status', '--no-logo'], dir);
+            const suppressed = await runCliSubprocess(['self', 'status', '--no-logo'], dir);
             expect(suppressed.code).toBe(0);
             expect(suppressed.stdout).not.toContain(bannerFirstLine);
             expect(suppressed.stdout.length).toBeGreaterThan(0);
@@ -265,8 +266,8 @@ describe('startup banner policy (A31/0719)', () => {
         // Automatic suppression on a healthy project: stdout begins with the JSON document.
         const dir = await createTempProject();
         try {
-            await runCliSubprocess(['init', '--name', 'fixture'], dir);
-            const ok = await runCliSubprocess(['status', '--json'], dir);
+            await runCliSubprocess(['self', 'init', '--name', 'fixture'], dir);
+            const ok = await runCliSubprocess(['self', 'status', '--json'], dir);
             expect(ok.code).toBe(0);
             expect(ok.stdout.startsWith('{')).toBe(true);
             expect(ok.stdout).not.toContain(bannerFirstLine);

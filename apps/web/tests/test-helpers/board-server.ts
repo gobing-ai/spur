@@ -1,7 +1,7 @@
 /**
  * Static board server for the browser proofs (task 0988 R4, task 0992 R1/R3).
  *
- * Mirrors the behaviours the proofs depend on from `spur serve`'s board path
+ * Mirrors the behaviours the proofs depend on from `spur self serve`'s board path
  * (`apps/server/src/bootstrap.ts` `createApp` and `apps/server/src/modules/board/index.ts`):
  * extension-derived MIME types (browsers refuse ES modules served without a JS content type), the
  * SPA fallback that makes a deep link a real page load, the read-only `GET /api/board/modules`

@@ -64,7 +64,7 @@ existing group, not part of the rd3-migration F-series.
 
 | ID | Name | Priority | Wave | Status | Slug |
 |---|---|---|---|---|---|
-| **S0** | Board launcher (`spur serve`) | P1 | S0 | planned | `board-launcher` |
+| **S0** | Board launcher (`spur self serve`) | P1 | S0 | planned | `board-launcher` |
 | **S1** | Server foundation | P1 | S0 | planned | `server-foundation` |
 | **S2** | Server module system | P1 | S0 | planned | `server-module-system` |
 | **S3** | Server domain modules (task + feature) | P1 | S1 | planned | `server-domain-modules` |
@@ -112,12 +112,12 @@ task/feature (follow incrementally), authentication (future).
 
 ---
 
-### S0 — Board launcher (`spur serve`)
+### S0 — Board launcher (`spur self serve`)
 
 | Field | Value |
 |---|---|
 | id | S0 |
-| name | Board launcher (`spur serve`) |
+| name | Board launcher (`spur self serve`) |
 | status | planned |
 | priority | P1 |
 | tags | [server-side-adjustment, wave-S0] |
@@ -128,14 +128,14 @@ task/feature (follow incrementally), authentication (future).
 optionally opens the browser, handles SIGINT for graceful shutdown. The local-fallback deployment
 path; primary deployment is Cloudflare (`wrangler deploy`).
 
-**Scope.** `spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` CLI verb in
+**Scope.** `spur self serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]` CLI verb in
 `apps/cli`. Config resolution: CLI flag → `PORT`/`HOST` env (folded by `buildConfigFromEnv`) →
 schema default (3000 / localhost). Browser auto-open. SIGINT/SIGTERM → `runNodeApplication` graceful
 shutdown. Serve keys (`host`, `openBrowser`, `webDistPath`) added to the **existing**
 `configSchema.server` in `packages/config` — **not** a new `server:` block on `spurConfigSchema`
 (that would collide with the existing env-config `server.port`; see design §4.2).
 
-**Out.** Cloudflare `wrangler deploy` (that's the Workers entry, not `spur serve`). Vite dev server
+**Out.** Cloudflare `wrangler deploy` (that's the Workers entry, not `spur self serve`). Vite dev server
 integration (that's W5/S5 build toolchain).
 
 **Design reference.** Design doc §4 (Board launcher), §4.1 (command surface), §4.2 (config
@@ -144,23 +144,23 @@ resolution), §4.3 (implementation shape).
 **Acceptance Criteria:**
 
 ```gherkin
-Feature: Board launcher (spur serve)
+Feature: Board launcher (spur self serve)
 
   Scenario: One command starts the board
     Given a project resolving server config (configSchema.server defaults + PORT/HOST env)
-    When spur serve runs
+    When spur self serve runs
     Then Bun.serve starts on the configured port
     And the browser opens to the board URL
     And the startup info is printed (port, URL, pid)
 
   Scenario: Config precedence is CLI flag > env > default
     Given PORT env is 4000
-    When spur serve --port 5000 runs
+    When spur self serve --port 5000 runs
     Then the server listens on port 5000
     And with no --port flag it would listen on 4000 (env), else 3000 (default)
 
   Scenario: Graceful shutdown drains connections
-    Given a running spur serve with in-flight requests
+    Given a running spur self serve with in-flight requests
     When SIGINT is received
     Then in-flight requests complete within the shutdown deadline
     And the DB adapter is closed
@@ -168,12 +168,12 @@ Feature: Board launcher (spur serve)
 
   Scenario: --no-open skips browser
     Given a headless environment
-    When spur serve --no-open runs
+    When spur self serve --no-open runs
     Then the server starts without attempting to open a browser
 ```
 
 **Task decomposition guidance.** Likely 2–3 tasks: (1) `server:` config schema + keys in
-`packages/config`; (2) `spur serve` command in `apps/cli` (config resolution, runtime build,
+`packages/config`; (2) `spur self serve` command in `apps/cli` (config resolution, runtime build,
 `createApp` call, `Bun.serve`, browser open); (3) graceful shutdown wiring (SIGINT handler,
 drain deadline). Depends on S1 (foundation must exist for `createApp` to work).
 
@@ -1020,7 +1020,7 @@ for the local Bun path.
 
 | Wave | Features | Depends on | Gate (what proves the wave is done) |
 |---|---|---|---|
-| **S0** (server foundation) | S0, S1, S2 | P1 (ts-runtime) | Server boots, middleware pipeline works, module system proven with health module, `spur serve` launches the board. |
+| **S0** (server foundation) | S0, S1, S2 | P1 (ts-runtime) | Server boots, middleware pipeline works, module system proven with health module, `spur self serve` launches the board. |
 | **W0** (web foundation) | W1, W2, W5 | S0 wave (needs API to exist) | Static SPA shell renders, 3-column layout works, module system proven with a placeholder module, unified Vite dev server runs. |
 | **S1** (server domain) | S3, S4, S5 | S0 wave (module system) | Task/feature API live, contracts shipped, static assets served. |
 | **W1** (web module) | W3, W4 | S1 wave (needs task/feature API) + W0 wave | Task Kanban functional end-to-end. |

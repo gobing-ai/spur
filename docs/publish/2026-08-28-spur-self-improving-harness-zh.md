@@ -29,7 +29,7 @@ bun add -g @gobing-ai/superskill @gobing-ai/spur && superskill install sp
 curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install.sh | sh
 
 ## After installed, you can use the following command in you projiect to initialize your project and run the web ui part
-spur init && spur self  serve &
+spur self init && spur self  serve &
 ```
 
 

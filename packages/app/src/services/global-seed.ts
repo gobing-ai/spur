@@ -5,7 +5,7 @@ import { bundledRulesRoot, listBundledRuleFiles } from '@gobing-ai/ts-rule-engin
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 
 /**
- * Machine-wide seed ownership (A93 1353 R2), extracted from `spur init` so `spur self install`
+ * Machine-wide seed ownership (A93 1353 R2), extracted from `spur self init` so `spur self install`
  * and project scaffolding share one implementation of "copy the shipped global layer into
  * `~/.config/spur/`".
  *

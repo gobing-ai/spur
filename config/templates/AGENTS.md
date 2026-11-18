@@ -10,7 +10,7 @@ Does **not** restate skill runbooks or the full `spur` / `superskill` verb catal
 
 ## Project
 
-<!-- PROJECT-SPECIFIC: filled by `spur init` (`{project-name}` / `{project-description}`). -->
+<!-- PROJECT-SPECIFIC: filled by `spur self init` (`{project-name}` / `{project-description}`). -->
 **{project-name}** — {project-description}.
 
 This project uses two complementary first-class harness tools:

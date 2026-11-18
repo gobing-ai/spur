@@ -13,18 +13,18 @@ tags: [brainstorm, web]
 
 ## Overview
 
-Currently, `spur serve --port N` must be run explicitly from each project root to access its Spur Board. Users memorize port numbers and manage multiple terminal sessions to work across projects. The request is to make the project name in the Spur Board sidebar a clickable project switcher — click it, see all known projects with running/stopped status, select one to navigate there (auto-starting if needed). Under the hood, project metadata lives in `~/.config/spur/projects.json` with port `0` meaning "not running," and auto-port allocation on startup.
+Currently, `spur self serve --port N` must be run explicitly from each project root to access its Spur Board. Users memorize port numbers and manage multiple terminal sessions to work across projects. The request is to make the project name in the Spur Board sidebar a clickable project switcher — click it, see all known projects with running/stopped status, select one to navigate there (auto-starting if needed). Under the hood, project metadata lives in `~/.config/spur/projects.json` with port `0` meaning "not running," and auto-port allocation on startup.
 
 ## Approaches
 
 ### Approach 1: In-Process Hub Registry ⭐ Recommended
 
-**Description:** The currently-running `spur serve` process doubles as a project registry hub. On startup, it registers itself in `~/.config/spur/projects.json` (auto-allocating a port if needed). It exposes a `GET /api/projects` endpoint listing all known projects with running/stopped status. When the web UI selects a stopped project, the hub spawns a child `bun` process running `spur serve` for that project. On shutdown (SIGINT/SIGTERM/process exit), the hub deregisters itself and kills child processes.
+**Description:** The currently-running `spur self serve` process doubles as a project registry hub. On startup, it registers itself in `~/.config/spur/projects.json` (auto-allocating a port if needed). It exposes a `GET /api/projects` endpoint listing all known projects with running/stopped status. When the web UI selects a stopped project, the hub spawns a child `bun` process running `spur self serve` for that project. On shutdown (SIGINT/SIGTERM/process exit), the hub deregisters itself and kills child processes.
 
 **Trade-offs:**
 - **Pros:**
   - Minimal new infrastructure — no separate daemon process
-  - Leverages existing `spur serve` and `/api/project` endpoint patterns
+  - Leverages existing `spur self serve` and `/api/project` endpoint patterns
   - Natural extension of the current single-project model
   - `projects.json` is the stable contract for future launchd migration
   - Cross-project navigation is a simple browser redirect to the target port
@@ -37,7 +37,7 @@ Currently, `spur serve --port N` must be run explicitly from each project root t
 **Implementation Notes:**
 - New `ProjectRegistry` service in `packages/app` reads/writes `~/.config/spur/projects.json` with atomic file writes
 - New `/api/projects` endpoint in `apps/server` returning `{ projects: [{ name, path, port, running }] }`
-- `spur serve` gains `--hub` flag (implicit when `projects.json` exists) to enable registry mode
+- `spur self serve` gains `--hub` flag (implicit when `projects.json` exists) to enable registry mode
 - Port allocation: scan `projects.json` for used ports, pick next available from 3000–3099 range
 - Graceful shutdown: `process.on('exit')` + signal handlers deregister project and kill children
 - Web UI: `LeftSidebar` project name → clickable `<button>` → fetches `/api/projects` → renders dropdown with status dots
@@ -47,7 +47,7 @@ Currently, `spur serve --port N` must be run explicitly from each project root t
 
 ### Approach 2: Standalone Project Daemon
 
-**Description:** A separate lightweight daemon process (`spur daemon` or launchd service) manages project instances independently. It listens on a Unix socket or fixed TCP port, accepts commands (list/start/stop), and maintains `projects.json`. The web UI communicates with this daemon for project discovery and switching. Each `spur serve` instance registers with the daemon on startup.
+**Description:** A separate lightweight daemon process (`spur daemon` or launchd service) manages project instances independently. It listens on a Unix socket or fixed TCP port, accepts commands (list/start/stop), and maintains `projects.json`. The web UI communicates with this daemon for project discovery and switching. Each `spur self serve` instance registers with the daemon on startup.
 
 **Trade-offs:**
 - **Pros:**
@@ -64,7 +64,7 @@ Currently, `spur serve --port N` must be run explicitly from each project root t
 **Implementation Notes:**
 - New `spur daemon` CLI command with start/stop/status subcommands
 - Daemon listens on `~/.config/spur/daemon.sock` (Unix socket) or `localhost:3099`
-- Project registration is push-based (each `spur serve` calls daemon on startup)
+- Project registration is push-based (each `spur self serve` calls daemon on startup)
 - Web UI fetches from daemon's HTTP endpoint, not from the project's own server
 
 **Confidence:** MEDIUM
@@ -114,7 +114,7 @@ interface ProjectEntry {
 
 **Rules:**
 - Port `0` means no instance is running for that project
-- On `spur serve` startup: if an entry exists with `port: 0`, allocate a free port and update to the new port; if no entry exists, create one with an allocated port
+- On `spur self serve` startup: if an entry exists with `port: 0`, allocate a free port and update to the new port; if no entry exists, create one with an allocated port
 - On shutdown (any exit): unconditionally set port back to `0`
 - Port allocation: scan all entries for used ports, pick the lowest free port ≥ 3000
 - File writes are atomic (write to temp file, rename) to prevent corruption
@@ -136,7 +136,7 @@ interface ProjectEntry {
 { "projects": [{ "name": "Spur", "path": "~/xprojects/spur-new", "port": 3000, "running": true }] }
 ```
 
-**New: `POST /api/projects/start`** — starts a project's `spur serve` if stopped, returns `{ port }`.
+**New: `POST /api/projects/start`** — starts a project's `spur self serve` if stopped, returns `{ port }`.
 
 **Modified: `startServer()`** — auto-registers current project on startup, deregisters on shutdown. Accepts optional `projectName` to override basename-derived name.
 
@@ -166,10 +166,10 @@ interface ProjectEntry {
 **Adopt Approach 1 (In-Process Hub Registry)** with the following scope decisions:
 
 1. **Ship now:** `ProjectRegistry` service, `GET /api/projects`, `LeftSidebar` project switcher popup, auto-registration on serve startup, graceful deregistration on shutdown, auto-port allocation.
-2. **Defer:** Child process spawning (start a stopped project from the hub). Initial implementation shows stopped projects as greyed out; clicking them shows a "run `spur serve` from that project" tooltip. This avoids the complexity of nested Bun process management in v1 while still delivering the core value of project discovery and switching between running instances.
+2. **Defer:** Child process spawning (start a stopped project from the hub). Initial implementation shows stopped projects as greyed out; clicking them shows a "run `spur self serve` from that project" tooltip. This avoids the complexity of nested Bun process management in v1 while still delivering the core value of project discovery and switching between running instances.
 3. **Design for later:** The `POST /api/projects/start` endpoint and the `ProjectManager` subprocess spawner are designed but implemented in a follow-up. The `projects.json` schema and API contract remain stable through both phases.
 
-**Rationale:** The in-process hub model matches current usage (single developer, macOS, interactive terminal sessions) without introducing a new persistent process. It builds directly on the existing `spur serve` infrastructure. Deferring child-process spawning to phase 2 reduces risk and delivers value faster — the core pain point (finding which port each project is on) is solved immediately.
+**Rationale:** The in-process hub model matches current usage (single developer, macOS, interactive terminal sessions) without introducing a new persistent process. It builds directly on the existing `spur self serve` infrastructure. Deferring child-process spawning to phase 2 reduces risk and delivers value faster — the core pain point (finding which port each project is on) is solved immediately.
 
 ## Next Steps
 

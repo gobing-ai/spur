@@ -344,7 +344,7 @@ export function registerSchedulerEntries(
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
             // Task 0863: single-flight is the DATABASE's job — the enqueue IS the
-            // check. Every `spur serve` daemon sharing this project database runs its
+            // check. Every `spur self serve` daemon sharing this project database runs its
             // own cron, so the previous read-then-insert guard
             // (findActiveSchedulerCustomJob then enqueue) let each daemon admit its own
             // row on the same occurrence (3-14 rows per tick, 2026-09-14/15). The
@@ -719,8 +719,8 @@ export async function resolveWebDistPath(
 }
 
 /**
- * Single entry point for the `spur serve` launcher — shared by both the
- * standalone entry and the CLI `spur serve` command.
+ * Single entry point for the `spur self serve` launcher — shared by both the
+ * standalone entry and the CLI `spur self serve` command.
  *
  * Builds the `ApplicationRuntime`, wires the Hono app through `createApp`,
  * starts `Bun.serve`, optionally opens the browser, and installs

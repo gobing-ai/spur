@@ -302,7 +302,7 @@ collect step (both EXT wrappers over `pr-reviewing.ts`, advisory under D5-P). Th
 
 ## Portability rule (feature R5, task 0608 R5)
 
-`spur init` never scaffolds `packages/` or `plugins/sp/`, so any capability a shipped workflow
+`spur self init` never scaffolds `packages/` or `plugins/sp/`, so any capability a shipped workflow
 invokes must resolve in a seeded project or degrade deliberately:
 
 - **Built-in action kinds** (`doctor.probe`, `command.gate`, `run.artifact`) run in-process in the

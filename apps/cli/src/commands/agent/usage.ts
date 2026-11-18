@@ -157,7 +157,7 @@ export function registerAgentUsageCommand(agent: Command, context: CliContext): 
     agent
         .command('usage')
         .description(
-            'Run-once provider usage capture (codexbar) that refreshes quota-owned executor availability. Schedule it externally (cron/launchd); spur serve never runs it.',
+            'Run-once provider usage capture (codexbar) that refreshes quota-owned executor availability. Schedule it externally (cron/launchd); spur self serve never runs it.',
         )
         .option(...SHARED_OPTIONS.dryRunAgentUsage)
         .option(...SHARED_OPTIONS.sourceAgentUsage)

@@ -17,7 +17,7 @@ interface ProjectInfo {
 }
 
 /**
- * Resolve the current project name from the server (basename of the cwd `spur serve`
+ * Resolve the current project name from the server (basename of the cwd `spur self serve`
  * runs in) so users can tell which project this board belongs to. Falls back to
  * {@link FALLBACK_TITLE} while loading, when offline, or when the server has no cwd.
  */

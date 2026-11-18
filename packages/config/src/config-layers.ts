@@ -31,7 +31,7 @@ export const spurConfigCache = new Map<string, Promise<SpurConfig>>();
  *   caller did not pass `cwd` (task 0817) — an explicit `cwd` always wins.
  *
  * Both keys are present when both files exist; a missing file leaves the key `undefined`.
- * When neither exists (pre-`spur init`), both are `undefined`.
+ * When neither exists (pre-`spur self init`), both are `undefined`.
  */
 export interface ResolvedConfigLayers {
     /** `~/.config/spur/config.yaml` when it exists (and the skip env is unset). */

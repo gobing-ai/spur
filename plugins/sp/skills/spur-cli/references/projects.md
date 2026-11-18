@@ -93,7 +93,7 @@ spur projects stop my-project --json
 
 `start` resolves by name or path. An existing unregistered path is auto-registered. A live recorded
 port is returned idempotently; otherwise the service allocates a port (3000–3999 unless explicitly
-set), spawns `spur serve --host 127.0.0.1 --no-open` detached in the project root, waits for the port,
+set), spawns `spur self serve --host 127.0.0.1 --no-open` detached in the project root, waits for the port,
 then persists it.
 
 `stop` signals only a listener that proves `service:spur` identity plus the exact registered project

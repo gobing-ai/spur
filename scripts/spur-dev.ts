@@ -39,7 +39,7 @@
  *   dev-all                                     run server + web under one supervisor
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
- *   a2a-serve-e2e                               prove `spur serve` speaks A2A through the real `a2a` CLI, write the receipt
+ *   a2a-serve-e2e                               prove `spur self serve` speaks A2A through the real `a2a` CLI, write the receipt
  *   a2a-member-e2e                              prove A2A member delivery cold, live and on restart, write the receipt
  *   a2a-two-install-e2e                         prove two Spur installs dispatch over A2A with write fencing, write the receipt
  *   delegate-workflow-e2e                       prove both 1397 delegation workflows link tasks across two installs

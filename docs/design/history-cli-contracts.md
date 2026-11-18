@@ -556,7 +556,7 @@ embedded scheduler needs a daemon the run-once CLI is not, and drives nothing un
 > **Amendment (2026-09-02, task 0734):** the *cron* half of this rationale is obsolete —
 > `NodeSchedulerAdapter` now accepts real five-field cron, so `0 2 * * *` is expressible and no
 > longer degrades to a 60-second interval. The decision stands on the remaining premise: the daily
-> pipeline must run whether or not `spur serve` is up. An operator who *does* run the server can now
+> pipeline must run whether or not `spur self serve` is up. An operator who *does* run the server can now
 > express the same schedule as a `bootstrap.scheduler.jobs` entry instead (§5.2).
 
 **Template:** `config/launchd/ai.gobing.spur.history.daily.plist` — `StartCalendarInterval` (daily
@@ -694,7 +694,7 @@ elapsed time is unaffected. The refresh runs as queue job kind `history.refresh`
 registers a handler that runs `<invocation> --no-logo history daily` via `ProcessExecutor`), so
 the same import-all fan-out with **per-source isolation** (R5: one source failing never aborts the others),
 analyze, and artifact write the nightly loop uses executes outside the server event loop.
-Both launchers provide a PATH-independent invocation: `spur serve` reuses its live CLI entry, while the
+Both launchers provide a PATH-independent invocation: `spur self serve` reuses its live CLI entry, while the
 standalone server resolves the source-local CLI or its sibling compiled `dist/cli/spur`. All coalesced
 refresh producers share `max_retries = 3`; this intentionally replaces the old scheduler-only value of 1.
 The server queue visibility timeout is two hours because `history daily` can spend ten minutes on each
@@ -755,6 +755,6 @@ it. An exception from `daily` itself emits and rethrows so the queue records the
 `history.import.completed` / `history.analyze.completed` / `history.daily.failed` catalog events in the
 child, stamped with the coalesced `trigger`/window and resolved `importMode` from
 `SPUR_HISTORY_REFRESH_CONTEXT` (+ `coverage` on import). The child inherits the server's resolved
-`DATABASE_URL`, so `spur serve --cwd` refreshes the same database; the parent emits no `history.*` events.
+`DATABASE_URL`, so `spur self serve --cwd` refreshes the same database; the parent emits no `history.*` events.
 Enqueue failures degrade to a stderr warning and never change
 the firing operation's exit code.

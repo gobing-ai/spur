@@ -276,11 +276,11 @@ describe('spur self status — configured project', () => {
     test('keeps the legacy path argument and its failure exit', async () => {
         const fx = await fixture('project: fixture\n');
         try {
-            const missing = await runCli(['status', 'no-such-file.txt'], fx.cwd, fx.env);
+            const missing = await runCli(['self', 'status', 'no-such-file.txt'], fx.cwd, fx.env);
             expect(missing.code).toBe(1);
             expect(`${missing.stdout}${missing.stderr}`).toContain('path does not exist');
             await writeFile(join(fx.cwd, 'present.txt'), 'ok\n');
-            const present = await runCli(['status', 'present.txt', '--json'], fx.cwd, fx.env);
+            const present = await runCli(['self', 'status', 'present.txt', '--json'], fx.cwd, fx.env);
             expect(present.code).toBe(0);
             const json = present.json as SelfStatusJson & { target?: { path: string; size: number } };
             expect(json.target?.path).toBe('present.txt');
@@ -293,7 +293,7 @@ describe('spur self status — configured project', () => {
     test('renders the legacy text lines', async () => {
         const fx = await fixture('project: fixture\n');
         try {
-            const result = await runCli(['status'], fx.cwd, fx.env);
+            const result = await runCli(['self', 'status'], fx.cwd, fx.env);
             expect(result.code).toBe(0);
             for (const line of ['Project: ok', 'Package:', 'Agents:', 'Git:', 'DecisionMaker:']) {
                 expect(result.stdout).toContain(line);

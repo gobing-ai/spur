@@ -100,7 +100,7 @@ describe('ProjectRegistry', () => {
         expect(res).toBe(false);
     });
 
-    // A local `spur serve` shutdown deregisters with setPort(path, 0). When the
+    // A local `spur self serve` shutdown deregisters with setPort(path, 0). When the
     // same path is also registered for a remote host, a path-only match zeroed
     // the REMOTE entry (the live 3003 serve) and reported it as stopped
     // (observed 2026-10-22 on knowledge-kit @192.168.87.27).

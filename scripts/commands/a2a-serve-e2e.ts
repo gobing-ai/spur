@@ -1,11 +1,11 @@
 /**
- * a2a-serve-e2e — prove `spur serve` speaks A2A, driven by the unmodified `a2a` CLI (feature G9,
+ * a2a-serve-e2e — prove `spur self serve` speaks A2A, driven by the unmodified `a2a` CLI (feature G9,
  * task 1336 R7; design `a2a-member-transport` §3.5).
  *
  * Usage: bun scripts/spur-dev.ts a2a-serve-e2e [--keep]
  *
  * One scratch project is scaffolded under `$TMPDIR` with a declared fleet member (`agent.fleet`
- * WITHOUT `enabled: true`, so nothing autostarts), `spur serve` is started on a free port with the
+ * WITHOUT `enabled: true`, so nothing autostarts), `spur self serve` is started on a free port with the
  * A2A listener on, and the operator-installed `a2a` binary is the only client: `card get`,
  * `send --async`, `task get`, `task cancel`. Every step records its command, exit code, observed
  * evidence and the requirement it proves, and the run writes
@@ -130,10 +130,10 @@ function scaffold(dir: string): void {
     );
 }
 
-/** Start `spur serve` for the scratch project with the A2A listener on (or off). */
+/** Start `spur self serve` for the scratch project with the A2A listener on (or off). */
 function startServe(dir: string, port: number, enabled: boolean): Subprocess<'ignore', 'pipe', 'pipe'> {
     return spawn({
-        cmd: ['bun', CLI, 'serve', '--port', String(port), '--host', '127.0.0.1', '--no-open'],
+        cmd: ['bun', CLI, 'self', 'serve', '--port', String(port), '--host', '127.0.0.1', '--no-open'],
         cwd: dir,
         stdout: 'pipe',
         stderr: 'pipe',
@@ -221,12 +221,12 @@ export async function runA2aServeE2e(args: string[] = []): Promise<number> {
             rows,
             'serve-ready',
             'R1',
-            `spur serve --port ${port}`,
+            `spur self serve --port ${port}`,
             healthy ? 0 : 1,
             healthy,
             healthy ? 'health ok' : 'server did not answer /api/health',
         );
-        if (!healthy) throw new Error('spur serve never became healthy');
+        if (!healthy) throw new Error('spur self serve never became healthy');
 
         // ── R2 / AC1 — the card ──
         const card = await run(['a2a', '-a', cardPath, '--auth', `Bearer ${TOKEN}`, 'card', 'get', '-o', 'json']);
@@ -430,7 +430,7 @@ export async function runA2aServeE2e(args: string[] = []): Promise<number> {
             rows,
             'endpoint-off',
             'R1 / AC5',
-            `spur serve (SPUR_A2A_ENABLED=0) :${offPort}`,
+            `spur self serve (SPUR_A2A_ENABLED=0) :${offPort}`,
             0,
             offHealthy && offCard.status === 404,
             offHealthy ? `HTTP ${offCard.status}` : 'second server did not answer /api/health',

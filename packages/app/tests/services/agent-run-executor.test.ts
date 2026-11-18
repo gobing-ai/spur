@@ -138,13 +138,13 @@ describe('AgentRunExecutor dispatch wiring', () => {
             const svc = new AgentService({ cwd, env: {}, output: { write: () => {}, error: () => {} } });
             await svc.runTraced(
                 'work',
-                { agent: 'pi', dispatchDelivery: "cold subprocess executor 'codex' — not live under spur serve" },
+                { agent: 'pi', dispatchDelivery: "cold subprocess executor 'codex' — not live under spur self serve" },
                 resolutionDeps(),
                 { heartbeatMs: 0 },
             );
             const dir = join(cwd, '.spur', 'memory', 'runs');
             const log = readFileSync(join(dir, readdirSync(dir)[0] as string), 'utf8');
-            expect(log).toContain("delivery: cold subprocess executor 'codex' — not live under spur serve");
+            expect(log).toContain("delivery: cold subprocess executor 'codex' — not live under spur self serve");
         } finally {
             rmSync(cwd, { recursive: true, force: true });
         }

@@ -8,7 +8,7 @@ export function registerAgentStartCommand(agent: Command, context: CliContext): 
     // (POST /api/agents/:id/{start,stop}).
     agent
         .command('start')
-        .description('Start a supervised agent process (requires spur serve).')
+        .description('Start a supervised agent process (requires spur self serve).')
         .argument('<spec-id>', 'Agent spec id')
         .option(
             '--server <url>',

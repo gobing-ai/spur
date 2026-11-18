@@ -177,7 +177,7 @@ describe('registerMcpCommand wiring (task 1373 R2)', () => {
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-mcp-cmd-'));
         const { output, stdout, stderr } = captureOutput();
         const exits: number[] = [];
-        // Server settings are env-scoped (like `spur serve`): authEnv names a variable that is
+        // Server settings are env-scoped (like `spur self serve`): authEnv names a variable that is
         // deliberately absent from `env`.
         const context = {
             cwd: tempDir,

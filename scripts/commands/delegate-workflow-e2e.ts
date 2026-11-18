@@ -2,7 +2,7 @@
  * delegate-workflow-e2e — task 1397: both delegation workflows run end to end across two installs.
  *
  * Nothing on the chain is mocked: install A's workflow sends one `agent.run` to a fleet member, that
- * member's card is install B's `spur serve` A2A surface, and B's own transport drives a deterministic
+ * member's card is install B's `spur self serve` A2A surface, and B's own transport drives a deterministic
  * worker. The worker creates a tagged task and replies `WBS: <id>`, which the workflow parses to tag
  * A's requesting task. Both fixture projects are real Spur homes with their own databases.
  */
@@ -144,12 +144,15 @@ export async function runDelegateWorkflowE2e(args: string[] = []): Promise<numbe
             if (init.code !== 0) throw new Error(`git init failed in ${dir}: ${init.stderr}`);
         }
         await Bun.sleep(300);
-        bServe = Bun.spawn([CLI, 'serve', '--port', String(bPort), '--host', '127.0.0.1', '--no-open', '--no-logo'], {
-            cwd: bHome,
-            stdout: 'pipe',
-            stderr: 'pipe',
-            env: { ...getEnvVars(), ...sharedEnv, SPUR_A2A_ENABLED: '1', SPUR_A2A_AUTH_ENV: LISTENER_ENV },
-        });
+        bServe = Bun.spawn(
+            [CLI, 'self', 'serve', '--port', String(bPort), '--host', '127.0.0.1', '--no-open', '--no-logo'],
+            {
+                cwd: bHome,
+                stdout: 'pipe',
+                stderr: 'pipe',
+                env: { ...getEnvVars(), ...sharedEnv, SPUR_A2A_ENABLED: '1', SPUR_A2A_AUTH_ENV: LISTENER_ENV },
+            },
+        );
         if (!(await healthy(bPort))) throw new Error('install B never became healthy');
 
         // A's member points at B's serve card, which advertises the write-fencing extension, so the

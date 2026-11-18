@@ -140,7 +140,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_active_unique ON qu
 
 -- At most one ACTIVE configured-scheduler job per job NAME (task 0863): the tick
 -- reads findActiveSchedulerCustomJob and then inserts, which is not atomic across
--- spur serve daemons sharing one project DB — every daemon's cron occurrence used
+-- spur self serve daemons sharing one project DB — every daemon's cron occurrence used
 -- to insert its own row (3-14 per tick on 2026-09-14/15). The name lives inside the
 -- JSON payload, so this is an expression index — scoped to scheduler.custom +
 -- active rows exactly like the 0716 history.refresh index, so terminal rows and
@@ -1079,7 +1079,7 @@ CREATE INDEX IF NOT EXISTS idx_history_message_provenance_run ON history_message
 /**
  * Migration 0047 (task 0863): make the configured-scheduler single-flight durable.
  * The tick's `findActiveSchedulerCustomJob` + insert sequence is check-then-act:
- * every `spur serve` daemon sharing the project DB admits its own `scheduler.custom`
+ * every `spur self serve` daemon sharing the project DB admits its own `scheduler.custom`
  * row on the same cron occurrence, so N daemons produce N rows and the losers fail
  * with "already running in this process" (402 such rows on 2026-09-08…15).
  *
@@ -1692,7 +1692,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
     // Read-only fast path. EVERY CLI invocation calls this, including read-only ones
     // like `rule run`, and the CREATE TABLE below is DDL — it takes a write lock on the
     // shared project DB even when there is nothing to migrate. Against a large
-    // `.spur/spur.db` held open by a long-lived `spur serve`, that turned routine
+    // `.spur/spur.db` held open by a long-lived `spur self serve`, that turned routine
     // read-only commands into SQLITE_BUSY failures. When the journal already lists
     // every migration there is no work to do, so answer from a read and take no lock.
     if (await allMigrationsJournaled(adapter, migrations)) return 0;

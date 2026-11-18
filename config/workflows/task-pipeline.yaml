@@ -43,7 +43,7 @@
 #   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
 #   maxEscalations            — max operator-question pauses per implement chain (default: 2)
 #
-# Seeded by `spur init`. agent.run inputs are pure slash commands (ADR-043).
+# Seeded by `spur self init`. agent.run inputs are pure slash commands (ADR-043).
 
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine

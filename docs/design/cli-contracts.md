@@ -53,7 +53,7 @@ spur <noun> [<verb>] [positionals] [--flags]
   behavior, flags, output, and exit codes are identical on both paths. `exec` (feature A92) is the
   one self verb with no legacy alias: it runs the project's `builder.actions` / `builder.preset`
   binding (see `docs/design/sdlc-actions.md` §3.3).
-- The legacy **hidden aliases** (`spur init`, `spur maintain`, `spur migrate`, `spur serve`, `spur status`) stay
+- The legacy **hidden aliases** (`spur self init`, `spur self maintain`, `spur self migrate`, `spur self serve`, `spur self status`) stay
   registered at the top level for back-compat with existing scripts and workflow YAML. They are
   verb-less commands that accept flags and optional positionals directly, but they are omitted from
   the `spur --help` listing (commander's `hidden` option), leaving `self` as the visible surface.
@@ -139,9 +139,9 @@ arguments, and a missing action without `--list`.
 
 <a id="spur-init---name-name---force---minimal---json"></a>
 
-#### `spur init [--name <name>] [--force] [--minimal] [--json]`
+#### `spur self init [--name <name>] [--force] [--minimal] [--json]`
 
-> **Canonical path:** `spur self init`. The legacy `spur init` top-level form remains a hidden alias
+> **Canonical path:** `spur self init`. The legacy `spur self init` top-level form remains a hidden alias
 > over the same command — identical flags, output, and exit codes; absent from `spur --help`.
 
 Scaffold a local Spur project. Writes `.spur/config.yaml` (§2.1) and records the config artifact. Unless
@@ -159,7 +159,7 @@ project. Re-running fills missing assets and preserves existing configuration/cu
 
 **Init ownership contract.** Two surfaces collaborate; their cut is strict (task 0188):
 
-- **`spur init` owns file materialization.** Copies every `SCAFFOLD_MANIFEST` entry from
+- **`spur self init` owns file materialization.** Copies every `SCAFFOLD_MANIFEST` entry from
   `bundledConfigRoot()` to `.spur/` (and the `docs/` stubs to the project root). Idempotent;
   `--force` overwrites non-preserve entries, never overwrites preserve-marked docs; `--minimal`
   skips bundled project-asset materialization. The manifest is pure data — adding a default is a
@@ -172,12 +172,12 @@ project. Re-running fills missing assets and preserves existing configuration/cu
   ownership (task 0312; [portable contract](portable-agents-harness-contract.md)). Existing
   customized AGENTS.md is never overwritten.
 
-- **`/sp:spur-init` owns content adaptation only.** Calls `spur init` as its first step, then
-  performs three classes of adaptation. Its scaffold step invokes `spur init --json` exactly once,
+- **`/sp:spur-init` owns content adaptation only.** Calls `spur self init` as its first step, then
+  performs three classes of adaptation. Its scaffold step invokes `spur self init --json` exactly once,
   retains the result envelope, reports one concise created/skipped summary, and reuses
   `result.project` for customization without replaying the human transcript. Two probes sit between
   scaffold and customization:
-  - *Functional probe (Phase 1.5):* `spur status`, `spur task create`, `spur workflow validate`.
+  - *Functional probe (Phase 1.5):* `spur self status`, `spur task create`, `spur workflow validate`.
   - *Rule glob adaptation (Phase 1.6):* the `recommended-pre-check` preset ships globs calibrated
     to Spur's monorepo (`apps/**/*.ts` etc.). On any other layout these match zero files and `rg`
     exits 2, surfacing as `kind: "error"` findings. The command detects the project layout
@@ -632,13 +632,13 @@ alias of `antigravity-cli`). With `--specs`, lists the project's addressable age
 declared `agent.fleet` members plus hand-authored `.spur/agents/` files (G72 R2) — instead
 (`<id> <type> <role> <executor> <purpose>` — role and executor are distinct columns; an undeclared
 role renders `unset`, 0544 R2/R4; `--json` includes the spec path plus `role`/`executor` fields,
-omitted when unset). Since 0848 `--specs` also merges live run status from the `spur serve`
+omitted when unset). Since 0848 `--specs` also merges live run status from the `spur self serve`
 supervisor through `--server <url>`, each row gaining a
 `running`/`stopped`/`errored`/`unknown` column and `pid=<n>` where a process exists; an unreachable
 server falls back to all `stopped` with a stderr warning.
 
 **Default server resolution (1088 R1).** With no `--server`, the URL is THIS project's serve: the
-port in the cwd's project-registry entry — the port `spur serve` records via
+port in the cwd's project-registry entry — the port `spur self serve` records via
 `ProjectRegistry.setPort` — rendered `http://localhost:<port>/api`. A project with no live entry
 (a port cleared by the registry's stale heal included) falls back to `http://localhost:3000/api`.
 An explicit `--server` always wins, so the flag declares no default. Same resolution for
@@ -738,7 +738,7 @@ window can neither imply recovery nor hide valid headroom (0907). Reported chang
 are delivery semantics (`would-apply`/`applied`/`no-op`/`skipped`/`pending`), not byte-mutation
 proof; decision and outcome detail lives in
 [session-pinned-dispatch](session-pinned-dispatch.md) §3.4. An external
-scheduler (cron/launchd) owns invocation — `spur serve` never runs it (asserted by test), keeping
+scheduler (cron/launchd) owns invocation — `spur self serve` never runs it (asserted by test), keeping
 the no-hidden-automation posture: no poller, no timer, no serve-side loop. Mapping rules and the
 recorded rejected shape (`spur agent doctor --refresh-usage`) live in
 [harness-surface-governance](harness-surface-governance.md) §4 and
@@ -879,18 +879,18 @@ retired `AgentCoordinationService` message wrappers or the ts-db DAO.
 
 #### `spur agent start <spec-id> [--server <url>] [--json]` · `spur agent stop <spec-id> [--server <url>] [--json]`
 
-Supervised process lifecycle (backed by `SupervisorService` via `spur serve`). The `spur team` noun was
+Supervised process lifecycle (backed by `SupervisorService` via `spur self serve`). The `spur team` noun was
 removed at the G64 cutover (2026-09-14): `assign` → `spur task update --assignee`, `status` →
 `spur agent list --specs`, `up` → fleet roster derivation at serve start. There is no attach verb:
 attach is `GET /api/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
-- POST to `<server>/agents/<id>/(start|stop)`. The server defaults to this project's registry entry port (`http://localhost:<port>/api`, the port `spur serve` records via `ProjectRegistry.setPort`) and falls back to `http://localhost:3000/api` when the project has no live entry (1088 R1); `--server` overrides. `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery. The spawned loop's lifetime is bound to its serve (1088 R2 — §17 of `docs/03_ARCHITECTURE.md`).
+- POST to `<server>/agents/<id>/(start|stop)`. The server defaults to this project's registry entry port (`http://localhost:<port>/api`, the port `spur self serve` records via `ProjectRegistry.setPort`) and falls back to `http://localhost:3000/api` when the project has no live entry (1088 R1); `--server` overrides. `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery. The spawned loop's lifetime is bound to its serve (1088 R2 — §17 of `docs/03_ARCHITECTURE.md`).
 
 <a id="spur-rule-run---preset-name---file-path---rule-id---fail-on-severity---stop-on-first-severity---fix-mode-mode---dry-run---verbose---json"></a>
 
 #### `spur mcp [--cwd <path>] [--url <mcpUrl>]`
 
-Thin stdio→HTTP bridge to the embedded MCP 2.0+ server (`POST /mcp` on `spur serve`, feature B9,
+Thin stdio→HTTP bridge to the embedded MCP 2.0+ server (`POST /mcp` on `spur self serve`, feature B9,
 ADR-152): reads NDJSON from stdin, forwards one `POST` per non-blank line, echoes each JSON response
 line to stdout (no banner). Always sends `Mcp-Protocol-Version: 2026-07-28` and
 `Content-Type: application/json`; attaches `Authorization: Bearer` only when the environment
@@ -922,7 +922,7 @@ Exit code is governed by `--fail-on` based on **findings** alone; applying a fix
 clear the exit code (the operator re-runs to confirm green). `--verbose` streams per-rule progress with
 execution time to stderr (e.g. `✓ passed - 0.12s`). Rule roots resolve highest-priority-first:
 `SPUR_RULES_PATH`, local `.spur/rules`, the user-global `~/.config/spur/rules`, then the generic demo
-rules bundled with `ts-rule-engine` as a fallback so a preset's categories resolve before `spur init`
+rules bundled with `ts-rule-engine` as a fallback so a preset's categories resolve before `spur self init`
 seeds the global layer. A run that resolves **zero rules** exits 1. Setting `SPUR_GLOBAL_RULES_DIR`
 overrides the global root and suppresses the bundled fallback for a hermetic run. With
 `SPUR_SKIP_GLOBAL_CONFIG=true` and no `SPUR_GLOBAL_RULES_DIR`, the user-global `~/.config/spur/rules`
@@ -1275,7 +1275,7 @@ The aggregate that carries it is additive (A93 1352): `schemaVersion: 1`,
 answers, `not-applicable` when the port is free, and `degraded` when a foreign listener holds it
 (a project serve or anything that is not the gateway). Text mode prints one
 `gateway counters: requests=… 4xx=… 5xx=… restarts=… since=…` line under it only when the section is
-`ready`, so a probe that did not answer is never rendered as zeroes. `spur self status` and the hidden `spur status` alias
+`ready`, so a probe that did not answer is never rendered as zeroes. `spur self status` and the hidden `spur self status` alias
 render the same app-owned collector and dispatch before database boot, so reporting readiness never
 creates the schema it reports on; ledger-backed sections report `unavailable` rather than empty
 counts while the installed ts-db facade has no proven non-mutating read.

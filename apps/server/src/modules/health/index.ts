@@ -81,7 +81,7 @@ export const healthModule: ServerModule = {
 
         // ── Project identity ──
         // The board sidebar labels itself with the served project (basename of
-        // the cwd `spur serve` runs in). `null` when there is no ServerContext
+        // the cwd `spur self serve` runs in). `null` when there is no ServerContext
         // (e.g. the Cloudflare Worker, which has no meaningful cwd).
         //
         // `path` (0840 R4): the canonical worktree through the SAME

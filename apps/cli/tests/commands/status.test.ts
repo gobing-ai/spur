@@ -16,7 +16,7 @@ describe('status command', () => {
             const spurDir = join(cwd, '.spur');
             await mkdir(spurDir, { recursive: true });
             await writeFile(join(spurDir, 'config.yaml'), 'project: test\n');
-            const exitCode = await main(['status'], { cwd, output: nullOutput(), dbUrl: ':memory:' });
+            const exitCode = await main(['self', 'status'], { cwd, output: nullOutput(), dbUrl: ':memory:' });
             expect(exitCode).toBe(0);
         } finally {
             await rm(cwd, { recursive: true, force: true });
@@ -36,7 +36,7 @@ describe('status command', () => {
             await writeFile(join(agentsDir, '.gitkeep'), '');
 
             const messages: string[] = [];
-            const exitCode = await main(['status', '--json'], {
+            const exitCode = await main(['self', 'status', '--json'], {
                 cwd,
                 output: { write: (m) => messages.push(m), error: () => {} },
                 dbUrl: ':memory:',
@@ -73,7 +73,7 @@ describe('status command', () => {
                 await mkdir(spurDir, { recursive: true });
                 await writeFile(join(spurDir, 'config.yaml'), `project: test\n${scenario.config}`);
                 const messages: string[] = [];
-                const exitCode = await main(['status', '--json'], {
+                const exitCode = await main(['self', 'status', '--json'], {
                     cwd,
                     env: scenario.env as NodeJS.ProcessEnv,
                     output: { write: (m) => messages.push(m), error: () => {} },
@@ -89,7 +89,7 @@ describe('status command', () => {
 
                 // Same projection on the human and envelope surfaces, with the key value never echoed.
                 const human: string[] = [];
-                await main(['status'], {
+                await main(['self', 'status'], {
                     cwd,
                     env: scenario.env as NodeJS.ProcessEnv,
                     output: { write: (m) => human.push(m), error: () => {} },
@@ -97,7 +97,7 @@ describe('status command', () => {
                 });
                 expect(human.join('\n')).toContain(`DecisionMaker: ${scenario.state}`);
                 const envelope: string[] = [];
-                await main(['status', '--json', '--json-envelope'], {
+                await main(['self', 'status', '--json', '--json-envelope'], {
                     cwd,
                     env: scenario.env as NodeJS.ProcessEnv,
                     output: { write: (m) => envelope.push(m), error: () => {} },
@@ -121,7 +121,7 @@ describe('status command', () => {
         try {
             await writeFile(join(cwd, 'package.json'), '{}');
 
-            const exitCode = await main(['status'], {
+            const exitCode = await main(['self', 'status'], {
                 cwd,
                 output: nullOutput(),
                 dbUrl: ':memory:',
@@ -140,7 +140,7 @@ describe('status command', () => {
             await writeFile(join(cwd, '.spur', 'config.yaml'), 'project: test\n');
             await writeFile(join(cwd, 'note.txt'), 'hello');
             const out: string[] = [];
-            const ok = await main(['status', 'note.txt', '--json'], {
+            const ok = await main(['self', 'status', 'note.txt', '--json'], {
                 cwd,
                 output: { write: (m) => out.push(m), error: () => {} },
                 dbUrl: ':memory:',
@@ -154,7 +154,7 @@ describe('status command', () => {
             });
 
             const errors: string[] = [];
-            const missing = await main(['status', 'absent.txt'], {
+            const missing = await main(['self', 'status', 'absent.txt'], {
                 cwd,
                 output: { write: (m) => errors.push(m), error: (m) => errors.push(m) },
                 dbUrl: ':memory:',

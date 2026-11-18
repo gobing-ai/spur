@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { main } from '../../src';
-import type { CommandOutput } from '../../src/output';
+import { main } from '../../../src';
+import type { CommandOutput } from '../../../src/output';
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
@@ -8,7 +8,7 @@ function nullOutput(): CommandOutput {
 
 describe('migrate command', () => {
     test('runs migration with in-memory db', async () => {
-        const exitCode = await main(['migrate'], { output: nullOutput(), dbUrl: ':memory:' });
+        const exitCode = await main(['self', 'migrate'], { output: nullOutput(), dbUrl: ':memory:' });
         expect(exitCode).toBe(0);
     });
 });

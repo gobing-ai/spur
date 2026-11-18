@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { createDbAdapter } from '@gobing-ai/ts-db';
+import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import {
     checkImporterSchemaVersion,
     IMPORTER_SCHEMA_KEY,
     IMPORTER_SCHEMA_LEDGER_PREFIX,
     readRecordedImporterSchemaVersion,
+    repairImporterSchemaVersion,
 } from '../../src/analytics/importer-schema-version';
 import { applyCliMigrations } from '../../src/migrations';
 
@@ -101,7 +102,7 @@ describe('importer-schema-version (task 0748)', () => {
             expect(drift?.missingTables).toContain('history_skill_call');
             expect(drift?.remediation).toContain('0.4.51');
             expect(drift?.remediation).toContain(IMPORTER_SCHEMA_KEY);
-            expect(drift?.remediation).toContain('spur migrate');
+            expect(drift?.remediation).toContain('spur self migrate');
             db.close();
         });
 
@@ -128,5 +129,42 @@ describe('importer-schema-version (task 0748)', () => {
             expect(drift).toBeNull();
             db.close();
         });
+    });
+});
+
+/**
+ * Task 1388 touched this module's remedy strings (`spur migrate` → `spur self migrate`), so the
+ * file must meet the coverage bar. These cases cover the two paths the suite left unexercised: an
+ * unreadable ledger (the catch in the reader) and the repair routine's journal rewrite.
+ */
+describe('importer schema version — unreadable ledger and repair (task 1388)', () => {
+    test('an unreadable ledger reads as "no recorded key" rather than throwing', async () => {
+        const broken = {
+            queryFirst: async () => {
+                throw new Error('no such table: __spur_cli_migrations');
+            },
+        } as unknown as DbAdapter;
+        expect(await readRecordedImporterSchemaVersion(broken)).toBeNull();
+    });
+
+    test('repair rewrites the journal to exactly one current key', async () => {
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        try {
+            await applyCliMigrations(db);
+            await db.run('INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
+                `${IMPORTER_SCHEMA_LEDGER_PREFIX}stale`,
+                1,
+            ]);
+            await repairImporterSchemaVersion(db);
+            const keys = await db.queryAll<{ id: string }>(
+                `SELECT id FROM "__spur_cli_migrations" WHERE id LIKE '${IMPORTER_SCHEMA_LEDGER_PREFIX}%'`,
+            );
+            expect(keys).toHaveLength(1);
+            expect(keys[0]?.id).toBe(`${IMPORTER_SCHEMA_LEDGER_PREFIX}${IMPORTER_SCHEMA_KEY}`);
+            expect(await readRecordedImporterSchemaVersion(db)).toBe(IMPORTER_SCHEMA_KEY);
+            expect(await checkImporterSchemaVersion(db)).toBeNull();
+        } finally {
+            await db.close();
+        }
     });
 });

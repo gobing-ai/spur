@@ -234,7 +234,7 @@ Q5 (2026-11-15): config keys `agent.fleet.maxWriters` and `agent.fleet.laneRoot`
 - **Q1. Writer concurrency model.**
   - **Recommended:** per-worktree lanes with `maxWriters` (default 1, operator raises it).
   - **Alternative:** keep serial writers and parallelize only review and read turns. This is lower risk but gives little throughput.
-- **Q2. Who hosts the tick when `spur serve` is off?** ADR-148 made serve an accelerator.
+- **Q2. Who hosts the tick when `spur self serve` is off?** ADR-148 made serve an accelerator.
   - **Recommended:** `dev-runall` runs the same `StrategyRuntime.tick` in a foreground loop, using the same fencing as serve.
   - **Alternative:** require serve for parallel runs.
 - **Q3. Retire the in-session parallel path?**

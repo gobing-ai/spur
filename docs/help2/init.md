@@ -3,7 +3,7 @@
 Initialize Spur in a project: scaffold `.spur/`, seed the global config on first run, and get a
 project ready for tasks, rules, and workflows.
 
-> **Canonical path:** `spur self init`. The legacy `spur init` top-level form remains a hidden alias.
+> **Canonical path:** `spur self init`. The legacy `spur self init` top-level form remains a hidden alias.
 
 ## Related: machine setup (`spur self install`)
 

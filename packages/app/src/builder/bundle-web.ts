@@ -4,7 +4,7 @@
  * `@gobing-ai/spur-contracts` so packaging never imports the web workspace).
  *
  * The published `@gobing-ai/spur` package must ship a `web/` directory next to
- * `spur.js` so `spur serve` can resolve board assets from any project cwd
+ * `spur.js` so `spur self serve` can resolve board assets from any project cwd
  * (see `resolveWebDistPath` in apps/server/src/serve.ts). Without this step,
  * `/board` returns `{"error":"Not Found"}` after a global npm/bun install.
  *

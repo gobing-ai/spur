@@ -300,9 +300,9 @@ describe('spur agent usage (0892)', () => {
         }
     });
 
-    test('R4: the serve module never references the producer (no scheduler in spur serve)', async () => {
+    test('R4: the serve module never references the producer (no scheduler in spur self serve)', async () => {
         const serveModule = await readFile(
-            join(join(import.meta.dir, '..'), '..', '..', 'src', 'commands', 'serve.ts'),
+            join(join(import.meta.dir, '..'), '..', '..', 'src', 'commands', 'self', 'serve.ts'),
             'utf8',
         );
         expect(serveModule).not.toContain('codexbar');

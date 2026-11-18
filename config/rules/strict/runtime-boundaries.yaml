@@ -130,7 +130,7 @@ rules:
             - "packages/config/src/config-layers.ts" # sync resolveConfigLayers() existence probes moved verbatim out of loader.ts to break the loader↔executor-update cycle (same exemption)
             - "packages/config/src/executor-update.ts" # atomic single-entry config update (task 0797): O_EXCL lock, fsync'd tmp+rename commit, lstat symlink refusal, mode preservation — ts-runtime FileSystem seam has no lstat/fsync/chmod/O_EXCL
             - "packages/app/src/services/project-start.ts" # sync CLI binary path checks before daemon spawn
-            - "apps/cli/src/commands/serve.ts" # sync resolveServeCwd() directory validation before server startup (task 0805 R2); mirrors task.ts sync-template exemption
+            - "apps/cli/src/commands/self/serve.ts" # sync resolveServeCwd() directory validation before server startup (task 0805 R2); mirrors task.ts sync-template exemption
 
             # Synchronous template & workflow resolvers:
             # commands/task.ts was split per verb (commands/task/<verb>.ts); the exempt fs use moved verbatim:

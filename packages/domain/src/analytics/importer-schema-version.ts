@@ -87,8 +87,8 @@ export async function checkImporterSchemaVersion(db: DbAdapter): Promise<Importe
 
     const remediation =
         recorded === null
-            ? `Database has no recorded importer schema key (installed DDL key: ${installed}). Run \`spur migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`
-            : `Recorded importer schema key (${recorded}) does not match the installed DDL key (${installed}). Run \`spur migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`;
+            ? `Database has no recorded importer schema key (installed DDL key: ${installed}). Run \`spur self migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`
+            : `Recorded importer schema key (${recorded}) does not match the installed DDL key (${installed}). Run \`spur self migrate\` to apply schema updates or \`bun install\` to resync workspace packages.`;
 
     return {
         recorded,
@@ -107,7 +107,7 @@ export async function checkImporterSchemaVersion(db: DbAdapter): Promise<Importe
  * `applied_at`, written by a stale binary's `INSERT OR REPLACE` provisioning
  * (observed: global spur 0.3.78 stamping 0.4.60 over a 0.4.62 worktree DB) — are
  * deleted so the `ORDER BY applied_at DESC` read can only see the truthful stamp.
- * `spur migrate`'s journaled fast path cannot heal this state, which is why the
+ * `spur self migrate`'s journaled fast path cannot heal this state, which is why the
  * check folds the remedy in here instead of delegating to it.
  */
 export async function repairImporterSchemaVersion(db: DbAdapter): Promise<void> {

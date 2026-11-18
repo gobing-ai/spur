@@ -1,6 +1,6 @@
 # Spur GLOBAL configuration — `~/.config/spur/config.yaml`
 #
-# Seeded here by `spur init` on first run (never overwritten once it exists —
+# Seeded here by `spur self init` on first run (never overwritten once it exists —
 # you own this file). It is the DEFAULT layer: every project's
 # `.spur/config.yaml` is merged OVER it, so a project config only needs to carry
 # its delta.

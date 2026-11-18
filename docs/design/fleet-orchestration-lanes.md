@@ -70,7 +70,7 @@ tick (fenced owner)
 - **Roles.** The coder member drives the whole pipeline run.
   - The pipeline's `role: reviewer` stage resolves to a declared reviewer member, using the existing ADR-126/148 role path, in a fresh conversation.
   - Without a reviewer member, the current executor resolution applies.
-- **Tick host.** This is `spur serve` when running. Otherwise `/sp:dev-runall --mode parallel` runs the same tick in a foreground loop, under the same fencing. A second host loses the fence and exits.
+- **Tick host.** This is `spur self serve` when running. Otherwise `/sp:dev-runall --mode parallel` runs the same tick in a foreground loop, under the same fencing. A second host loses the fence and exits.
 
 ## 4. Contract and compatibility
 

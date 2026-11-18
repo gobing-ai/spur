@@ -17,7 +17,7 @@ tags: [system, E31, history]
 
 ## Current failure
 
-`spur serve` drains `history.refresh` jobs in its own Bun process. The handler calls
+`spur self serve` drains `history.refresh` jobs in its own Bun process. The handler calls
 `HistoryService.daily()` directly; its synchronous filesystem and `bun:sqlite` work blocks the
 server event loop long enough for the web client's 10-second abort timer to fire.
 

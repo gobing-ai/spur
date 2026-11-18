@@ -1,7 +1,7 @@
 /**
  * Integration test (task 0249): CLI-driven task/feature status changes persist
  * `task.*` / `feature.*` rows into the shared `system_events` ledger that the
- * System Events tabview reads, even with `spur serve` down (R1, R2, R4).
+ * System Events tabview reads, even with `spur self serve` down (R1, R2, R4).
  *
  * Each scenario drives the real `main()` entry point against a temp worktree
  * with its own SQLite ledger, then opens the same DB out-of-band and asserts

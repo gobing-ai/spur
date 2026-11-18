@@ -119,7 +119,7 @@ function parseInvocation(tokens: string[], file: string, line: number): Invocati
             verb = rest[i];
             i += 1;
         } else {
-            verb = nounToken; // bare alias `spur init` ≡ `spur self init`
+            verb = nounToken; // bare alias `spur self init` ≡ `spur self init`
         }
     } else if (rest[i] && VERB_TOKEN.test(rest[i] ?? '') && surface.get(noun)?.has(rest[i] ?? '')) {
         verb = rest[i];

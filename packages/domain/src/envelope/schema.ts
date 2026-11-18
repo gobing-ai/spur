@@ -230,7 +230,7 @@ export type Envelope = z.infer<typeof envelopeSchema>;
 // ─── Project / task snapshots (R2) ─────────────────────────────────────────
 
 /**
- * A minimal project snapshot schema obtained via `spur status --json`
+ * A minimal project snapshot schema obtained via `spur self status --json`
  * (0284 R2). Never a full-file reread — the snapshot is the projected
  * CLI output, fingerprinted by content hash.
  */

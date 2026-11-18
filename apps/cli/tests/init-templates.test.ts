@@ -21,12 +21,12 @@ async function isolatedOptions(cwd: string) {
     return { options: { cwd, env, output: nullOutput(), dbUrl: ':memory:' as const }, globalDir };
 }
 
-describe('spur init template copy', () => {
+describe('spur self init template copy', () => {
     test('task templates are remapped under .spur/tasks without creating .spur/templates', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         // Task templates under .spur/tasks/templates/
         const tasksBase = join(cwd, '.spur', 'tasks', 'templates');
@@ -71,7 +71,7 @@ describe('spur init template copy', () => {
         const { options } = await isolatedOptions(cwd);
 
         // First init — templates are created.
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         const tmplPath = join(cwd, '.spur', 'tasks', 'templates', 'standard.md');
         expect(existsSync(tmplPath)).toBe(true);
 
@@ -82,13 +82,13 @@ describe('spur init template copy', () => {
 
         // Re-init without --force converges (task 0649 R1) — it seeds only what is
         // missing and writes no config, so the modified template is preserved.
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         // Template still has our marker — not overwritten.
         const after = readFileSync(tmplPath, 'utf-8');
         expect(after).toContain(marker);
 
         // Re-init with --force does overwrite.
-        expect(await main(['init', '--force'], options)).toBe(0);
+        expect(await main(['self', 'init', '--force'], options)).toBe(0);
         const forced = readFileSync(tmplPath, 'utf-8');
         expect(forced).not.toContain(marker);
     });
@@ -97,7 +97,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const matrixPath = join(cwd, '.spur', 'tasks', 'section-matrix.yaml');
         expect(existsSync(matrixPath)).toBe(true);
@@ -109,7 +109,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const wfDir = join(cwd, '.spur', 'workflows');
         expect(existsSync(wfDir)).toBe(false);
@@ -119,7 +119,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const docsDir = join(cwd, 'docs');
         expect(existsSync(join(docsDir, '99_PROJECT_CONSTITUTION.md'))).toBe(true);
@@ -140,14 +140,14 @@ describe('spur init template copy', () => {
         const { options } = await isolatedOptions(cwd);
 
         // First init scaffolds the docs
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         // Customize one doc
         const prdPath = join(cwd, 'docs', '01_PRD.md');
         writeFileSync(prdPath, 'CUSTOM CONTENT — must survive re-init');
 
         // Re-init with --force must NOT overwrite the customized doc (preserve: true)
-        expect(await main(['init', '--force'], options)).toBe(0);
+        expect(await main(['self', 'init', '--force'], options)).toBe(0);
 
         const content = readFileSync(prdPath, 'utf-8');
         expect(content).toBe('CUSTOM CONTENT — must survive re-init');
@@ -157,7 +157,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         expect(existsSync(join(cwd, '.spur', 'templates'))).toBe(false);
         const content = readFileSync(join(cwd, 'docs', '04_DESIGN.md'), 'utf-8');
@@ -169,7 +169,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const agentsPath = join(cwd, 'AGENTS.md');
         expect(existsSync(agentsPath)).toBe(true);
@@ -182,7 +182,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init', '--name', 'MyApp'], options)).toBe(0);
+        expect(await main(['self', 'init', '--name', 'MyApp'], options)).toBe(0);
 
         const content = readFileSync(join(cwd, 'AGENTS.md'), 'utf-8');
         expect(content).toContain('MyApp');
@@ -206,12 +206,12 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const agentsPath = join(cwd, 'AGENTS.md');
         writeFileSync(agentsPath, 'CUSTOM AGENTS — must survive re-init');
 
-        expect(await main(['init', '--force'], options)).toBe(0);
+        expect(await main(['self', 'init', '--force'], options)).toBe(0);
         // Custom content is preserved (preserve: true — manifest never overwrites)
         const afterForce = readFileSync(agentsPath, 'utf-8');
         expect(afterForce).toContain('CUSTOM AGENTS — must survive re-init');
@@ -223,7 +223,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const gitignorePath = join(cwd, '.gitignore');
         expect(existsSync(gitignorePath)).toBe(true);
@@ -235,10 +235,10 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         // Manually re-run the append by calling init again with --force
-        expect(await main(['init', '--force'], options)).toBe(0);
+        expect(await main(['self', 'init', '--force'], options)).toBe(0);
 
         const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
         const matches = content.match(/\.spur\/context\//g) ?? [];
@@ -249,7 +249,7 @@ describe('spur init template copy', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init', '--minimal'], options)).toBe(0);
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
 
         const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
         expect(content).toContain('.spur/context/');
@@ -262,7 +262,7 @@ describe('spur init template copy', () => {
         writeFileSync(agentsPath, '# My Project\n\nCustom content here.\n', 'utf-8');
 
         const { options } = await isolatedOptions(cwd);
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const content = readFileSync(agentsPath, 'utf-8');
         // Original content preserved
@@ -279,7 +279,7 @@ describe('spur init template copy', () => {
         writeFileSync(agentsPath, '# My Project\n\n## Indexed context\n\nAlready has it.\n', 'utf-8');
 
         const { options } = await isolatedOptions(cwd);
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const content = readFileSync(agentsPath, 'utf-8');
         const markerCount = (content.match(/## Indexed context/g) ?? []).length;
@@ -293,7 +293,7 @@ describe('spur init template copy', () => {
         writeFileSync(agentsPath, '# Minimal Project\n', 'utf-8');
 
         const { options } = await isolatedOptions(cwd);
-        expect(await main(['init', '--minimal'], options)).toBe(0);
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
 
         const content = readFileSync(agentsPath, 'utf-8');
         expect(content).toContain('## Indexed context');
@@ -305,7 +305,7 @@ describe('init docs contract (task 0313)', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init', '--name', 'knowledge-kit'], options)).toBe(0);
+        expect(await main(['self', 'init', '--name', 'knowledge-kit'], options)).toBe(0);
 
         const docsDir = join(cwd, 'docs');
         for (const doc of [
@@ -330,7 +330,7 @@ describe('init docs contract (task 0313)', () => {
     test('scaffolded docs have §4.3 frontmatter fields (edit_rules, sync, read_before)', async () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const docsDir = join(cwd, 'docs');
         // 00–05 should have edit_rules, sync, read_before
@@ -359,7 +359,7 @@ describe('init docs contract (task 0313)', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const constContent = readFileSync(join(cwd, 'docs', '99_PROJECT_CONSTITUTION.md'), 'utf-8');
         // Check actual section destinations, not incidental prose mentions of section IDs.
@@ -380,7 +380,7 @@ describe('init docs contract (task 0313)', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const designContent = readFileSync(join(cwd, 'docs', '04_DESIGN.md'), 'utf-8');
         expect(designContent).toContain('DESIGN.md');

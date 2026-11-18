@@ -127,7 +127,7 @@ export const templateBodiesCache = new Map<string, Partial<Record<TaskSection, s
 /**
  * Read a variant's scaffold template and extract its per-section bodies
  * (e.g. `review`'s P1–P4 table). Resolution order:
- *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur init`)
+ *   1. `.spur/tasks/templates/<variant>.md` (project-local, seeded by `spur self init`)
  *   2. bundled template fallback (`templates/task/<variant>.md`)
  * Returns `{}` when neither source is reachable — creation then falls back to
  * matrix + guidance only. Results are cached per process.

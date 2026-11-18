@@ -117,7 +117,7 @@ decision point for the design step if machine consumers need to distinguish it.
    (Parallelism is dispatch by definition.)
 2. Should the special error be a dedicated exit code (e.g. `3`) or reuse `2` with the stable
    message? (Recommendation: reuse `2`, keep message as the contract.)
-3. Serve-side dispatch (`spur serve` web surface) — same special error, or reject `inline` in
+3. Serve-side dispatch (`spur self serve` web surface) — same special error, or reject `inline` in
    request payloads at the contract layer?
 
 ## Next Steps

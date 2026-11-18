@@ -76,7 +76,7 @@ function resolvePrefixWrite(
  *
  * Matching is host-scoped: the same path can be registered for a remote host AND for
  * localhost, so a path-only match let a local write land on the remote entry (a local
- * `spur serve` shutdown cleared knowledge-kit's live 192.168.87.27:3003 to 0).
+ * `spur self serve` shutdown cleared knowledge-kit's live 192.168.87.27:3003 to 0).
  */
 function findProjectIndex(projects: ProjectEntry[], pathInput: string, hostInput?: string): number {
     const host = hostInput?.trim() ?? '';

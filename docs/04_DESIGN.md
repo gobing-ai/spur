@@ -87,7 +87,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Fleet task turns and measured warm execution (G74, ADR-145; implemented — `fleet-e2e --perf --modes` lane comparison) | [fleet-task-turn-execution.md](design/fleet-task-turn-execution.md) |
 | Named-agent dispatch with A2A as a hidden member transport (G8 sender 1333–1335; G9 listener 1336; two-install dispatch and write fencing 1337); project-addressed members through the gateway, refresh-on-read receipts and the shipped delegation workflows (1395–1397; ADR-148) | [a2a-member-transport.md](design/a2a-member-transport.md) |
-| Embedded MCP 2.0+ server in spur serve — stateless Streamable HTTP `POST /mcp`, bearer auth, `spur://` resources, `spur mcp` stdio bridge (B9, ADR-152; implemented by 1370–1374) | [embedded-mcp-server](design/embedded-mcp-server.md) |
+| Embedded MCP 2.0+ server in spur self serve — stateless Streamable HTTP `POST /mcp`, bearer auth, `spur://` resources, `spur mcp` stdio bridge (B9, ADR-152; implemented by 1370–1374) | [embedded-mcp-server](design/embedded-mcp-server.md) |
 | Verified attached fleet occupants (G75, ADR-146; §3 guest renewal + §4 `join --member` implemented by 1279/1281, §5 attached stages + drain by 1282, probe report `docs/reports/fleet-host-capabilities.json` by 1280) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
 | Parallel fleet orchestration — worktree lanes, lane admission and the gated merge queue (G76, ADR-149; implemented by 1341–1346 — `'integrate'` claim slot, `fleet.task.integrated` admission, lane `cwd` in the fleet work-item envelope, remote `sp/remote-*` landing, `--perf --modes batch`) | [fleet-orchestration-lanes.md](design/fleet-orchestration-lanes.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
@@ -133,7 +133,7 @@ See [contract detail](design/cli-contracts.md#101-shared-option-registry-0618).
 
 See [contract detail](design/cli-contracts.md#11-committed-product-commands).
 
-#### `spur init [--name <name>] [--force] [--minimal] [--json]`
+#### `spur self init [--name <name>] [--force] [--minimal] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-init---name-name---force---minimal---json).
 

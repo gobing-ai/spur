@@ -1,6 +1,6 @@
 ---
 kind: design
-title: "Embedded MCP 2.0+ server in spur serve"
+title: "Embedded MCP 2.0+ server in spur self serve"
 status: accepted
 created_at: 2026-11-17
 updated_at: 2026-11-17
@@ -12,14 +12,14 @@ related:
 tags: [mcp, server, protocol, agent]
 ---
 
-# Embedded MCP 2.0+ server in spur serve
+# Embedded MCP 2.0+ server in spur self serve
 
 Accepted under [ADR-152](../00_ADR.md#adr-152-spur-serve-embeds-a-stateless-mcp-20-server-that-delegates-to-spur-app-services).
 Implemented by feature B9, tasks 1370–1374.
 
 ## 1. Boundary
 
-`spur serve` exposes one agent-facing MCP endpoint: `POST /mcp`, mounted by `mcpModule`
+`spur self serve` exposes one agent-facing MCP endpoint: `POST /mcp`, mounted by `mcpModule`
 (`apps/server/src/modules/mcp/`, registered in `apps/server/src/modules/registry.ts`) only when
 `server.mcp.enabled` is true — off mounts no route at all, like the A2A listener. The adapter
 (`apps/server/src/modules/mcp/protocol.ts`) is transport-only: it parses and serializes, then
@@ -101,7 +101,7 @@ Headers always include `Mcp-Protocol-Version: 2026-07-28` and `Content-Type: app
 loud `CommandError`, never a silent unauthenticated call. URL resolution order: `--url` → the
 project's gateway prefix (`http://127.0.0.1:<gateway.port><prefix>/mcp`, when the registry entry is
 local and the gateway answers) → the registry entry's live port → `server.port`. Config parity with
-`spur serve` through the `@gobing-ai/spur-config` env funnel.
+`spur self serve` through the `@gobing-ai/spur-config` env funnel.
 
 ## 6. Gateway interaction
 

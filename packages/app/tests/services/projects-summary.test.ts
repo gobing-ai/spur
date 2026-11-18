@@ -145,7 +145,7 @@ describe('collectProjectsView through the real gateway handler (1402 R1/R2)', ()
             since: SINCE,
         });
         expect(rows.map((row) => row.state)).toEqual(['gateway-down', 'gateway-down']);
-        expect(rows[0]?.message).toContain('spur serve --gateway');
+        expect(rows[0]?.message).toContain('spur self serve --gateway');
     });
 });
 

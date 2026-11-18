@@ -1,5 +1,5 @@
 # Spur project configuration example
-# Seeded by `spur init` as ~/.config/spur/config.yaml on first run
+# Seeded by `spur self init` as ~/.config/spur/config.yaml on first run
 # (never overwritten).
 # Copy / adapt into a project as `.spur/config.yaml`.
 
@@ -138,7 +138,7 @@ agent:
     # removing the line or setting disabled: false.
     # Quota refresh is external: schedule `spur agent usage` (cron/launchd) to
     # capture provider usage and record quota-owned availability observations.
-    # spur serve never runs it (B6 0892; docs/design/session-pinned-dispatch.md §3.4).
+    # spur self serve never runs it (B6 0892; docs/design/session-pinned-dispatch.md §3.4).
     # A bare `true` is operator-owned (only humans write booleans). Automatic
     # writers (quota/probe checks) emit the ownership object instead; an
     # operator-owned disable is never auto-re-enabled (B6 0890).
@@ -195,7 +195,7 @@ agent:
   # A project's agent roster is a **fleet** declared in the project's own
   # `.spur/config.yaml` under `agent.fleet` — never in this global file, and never
   # in the retired `<projectPath>/.spur/fleet.json` (ADR-116 carrier moved by task
-  # 0858). Materialized and autostarted at `spur serve` start only when
+  # 0858). Materialized and autostarted at `spur self serve` start only when
   # `agent.fleet.enabled` is true; preview with `spur projects list --fleet`.
   # Shape (project layer; a member declares role or executor):
   #   agent:

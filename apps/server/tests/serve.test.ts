@@ -2523,7 +2523,7 @@ describe('startServer', () => {
     }, 20_000);
 
     test('a child killed by server shutdown is abandoned and audited, never reported as a failure (Sep 2026)', async () => {
-        // The incident: a `spur serve` restart mid-`history import` SIGTERMs the job child,
+        // The incident: a `spur self serve` restart mid-`history import` SIGTERMs the job child,
         // which the queue recorded as an error-severity `queue.job.failed` — the exact
         // alert text (“terminated before a normal exit (Termination) after 50335ms”) the
         // operator chased. The attempt must settle as abandoned instead.
@@ -3132,7 +3132,7 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
         };
 
         try {
-            // Two ticks model two `spur serve` daemons sharing this project database,
+            // Two ticks model two `spur self serve` daemons sharing this project database,
             // each running the same cron over the same occurrence.
             registerSchedulerEntries(scheduler, ctx, [{ name: 'ok-job', command: 'exit 0', intervalMinutes: 5 }]);
             await registered[2]?.action(tickCtx);

@@ -14,7 +14,7 @@ Surface index row: [`04_DESIGN.md §0`](../04_DESIGN.md).
 
 ## Scope
 
-`config/templates/AGENTS.md` is the root `AGENTS.md` seed materialized by `spur init`. It is the
+`config/templates/AGENTS.md` is the root `AGENTS.md` seed materialized by `spur self init`. It is the
 portable first-session contract for any Spur-managed project; project-specific stack, command, and
 boundary slots remain explicit customization stubs.
 
@@ -55,7 +55,7 @@ explicitly disjoint from `docs/04_DESIGN.md`, which owns command, config, schema
 - `apps/cli/tests/agents-md-portable-alignment.test.ts` rejects root/seed drift.
 - `apps/cli/tests/init-templates.test.ts` verifies a fresh scaffold contains the Superskill and
   conditional-design contracts after token substitution, and checks constitution-body parity.
-- `spur init --force` preserves an existing root `AGENTS.md`; the enhanced contract applies when a
+- `spur self init --force` preserves an existing root `AGENTS.md`; the enhanced contract applies when a
   fresh file is scaffolded and does not overwrite project customization.
 
 ## References

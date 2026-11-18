@@ -9,9 +9,9 @@ import {
     registerServeCommand,
     resolveServeCwd,
     resolveServeDbUrl,
-} from '../../src/commands/serve';
-import type { CliContext } from '../../src/context';
-import { CommandError } from '../../src/errors';
+} from '../../../src/commands/self/serve';
+import type { CliContext } from '../../../src/context';
+import { CommandError } from '../../../src/errors';
 
 type ActionFn = (options: {
     port?: number;
@@ -345,13 +345,14 @@ describe('serve --cwd project root (task 0805 R2)', () => {
 });
 
 test('main dispatches both serve forms without booting or closing a CLI database', async () => {
-    const { main } = await import('../../src/index');
+    const { main } = await import('../../../src/index');
     const root = mkdtempSync(join(tmpdir(), 'spur-db-free-serve-'));
     const invalidConfig = join(root, '.spur.yaml');
     writeFileSync(invalidConfig, 'invalid: [');
     let closed = false;
     const captured: StartServerOptions[] = [];
-    for (const prefix of [['serve'], ['--no-logo', 'self', 'serve']]) {
+    // Task 1388: `self serve` is the only spelling left.
+    for (const prefix of [['--no-logo', 'self', 'serve']]) {
         const code = await main([...prefix, '--cwd', root, '--no-open'], {
             cwd: root,
             db: {
@@ -372,23 +373,24 @@ test('main dispatches both serve forms without booting or closing a CLI database
         expect(code).toBe(0);
     }
     expect(closed).toBe(false);
-    expect(captured).toHaveLength(2);
+    // One spelling left after task 1388 removed the top-level alias.
+    expect(captured).toHaveLength(1);
     expect(
         captured.every((options) => options.cwd === root && options.dbUrl === join(root, DEFAULT_DATABASE_URL)),
     ).toBe(true);
 });
 
 test('database-free serve dispatch preserves help, parse errors and startup exit status', async () => {
-    const { main } = await import('../../src/index');
+    const { main } = await import('../../../src/index');
     const writes: string[] = [];
     const errors: string[] = [];
     const output = { write: (value: string) => writes.push(value), error: (value: string) => errors.push(value) };
-    expect(await main(['serve', '--help'], { output })).toBe(0);
+    expect(await main(['self', 'serve', '--help'], { output })).toBe(0);
     expect(writes.join('')).toContain('--cwd');
-    expect(await main(['serve', '--unknown'], { output })).toBe(1);
+    expect(await main(['self', 'serve', '--unknown'], { output })).toBe(1);
     expect(errors.join('')).toContain('unknown option');
     expect(
-        await main(['serve', '--no-open'], {
+        await main(['self', 'serve', '--no-open'], {
             output,
             startServer: async () => {
                 throw new Error('server startup failed');

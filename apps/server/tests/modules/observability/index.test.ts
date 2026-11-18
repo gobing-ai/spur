@@ -69,7 +69,7 @@ describe('observability module', () => {
                     ppid: 0,
                     depth: 0,
                     source: 'serve',
-                    label: 'spur serve',
+                    label: 'spur self serve',
                     command: 'serve',
                     status: 'running',
                     rssBytes: 1000,

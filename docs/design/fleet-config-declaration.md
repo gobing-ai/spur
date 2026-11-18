@@ -97,7 +97,7 @@ wins, and a binary-name claim is refused at the CLI boundary where the canonical
 ### Retired sources — hard errors (R2)
 
 One loader guard (`packages/config/src/loader.ts`) runs before schema parse, so nothing is stripped silently and
-every CLI command and `spur serve` fail the same way:
+every CLI command and `spur self serve` fail the same way:
 
 | Found | Error names |
 | --- | --- |

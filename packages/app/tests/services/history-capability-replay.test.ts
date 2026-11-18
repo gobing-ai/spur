@@ -308,7 +308,7 @@ beforeAll(async () => {
     harness.claudeFile = claudeFile;
     harness.piRoot = piRoot;
 
-    // Old-schema fixture database: current schema (spur migrate already adopted, 0050
+    // Old-schema fixture database: current schema (spur self migrate already adopted, 0050
     // applied) with PRE-UPGRADE data — null-capability skill rows carrying extraction
     // hashes the current mapper no longer reproduces, a checkpoint claiming the current
     // fixture bytes were already imported, a pre-1029 '' rollup sentinel, and v6 rollup

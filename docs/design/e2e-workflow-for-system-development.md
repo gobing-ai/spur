@@ -262,7 +262,7 @@ Workflow paths in this repository:
 
 | Path | Role | Rule |
 | --- | --- | --- |
-| `.spur/workflows/<name>.yaml` | Optional `project` layer (ADR-113). Absent in this checkout: task 0650 removed the symlink, and `spur init` seeds no shadow | An explicit path falls back to the bundled `shared` layer by basename. Shipped workflows are invoked by bare name (`configuration-contracts.md`). |
+| `.spur/workflows/<name>.yaml` | Optional `project` layer (ADR-113). Absent in this checkout: task 0650 removed the symlink, and `spur self init` seeds no shadow | An explicit path falls back to the bundled `shared` layer by basename. Shipped workflows are invoked by bare name (`configuration-contracts.md`). |
 | `config/workflows/<name>.yaml` | Physical repo source for this checkout and the bundled `shared` layer | **Monorepo edit SSOT.** Do not create a `.spur/workflows` copy; it would shadow the shared layer. |
 | `apps/cli/config/workflows/` | Gitignored `build:bundle` / `bundle-config` output for npm package ship | Do **not** hand-edit or hand-`cp` after pipeline edits. Rebuild the CLI package when you need the published tree. |
 

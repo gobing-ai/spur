@@ -691,7 +691,7 @@ describe('migration 0041: queue_jobs deadline/lease columns (task 0817)', () => 
     test('an already-migrated DB is a pure read — no write lock taken', async () => {
         // Every CLI invocation calls applyCliMigrations, including read-only ones.
         // The CREATE TABLE it used to run unconditionally is DDL, so a read-only
-        // `rule run` took a write lock and could lose to a long-lived `spur serve`
+        // `rule run` took a write lock and could lose to a long-lived `spur self serve`
         // with SQLITE_BUSY. On an up-to-date DB there must be no write at all.
         const db = await createMigratedDb({ url: ':memory:' });
         try {

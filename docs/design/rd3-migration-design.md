@@ -222,7 +222,7 @@ still owns the goal until it is done.
 | `planning_events` | `id`, `entity_kind` (`task\|feature`), `entity_id`, `event`, `from_status?`, `to_status?`, `run_id?`, `payload` (JSON), `created_at` | Append-only event ledger (§7); rebuildable from files' `## History`. |
 | `task_run_links` | `id`, `wbs`, `run_id`, `kind` (`lifecycle\|pipeline`), `created_at` | Task ↔ engine-run traceability (D06). |
 
-Engine run state persists in the existing engine tables. Rebuild rule: `spur migrate` (DB) can
+Engine run state persists in the existing engine tables. Rebuild rule: `spur self migrate` (DB) can
 always reconstruct both tables from the corpus — the test suite proves it (§13).
 
 ---
@@ -465,7 +465,7 @@ features:
   dir: docs/features
 ```
 
-`spur init` copies the §8 templates, `config/tasks/section-matrix.yaml`, and the two lifecycle +
+`spur self init` copies the §8 templates, `config/tasks/section-matrix.yaml`, and the two lifecycle +
 pipeline workflow YAMLs into the project (ADR-015 pattern, same as rules/workflows today).
 JSON schemas (`apps/cli/schemas/`): `spur-config.schema.json` extended; `task-batch.schema.json`
 (the LLM gate — §12.2); `section-matrix.schema.json`; generated

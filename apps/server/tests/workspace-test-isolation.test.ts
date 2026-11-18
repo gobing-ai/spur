@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
  * R5 regression pin (task 1089): the server workspace must load the shared test
  * preload when its suite is run workspace-locally.
  *
- * `serve.test.ts` starts real servers against throwaway roots, and `spur serve`
+ * `serve.test.ts` starts real servers against throwaway roots, and `spur self serve`
  * upserts its project root into `getProjectsFilePath()`. `tests/setup.ts` points
  * `SPUR_PROJECTS_FILE` at a disposable registry, but Bun only applies the preload
  * from the *nearest* bunfig — so the root bunfig alone left

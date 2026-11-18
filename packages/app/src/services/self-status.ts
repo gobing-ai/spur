@@ -45,7 +45,7 @@ export interface SelfStatusSection {
     data?: Record<string, unknown>;
 }
 
-/** Aggregate readiness (additive to the legacy `spur status` shape). */
+/** Aggregate readiness (additive to the legacy `spur self status` shape). */
 export type SelfStatusOverallState = 'ready' | 'degraded' | 'missing';
 
 /** The nine sections, in render order. */
@@ -205,7 +205,7 @@ async function probeProjectServer(
             state: 'not-applicable',
             scope: 'project',
             source,
-            message: 'this directory is not registered; `spur serve` registers it',
+            message: 'this directory is not registered; `spur self serve` registers it',
             data: { registered: snapshot.projects.length },
         };
     }
@@ -214,7 +214,7 @@ async function probeProjectServer(
             state: 'not-applicable',
             scope: 'project',
             source,
-            message: 'no serve is running for this project; `spur serve` starts one',
+            message: 'no serve is running for this project; `spur self serve` starts one',
             data: { registered: snapshot.projects.length, port: 0 },
         };
     }
@@ -230,7 +230,7 @@ async function probeProjectServer(
                 state: 'degraded',
                 scope: 'project',
                 source,
-                message: `registered serve answered ${response.status}; restart it with \`spur serve\``,
+                message: `registered serve answered ${response.status}; restart it with \`spur self serve\``,
                 data: { registered: snapshot.projects.length, port: entry.port, host },
             };
         }
@@ -246,7 +246,7 @@ async function probeProjectServer(
             state: 'degraded',
             scope: 'project',
             source,
-            message: `registered serve on ${host}:${entry.port} is unreachable; restart it with \`spur serve\``,
+            message: `registered serve on ${host}:${entry.port} is unreachable; restart it with \`spur self serve\``,
             data: { registered: snapshot.projects.length, port: entry.port, host },
         };
     }
@@ -273,7 +273,7 @@ async function probeGateway(ctx: SelfStatusContext, signal: AbortSignal): Promis
             state: 'not-applicable',
             scope: 'machine',
             source,
-            message: `no gateway is listening on ${host}:${port}; \`spur serve\` starts one`,
+            message: `no gateway is listening on ${host}:${port}; \`spur self serve\` starts one`,
             data: { port, host },
         };
     }
@@ -356,7 +356,7 @@ export async function collectSelfStatus(ctx: SelfStatusContext): Promise<SelfSta
         const dbPath = databasePath(ctx.cwd, ctx.env);
         const dbExists = await fs.exists(dbPath);
 
-        // The legacy field stays tolerant (file stems), exactly as `spur status` always reported it.
+        // The legacy field stays tolerant (file stems), exactly as `spur self status` always reported it.
         // The richer `AgentCoordinationService` read merges fleet members through the project database,
         // which status must not open, so the aggregate reports the specs it can read and names that limit.
         const agentSpecs = await listAgentSpecIdsFromDisk(fs, ctx.cwd);

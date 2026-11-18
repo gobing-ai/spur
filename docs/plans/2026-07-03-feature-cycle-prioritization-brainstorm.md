@@ -38,9 +38,9 @@ window over surfaces that already exist (SSE event stream, `inbox_messages`), th
 while building the async infrastructure (job-queue worker, inbox IPC, team supervision), then close
 the board surface (F7/A17, Features module), with Workspace designed early and implemented last as
 the capstone (D3). One new schema object (`system_events`, capped — D5), one new execution
-component (in-process job worker + scheduler start in `spur serve`, Bun-only — D6), one new
+component (in-process job worker + scheduler start in `spur self serve`, Bun-only — D6), one new
 transport surface (server-mediated stdio attach streams, no PTY — D7), and one contract fix
-(`spur init` owns the full canonical scaffold from its npm package; `/sp:spur-init` becomes a thin
+(`spur self init` owns the full canonical scaffold from its npm package; `/sp:spur-init` becomes a thin
 adapter that calls it then adapts content — D1). `needs_design: true` — multiple subsystems, a
 schema change, new modules, and a new transport are all touched; the Workspace ADR and the team
 attach-stream design are the two pieces that must be designed before their build waves.
@@ -52,7 +52,7 @@ attach-stream design are the two pieces that must be designed before their build
 - **Rationale:** The observability window pays for itself during the infra build — events/inbox visibility while debugging the worker, IPC, and supervisor.
 
 ### D1 — init fix shape
-- **Resolved:** Ownership contract: `spur init` copies the full canonical scaffold from its npm package folder; `/sp:spur-init` calls `spur init` then adapts contents to the project. Today there is no clear cut and fresh projects get insufficient config files.
+- **Resolved:** Ownership contract: `spur self init` copies the full canonical scaffold from its npm package folder; `/sp:spur-init` calls `spur self init` then adapts contents to the project. Today there is no clear cut and fresh projects get insufficient config files.
 - **Depends on:** none (independent bug fix).
 
 ### D3 — Workspace position
@@ -67,7 +67,7 @@ attach-stream design are the two pieces that must be designed before their build
 - **Depends on:** D4.
 
 ### D6 — Job queue execution model
-- **Resolved:** In-process worker inside `spur serve` (Bun path only; CF stays `NotConfiguredError`): flip `jobQueueEnabled`, add polling consumer loop + typed handler registry + scheduler start.
+- **Resolved:** In-process worker inside `spur self serve` (Bun path only; CF stays `NotConfiguredError`): flip `jobQueueEnabled`, add polling consumer loop + typed handler registry + scheduler start.
 - **Depends on:** Root.
 
 ### D7 — Team attach/detach transport
@@ -115,13 +115,13 @@ the mid-point instead of the end.
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| P0 | **init ownership contract fix** (D1) — `spur init` ships full canonical scaffold from package; `/sp:spur-init` thin adapter | S | It's a bug on the front door of every new project; independent of everything else |
+| P0 | **init ownership contract fix** (D1) — `spur self init` ships full canonical scaffold from package; `/sp:spur-init` thin adapter | S | It's a bug on the front door of every new project; independent of everything else |
 | P1 | **Observabilities v1** — module shell + Events tab (`system_events` capped table + tap + API + SSE live tail) + Inbox tab (D4/D5) | M | Operator strategy root; every later wave is debugged through this window |
 | P2 | **Job queue + scheduler enablement** — worker loop, typed handler registry, scheduler start; first consumers: `system_events` pruning, then history import (D6) | M | Foundation for all async work; Obs Jobs tab lands here |
 | P3 | **F7 parity + workflow-action server support + A17 `task migrate` cutover** | S–M | Closes the declared Phase 1.5 exit; board becomes the daily driver; cheapest milestone on the board |
 | P4 | **Inbox/IPC enhancement** — message events on the bus, watch/push delivery, server message API; Obs Inbox tab upgrades to live (dep: P2) | M | The IPC substrate team mode and Workspace both consume |
 | P5 | **Features board module** — web module over the existing server feature module | S | Cheap win; independent, slots after the board is the daily driver |
-| P6 | **Team-mode supervision** — launch at `spur serve` startup, attach/detach via server-mediated streams (D7); Obs Process tab | L | Largest item; consumes P2 (lifecycle) + P4 (messaging); design doc first |
+| P6 | **Team-mode supervision** — launch at `spur self serve` startup, attach/detach via server-mediated streams (D7); Obs Process tab | L | Largest item; consumes P2 (lifecycle) + P4 (messaging); design doc first |
 | P7 | **Workspace module** — ADR/design written during P1–P2; implemented last as composition of P4+P6+board modules (D3) | L | Capstone by operator decision; early design keeps seams workspace-shaped |
 | P8 | Backlog: `spur history report`, roadmap/docs drift fix (02_ROADMAP S/W wave status), 0142 unblock check after P6 | S | Park; drift fix can ride any docs commit |
 

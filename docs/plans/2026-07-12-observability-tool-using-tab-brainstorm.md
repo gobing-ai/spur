@@ -64,7 +64,7 @@ path; no second event store.
 ### Branch: Path resolution
 
 - **Resolved:** `{serve cwd}/.spur/context/token-ledger.jsonl`
-- **Rationale:** Same project root contract as hooks when `spur serve` is started in the project
+- **Rationale:** Same project root contract as hooks when `spur self serve` is started in the project
 
 ## Approaches
 

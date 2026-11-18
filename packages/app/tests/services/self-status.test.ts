@@ -174,7 +174,7 @@ describe('collectSelfStatus — projects section', () => {
             baseContext({ env: { PATH: '/usr/bin', SPUR_PROJECTS_FILE: stopped } }),
         );
         expect(aggregate.sections.projects.state).toBe('not-applicable');
-        expect(aggregate.sections.projects.message).toContain('spur serve');
+        expect(aggregate.sections.projects.message).toContain('spur self serve');
     });
 
     test('a healthy, a failing and an unreachable serve are distinguished', async () => {

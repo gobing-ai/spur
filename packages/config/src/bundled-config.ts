@@ -95,7 +95,7 @@ function walk(dir: string, relPrefix: string, filter: RegExp = /\.(ya?ml|json)$/
  * List the relative paths of every bundled template file (`.md` under the shipped `templates/`),
  * each as a `/`-joined path relative to {@link bundledConfigRoot}.
  *
- * Used to inspect the shipped template inventory. `spur init` materializes only
+ * Used to inspect the shipped template inventory. `spur self init` materializes only
  * reviewed manifest targets; it does not seed the natural `templates/` tree.
  * Returns an empty array when no bundled directory is present.
  */

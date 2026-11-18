@@ -1,5 +1,5 @@
 /**
- * Explicit manifest of default config files `spur init` scaffolds into `.spur/`.
+ * Explicit manifest of default config files `spur self init` scaffolds into `.spur/`.
  *
  * Each entry maps a bundled config source (relative to {@link bundledConfigRoot})
  * to a local target (relative to the project `.spur/` directory). Adding a future
@@ -32,7 +32,7 @@ export interface ScaffoldEntry {
 }
 
 /**
- * Ordered list of files `spur init` writes under `.spur/` (unless `--minimal`).
+ * Ordered list of files `spur self init` writes under `.spur/` (unless `--minimal`).
  * The order determines the scaffold sequence; target directories are ensured
  * automatically by `init.ts` before each write.
  */
@@ -51,7 +51,7 @@ export const SCAFFOLD_MANIFEST: readonly ScaffoldEntry[] = [
     { source: 'templates/task/meta.md', target: 'tasks/templates/meta.md' },
     // Docs scaffolds at the project root (R1 — task 0088): constitution + numbered doc stubs.
     // Idempotent / never-overwrite (preserve) — a customized live doc is never clobbered, even
-    // by `spur init --force`.
+    // by `spur self init --force`.
     {
         source: 'templates/docs/99_PROJECT_CONSTITUTION.md',
         target: 'docs/99_PROJECT_CONSTITUTION.md',

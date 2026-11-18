@@ -2,7 +2,7 @@
 
 Project health check in one command: config, database, git, and detected agent specs.
 
-> **Canonical path:** `spur self status`. The legacy `spur status` top-level form remains a hidden alias.
+> **Canonical path:** `spur self status`. The legacy `spur self status` top-level form remains a hidden alias.
 
 ## Usage
 

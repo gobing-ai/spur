@@ -12,16 +12,16 @@
 | `diagnostic` | High-volume / internal health event visible only when diagnostic toggle is on. |
 | `out-of-scope` | Emit is not part of the board runtime contract (CLI local bus, browser store, raw Node signal). |
 
-**Reachable-from-`spur serve`?** — *yes* when the canonical server `EventBus` reaches the
+**Reachable-from-`spur self serve`?** — *yes* when the canonical server `EventBus` reaches the
 emitter either directly or via an injected `events`/`systemBus` argument on a server-executed
 constructor; *partial* when the reach depends on a CLI/Workers-only code path; *no* when the
-emit lives entirely outside the `spur serve` runtime.
+emit lives entirely outside the `spur self serve` runtime.
 
 ## A. `@gobing-ai/ts-rule-engine`
 
 Source: `~/xprojects/ts-libs/packages/rule-engine/src/`
 
-| Event name            | Emit site                  | Bus owner                                 | Reachable from `spur serve`? | Desired tier   |
+| Event name            | Emit site                  | Bus owner                                 | Reachable from `spur self serve`? | Desired tier   |
 | --------------------- | -------------------------- | ----------------------------------------- | ---------------------------- | -------------- |
 | `rule.run.start`      | `engine.ts:135`            | `RuleEngineEvents` (`events` arg of ctor) | yes (via R3)                 | `default`      |
 | `rule.eval.start`     | `engine.ts:158`            | same                                      | yes (via R3)                 | `default`      |
@@ -39,7 +39,7 @@ Sources:
 `~/xprojects/ts-libs/packages/ai-runner/src/`,
 `~/xprojects/ts-libs/packages/runtime/src/process-executor.ts`.
 
-| Event name            | Emit site                       | Bus owner                                             | Reachable from `spur serve`? | Desired tier   |
+| Event name            | Emit site                       | Bus owner                                             | Reachable from `spur self serve`? | Desired tier   |
 | --------------------- | ------------------------------- | ----------------------------------------------------- | ---------------------------- | -------------- |
 | `agent.invoke.start`  | `ai-runner.ts:138`              | `AiRunnerOptions.events` (`AgentEvents`)              | yes (via R3)                 | `default`      |
 | `agent.invoke.exit`   | `ai-runner.ts:156`              | same                                                  | yes (via R3)                 | `default`      |
@@ -57,7 +57,7 @@ The server-side `AgentService` does NOT yet pass them — primary R3 fix for age
 
 Source: `~/xprojects/ts-libs/packages/dual-workflow-engine/src/`
 
-| Event name (engine native)   | Emit site                  | Bus owner                                            | Reachable from `spur serve`? | Desired tier   |
+| Event name (engine native)   | Emit site                  | Bus owner                                            | Reachable from `spur self serve`? | Desired tier   |
 | ---------------------------- | -------------------------- | ---------------------------------------------------- | ---------------------------- | -------------- |
 | `workflow.run.started`       | `run-lifecycle.ts:150`     | `WorkflowRunOptions.events` (`WorkflowEngineEvents`) | yes (via R3 — `runFile()`)   | `default`      |
 | `workflow.run.done`          | `run-lifecycle.ts:226`     | same                                                 | yes                          | `default`      |
@@ -129,7 +129,7 @@ Sources: `~/xprojects/ts-libs/packages/infra/src/`.
 ## G. `apps/cli` and `apps/web` (out-of-scope by design)
 
 - CLI emits land on CLI-local buses (`apps/cli/src/commands/workflow.ts:66` builds `WorkflowAppService`
-  with optional local `observabilityBus`, not the server bus). These are not wired into `spur serve`
+  with optional local `observabilityBus`, not the server bus). These are not wired into `spur self serve`
   runtime paths today.
 - Browser-local store notification emitters and Zustand store middleware are out-of-scope.
 
@@ -156,13 +156,13 @@ Sources: `~/xprojects/ts-libs/packages/infra/src/`.
 
 **Already in catalog and unchanged:** `task.*`, `feature.*`, `queue.*`, `scheduler.*`, `message.*`, `process.spawned`/`process.exited`/`process.stopped`, `workflow.run.started`, `workflow.run.finalized`, `workflow.phase`, `workflow.transition`, `workflow.action.started`, `workflow.action.finished`, `workflow.hitl.ask`, `workflow.hitl.response`.
 
-## I. Reachable-from-`spur serve` matrix (task 0226 F6)
+## I. Reachable-from-`spur self serve` matrix (task 0226 F6)
 
 > Verified 2026-07-08 against production source after F2/F3/F4/F7 wiring.
 > Classification: **reachable** = server bus receives the emit via injected `events`/`eventBus`;
 > **unreachable** = no production emit callsite on the server bus; **diagnostic-only** = emitted
 > on a separate `lifecycleBus`, not the main server bus; **conditional** = requires a
-> registration that `spur serve` does not perform.
+> registration that `spur self serve` does not perform.
 
 ### Server-bus-wired accessors (F2)
 
@@ -202,7 +202,7 @@ Sources: `~/xprojects/ts-libs/packages/infra/src/`.
 
 ### Gaps requiring follow-up
 
-1. **`queue.stats` — conditional.** `QueueStatsAction` exists but `spur serve`'s
+1. **`queue.stats` — conditional.** `QueueStatsAction` exists but `spur self serve`'s
    `registerSchedulerEntries` does not register it (no `createDefaultRegistry` call with
    `queueStatsDaoProvider`). To activate, wire the DAO provider into the scheduler registry
    and forward `eventsBus` as `systemBus`.

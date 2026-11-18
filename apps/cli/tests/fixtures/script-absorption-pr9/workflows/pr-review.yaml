@@ -1,7 +1,7 @@
 # PR-review workflow: deterministic spine for /sp:dev-pr-review (skill sp:pr-reviewing).
 # Authored for the @gobing-ai/ts-dual-workflow-engine state-machine schema
 # (initialState / states[].id / onEnter / top-level transitions), same family as
-# basic.yaml / task-pipeline.yaml. Seeded into projects by `spur init` (scaffold manifest).
+# basic.yaml / task-pipeline.yaml. Seeded into projects by `spur self init` (scaffold manifest).
 #
 # Shape: preflight → hygiene → precheck → push → ensure-pr → request → wait → collect → done
 #        (soft probes everywhere: red gates route to `failed`/`pending` via transitions,

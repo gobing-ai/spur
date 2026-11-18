@@ -1,5 +1,5 @@
 /**
- * G9 task 1336 — `spur serve` speaks A2A (HTTP+JSON binding, v1.0).
+ * G9 task 1336 — `spur self serve` speaks A2A (HTTP+JSON binding, v1.0).
  *
  * The failure modes come first (task Plan step 1): a mounted route with the endpoint off, a
  * write that sneaks past authentication, a duplicate message id that double-enqueues, an
@@ -401,7 +401,7 @@ describe('a2a module — GetTask reads the receipt (R4)', () => {
     test('state survives a restart because it is read from the store, not memory', async () => {
         const sent = (await (await sendMessage('m-restart')).json()) as { task: { id: string } };
         await seedRun(sent.task.id, 'exited');
-        // A second app over the SAME database stands in for a restarted `spur serve`.
+        // A second app over the SAME database stands in for a restarted `spur self serve`.
         const app2 = new Hono();
         const ctx = {
             cwd: tempDir,

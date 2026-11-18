@@ -24,18 +24,16 @@ import { registerBuilderCommand } from './commands/builder';
 import { registerDecisionCommand } from './commands/decision';
 import { registerFeatureCommand } from './commands/feature';
 import { registerHistoryCommand } from './commands/history';
-import { registerInitCommand } from './commands/init';
-import { registerMaintainCommand } from './commands/maintain';
 import { registerMcpCommand } from './commands/mcp';
 import { registerMessageCommand } from './commands/message';
-import { registerMigrateCommand } from './commands/migrate';
 import { registerProjectsCommand } from './commands/projects';
 import { registerRuleCommand } from './commands/rule';
 import { registerSelfCommand } from './commands/self';
 import { registerInstallCommand } from './commands/self/install';
+import { registerMigrateCommand } from './commands/self/migrate';
 
-import { registerServeCommand } from './commands/serve';
-import { registerStatusCommand } from './commands/status';
+import { registerServeCommand } from './commands/self/serve';
+import { registerStatusCommand } from './commands/self/status';
 import { registerTaskCommand } from './commands/task';
 import { registerTaskGateCommand } from './commands/task/gate';
 import { registerWorkflowCommand } from './commands/workflow';
@@ -141,7 +139,6 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 registerTaskGateCommand(program.command('task'), createCliContext({ ...context, spurConfig }));
             } else if (migrationCheck) {
                 const migrationContext = createCliContext(context);
-                registerMigrateCommand(program, migrationContext, { hidden: true });
                 registerMigrateCommand(program.command('self'), migrationContext);
             } else if (builderArtifact) {
                 registerBuilderCommand(program, createCliContext(context));
@@ -165,10 +162,9 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                     return 1;
                 }
                 const statusContext = createCliContext({ ...context, spurConfig });
-                registerStatusCommand(program, statusContext, { hidden: true });
                 registerStatusCommand(program.command('self'), statusContext);
             } else if (mcpBridge) {
-                // Server settings come from the app-layer env config (like `spur serve`), so the
+                // Server settings come from the app-layer env config (like `spur self serve`), so the
                 // bridge needs no project-config loader wiring.
                 registerMcpCommand(program, createCliContext(context));
             } else {
@@ -314,17 +310,10 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     registerProjectsCommand(program, context);
     registerRuleCommand(program, context);
 
-    // `self` is the visible home for the self-management verbs; the four legacy
-    // top-level nouns stay registered over the same builders as hidden aliases
-    // so existing scripts, workflow YAML, and habits keep working unchanged.
+    // Task 1388: `self` is the only home for init/maintain/migrate/serve/status — the hidden
+    // top-level aliases are gone, so one spelling per action.
     const selfCommand = program.command('self').summary('inspect and manage the Spur installation itself');
     registerSelfCommand(selfCommand, context);
-
-    registerInitCommand(program, context, { hidden: true });
-    registerMaintainCommand(program, context, { hidden: true });
-    registerMigrateCommand(program, context, { hidden: true });
-    registerServeCommand(program, context, { hidden: true });
-    registerStatusCommand(program, context, { hidden: true });
 
     registerTaskCommand(program, context);
     registerWorkflowCommand(program, context);

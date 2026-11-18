@@ -22,7 +22,7 @@ feature list; all open questions resolved in the feature draft)
 
 **Source of truth for:** module interface shapes (`ServerModule`, `WebModule`), middleware order,
 `ServerContext` wiring, oRPC contract shapes, layout component tree, module manifest format,
-error/output envelopes, `spur serve` config resolution, deployment-target divergence.
+error/output envelopes, `spur self serve` config resolution, deployment-target divergence.
 
 **Not the source of truth for:** the feature list and scope (that is
 `server-side-adjustment-feature-drafted.md`); decisions and one-line reasons (`00_ADR.md`); module
@@ -63,7 +63,7 @@ land in `04_DESIGN.md` in the same commit a command ships.
   `packages/app` services the CLI uses. The server never reads or writes markdown directly; it
   never owns a lock; it never owns a lifecycle transition — the write service does.
 6. **Cloudflare-default, local-capable — via `ts-runtime`, not by forking code.** The same source
-  compiles to a Cloudflare Worker (default deployment) and a local Bun binary (`spur serve`).
+  compiles to a Cloudflare Worker (default deployment) and a local Bun binary (`spur self serve`).
   Platform divergence is **never** expressed as `if (isCloudflare)` branches in app code; it lives
   exclusively behind `@gobing-ai/ts-runtime`'s `RuntimeFactory` abstraction (§2.1.1). **If the
   shared library cannot express a divergence cleanly, enhance the library first, then consume the
@@ -196,7 +196,7 @@ fixed in `createApp`:
 **Rationale for the order:**
 
 - `secureHeaders` first: every response gets security headers, including error responses.
-- Host guard before everything (local `spur serve` only; the Worker is behind a real domain):
+- Host guard before everything (local `spur self serve` only; the Worker is behind a real domain):
   `csrf()` trusts `new URL(c.req.url).origin`, which Bun derives from `Host`, so a rebinding page
   on `evil.test` → 127.0.0.1 would pass as same-origin. `middleware/host-guard.ts` answers 421
   unless `Host` is an IP literal, `localhost`, the `--host` bind name, or a `SPUR_CORS_ORIGINS` host.
@@ -699,7 +699,7 @@ graceful shutdown.
 `buildConfigFromEnv(env)` → `runNodeApplication({ config: serverBootstrapConfig(env), start })` →
 `Bun.serve({ fetch: createApp(appRt).fetch, port: config.server.port })`. The **only** new work is
 (a) capturing the `Bun.serve` handle so it can be drained, and (b) the SIGINT/SIGTERM handlers
-below. The serve entry is also extracted to `startServer()` for `spur serve` reuse (§4.3) — that
+below. The serve entry is also extracted to `startServer()` for `spur self serve` reuse (§4.3) — that
 extraction and these handlers are the entire S0/S1 change to this file.
 
 ```typescript
@@ -1354,12 +1354,12 @@ not a contract change.
 
 ---
 
-## 4. Board launcher — `spur serve` (S0)
+## 4. Board launcher — `spur self serve` (S0)
 
 ### 4.1 Command surface
 
 ```
-spur serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]
+spur self serve [--port <n>] [--host <addr>] [--no-open] [--cwd <path>] [--json]
 ```
 
 | Flag | Default | Source |
@@ -1392,7 +1392,7 @@ export const configSchema = z.object({
         .object({
             port: z.coerce.number().int().positive().default(3000),
             host: z.string().default('localhost'),          // new — HOST env
-            openBrowser: z.boolean().default(true),          // new — spur serve only
+            openBrowser: z.boolean().default(true),          // new — spur self serve only
             webDistPath: z.string().nullable().default(null),// new — local static-assets path (S5)
         })
         .default({ port: 3000, host: 'localhost', openBrowser: true, webDistPath: null }),
@@ -1416,12 +1416,12 @@ command handler — see the precedence chain below.
 **`config/config.example.yaml` addition (documents the env-backed keys):**
 
 ```yaml
-# ── Server (spur serve / apps/server) ──
+# ── Server (spur self serve / apps/server) ──
 # These map to configSchema.server; PORT / HOST env override; CLI flags override both.
 server:
   port: 3000          # ${PORT} env overrides
   host: localhost     # ${HOST} env; 0.0.0.0 for LAN access
-  openBrowser: true   # open board on start (spur serve only)
+  openBrowser: true   # open board on start (spur self serve only)
   webDistPath: null   # null = bundled web build; path = custom build location
 ```
 
@@ -1475,7 +1475,7 @@ options:
 1. **CLI depends on `@gobing-ai/spur-server`** (`apps/server`) — adds a workspace dep. The CLI
    imports `createApp` and runs `Bun.serve` itself.
 2. **Extract the serve entry to a shared function** — `apps/server/src/index.ts` exports a
-   `startServer(options)` function that both the CLI's `spur serve` and the standalone
+   `startServer(options)` function that both the CLI's `spur self serve` and the standalone
    `apps/server/src/index.ts` entry call.
 
 **Recommendation:** option 2 — extract `startServer` to `apps/server/src/serve.ts`. Both the
@@ -1528,7 +1528,7 @@ the server dev server which proxies to the web's Astro integration. The exact wi
 task-implementation detail; the design constraint is: **one port, one process, no CORS in dev**.
 
 **The standalone `apps/server/src/index.ts` entry remains** for the Bun-binary production path
-(`spur serve`, Docker, air-gapped). Vite is dev-only; production builds don't involve Vite for
+(`spur self serve`, Docker, air-gapped). Vite is dev-only; production builds don't involve Vite for
 the local-fallback path.
 
 ### 5.2 Production builds
@@ -1536,7 +1536,7 @@ the local-fallback path.
 | Target | Server build | Web build | Deploy |
 |---|---|---|---|
 | **Cloudflare (default)** | `@hono/vite-build/cloudflare-workers` bundles `worker.ts` | `astro build` → static files | `wrangler deploy` from `apps/server` |
-| **Local (fallback)** | `bun build --compile` → single binary | `astro build` → static files (served by Hono `serveStatic`) | `spur serve` or run the binary |
+| **Local (fallback)** | `bun build --compile` → single binary | `astro build` → static files (served by Hono `serveStatic`) | `spur self serve` or run the binary |
 
 **`apps/server/wrangler.toml` (revised for S5):**
 
@@ -1703,7 +1703,7 @@ apps/web/src/
 
 apps/cli/src/
   commands/
-    serve.ts                    # spur serve command (S0)
+    serve.ts                    # spur self serve command (S0)
 
 packages/contracts/src/
   task.ts                       # taskContract + DTOs (S4)
@@ -1730,7 +1730,7 @@ packages/contracts/src/
   key deferred with D1, §2.3.1.)
 - `config/config.example.yaml` — `server:` block; `d1Binding` key documented.
 - `apps/cli/src/index.ts` — register `registerServeCommand`.
-- `docs/04_DESIGN.md` — `spur serve` surface, server config keys (same commit the command ships).
+- `docs/04_DESIGN.md` — `spur self serve` surface, server config keys (same commit the command ships).
 
 **Upstream (`ts-libs` — prerequisite to S1, per enhance-first rule §2.1.1):**
 
@@ -1761,7 +1761,7 @@ none is a design blocker.
    **Benefit over current setup:** eliminates proxy drift, eliminates the two-process juggle,
    eliminates CORS config in dev. Production builds are unaffected (Vite is dev-only; production
    uses `bun build --compile` / `@hono/vite-build/cloudflare-workers`). The standalone
-   `apps/server/src/index.ts` entry remains for `spur serve`.
+   `apps/server/src/index.ts` entry remains for `spur self serve`.
 
 3. **Workers DB — RESOLVED + SCOPED OUT.** Cloudflare **D1** is the Workers DB (operator decision).
    This requires a `@gobing-ai/ts-db` `D1DbAdapter` enhancement, done in `ts-libs` first per the

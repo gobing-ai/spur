@@ -97,9 +97,9 @@ async function probeGateway(input: ProjectsViewInput): Promise<string | null> {
         });
         const body = (await response.json().catch(() => null)) as { gateway?: unknown } | null;
         if (response.ok && body?.gateway === true) return null;
-        return `localhost:${input.gatewayPort} answered ${response.status} but is not the gateway — start it with \`spur serve --gateway\``;
+        return `localhost:${input.gatewayPort} answered ${response.status} but is not the gateway — start it with \`spur self serve --gateway\``;
     } catch (error) {
-        return `no gateway is listening on localhost:${input.gatewayPort} — start it with \`spur serve --gateway\` (${reasonOf(error)})`;
+        return `no gateway is listening on localhost:${input.gatewayPort} — start it with \`spur self serve --gateway\` (${reasonOf(error)})`;
     }
 }
 

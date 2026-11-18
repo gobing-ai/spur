@@ -10,7 +10,7 @@ describe('CLI migrate and extracted domains', () => {
         const output = createCapturedOutput();
         const dbUrl = join(cwd, '.spur', 'test.db');
 
-        expect(await main(['migrate', '--json'], { cwd, output, dbUrl })).toBe(0);
+        expect(await main(['self', 'migrate', '--json'], { cwd, output, dbUrl })).toBe(0);
         const result = JSON.parse(output.messages.at(-1) ?? '{}') as { ok: boolean; applied: number };
         expect(result.ok).toBe(true);
         expect(result.applied).toBe(0);

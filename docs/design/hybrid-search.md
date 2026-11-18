@@ -82,7 +82,7 @@ index formats, index creation, bundling zg, remote embedding providers, the Clou
 ```text
 spur self search ─┐
 Board /search ────┼─► SearchService (packages/app/src/services/search.ts)
-spur init ────────┘        ├─ exact  → rg --json [-F] … (stable JSON events)
+spur self init ────────┘        ├─ exact  → rg --json [-F] … (stable JSON events)
                            ├─ fuzzy  → ZgAdapter (search-zg.ts) → zg --hybrid <q> --limit n -g …
                            └─ status → Bun.which('rg'|'zg') + `zg --version` + `zg --status`
 ```
@@ -242,7 +242,7 @@ spur self search <query> [--mode exact|fuzzy|auto] [--scope docs|code|all]
 
 **Init** (R12):
 
-- `spur init` appends `.zvec-grep/` to `.gitignore`, beside the `.spur/context/` entry. The
+- `spur self init` appends `.zvec-grep/` to `.gitignore`, beside the `.spur/context/` entry. The
   append is idempotent and runs in every mode, including `--minimal`.
 - It calls `searchStatus(cwd)` and prints one readiness line. The `--json` payload gains
   `search: SearchStatus`.

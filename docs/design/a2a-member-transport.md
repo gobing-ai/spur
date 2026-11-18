@@ -20,7 +20,7 @@ tags: [a2a, agent, fleet, dispatch]
 
 Two problems, in the operator's order of importance:
 
-1. **Fleet is too heavy for daily use.** A dispatch needs `spur serve` running, a started member
+1. **Fleet is too heavy for daily use.** A dispatch needs `spur self serve` running, a started member
    (`spur agent start <spec-id>`), and a model of spec ids, occupants, roles, executors, strategy and
    guests. This repository's own `.spur/config.yaml` ships `agent.fleet.enabled: false`.
 2. **Spur cannot reach an agent it does not run itself** — another machine, another project, or an
@@ -86,7 +86,7 @@ transport, a surface or a daemon.
 
 ```text
 dispatch to <member>
-  ├─ member is live under spur serve      → keyed inbox request → warm turn          (today's fleet)
+  ├─ member is live under spur self serve      → keyed inbox request → warm turn          (today's fleet)
   ├─ member declares `a2a`                → keyed inbox request → A2A turn           (new)
   │                                         or, with no serve, the A2A turn in-process
   └─ member is local and not live         → cold subprocess with the member's executor (default-on)
@@ -94,7 +94,7 @@ every rung ends in the same receipt, gates and trace
 ```
 
 The third rung is the daily-use fix: a dispatch with no daemon running works, slower, instead of
-failing. `spur serve` becomes an accelerator, not a prerequisite. The ladder falls through only on a
+failing. `spur self serve` becomes an accelerator, not a prerequisite. The ladder falls through only on a
 definite `not-started`; it never re-dispatches after `outcome-unknown`.
 
 ### 3.3 The A2A turn
@@ -118,7 +118,7 @@ letting the CLI synthesize a different message id. The keyed inbox id and the A2
 stay identical.
 
 `A2aMemberTransport` (`packages/app/src/services/a2a-member-transport.ts`) is the only module that
-owns `card get`, `send`, `task get` and `task cancel`. With no `spur serve`, the dispatch command
+owns `card get`, `send`, `task get` and `task cancel`. With no `spur self serve`, the dispatch command
 claims the just-enqueued message by id and runs that function in-process; a live member runs the same
 function for its claimed messages. A stored `remote_task_id`/`remote_context_id` on the existing
 `coordination_runs` row (migrations 0055/0056) suppresses `send` on every restart, and the loop's local
@@ -144,7 +144,7 @@ errors are redacted before they reach receipts or logs. Artifact text lands at
 and read-only refusal. Receipt: `docs/reports/a2a-member-e2e-receipt.json` (9/9).
 
 A restarted loop that finds a stored `taskId` reads that task; it never sends again. The same
-function runs in-process when no `spur serve` is up.
+function runs in-process when no `spur self serve` is up.
 
 ### 3.4 Ownership
 
@@ -161,9 +161,9 @@ function runs in-process when no `spur serve` is up.
 No new table, verb, executor surface or contract DTO. `ExecutorDispatchSurface` keeps its three
 values.
 
-### 3.5 Phase 2 (feature G9): `spur serve` speaks A2A — contract (task 1336, built)
+### 3.5 Phase 2 (feature G9): `spur self serve` speaks A2A — contract (task 1336, built)
 
-Each declared, enabled member gets an Agent Card served by `spur serve`; `SendMessage` becomes a
+Each declared, enabled member gets an Agent Card served by `spur self serve`; `SendMessage` becomes a
 keyed inbox request (`messageId` → `request_key`) and `GetTask` reads `coordination_runs`. Two Spur
 installs then form a cross-machine fleet with A2A as the only wire and the inbox as the ledger at
 both ends, and any A2A client can hand work to a Spur member. A card extension lets a Spur member
@@ -197,7 +197,7 @@ cross-site simple request cannot set — so the rule protects nothing there, and
 the client: the unmodified `a2a` CLI sends no `Content-Type` on `task cancel`, which is exactly the
 shape `csrf()` rejects.
 
-**Proof.** `bun run a2a-serve-e2e` drives a real `spur serve` with the real `a2a` CLI
+**Proof.** `bun run a2a-serve-e2e` drives a real `spur self serve` with the real `a2a` CLI
 (`card get`, `send --async`, `task get`, `task cancel`) and writes
 `docs/reports/a2a-serve-e2e-receipt.json`. The member loop itself is not run there — the
 `completed`/`failed` arms seed the run rows a member writes; the two-install dispatch is G9 task
@@ -275,7 +275,7 @@ exists and the next action.
   own; inside one machine the inbox is faster, warm and durable. Uniform A2A for local members would
   mean running one cold `a2a server --exec` per agent and losing ADR-145.
 - **Default cold fallback.** Zero-setup dispatch costs a cold start per turn. The alternative
-  (auto-starting `spur serve` from a CLI command) hides a daemon behind a one-shot command.
+  (auto-starting `spur self serve` from a CLI command) hides a daemon behind a one-shot command.
 - **Shelling to `a2a` vs. an SDK.** No new dependency; cost is a process per call and a parser pinned
   by golden fixtures that fails loudly on an unknown shape.
 - **Read-only default.** A card without the write-fencing extension takes no coding work at all. The
@@ -290,5 +290,5 @@ Operator decisions (2026-11-14, ADR-051 consent):
    prerequisite (task 1334).
 3. **Accepted, in G8** — `join`, `leave`, `wait` and `report` are hidden from default
    `spur agent --help` and keep working (task 1335).
-4. **Planned as feature G9** — `spur serve` as an A2A server (tasks 1336, 1337; P3 until a caller
+4. **Planned as feature G9** — `spur self serve` as an A2A server (tasks 1336, 1337; P3 until a caller
    exists).

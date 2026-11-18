@@ -7,11 +7,11 @@ import { resolveWorkflowFile } from '@gobing-ai/spur-app';
 import { type BuilderConfig, getEnvVars, spurConfigSchema } from '@gobing-ai/spur-config';
 import { bundledConfigRoot, parseConfigYaml } from '@gobing-ai/spur-config/loader';
 import { TASK_VARIANTS } from '@gobing-ai/spur-domain';
-import { renderBuilderBlock } from '../../src/commands/init';
-import { SCAFFOLD_MANIFEST } from '../../src/config/scaffold-manifest';
-import { main } from '../../src/index';
-import type { CommandOutput } from '../../src/output';
-import { createTempProject, createTempProjectStackNeutral, runCli } from '../helpers';
+import { renderBuilderBlock } from '../../../src/commands/self/init';
+import { SCAFFOLD_MANIFEST } from '../../../src/config/scaffold-manifest';
+import { main } from '../../../src/index';
+import type { CommandOutput } from '../../../src/output';
+import { createTempProject, createTempProjectStackNeutral, runCli } from '../../helpers';
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
@@ -31,7 +31,7 @@ async function isolatedOptions(cwd: string) {
  */
 async function initAndParse(cwd: string, args: string[] = []): Promise<{ text: string; builder: BuilderConfig }> {
     const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-    const result = await runCli(['init', '--minimal', ...args], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir });
+    const result = await runCli(['self', 'init', '--minimal', ...args], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir });
     expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
     const text = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
@@ -45,7 +45,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules', 'recommended-pre-check.yaml'))).toBe(true);
@@ -70,7 +70,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         // Nested rule categories (full tree). Rules stay per-project by operator
         // ruling — they resolve against project folder structure (A4).
@@ -87,7 +87,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         expect(existsSync(join(cwd, '.spur', 'workflows'))).toBe(false);
 
         const resolved = resolveWorkflowFile(cwd, '.spur/workflows/task-pipeline.yaml');
@@ -108,7 +108,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         // Dead natural-path duplicate of the manifest remap above — zero readers.
         expect(existsSync(join(cwd, '.spur', 'templates', 'task', 'standard.md'))).toBe(false);
@@ -127,7 +127,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const config = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
         expect(config).toContain('version: "1.2"');
@@ -137,7 +137,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const config = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
         // A fresh project opts in module by module: the declaration contract ships empty, never
@@ -150,7 +150,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options, globalDir } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         // Bundled ts-rule-engine categories land in the isolated global root so any
         // project's `rule run --preset recommended-pre-check` resolves a real ruleset.
@@ -175,7 +175,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init', '--minimal'], options)).toBe(0);
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
 
         expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
         expect(existsSync(join(cwd, '.spur', 'rules'))).toBe(false);
@@ -188,11 +188,11 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         // A second plain init converges (task 0649 R1) instead of refusing — it
         // seeds nothing new and writes no config, but exits 0.
-        expect(await main(['init'], options)).toBe(0);
-        expect(await main(['init', '--force'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
+        expect(await main(['self', 'init', '--force'], options)).toBe(0);
     });
 
     test('converge re-init leaves the existing config untouched', async () => {
@@ -200,12 +200,12 @@ describe('init command', () => {
         const { options } = await isolatedOptions(cwd);
         const configPath = join(cwd, '.spur', 'config.yaml');
 
-        expect(await main(['init', '--name', 'original'], options)).toBe(0);
+        expect(await main(['self', 'init', '--name', 'original'], options)).toBe(0);
         const before = await Bun.file(configPath).text();
 
         // A converging re-run must NOT overwrite the project config (R2) — it writes
         // no config at all, whatever --name is passed.
-        expect(await main(['init', '--name', 'clobbered'], options)).toBe(0);
+        expect(await main(['self', 'init', '--name', 'clobbered'], options)).toBe(0);
         const after = await Bun.file(configPath).text();
 
         expect(after).toBe(before);
@@ -222,7 +222,7 @@ describe('init command', () => {
             dbUrl: ':memory:' as const,
         };
 
-        expect(await main(['init', '--json', '--name', 'fixture'], options)).toBe(0);
+        expect(await main(['self', 'init', '--json', '--name', 'fixture'], options)).toBe(0);
         const result = JSON.parse(messages.at(-1) ?? '{}') as {
             ok: boolean;
             project: string;
@@ -239,7 +239,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         // Remove a seeded rule file to simulate a partially-converged project.
         const rulesDir = join(cwd, '.spur', 'rules');
         const seeded = (await Bun.file(join(rulesDir, 'task.md')).exists()) ? join(rulesDir, 'task.md') : null;
@@ -247,7 +247,7 @@ describe('init command', () => {
         await Bun.write(seeded, '');
 
         // A converging re-run seeds the missing asset and exits 0.
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         expect((await Bun.file(seeded).text()).length).toBeGreaterThan(0);
     });
 
@@ -256,11 +256,11 @@ describe('init command', () => {
         const { options, globalDir } = await isolatedOptions(cwd);
         const globalConfigPath = join(globalDir, 'config.yaml');
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         // Simulate an operator-owned pre-A4 global config.
         await Bun.write(globalConfigPath, 'name: my-machine\nworkflows: {}\n');
 
-        expect(await main(['init', '--adopt-global-config'], options)).toBe(0);
+        expect(await main(['self', 'init', '--adopt-global-config'], options)).toBe(0);
 
         // A timestamped backup exists with the previous contents.
         const backups = (await Bun.$`ls ${globalDir}`.text()).split('\n').filter((p) => p.includes('config.yaml.bak-'));
@@ -276,12 +276,12 @@ describe('init command', () => {
         const { options, globalDir } = await isolatedOptions(cwd);
         const globalConfigPath = join(globalDir, 'config.yaml');
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         await Bun.write(globalConfigPath, 'name: my-machine\n');
 
-        expect(await main(['init', '--adopt-global-config'], options)).toBe(0);
+        expect(await main(['self', 'init', '--adopt-global-config'], options)).toBe(0);
         await Bun.write(globalConfigPath, 'name: my-machine\n');
-        expect(await main(['init', '--adopt-global-config'], options)).toBe(0);
+        expect(await main(['self', 'init', '--adopt-global-config'], options)).toBe(0);
 
         const backups = (await Bun.$`ls ${globalDir}`.text()).split('\n').filter((p) => p.includes('config.yaml.bak-'));
         expect(backups.length).toBe(2);
@@ -298,12 +298,12 @@ describe('init command', () => {
             dbUrl: ':memory:' as const,
         };
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         // Pre-A4 global config carrying project-shaped keys.
         await Bun.write(join(globalDir, 'config.yaml'), 'name: my-machine\nbootstrap: {}\nrules: {}\n');
 
         // Detection reports even without the opt-in flag.
-        expect(await main(['init', '--json'], options)).toBe(0);
+        expect(await main(['self', 'init', '--json'], options)).toBe(0);
         const result = JSON.parse(messages.at(-1) ?? '{}') as { misplacedGlobalKeys?: string[]; converged?: boolean };
         expect(result.converged).toBe(true);
         expect(result.misplacedGlobalKeys).toEqual(['name', 'bootstrap', 'rules']);
@@ -320,10 +320,10 @@ describe('init command', () => {
             dbUrl: ':memory:' as const,
         };
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         await Bun.write(join(globalDir, 'config.yaml'), 'agent:\n  default: coder\nworkflows: {}\n');
 
-        expect(await main(['init', '--json'], options)).toBe(0);
+        expect(await main(['self', 'init', '--json'], options)).toBe(0);
         const result = JSON.parse(messages.at(-1) ?? '{}') as { misplacedGlobalKeys?: string[] };
         expect(result.misplacedGlobalKeys).toBeUndefined();
     });
@@ -367,7 +367,7 @@ describe('init command', () => {
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
         // task create reads the scaffolded template + section-matrix; failure here
         // means the scaffold is internally inconsistent.
         expect(await main(['task', 'create', '--skip-ready', 'probe-task', '--json'], options)).toBe(0);
@@ -443,7 +443,7 @@ describe('init command', () => {
         // A bun lockfile appears; a plain re-init converges and rewrites nothing.
         await Bun.write(join(cwd, 'bun.lock'), '');
         const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-        expect((await runCli(['init', '--minimal'], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir })).code).toBe(0);
+        expect((await runCli(['self', 'init', '--minimal'], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir })).code).toBe(0);
         expect(await readFile(configPath, 'utf8')).toBe(first.text);
 
         // --force regenerates it with the fresh detection.

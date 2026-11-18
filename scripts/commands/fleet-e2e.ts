@@ -623,14 +623,14 @@ const PRE_1081_AGENT_HELP = [
     '',
     'Commands:',
     '  list [options]             List detected coding agents, or agent specs with --specs.',
-    '  status [options]           Show agent specs with live process status and member session (requires spur serve).',
+    '  status [options]           Show agent specs with live process status and member session (requires spur self serve).',
     '  usage [options]            Run-once provider usage capture (codexbar) that refreshes quota-owned executor availability.',
     '  doctor [options] [agent]   Check agent readiness.',
     '  run [options] <prompt>     Execute a prompt or slash command via a coding agent.',
     '  wait [options] [specId]    Wait for a pinned occupant run to reach a lifecycle state. Address by spec id or --role.',
     '  trace [options] <runId>    Print one execution record: the run, its dispatch lineage, session ids and streams.',
-    '  start [options] <spec-id>  Start a supervised agent process (requires spur serve).',
-    '  stop [options] <spec-id>   Stop a supervised agent process (requires spur serve).',
+    '  start [options] <spec-id>  Start a supervised agent process (requires spur self serve).',
+    '  stop [options] <spec-id>   Stop a supervised agent process (requires spur self serve).',
     '  help [command]             display help for command',
     '',
 ].join('\n');
@@ -3408,7 +3408,7 @@ export async function runFleetE2e(args: string[]): Promise<number> {
             // R4 skip arm: lay down the pre-1081 fixture CLI the guest-join leg will interrogate.
             if (guestJoinFixture) writeFileSync(fixturePath, pre1081FixtureSource());
             db = await createMigratedDb({ url: join(scratch, '.spur/spur.db') });
-            // The same reconciliation `spur serve` runs at start (apps/server/src/serve.ts:959-975):
+            // The same reconciliation `spur self serve` runs at start (apps/server/src/serve.ts:959-975):
             // the declared strategy reaches the persisted row before any loop resumes on it.
             const runtime = new StrategyRuntime({ openDb: async () => db } as never);
             await runtime.reconcileStrategy(scratch, 'gtd');

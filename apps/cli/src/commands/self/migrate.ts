@@ -8,9 +8,9 @@ import {
     openExistingDb,
     repairImporterSchemaVersion,
 } from '@gobing-ai/spur-domain';
-import { type CliContext, resolveDatabaseUrl } from '../context';
-import { toEnvelopeJson } from '../output';
-import { SHARED_OPTIONS } from './shared-options';
+import { type CliContext, resolveDatabaseUrl } from '../../context';
+import { toEnvelopeJson } from '../../output';
+import { SHARED_OPTIONS } from '../shared-options';
 
 /** Outcome of the read-only importer-schema check (`spur self migrate --check`). */
 export type ImporterSchemaCheckResult =

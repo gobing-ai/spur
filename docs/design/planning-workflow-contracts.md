@@ -519,7 +519,7 @@ guard. No `record → done` proof-block assertion remains.
 `phasing(HITL) → feature-id → design-gen → design-approval(HITL) → handoff`. Planning is absorbed
 into the canonical idea/dev-plan path: `/sp:dev-plan` routes through `idea-pipeline.yaml`, the
 scaffold manifest excludes `workflows/planning-pipeline.yaml` through `RETIRED_PROJECT_SEEDS`, and
-no skill, README, or help table points at it. A fresh `spur init` therefore never receives a second
+no skill, README, or help table points at it. A fresh `spur self init` therefore never receives a second
 planning graph.
 
 <a id="76-task-dtos-orpc-contract"></a>

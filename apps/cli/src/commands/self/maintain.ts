@@ -2,9 +2,9 @@ import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
 import { type DatabaseMaintenanceResult, maintainDatabase } from '@gobing-ai/spur-domain';
-import type { CliContext } from '../context';
-import { toEnvelopeJson } from '../output';
-import { SHARED_OPTIONS } from './shared-options';
+import type { CliContext } from '../../context';
+import { toEnvelopeJson } from '../../output';
+import { SHARED_OPTIONS } from '../shared-options';
 
 /** Register `spur self maintain` command (optionally hidden from the top-level help listing). */
 export function registerMaintainCommand(

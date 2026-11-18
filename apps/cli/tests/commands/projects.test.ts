@@ -830,7 +830,7 @@ describe('spur projects CLI command', () => {
     });
 
     // `projects add` is also the re-register path: it must not wipe a live port
-    // that `spur serve` recorded (2026-10-22, knowledge-kit 3003 -> 0).
+    // that `spur self serve` recorded (2026-10-22, knowledge-kit 3003 -> 0).
     it('should preserve an existing live port when re-adding a registered project', async () => {
         const registry = new ProjectRegistry(projectsFile);
         await registry.upsert({ name: 'KeepPort', path: projectPath, port: 3007, host: 'localhost' });

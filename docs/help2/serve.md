@@ -3,7 +3,7 @@
 Start the Spur web server for the current project: the local UI for boards, runs, and team
 status.
 
-> **Canonical path:** `spur self serve`. The legacy `spur serve` top-level form remains a hidden alias.
+> **Canonical path:** `spur self serve`. The legacy `spur self serve` top-level form remains a hidden alias.
 
 ## Usage
 

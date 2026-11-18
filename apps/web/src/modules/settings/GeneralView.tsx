@@ -191,7 +191,7 @@ export default function GeneralView() {
                             </p>
                             <div className="pt-2">
                                 <code className="px-3 py-1.5 rounded-lg bg-spur-surface border border-spur-border font-mono text-xs text-spur-accent">
-                                    {activeSubtab === 'global' ? 'spur init --global' : 'spur init'}
+                                    {activeSubtab === 'global' ? 'spur self init --global' : 'spur self init'}
                                 </code>
                             </div>
                         </div>

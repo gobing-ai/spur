@@ -6,7 +6,7 @@ import { buildConfigFromEnv, isLocalHost, resolveProjectPrefix } from '@gobing-a
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
 import type { CommandOutput } from '../output';
-import { resolveServeCwd } from './serve';
+import { resolveServeCwd } from './self/serve';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
@@ -16,7 +16,7 @@ import { SHARED_OPTIONS } from './shared-options';
  * no tool/resource execution here (anti-pattern), the endpoint owns the whole protocol.
  *
  * Server settings (`server.mcp.authEnv`, ports) read from the same app-layer env config as
- * `spur serve` (`buildConfigFromEnv`) — the server config surface is env-scoped, not project-file.
+ * `spur self serve` (`buildConfigFromEnv`) — the server config surface is env-scoped, not project-file.
  */
 
 /** Mirrors the server adapter's `MIN_MCP_PROTOCOL_VERSION` (`apps/server/src/modules/mcp/protocol.ts`);

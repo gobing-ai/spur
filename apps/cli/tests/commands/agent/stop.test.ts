@@ -1,6 +1,6 @@
 /**
  * Supervisor-backed agent verbs and `task update --assignee` from the CLI boundary:
- * - `agent start|stop` POST to the `spur serve` supervisor and surface its errors.
+ * - `agent start|stop` POST to the `spur self serve` supervisor and surface its errors.
  * - `agent list --specs` merges live run status from the server, falling back to stopped.
  * - `task update --assignee` writes frontmatter via AgentCoordinationService.assignTask and persists
  *   `task.assigned` (0371 R6; renamed by 0860 R2).

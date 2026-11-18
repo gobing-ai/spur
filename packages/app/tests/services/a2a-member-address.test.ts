@@ -86,7 +86,7 @@ describe('1395 R2: project member → gateway card URL', () => {
 
     test('a gateway that is not answering says how to start one', async () => {
         const resolved = await resolveProjectCardTarget(deps({ fetchImpl: nothingListening }));
-        expect(resolved).toEqual({ error: expect.stringContaining('spur serve --gateway') });
+        expect(resolved).toEqual({ error: expect.stringContaining('spur self serve --gateway') });
     });
 
     test('a foreign listener on the gateway port is not accepted as the gateway', async () => {

@@ -58,7 +58,7 @@ adjustments included — before wave implementation. `deferred` items return in 
    skill territory per ADR-016/ADR-023, not CLI territory. C01–C03 re-marked `fixed-need`: a
    `plugins/sp` fat skill drives `spur agent run` + the deterministic verbs; the CLI validates
    every LLM output before write.
-7. **`spur serve` deferred (2026-06-11 operator review).** The board launcher belongs to the
+7. **`spur self serve` deferred (2026-06-11 operator review).** The board launcher belongs to the
    server/web design task (ADR-021 consequence b). X03 re-dispositioned accordingly.
 8. **Lifecycle mechanism corrected (2026-06-11 operator review).** Task/feature lifecycles run on
    `spur workflow` (ADR-022), not a local static transition table. A04/B07 re-marked; D08's
@@ -124,7 +124,7 @@ Spec (operator-feedback doc).
 | C02 | BDD scenario generation — LLM generates Gherkin from feature description | fixed-need | **Correction:** skill step via `spur agent run`; output gated by the shared BDD validator (X01) before write. |
 | C03 | Feature-to-task decomposition — feature AC → task files linked via `feature-id` | fixed-need | **Correction:** skill step over A08 batch-create; replaces the `rd3:task-decomposition` output contract in lockstep with the new schema (review §5). |
 | C04 | Task-to-spec traceability validation | fixed-need | **Correction:** traceability checks live in `spur task check` (A07) and `spur feature check` (B08). One validation surface; no forwarding verbs (lean-CLI preference, ADR-016 logic). |
-| C05 | Pipeline status overview — active features, tasks, blockers | deferred | `INDEX.md` + `kanban.md` + `spur status` cover the overview initially; a dedicated view returns with the dashboards (E04). |
+| C05 | Pipeline status overview — active features, tasks, blockers | deferred | `INDEX.md` + `kanban.md` + `spur self status` cover the overview initially; a dedicated view returns with the dashboards (E04). |
 | C06 | Brainstorm as a standalone CLI step | **rejected** | Per the ADR-016 decision test: brainstorm is fuzzy-intent LLM work — it stays a prompt skill in `plugins/sp` delegating to `spur agent run`. A dedicated CLI verb is a forwarding layer with no deterministic value. (The skill itself is retained — see I05.) |
 
 ## D. Task Execution Engine
@@ -328,7 +328,7 @@ to the server/web design task (global correction #7).
 |---|---|---|---|
 | X01 | **Shared BDD validator engine** — Gherkin-subset parser + checklist (`- [ ]`) parser + AC-coverage check + tag-filter hooks; AST aligned with `@cucumber/gherkin` types (BDD research §7.2, no runtime dep) | One implementation behind A14, B08, C02-output validation, and the A07 traceability check — instead of four call sites growing private parsers. Port of `validate-feature.ts` (K08). Generic by nature → ts-libs candidate (`@gobing-ai/ts-bdd` or a ts-utils subpath) per the shared-library evolution rule. | ts-libs package (preferred) or Spur package until a second consumer |
 | X02 | **Sub-task hierarchy — single `parent_wbs` convention** — schema field (in A18), check validation, `spur task list --parent <wbs>`, grouped kanban rendering | Review backlog #10 (P2): three competing unenforced conventions exist in the corpus; the inventory dropped this item entirely. Costs little while A18/A17 are open; expensive to retrofit later. | task domain + A17 normalization |
-| X03 | **Local board launcher** — the `tasks server &` replacement; how the operator starts the board from any project | **Deferred (2026-06-11):** belongs to the Stage-D server/web design task (ADR-021 consequence b) — whether it's a `spur serve` verb wrapping the `packages/app` server factory, or running `apps/server` directly, is decided there. Not batch scope. | server/web design task |
+| X03 | **Local board launcher** — the `tasks server &` replacement; how the operator starts the board from any project | **Deferred (2026-06-11):** belongs to the Stage-D server/web design task (ADR-021 consequence b) — whether it's a `spur self serve` verb wrapping the `packages/app` server factory, or running `apps/server` directly, is decided there. Not batch scope. | server/web design task |
 | X04 | **Task lifecycle event contract** — typed event map for task/feature transitions on the engine's EventBus seam (ADR-022) | The architectural prep the operator asked to do now (Point 10): SSE (E08) consumes it in this batch; scheduler (D07) attaches later with zero rework. The seam comes from the engine; this item defines the Spur-side typed contract. | lifecycle integration (A04/B07/E11) |
 | X05 | **Doc sync as a scheduled item** — `04_DESIGN.md` gains task/feature/plan/serve command + schema sections in the same commits the commands land; `05_FEATURES.md` rows track status | AGENTS.md mandates same-commit `04` sync for any command/config/schema change; making it an explicit batch item ensures it is scheduled, not remembered. | docs |
 

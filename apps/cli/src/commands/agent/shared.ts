@@ -45,7 +45,7 @@ import { makeCheckService, makeService } from '../task';
  */
 export const DEFAULT_TRACE_FOLLOW_TIMEOUT_MS = 600_000;
 
-// ── Injectable fetch seam for the `spur serve` supervisor calls ───────
+// ── Injectable fetch seam for the `spur self serve` supervisor calls ───────
 export let _testFetch: typeof fetch | undefined;
 
 /** Replace the server fetch for the current test. Call resetAgentServerFetchForTesting in cleanup. */
@@ -65,7 +65,7 @@ export function resetAgentServerFetchForTesting(): void {
 export const DEFAULT_SERVER = 'http://localhost:3000/api';
 
 /**
- * This project's `spur serve` API URL (1088 R1). `spur serve` records its port in the project
+ * This project's `spur self serve` API URL (1088 R1). `spur self serve` records its port in the project
  * registry (`ProjectRegistry.setPort`), so an entry with `port > 0` names the serve that owns
  * THIS project; the hard-coded 3000 default pointed `agent status|stop|start` at a different
  * project's serve (or nothing at all) and reported every spec `stopped` while loops ran.
@@ -277,7 +277,7 @@ export interface LiveProcess {
     session?: MemberSessionObservation;
 }
 
-/** Live process table from the `spur serve` supervisor, keyed by spec id; null when the server is unreachable or answers non-OK. */
+/** Live process table from the `spur self serve` supervisor, keyed by spec id; null when the server is unreachable or answers non-OK. */
 export async function fetchServerProcesses(server: string): Promise<Map<string, LiveProcess> | null> {
     return fetchAgentProcesses(server, { fetchImpl: _testFetch ?? fetch });
 }
@@ -333,7 +333,7 @@ export async function runAgentLifecycle(
         writeJsonError(
             context.output,
             options,
-            `Cannot reach server at ${options.server} — is spur serve running? (${err instanceof Error ? err.message : String(err)})`,
+            `Cannot reach server at ${options.server} — is spur self serve running? (${err instanceof Error ? err.message : String(err)})`,
             'INTERNAL_ERROR',
         );
         return 1;
@@ -545,7 +545,7 @@ export function parseTimeout(raw: string | boolean | undefined): number | undefi
 /**
  * The declaration + liveness + dispatch seams behind a named-member dispatch (1333, ADR-148).
  *
- * Liveness is read from `spur serve` (`GET /api/processes`) — the same probe `spur agent
+ * Liveness is read from `spur self serve` (`GET /api/processes`) — the same probe `spur agent
  * status` uses, so "no daemon" reads as "not live" instead of an error, and the ladder simply
  * takes the cold rung. Nothing here starts a server.
  */
@@ -563,7 +563,7 @@ export function projectCardRefs(
 /**
  * The declaration + liveness + dispatch seams behind a named-member dispatch (1333, ADR-148).
  *
- * Liveness is read from `spur serve` (`GET /api/processes`) — the same probe `spur agent
+ * Liveness is read from `spur self serve` (`GET /api/processes`) — the same probe `spur agent
  * status` uses, so "no daemon" reads as "not live" instead of an error, and the ladder simply
  * takes the cold rung. Nothing here starts a server.
  */

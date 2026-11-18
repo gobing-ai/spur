@@ -14,7 +14,7 @@ authority: derived (ADR-151 wins on conflict)
 
 ## 1. Problem
 
-Each local `spur serve` binds its own port, allocated from 3000–3999 and rewritten to `0` on stop
+Each local `spur self serve` binds its own port, allocated from 3000–3999 and rewritten to `0` on stop
 (`packages/app/src/services/project-registry.ts:400`). A Cloudflare tunnel ingress rule names a fixed
 port, so every restart can break remote access, and the live registry already shows two local
 entries claiming 3007. Serves are tied to terminals; nothing restarts them at login.
@@ -23,7 +23,7 @@ entries claiming 3007. Serves are tied to terminals; nothing restarts them at lo
 
 | Topic | Decision | Rejected |
 | --- | --- | --- |
-| Shape | A **gateway**: one long-lived process on one fixed port reverse-proxies `/<prefix>/*` to each local project's own `spur serve` on an internal loopback port | One multi-tenant `spur serve` (DB, fleet supervisor, job worker, scheduler, quota consumer and owner lock are process-scoped in `apps/server/src/serve.ts`; XL rewrite, one failure domain) |
+| Shape | A **gateway**: one long-lived process on one fixed port reverse-proxies `/<prefix>/*` to each local project's own `spur self serve` on an internal loopback port | One multi-tenant `spur self serve` (DB, fleet supervisor, job worker, scheduler, quota consumer and owner lock are process-scoped in `apps/server/src/serve.ts`; XL rewrite, one failure domain) |
 | Routing key | Path prefix per local entry (requested form) | Host-based `<slug>.localhost` / wildcard tunnel hostname — no base-path work, but wildcard DNS and tunnel config; fallback only if §5 regresses |
 | Adaptation | The **gateway** adapts requests and responses (host guard, CSRF, `Host`/`Origin` rewrite, HTML/`Location` rebasing). Project serves stay byte-for-byte unchanged and see a plain loopback request | Serve trusts `X-Forwarded-*` from loopback peers and injects the base itself (N serves to change, version skew between gateway and older serves, header-trust surface) |
 | Remote entries | Untouched: `host` + `port`, never proxied | Proxying remote hosts through the gateway |

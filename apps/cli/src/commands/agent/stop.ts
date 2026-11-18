@@ -7,7 +7,7 @@ import { resolveAgentServer, runAgentLifecycle } from './shared';
 export function registerAgentStopCommand(agent: Command, context: CliContext): void {
     agent
         .command('stop')
-        .description('Stop a supervised agent process (requires spur serve).')
+        .description('Stop a supervised agent process (requires spur self serve).')
         .argument('<spec-id>', 'Agent spec id')
         .option(
             '--server <url>',

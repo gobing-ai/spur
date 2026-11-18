@@ -154,7 +154,7 @@ doc-tripwire → metrics-record → branch-cleanup? → done | skipped | failed`
 ## 4. Contract and compatibility
 
 - **Breaking:** projects that override or invoke `feature-verification.yaml`, `pr-review.yaml` or
-  `wayfinder-resolution.yaml` by name. `spur init` copies bundled config into `~/.config/spur/` and
+  `wayfinder-resolution.yaml` by name. `spur self init` copies bundled config into `~/.config/spur/` and
   never deletes (`apps/cli/src/commands/init.ts:179`), so an existing install keeps a stale seeded
   copy that `spur workflow run <deleted>.yaml` still resolves; a fresh install fails with
   definition-not-found. CHANGELOG `BREAKING CHANGE` note: migrate verification overrides to

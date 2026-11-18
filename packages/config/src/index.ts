@@ -696,7 +696,7 @@ const FleetMemberEntrySchema = FleetMemberSchema.superRefine((member, ctx) => {
  * (0835/ADR-116 carrier change) and the retired `agent.team` roster.
  *
  * - `enabled` — the single fleet switch; gates materialization and autostart at
- *   `spur serve`. Default `false`: declaring a roster must not start processes
+ *   `spur self serve`. Default `false`: declaring a roster must not start processes
  *   by accident.
  * - `strategy` — the dispatch-strategy SSOT, reconciled into `project_strategy`
  *   at serve start (0859).

@@ -35,7 +35,7 @@ export interface DetachedServeSpawnOptions {
 }
 
 /**
- * Spawn function for detached `spur serve`.
+ * Spawn function for detached `spur self serve`.
  *
  * May be sync or async. Tests inject a fake — never reassign global `Bun.spawn`
  * (on Bun, execa/ProcessExecutor is Bun.spawn under the hood).
@@ -205,10 +205,10 @@ export function setDetachedServeSpawnForTests(spawn: DetachedServeSpawn | undefi
 }
 
 /**
- * Resolve argv that can run `spur serve …`.
+ * Resolve argv that can run `spur self serve …`.
  *
  * Prefer the current process entry when it *is* the spur CLI (spur.js / apps/cli).
- * When the caller is `spur serve` (board hub), fall back to `spur` on PATH —
+ * When the caller is `spur self serve` (board hub), fall back to `spur` on PATH —
  * never reuse the server entry as argv[1] (that spawned the wrong program).
  */
 export function resolveSpurServeCommand(): string[] {
@@ -241,7 +241,7 @@ export function resolveSpurServeCommand(): string[] {
     }
 
     throw new Error(
-        'Could not resolve the spur CLI to spawn `spur serve`. Ensure `spur` is on PATH (or invoke start via the monorepo CLI).',
+        'Could not resolve the spur CLI to spawn `spur self serve`. Ensure `spur` is on PATH (or invoke start via the monorepo CLI).',
     );
 }
 
@@ -361,7 +361,7 @@ export async function assertProjectServerAvailable(
 }
 
 /**
- * Start a registered project via detached `spur serve`, or return immediately
+ * Start a registered project via detached `spur self serve`, or return immediately
  * if it is already listening.
  *
  * Hardening vs the first ship:
@@ -406,7 +406,7 @@ export async function startRegisteredProject(
         throw new Error(
             `Remote project "${entry.name}" is not reachable at ${remoteHost}` +
                 `${entry.port > 0 ? `:${entry.port}` : ' (no registered port — the last liveness probe reset it)'}. ` +
-                `Start \`spur serve\` on ${remoteHost} and retry.`,
+                `Start \`spur self serve\` on ${remoteHost} and retry.`,
         );
     }
 
@@ -463,6 +463,9 @@ export async function startRegisteredProject(
         spawn(
             [
                 ...invocation,
+                // Task 1388: the top-level `spur self serve` spelling is gone; the nested verb is the
+                // only one the CLI still resolves.
+                'self',
                 'serve',
                 '--cwd',
                 projectPath,

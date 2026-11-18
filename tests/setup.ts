@@ -80,7 +80,7 @@ process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
 // that pass an explicit `cwd` are unaffected.
 process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
 
-// Registry hermeticity: `spur serve` upserts its project root into
+// Registry hermeticity: `spur self serve` upserts its project root into
 // `getProjectsFilePath()` at startup (apps/server/src/serve.ts). Tests that start a
 // server without overriding SPUR_PROJECTS_FILE — the ~38 unisolated `startServer`
 // calls in apps/server/tests/serve.test.ts — appended their throwaway temp roots to

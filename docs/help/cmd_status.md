@@ -3,7 +3,7 @@
 > Show project health, Git context, and optional path metadata. A **verb-less** command —
 > accepts an optional `path` positional and flags directly.
 >
-> **Canonical path:** `spur self status`. The legacy `spur status` top-level form remains a hidden
+> **Canonical path:** `spur self status`. The legacy `spur self status` top-level form remains a hidden
 > alias over the same command — it keeps working unchanged for existing scripts and workflow YAML but
 > is absent from `spur --help`.
 

@@ -2,7 +2,7 @@
 
 Apply Spur's CLI-owned schema migrations to the project database (`.spur/spur.db`).
 
-> **Canonical path:** `spur self migrate`. The legacy `spur migrate` top-level form remains a hidden alias.
+> **Canonical path:** `spur self migrate`. The legacy `spur self migrate` top-level form remains a hidden alias.
 
 ## Usage
 

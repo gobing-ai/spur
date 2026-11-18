@@ -1,7 +1,7 @@
 /**
  * Integration test (task 0370): CLI-driven `spur workflow run` persists
  * cataloged `workflow.*` rows into the shared `system_events` ledger the
- * Board history endpoint reads — even with `spur serve` down (R1, R3, R12).
+ * Board history endpoint reads — even with `spur self serve` down (R1, R3, R12).
  *
  * Mirrors the planning-system-events suite (task 0249) but drives a minimal
  * state-machine workflow so the engine + ObservableWorkflowAdapter emit onto

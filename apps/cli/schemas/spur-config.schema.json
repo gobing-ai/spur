@@ -197,7 +197,7 @@
                         "enabled": {
                             "type": "boolean",
                             "default": false,
-                            "description": "The single fleet switch. `spur serve` materializes and autostarts the roster only when true; an absent or disabled fleet starts nothing."
+                            "description": "The single fleet switch. `spur self serve` materializes and autostarts the roster only when true; an absent or disabled fleet starts nothing."
                         },
                         "strategy": {
                             "type": "string",

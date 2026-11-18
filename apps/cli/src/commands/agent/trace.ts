@@ -7,7 +7,7 @@ import { DEFAULT_TRACE_FOLLOW_TIMEOUT_MS, parseTimeout, projectCardRefs } from '
 
 /** Register `spur agent trace`. */
 export function registerAgentTraceCommand(agent: Command, context: CliContext): void {
-    // Per-spec process lifecycle through the `spur serve` supervisor
+    // Per-spec process lifecycle through the `spur self serve` supervisor
     // ── agent trace (1076 R4, ADR-132) ────────────────────────────────────────────
     // The execution record, read as one lineage. Logic lives in `@gobing-ai/spur-app`
     // (`AgentTraceService`); this transport only renders it (ADR-130).

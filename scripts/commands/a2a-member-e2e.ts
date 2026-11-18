@@ -248,7 +248,7 @@ export async function runA2aMemberE2e(args: string[]): Promise<number> {
             readFileSync(configPath, 'utf8').replace('  fleet:\n', '  fleet:\n    enabled: true\n'),
         );
         serve = Bun.spawn(
-            [CLI, 'serve', '--port', String(servePort), '--host', '127.0.0.1', '--no-open', '--no-logo'],
+            [CLI, 'self', 'serve', '--port', String(servePort), '--host', '127.0.0.1', '--no-open', '--no-logo'],
             {
                 cwd: scratch,
                 stdout: 'pipe',
@@ -268,7 +268,7 @@ export async function runA2aMemberE2e(args: string[]): Promise<number> {
         record(
             'live-member-loop',
             'R3/AC1',
-            'spur serve + spur agent run "live read-only turn" --agent remote --json',
+            'spur self serve + spur agent run "live read-only turn" --agent remote --json',
             liveReady &&
                 live.code === 0 &&
                 liveBody?.status === 'completed' &&

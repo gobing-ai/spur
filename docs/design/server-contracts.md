@@ -97,7 +97,7 @@ validator of record and aborts startup with an issue path under
 | Binding each job to a queue entry                               | `registerSchedulerEntries` (`apps/server/src/serve.ts`) |
 | Running the command                                             | `handleSchedulerCustomJob` (`packages/app`)      |
 
-`spur serve` registers built-in **and** configured entries against `appRt.scheduler` inside the
+`spur self serve` registers built-in **and** configured entries against `appRt.scheduler` inside the
 `start` callback — which runs before ts-infra's scheduler plugin starts the adapter — and reads
 configured jobs only from `appRt.config.scheduler.jobs`. `StartServerDeps.createScheduler` is gone:
 a second Spur-owned adapter would have run every entry twice once the production scheduler was
@@ -148,7 +148,7 @@ the whole backoff window. The next tick is the retry for an idempotent periodic 
 `scheduler.custom` row per job **name** exists per project database — a partial unique index on
 `json_extract(payload, '$.name')` (migration `0047_spur_cli_scheduler_custom_active_unique`, the
 0716 `history.refresh` shape; terminal rows and other job types are invisible to it). The tick's
-enqueue IS the check: several `spur serve` daemons sharing one project database each run their own
+enqueue IS the check: several `spur self serve` daemons sharing one project database each run their own
 cron, so the read-then-insert guard that preceded it let every daemon admit its own row on the same
 occurrence (3–14 rows per tick on 2026-09-14/15). The loser's insert fails with
 `SQLITE_CONSTRAINT_UNIQUE` on that index, which the tick recognizes (`isSchedulerCustomActiveConflict`)
@@ -179,7 +179,7 @@ response is no longer serialized behind a 30 s busy timeout. Job children run th
 shutdown terminates every still-running job child via `terminateJobChildren` (`SIGTERM` to the
 detached process group `kill(-pid)`, plain-pid fallback when the child is not group-owned,
 `SIGKILL` escalation at exit) before the worker drains — a job child can never outlive
-`spur serve` and hold the DB write lock against the next boot.
+`spur self serve` and hold the DB write lock against the next boot.
 
 <a id="6-plugin-system-removed--adr-012-amended-2026-06-09"></a>
 

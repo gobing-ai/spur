@@ -17,7 +17,7 @@ pending a real verify PASS; no receipt was forced.
 | 1286 | `spur self search` verb | `b391a7f6…` | done | pipeline (verdict PASS → approve → done) |
 | 1287 | Board/server/web search module + mode tabs | `cabda5d6…` | done | pipeline + one remediate round (P4 citation) |
 | 1288 | sp-skill semantic-first search guidance (R44 budget) | `16a8922a…` | run terminal-failed (stale-review answer pitfall) | manual close; status flip landed post-merge (`80905947a`) |
-| 1289 | spur init zg readiness + `.zvec-grep/` gitignore | `6ebf3a5f…` | run terminal-failed (done-gate evidence paths) | done transition accepted after evidence-copy fix; task committed |
+| 1289 | spur self init zg readiness + `.zvec-grep/` gitignore | `6ebf3a5f…` | run terminal-failed (done-gate evidence paths) | done transition accepted after evidence-copy fix; task committed |
 
 ## Commits on `main` (FF-merged, post-rebase onto `a8946da4f`)
 

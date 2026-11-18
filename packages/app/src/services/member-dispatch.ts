@@ -9,7 +9,7 @@ import { OPERATOR_INBOX_ID } from './inbox-service';
  *
  * | member state | delivery |
  * | --- | --- |
- * | live under `spur serve` | warm keyed inbox request (today's fleet turn) |
+ * | live under `spur self serve` | warm keyed inbox request (today's fleet turn) |
  * | not live, resolvable executor | cold subprocess on the member's executor (default-on) |
  * | disabled / no executor | `unavailable` with the fix named |
  *
@@ -55,7 +55,7 @@ export const DEFAULT_MEMBER_WAIT_MS = 600_000;
 export interface MemberDispatchDeps {
     /** Declared + resolved fleet members (config only — no liveness). */
     members(): Promise<ResolvedFleetMember[]>;
-    /** Is this instance live under `spur serve` right now? */
+    /** Is this instance live under `spur self serve` right now? */
     live(instanceId: string): Promise<boolean>;
     /** The single fleet dispatch primitive; absent → the warm rung is not wired here. */
     dispatcher?: Pick<FleetDispatcher, 'dispatch'> & Partial<Pick<FleetDispatcher, 'enqueue'>>;
@@ -143,11 +143,11 @@ export function memberDelivery(
         };
     }
     if (live) {
-        return { delivery: 'warm', reason: 'live under spur serve — warm inbox turn' };
+        return { delivery: 'warm', reason: 'live under spur self serve — warm inbox turn' };
     }
     return {
         delivery: 'cold',
-        reason: `not live under spur serve — cold subprocess on executor '${member.executor}'`,
+        reason: `not live under spur self serve — cold subprocess on executor '${member.executor}'`,
     };
 }
 

@@ -1,6 +1,6 @@
 /**
  * Guard: npm publish must ship board static assets next to spur.js, otherwise
- * `spur serve` from an arbitrary project cwd returns JSON 404 on /board. Since task 0988 the
+ * `spur self serve` from an arbitrary project cwd returns JSON 404 on /board. Since task 0988 the
  * packaged board must also advertise its runtime (`board-runtime.json` + resolvable facade
  * assets) — those cases are covered here too.
  */

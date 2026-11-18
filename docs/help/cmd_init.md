@@ -7,7 +7,7 @@
 > seeds `~/.config/spur/` from the bundled package-root `config/` assets so `spur rule run` resolves
 > a real ruleset from any project.
 >
-> **Canonical path:** `spur self init`. The legacy `spur init` top-level form remains a hidden alias
+> **Canonical path:** `spur self init`. The legacy `spur self init` top-level form remains a hidden alias
 > over the same command — it keeps working unchanged for existing scripts and workflow YAML but is
 > absent from `spur --help`.
 

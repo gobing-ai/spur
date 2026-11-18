@@ -34,7 +34,7 @@ async function runAgentStatus(
     const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(
-            `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
+            `Cannot reach server at ${server} — showing local specs as stopped. Is spur self serve running?`,
         );
     }
     const rows = specs.map((spec) => {
@@ -68,7 +68,7 @@ async function runAgentStatus(
 export function registerAgentStatusCommand(agent: Command, context: CliContext): void {
     agent
         .command('status')
-        .description('Show agent specs with live process status and member session (requires spur serve).')
+        .description('Show agent specs with live process status and member session (requires spur self serve).')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option(

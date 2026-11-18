@@ -56,7 +56,7 @@ describe('dogfood-pipeline-detect — detectPipelineDriving word-boundary contra
             '/sp:dev-unit 0125',
             '/sp:dev-refine 0125 --auto',
             'spur task show 0042',
-            'spur status',
+            'spur self status',
             '',
         ];
 

@@ -853,7 +853,7 @@ never signals the human-owned process; an unsettled turn stays `outcome-unknown`
 **Project-owned supervision (task 1088, feature G67).** A project's loops are reached through the
 serve that owns the project, and a loop never outlives that serve. *Discovery:* the
 `agent status|stop|start` and `agent list --specs` default server URL comes from the cwd's project
-registry entry — the port `spur serve` records via `ProjectRegistry.setPort`, rendered
+registry entry — the port `spur self serve` records via `ProjectRegistry.setPort`, rendered
 `http://localhost:<port>/api` — and falls back to `http://localhost:3000/api` only when the project
 has no live entry; `--server` still overrides. A hard-coded 3000 default queried another project's
 serve (or nothing) and reported every spec `stopped` while its loops ran. *Lifetime:* a supervised
@@ -865,7 +865,7 @@ marker file, or extra transport. Surfaces: [CLI contracts](design/cli-contracts.
 
 **Cross-process-tree delivery (ADR-148).** A2A is the turn driver where Spur crosses a process
 tree it does not own — another install, another machine — and not a third channel: the durable
-record stays the inbox at both ends, with `coordination_runs` as the receipt. `spur serve` answers
+record stays the inbox at both ends, with `coordination_runs` as the receipt. `spur self serve` answers
 the A2A card/send/task endpoints on demand (`server.a2a.enabled`, off by default) as a facade over
 `InboxService` and `coordination_runs` — one inbox writer, no new table. A remote card declares
 whether it fences its own tree through the `urn:spur:write-fencing:v1` extension, and the sender
@@ -1436,7 +1436,7 @@ freshness and confinement correctness. The durable plane is kept git-proof-inert
 
 ## 33. Embedded MCP 2.0+ Server (ADR-152; feature B9, tasks 1370–1374)
 
-`spur serve` mounts `mcpModule` (`apps/server/src/modules/mcp/`, registered in the server module
+`spur self serve` mounts `mcpModule` (`apps/server/src/modules/mcp/`, registered in the server module
 registry) on `POST /mcp` only when `server.mcp.enabled` is true (default off; enabled without
 `server.mcp.authEnv` fails the config load), speaking stateless MCP 2.0+ Streamable HTTP: a
 `2026-07-28` protocol-version floor rejects legacy versions and sessions instead of negotiating

@@ -1,5 +1,5 @@
 /**
- * B9 task 1374 — end-to-end: gateway `/<prefix>/mcp` → `spur serve` `mcpModule` → the 1371
+ * B9 task 1374 — end-to-end: gateway `/<prefix>/mcp` → `spur self serve` `mcpModule` → the 1371
  * protocol adapter → the real `@gobing-ai/spur-app` services.
  *
  * No mocks of `mcpModule` or `gatewayGuard` (task anti-pattern): a real serve app
@@ -48,7 +48,7 @@ beforeAll(async () => {
     writeFileSync(join(root, '.spur', 'context', 'learnings.md'), 'indexed context body\n');
 
     // The module resolves the token value through the env funnel — the live record
-    // `getEnvVars()` returns — exactly as `spur serve` does; a real ServerContext has no
+    // `getEnvVars()` returns — exactly as `spur self serve` does; a real ServerContext has no
     // top-level env map to inject through.
     setEnvVar(TOKEN_VAR, TOKEN);
     const env: Record<string, string | undefined> = {

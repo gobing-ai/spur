@@ -50,7 +50,7 @@ describe('ProcessInventoryService', () => {
         expect(snap.processes[0]).toMatchObject({
             source: 'serve',
             depth: 0,
-            label: 'spur serve',
+            label: 'spur self serve',
             status: 'running',
         });
         expect(snap.processes[1]?.depth).toBe(1);

@@ -18,7 +18,7 @@ export { CHILD_KILL_GRACE_MS, describeBoundedFailure, runBoundedChild };
  * Configured scheduler command execution (task 0734).
  *
  * `bootstrap.scheduler.jobs` entries are validated upstream by ts-infra and registered
- * in `spur serve` as ordinary scheduler entries. A tick does not run anything itself —
+ * in `spur self serve` as ordinary scheduler entries. A tick does not run anything itself —
  * it enqueues one `scheduler.custom` job carrying `{ name, command }` (R5), and this
  * handler is the queue-side consumer that actually spawns the command (R6).
  *
@@ -42,7 +42,7 @@ export const SCHEDULER_CUSTOM_ACTIVE_INDEX = 'queue_jobs_scheduler_custom_active
 /**
  * True when `error` is the active-job constraint violation raised by
  * {@link SCHEDULER_CUSTOM_ACTIVE_INDEX}. This is the durable single-flight signal
- * (task 0863): a second `spur serve` daemon ticking the same occurrence loses the
+ * (task 0863): a second `spur self serve` daemon ticking the same occurrence loses the
  * insert race and must treat the loss as a skipped tick, not a failure. The message
  * check is what identifies the index — SQLite reports `UNIQUE constraint failed:
  * index '<name>'` — and the code check keeps an unrelated constraint error from
@@ -99,9 +99,9 @@ export interface SchedulerCustomJobDeps {
     onShutdownAbandon?: (name: string) => void;
     /**
      * Shutdown probe. When it reports `true` and the child died from a signal (no exit
-     * code), the attempt was ended by `spur serve` tearing down its children rather
+     * code), the attempt was ended by `spur self serve` tearing down its children rather
      * than by anything the command did, so it is completed as abandoned instead of
-     * failing. `spur serve` wires the shutdown latch it sets before terminating job
+     * failing. `spur self serve` wires the shutdown latch it sets before terminating job
      * children; omitted → every signal death is a failure, as before.
      */
     isShuttingDown?: () => boolean;
@@ -233,7 +233,7 @@ export function validateSchedulerCustomJobPayload(raw: unknown): SchedulerCustom
 const activeJobs = new Set<string>();
 
 /**
- * Shutdown abandonment (Sep 2026). `spur serve` deliberately SIGTERMs every live job
+ * Shutdown abandonment (Sep 2026). `spur self serve` deliberately SIGTERMs every live job
  * child so no importer outlives the server; without {@link
  * SchedulerCustomJobDeps.isShuttingDown} the handler would report that deliberate kill
  * as a failed attempt and emit an error-severity `queue.job.failed` — every restart

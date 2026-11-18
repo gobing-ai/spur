@@ -705,3 +705,39 @@ describe('listen-port probe parsers (lsof-less Linux fallback)', () => {
         expect(parseSsListenPort(out, 7)).toBeNull();
     });
 });
+
+/**
+ * Task 1388 R1 — the detached serve argv must name the nested verb. The legacy top-level
+ * `spur self serve` registration is gone, so an argv without `self` would spawn a process that exits
+ * with commander's unknown-command error and never serves.
+ */
+describe('startRegisteredProject — serve argv (task 1388)', () => {
+    it('spawns `self serve`, never the removed top-level spelling', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-start-argv-'));
+        let spawned: string[] = [];
+        try {
+            mkdirSync(join(dir, '.spur'), { recursive: true });
+            writeFileSync(join(dir, '.spur', 'config.yaml'), 'version: "1.2"\nname: argv-probe\n');
+            const registry = new ProjectRegistry(join(dir, 'registry.json'));
+            await registry.upsert({ name: 'argv-probe', path: dir, prefix: 'argv-probe' });
+            // The fake spawn never becomes healthy, so the call itself reports the timeout —
+            // the argv it was handed is the assertion.
+            try {
+                await startRegisteredProject(registry, 'argv-probe', {
+                    spawn: fakeServeSpawn(null, (cmd) => {
+                        spawned = cmd;
+                    }),
+                    pollAttempts: 1,
+                    pollIntervalMs: 1,
+                });
+            } catch {
+                // expected: nothing is listening on the allocated port
+            }
+            const serveIndex = spawned.indexOf('serve');
+            expect(serveIndex).toBeGreaterThan(0);
+            expect(spawned[serveIndex - 1]).toBe('self');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

@@ -19,7 +19,7 @@ The Spur Board **Observability → Processes** tab is empty for most operators b
 `SPUR_TEAM_AUTOSTART` or `spur team start`. That matches feature **G2** (team supervision) but fails
 as a **daily runtime surface**.
 
-**Destination:** Refactor Processes into a read-only inventory of the **spur serve process and all
+**Destination:** Refactor Processes into a read-only inventory of the **spur self serve process and all
 descendants**, with OS-sourced metrics and a light registry overlay for Spur semantics (supervisor
 agent ids, source labels). Team control APIs stay separate.
 

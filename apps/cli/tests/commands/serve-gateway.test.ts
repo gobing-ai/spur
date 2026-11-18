@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { StartGatewayOptions } from '@gobing-ai/spur-server';
-import { registerServeCommand } from '../../src/commands/serve';
+import { registerServeCommand } from '../../src/commands/self/serve';
 import type { CliContext } from '../../src/context';
 
 type ActionFn = (options: {

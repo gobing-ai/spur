@@ -24,7 +24,7 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const gitignorePath = join(cwd, '.gitignore');
         expect(existsSync(gitignorePath)).toBe(true);
@@ -37,8 +37,8 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
-        expect(await main(['init', '--force'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
+        expect(await main(['self', 'init', '--force'], options)).toBe(0);
 
         const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
         expect((content.match(/\.spur\/context\//g) ?? []).length).toBe(1);
@@ -54,7 +54,7 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
         );
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init'], options)).toBe(0);
+        expect(await main(['self', 'init'], options)).toBe(0);
 
         const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
         expect(content).toContain('node_modules/');
@@ -66,7 +66,7 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
         const cwd = await createTempProject();
         const { options } = await isolatedOptions(cwd);
 
-        expect(await main(['init', '--minimal'], options)).toBe(0);
+        expect(await main(['self', 'init', '--minimal'], options)).toBe(0);
 
         const content = readFileSync(join(cwd, '.gitignore'), 'utf-8');
         expect(content).toContain('.spur/context/');
@@ -75,7 +75,7 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
 
     test('--json payload carries the search readiness field', async () => {
         const cwd = await createTempProject();
-        const result = await runCli(['init', '--minimal', '--json'], cwd);
+        const result = await runCli(['self', 'init', '--minimal', '--json'], cwd);
         expect(result.code).toBe(0);
 
         const payload = JSON.parse(result.stdout) as {
@@ -93,7 +93,7 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
         // PATH keeps the bun shim dir (runCli spawns `bun`) plus system dirs but drops the
         // bun global bin dir where zg lives, so `which zg` misses.
         const bunDir = join(Bun.which('bun') ?? '/usr/bin', '..');
-        const result = await runCli(['init', '--minimal', '--json'], cwd, { PATH: `${bunDir}:/usr/bin:/bin` });
+        const result = await runCli(['self', 'init', '--minimal', '--json'], cwd, { PATH: `${bunDir}:/usr/bin:/bin` });
         expect(result.code).toBe(0);
 
         const payload = JSON.parse(result.stdout) as {
@@ -107,7 +107,7 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
 
     test('human output prints one search readiness line', async () => {
         const cwd = await createTempProject();
-        const result = await runCli(['init', '--minimal'], cwd);
+        const result = await runCli(['self', 'init', '--minimal'], cwd);
         expect(result.code).toBe(0);
 
         const lines = result.stdout.split('\n').filter((line) => line.startsWith('search: '));
@@ -116,18 +116,18 @@ describe('init — zg readiness and .zvec-grep gitignore (task 1289 / A34 R12)',
     });
 
     // Regression (A34 dogfood): the converged re-run branch returned before the readiness
-    // probe, so a second `spur init` silently dropped the R12 report in both output modes.
+    // probe, so a second `spur self init` silently dropped the R12 report in both output modes.
     test('converged re-init still reports search readiness in JSON and human output', async () => {
         const cwd = await createTempProject();
-        expect((await runCli(['init', '--minimal'], cwd)).code).toBe(0);
+        expect((await runCli(['self', 'init', '--minimal'], cwd)).code).toBe(0);
 
-        const jsonRun = await runCli(['init', '--minimal', '--json'], cwd);
+        const jsonRun = await runCli(['self', 'init', '--minimal', '--json'], cwd);
         expect(jsonRun.code).toBe(0);
         const payload = JSON.parse(jsonRun.stdout) as { converged?: boolean; search?: { zg: { index: string } } };
         expect(payload.converged).toBe(true);
         expect(['ready', 'stale', 'missing', 'unknown']).toContain(payload.search?.zg.index ?? '<absent>');
 
-        const humanRun = await runCli(['init', '--minimal'], cwd);
+        const humanRun = await runCli(['self', 'init', '--minimal'], cwd);
         expect(humanRun.code).toBe(0);
         expect(humanRun.stdout).toContain('Already initialized');
         expect(humanRun.stdout.split('\n').filter((line) => line.startsWith('search: ')).length).toBe(1);

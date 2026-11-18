@@ -1,7 +1,7 @@
 /**
  * Bun/Hono listener lifecycle probe (task 0988 R6 / AC3).
  *
- * `spur serve` builds ONE Hono app before `Bun.serve` and never rebuilds it: the
+ * `spur self serve` builds ONE Hono app before `Bun.serve` and never rebuilds it: the
  * board catalogue and the project-module asset handlers are fixed at boot (design
  * §4.4, "no live route mutation"). Before writing that down as "v1 does not mutate
  * live routes" the claim needs to be observable rather than assumed, so this probe

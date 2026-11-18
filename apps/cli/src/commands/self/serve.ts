@@ -6,11 +6,11 @@ import { createJsonlEventSink, ProjectRegistry, startRegisteredProject } from '@
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
 import { startGateway, startServer } from '@gobing-ai/spur-server';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import type { CliContext } from '../context';
-import { CommandError, errorMessage } from '../errors';
-import { toEnvelopeJson, writeJsonError } from '../output';
-import { resolveSpurArgv } from '../workflow/resolve-spur-bin';
-import { SHARED_OPTIONS } from './shared-options';
+import type { CliContext } from '../../context';
+import { CommandError, errorMessage } from '../../errors';
+import { toEnvelopeJson, writeJsonError } from '../../output';
+import { resolveSpurArgv } from '../../workflow/resolve-spur-bin';
+import { SHARED_OPTIONS } from '../shared-options';
 
 /**
  * Where `serve --gateway` writes its structured event log (task 1384): next to the launchd logs on

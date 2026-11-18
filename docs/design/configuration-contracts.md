@@ -21,7 +21,7 @@ Original section numbers remain stable; unqualified section references resolve t
 
 ### 2.1 Project config — `.spur/config.yaml` (ADR-017)
 
-Written by `spur init`. Single YAML config surface; the legacy `.spur/config.json` project marker is
+Written by `spur self init`. Single YAML config surface; the legacy `.spur/config.json` project marker is
 retired. The merged global+project config (ADR-082) is loaded once at the composition root and
 threaded through dispatch; the project-first pick below now describes only which file supplies the
 project-shaped `bootstrap:` block to ts-infra: project `.spur/config.yaml` (cwd) → fallback
@@ -40,7 +40,7 @@ Two top-level concerns:
   `roles` (ADR-061 / 0572 — optional closed-vocabulary per-role tier/stage overrides merged per-field
   over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). `agent.fleet`
   (G65 / 0858) is the project fleet — the ONLY composition carrier and the project-layer-only
-  section: `enabled` (default `false`, the single switch `spur serve` gates fleet resolution and
+  section: `enabled` (default `false`, the single switch `spur self serve` gates fleet resolution and
   autostart on), `strategy` (`rest` | `gtd`, default `rest`; the `FLEET_STRATEGIES` tuple is the
   vocabulary SSOT), `orchestrator` (member local id), `members` (each declaring a role or an
   executor; `enabled: false` preserves its derived id index). It replaced `.spur/fleet.json` (0835)
@@ -75,7 +75,7 @@ bootstrap:
     url: .spur/spur.db # ${DATABASE_URL} interpolation supported
   scheduler:
     enabled: false # CLI is run-once; no scheduler
-    # jobs: [] # declarative recurring commands, read only under `spur serve` — §5.2
+    # jobs: [] # declarative recurring commands, read only under `spur self serve` — §5.2
 agent:
   default: coder # default role for `--agent auto` when nothing is declared (0542 R2 — role domain; legacy executor names warn once under shim agent-default-executor)
   executors: # ADR-033 / 0343 — declare tier (capable-1/2/3 quality ladder)
@@ -121,11 +121,11 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 | `database.url`       | `DATABASE_URL`            | `:memory:`                                                                                                           |
 | `server.port`        | `PORT`                    | `3000`                                                                                                               |
 | `server.host`        | `HOST`                    | `localhost`                                                                                                          |
-| `server.openBrowser` | —                         | `true` (spur serve only)                                                                                             |
+| `server.openBrowser` | —                         | `true` (spur self serve only)                                                                                             |
 | `server.webDistPath` | —                         | `null` (auto-resolve: cwd `dist/web`, package `web/` next to `spur.js`, binary-adjacent `web/`, monorepo `dist/web`) |
-| `server.a2a.enabled` | `SPUR_A2A_ENABLED`        | `false` (A2A listener in `spur serve`; off mounts no route)                                                          |
+| `server.a2a.enabled` | `SPUR_A2A_ENABLED`        | `false` (A2A listener in `spur self serve`; off mounts no route)                                                          |
 | `server.a2a.authEnv` | `SPUR_A2A_AUTH_ENV`       | — (NAME of the variable holding the A2A bearer token; required when `enabled` is true, never stored)                  |
-| `server.mcp.enabled`   | `SPUR_MCP_ENABLED`        | `false` (embedded MCP server in `spur serve`; off mounts no route)                                                   |
+| `server.mcp.enabled`   | `SPUR_MCP_ENABLED`        | `false` (embedded MCP server in `spur self serve`; off mounts no route)                                                   |
 | `server.mcp.authEnv`   | `SPUR_MCP_AUTH_ENV`       | — (NAME of the variable holding the MCP bearer token; required when `enabled` is true, never stored)                 |
 | `server.mcp.namespace` | `SPUR_MCP_NAMESPACE`      | — (optional project MCP namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load)               |
 | `telemetry.enabled`  | `SPUR_TELEMETRY_ENABLED`  | `false`                                                                                                              |
@@ -202,8 +202,8 @@ the uninstalled package; Spur never selects that backend, so the CLI/compiled bu
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Build (`build:bundle`)     | Copy repo-root `./config` → package-root `apps/cli/config` via `bundle-config`; copy repo-root `plugins/` + `.claude-plugin/` → package-root `apps/cli/plugins` + `apps/cli/.claude-plugin` via `bundle-plugins`; both shipped via the package `files` array as top-level `config/`, `plugins/`, `.claude-plugin/`.                                                                                                                                                                                                         |
 | Install (`bun install -g`) | Package-root `config/` ships inside `@gobing-ai/spur` — no `postinstall` (unreliable for global installs). Legacy installs may still have `spur-cli/config/` (pre-0.3.9); `bundledConfigRoot()` accepts both.                                                                                                                                         |
-| First run / `spur init`    | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites).                                                                                                                                                                                                                            |
-| `spur init` scaffold       | Seed only project-owned assets under `.spur/` (`rules/**`, `tasks/**`, and the `templates/task` → `tasks/templates` remap), plus root-scoped `docs/` + `AGENTS.md`. Workflows and natural-path templates stay bundled; no `.spur/workflows` or `.spur/templates` shadow is created. |
+| First run / `spur self init`    | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites).                                                                                                                                                                                                                            |
+| `spur self init` scaffold       | Seed only project-owned assets under `.spur/` (`rules/**`, `tasks/**`, and the `templates/task` → `tasks/templates` remap), plus root-scoped `docs/` + `AGENTS.md`. Workflows and natural-path templates stay bundled; no `.spur/workflows` or `.spur/templates` shadow is created. |
 | Workflow runtime resolution | Explicit path first, then the ADR-113 layers in order: `project` (`.spur/workflows`), each `registered` `workflows.paths` folder, then `shared` (package `config/workflows/<basename>`). `spur workflow list` shows the same layers. Shipped workflows are invoked by bare name; the seeded global workflow copy is not a layer unless registered. |
 
 **Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin

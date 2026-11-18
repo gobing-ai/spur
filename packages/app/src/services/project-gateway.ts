@@ -14,7 +14,7 @@ import { type GatewayIndexProject, renderGatewayIndex } from './project-gateway-
 export interface GatewayDeps {
     /** Every registry entry — remote entries are filtered out by the handler. */
     listProjects(): Promise<ProjectEntry[]>;
-    /** Start or adopt one project's `spur serve` and resolve its loopback port. */
+    /** Start or adopt one project's `spur self serve` and resolve its loopback port. */
     ensureUpstream(entry: ProjectEntry): Promise<number>;
     /** Remove a registered project entry from `projects.json`. */
     removeProject?: (path: string, host?: string) => Promise<boolean>;
@@ -192,7 +192,7 @@ function forbiddenOrigin(): Response {
 
 /**
  * Loopback families the gateway dials for a local upstream, IPv4 first: a registry-spawned serve
- * binds `127.0.0.1` (`project-start.ts:466`), while a hand-started `spur serve` binds `localhost`,
+ * binds `127.0.0.1` (`project-start.ts:466`), while a hand-started `spur self serve` binds `localhost`,
  * which Bun resolves to `::1` on macOS. Same both-families rule as `isPortLive`.
  */
 const LOOPBACK_FAMILIES = ['127.0.0.1', '::1'] as const;

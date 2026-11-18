@@ -4,7 +4,7 @@
 > The migrator only applies top-level `drizzle/*.sql` files carrying the `_spur_cli_` marker;
 > legacy migrations under `drizzle/_legacy_reference/` are inert and never applied.
 >
-> **Canonical path:** `spur self migrate`. The legacy `spur migrate` top-level form remains a hidden
+> **Canonical path:** `spur self migrate`. The legacy `spur self migrate` top-level form remains a hidden
 > alias over the same command — it keeps working unchanged for existing scripts and workflow YAML but
 > is absent from `spur --help`.
 

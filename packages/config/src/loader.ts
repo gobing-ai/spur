@@ -393,7 +393,7 @@ async function readRawYamlLayer(configPath: string, kind: 'global' | 'project'):
 
 /**
  * Parse a single config YAML string into a plain object (task 0649 R4).
- * The loader owns the `yaml` dependency, so callers (e.g. `spur init` global-config
+ * The loader owns the `yaml` dependency, so callers (e.g. `spur self init` global-config
  * detection) reuse this instead of importing yaml themselves. Throws on unparseable
  * input; returns `{}` for an empty/null document.
  */

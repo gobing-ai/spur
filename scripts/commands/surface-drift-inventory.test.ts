@@ -938,7 +938,7 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
             }
             if (key === 'rule list --json') return { exit: 0, out: 'not json at all', err: '' };
             if (key === 'projects list --json') return { exit: 3, out: '', err: 'no registry configured' };
-            if (key === 'status --json') {
+            if (key === 'self status --json') {
                 const wide = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`k${i}`, i]));
                 return { exit: 0, out: JSON.stringify(wide), err: '' };
             }
@@ -960,7 +960,7 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
         expect(failed?.actual).toContain('exit 3');
         expect(failed?.actual).toContain('no registry configured');
         // Wide envelopes are truncated in the report rather than flooding the row.
-        expect(rowFor('status --json (envelope)')?.actual).toContain('…');
+        expect(rowFor('self status --json (envelope)')?.actual).toContain('…');
     });
 
     test('the fields the plugin scripts depend on are confirmed against the captured envelope', () => {

@@ -82,7 +82,7 @@ Every `spur agent loop` / supervised `agent run` process receives, in addition t
 | --- | --- |
 | `SPUR_SPEC_ID` | Occupant `specId` |
 | `SPUR_RUN_ID` | Current `runId` (updated each loop iteration before invoke) |
-| `SPUR_SERVE_URL` | Supervisor API base when `spur serve` launched the process |
+| `SPUR_SERVE_URL` | Supervisor API base when `spur self serve` launched the process |
 
 `SPUR_AGENT` remains the **host** coding-agent hint (`04` §1.1). It is not a spec id.
 
@@ -199,7 +199,7 @@ Extend the team/agent CLI `--json` error body (not the generic HTTP `API_ERROR_C
 | `run_replaced` | `runId` or `generation` no longer matches the pin |
 | `wait_stalled` | no observed lifecycle change inside the stall budget |
 | `timeout` | caller `--timeout` elapsed |
-| `protocol_mismatch` | reserved; only if CLI/`spur serve` version skew is detected later |
+| `protocol_mismatch` | reserved; only if CLI/`spur self serve` version skew is detected later |
 
 Exit mapping: `timeout` / `wait_stalled` → 1; usage → 2; execution failure → existing agent-run 3.
 

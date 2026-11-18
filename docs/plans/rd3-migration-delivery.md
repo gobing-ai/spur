@@ -50,7 +50,7 @@ Derived from what already ships, so new names read like existing ones:
   `_spur_cli_` marker.
 - **JSON schemas:** `apps/cli/schemas/<topic>.schema.json` (existing: `spur-config`, `rule-file`,
   `preset`, two workflow schemas).
-- **Default config assets:** repo-root `./config/<area>/…` (ADR-015), copied by `spur init`.
+- **Default config assets:** repo-root `./config/<area>/…` (ADR-015), copied by `spur self init`.
 - **plugins/sp:** skills `sp:spur-<noun>` for CLI-noun companions; slash commands
   `<noun>-<verb>.md`; subagents `expert-<noun>.md` (existing: `sp:spur-rules`, `rule-add`,
   `expert-rules`).
@@ -88,7 +88,7 @@ Two new nouns (ADR-020) plus one new verb on an existing noun. Every command sup
 > status; files are SSOT, so a genuine mistake is `rm` + `refresh`. A delete verb would destroy
 > traceability edges (feature `## Tasks` links, history) for no job a status can't do.
 
-> Note: `spur task migrate` coexists with the DB utility `spur migrate`. They are noun-scoped and
+> Note: `spur task migrate` coexists with the DB utility `spur self migrate`. They are noun-scoped and
 > unambiguous in grammar; flagged in §12 in case the operator prefers a distinct verb (e.g.
 > `normalize`).
 
@@ -255,7 +255,7 @@ postponement cheap:
 | `PlanningWriteService` (§5.2) | fixed — **in batch** | The single write path is `packages/app` architecture, not a server feature; when routes arrive they bind to it — one lock domain by construction. | E11 |
 | `PlanningEventMap` (§5.2) + `planning_events` (§4) | fixed — **in batch** | The event contract + persistence ship now; SSE/board/scheduler are later subscribers. | X04 |
 | Task/feature HTTP API · SSE endpoint · `/board` page | postponed | Shapes, routes, and stack decided by the server/web design task; contract names reserved in §5.3. | E01 E08 E09 |
-| Board launcher | reserved — **deliberately unnamed** | `spur serve` vs. running `apps/server` is that design task's decision (X03). Do not coin a name before then. | X03 |
+| Board launcher | reserved — **deliberately unnamed** | `spur self serve` vs. running `apps/server` is that design task's decision (X03). Do not coin a name before then. | X03 |
 
 **Cutover constraint (updated 2026-06-12):** `spur task migrate` is built in the batch, but
 **corpus cutover waits for the new board** — the legacy `tasks server` board stays the operator's
@@ -427,7 +427,7 @@ subscribers: SSE/board (postponed, §6), scheduler auto-trigger (deferred, D07),
 1. **§7.1 companion-skill and §7.3 command-subset names** — `sp:spur-dev` is settled; the
    companions (`sp:spur-tasks`/`sp:spur-features`) and the exact dev-* subset are confirmed at
    Stage D. Recommend keeping the patterns as listed.
-2. **`spur task migrate` vs `spur migrate`** — superficially similar; grammatically unambiguous.
+2. **`spur task migrate` vs `spur self migrate`** — superficially similar; grammatically unambiguous.
    Recommend keeping `migrate` (matches the triage doc and the verb's meaning) over coining
    `normalize`.
 3. **`spur task info` / `spur feature info`** (§1.3) — TBD; recommend deciding with the

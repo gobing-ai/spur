@@ -98,7 +98,7 @@ describe('makeLifecycleAdapter', () => {
 
     describe('Issue A fix — project-local .spur/workflows/ fallback', () => {
         // WHY: When bundledConfigRoot() returns null (e.g. compiled binary without a
-        // sibling config/) but the project was initialised with `spur init` and carries
+        // sibling config/) but the project was initialised with `spur self init` and carries
         // `.spur/workflows/<name>.yaml`, the adapter should still be constructable.
         // Without this fix, `makeLifecycleAdapter` always returned undefined when the
         // bundled root was absent — triggering the inline fallback and Issue B.

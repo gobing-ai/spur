@@ -29,7 +29,7 @@ async function runAgentList(
         context.output.write(NO_AGENT_SPECS_MESSAGE);
         return 0;
     }
-    // The CLI process never owns the supervisor — specs are spawned by `spur serve` —
+    // The CLI process never owns the supervisor — specs are spawned by `spur self serve` —
     // so the local listing is only the desired state until the server's process table
     // overrides it. Unreachable server ⇒ every spec `stopped` plus a stderr warning,
     // so offline listing still works.
@@ -37,7 +37,7 @@ async function runAgentList(
     const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(
-            `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
+            `Cannot reach server at ${server} — showing local specs as stopped. Is spur self serve running?`,
         );
     }
     const specFacts = (id: string): { status: string; pid?: number; session?: MemberSessionObservation } => {

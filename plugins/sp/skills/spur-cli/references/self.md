@@ -8,8 +8,8 @@ see_also:
 # spur self - self-management verbs
 
 `spur self` hosts the self-management verbs. Five of them are the canonical path for a command
-that also remains registered as a legacy top-level **hidden alias** (`spur init`, `spur maintain`, `spur migrate`,
-`spur serve`, `spur status`) so existing scripts, workflow YAML, and habits keep working unchanged.
+that also remains registered as a legacy top-level **hidden alias** (`spur self init`, `spur self maintain`, `spur self migrate`,
+`spur self serve`, `spur self status`) so existing scripts, workflow YAML, and habits keep working unchanged.
 Both paths share the same command builder: identical flags, output, and exit codes. The legacy
 top-level forms are omitted from `spur --help`, leaving `self` as the visible surface.
 

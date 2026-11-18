@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { SelfStatusSection } from '@gobing-ai/spur-app';
-import { gatewayCountersLine } from '../../src/commands/status';
+import { gatewayCountersLine } from '../../src/commands/self/status';
 
 /**
  * 1385 R3 text output. The probe matrix (gateway / free port / foreign listener) is owned by the app
@@ -34,7 +34,7 @@ describe('status text — gateway counters line (1385 R3)', () => {
             state: 'not-applicable',
             scope: 'machine',
             source: 'services/project-gateway.ts',
-            message: 'no gateway is listening on localhost:3000; `spur serve` starts one',
+            message: 'no gateway is listening on localhost:3000; `spur self serve` starts one',
             data: { port: 3000, host: 'localhost' },
         };
         expect(gatewayCountersLine('gateway', section)).toBeNull();

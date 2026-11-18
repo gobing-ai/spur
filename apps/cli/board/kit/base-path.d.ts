@@ -1,7 +1,7 @@
 /**
  * Runtime base path for the Board (feature K4, ADR-151 §5).
  *
- * The Board is one static build served either at the origin root (direct per-port `spur serve`, the
+ * The Board is one static build served either at the origin root (direct per-port `spur self serve`, the
  * Astro dev server, memory-router tests) or under `/<prefix>/` behind the project gateway. The build
  * stays root-absolute and the gateway rebases the HTML; the client learns its mount point from the
  * `<meta name="spur-base">` tag the gateway injects. No global JS variable and no cookie, so a

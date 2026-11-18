@@ -87,7 +87,7 @@ async function probeGateway(port: number, fetchImpl: typeof fetch): Promise<stri
             signal: AbortSignal.timeout(2_000),
         });
     } catch {
-        return `no gateway is listening on localhost:${port} — start it with \`spur serve --gateway\``;
+        return `no gateway is listening on localhost:${port} — start it with \`spur self serve --gateway\``;
     }
     const body = (await response.json().catch(() => null)) as { gateway?: unknown } | null;
     if (!response.ok || body?.gateway !== true) {

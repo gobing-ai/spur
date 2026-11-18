@@ -20,6 +20,9 @@ import type { CommandOutput } from '../src/output';
 
 const HELP_DIR = join(import.meta.dir, '..', '..', '..', 'docs', 'help');
 
+/** `self` verbs with no `docs/help` page (pre-1388 gap, named so it stays visible). */
+const UNDOCUMENTED_SELF_VERBS = new Set(['exec', 'install', 'search', 'uninstall']);
+
 /** Global flags documented once in docs/help/index.md instead of per subcommand. */
 const ALLOW_LIST = new Set(['--json-envelope', '--help']);
 
@@ -34,17 +37,30 @@ function collectCliFlags(): Map<string, Set<string>> {
     const output: CommandOutput = { write: () => {}, error: () => {} };
     const program = buildProgram(createCliContext({ output }), output) as unknown as CmdLike;
     const cli = new Map<string, Set<string>>();
-    const walk = (cmd: CmdLike, path: string): void => {
+    const record = (cmd: CmdLike, path: string): void => {
         if (!cli.has(path)) {
             cli.set(path, new Set(cmd.options.map((o) => o.long).filter((f): f is string => f !== undefined)));
         }
+    };
+    const walk = (cmd: CmdLike, path: string): void => {
+        record(cmd, path);
         for (const sub of cmd.commands) walk(sub, `${path} ${sub.name()}`);
     };
     for (const noun of program.commands) {
-        // `self` is a container re-registering the five legacy nouns as visible verbs;
-        // those verbs are documented once under their top-level alias paths (cmd_init.md
-        // etc.), so the duplicate subtree is skipped.
-        if (noun.name() === 'self') continue;
+        // Task 1388: the five legacy verbs are now documented under `spur self <verb>` paths (their
+        // pages carry the canonical H1), so the whole `self` subtree is walked. The four verbs
+        // below have no `docs/help` page at all — that gap predates 1388 and stayed hidden behind
+        // the old blanket skip; naming them here keeps it visible instead of silent.
+        if (noun.name() === 'self') {
+            // Record the container, then descend verb by verb so the four undocumented verbs can
+            // be named instead of silently walked.
+            record(noun, 'spur self');
+            for (const verb of noun.commands) {
+                if (UNDOCUMENTED_SELF_VERBS.has(verb.name())) continue;
+                walk(verb, `spur self ${verb.name()}`);
+            }
+            continue;
+        }
         walk(noun, `spur ${noun.name()}`);
     }
     return cli;
@@ -62,7 +78,6 @@ function collectCliFlags(): Map<string, Set<string>> {
 function collectDocFlags(): Map<string, Map<string, Set<string>>> {
     const docs = new Map<string, Map<string, Set<string>>>();
     for (const file of readdirSync(HELP_DIR).filter((f) => f.startsWith('cmd_') && f.endsWith('.md'))) {
-        const noun = file.replace(/^cmd_/, '').replace(/\.md$/, '');
         const sections = new Map<string, Set<string>>();
         let current: Array<{ path: string; flags: Set<string> }> = [];
         const own = (path: string): { path: string; flags: Set<string> } => {
@@ -73,10 +88,11 @@ function collectDocFlags(): Map<string, Map<string, Set<string>>> {
             return { path, flags };
         };
         for (const line of readFileSync(join(HELP_DIR, file), 'utf8').split('\n')) {
-            // 1020: alias pages were canonicalized to `# spur self <verb>` H1s (cmd_init.md etc.);
-            // both H1 shapes key the single-verb section under the top-level alias path.
-            if (/^# spur (?:self )?[a-z-]+\s*$/.test(line)) {
-                current = [own(`spur ${noun}`)];
+            // 1020 canonicalized these pages to `# spur self <verb>` H1s; 1388 then removed the
+            // top-level spellings, so the H1 — not the filename — now names the command path.
+            const h1 = /^# (spur (?:self )?[a-z-]+)\s*$/.exec(line);
+            if (h1) {
+                current = [own(h1[1] as string)];
                 continue;
             }
             const h2 = /^## (spur [a-z][a-z |-]*?)\s*$/.exec(line);
@@ -104,15 +120,23 @@ describe('docs/help flag-set parity (task 0800 R3)', () => {
     const cli = collectCliFlags();
     const docs = collectDocFlags();
 
-    test('AC7: every CLI flag has a documented row (file :: subcommand :: flag)', () => {
+    test('AC7: every CLI flag has a documented row (subcommand :: flag)', () => {
+        // Task 1388: a page is found by the path its H1 documents, not by its filename, so
+        // `cmd_status.md` (# spur self status) still covers `spur self status`.
+        const docByPath = new Map<string, Set<string>>();
+        for (const sections of docs.values()) {
+            for (const [path, flags] of sections) {
+                const merged = docByPath.get(path) ?? new Set<string>();
+                for (const flag of flags) merged.add(flag);
+                docByPath.set(path, merged);
+            }
+        }
         const undocumented: string[] = [];
         for (const [path, flags] of cli) {
-            const noun = path.split(' ')[1] ?? '';
-            const file = `cmd_${noun}.md`;
-            const docFlags = docs.get(file)?.get(path) ?? new Set<string>();
+            const docFlags = docByPath.get(path) ?? new Set<string>();
             for (const flag of flags) {
                 if (ALLOW_LIST.has(flag)) continue;
-                if (!docFlags.has(flag)) undocumented.push(`${file} :: ${path} :: ${flag}`);
+                if (!docFlags.has(flag)) undocumented.push(`${path} :: ${flag}`);
             }
         }
         expect(undocumented).toEqual([]);
@@ -121,9 +145,11 @@ describe('docs/help flag-set parity (task 0800 R3)', () => {
     test('AC7: every documented flag exists on its subcommand (file :: subcommand :: flag)', () => {
         const phantom: string[] = [];
         for (const [file, sections] of docs) {
-            const noun = file.replace(/^cmd_/, '').replace(/\.md$/, '');
-            if (![...cli.keys()].some((p) => p === `spur ${noun}`)) {
-                phantom.push(`${file} :: <no such top-level command>`);
+            // Task 1388: a page's own H1 (e.g. `# spur self status`) is the path it documents,
+            // so a file whose name no longer matches a top-level noun is not a phantom.
+            const ownsLivePath = [...sections.keys()].some((path) => cli.has(path));
+            if (!ownsLivePath) {
+                phantom.push(`${file} :: <no such command>`);
                 continue;
             }
             for (const [path, flags] of sections) {

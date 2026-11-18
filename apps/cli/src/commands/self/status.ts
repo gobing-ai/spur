@@ -1,13 +1,13 @@
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { collectSelfStatus, type SelfStatusSection } from '@gobing-ai/spur-app';
-import { CLI_CONFIG } from '../config';
-import type { CliContext } from '../context';
-import { CommandError } from '../errors';
-import { gitContext } from '../git-context';
-import { toEnvelopeJson, writeJsonError } from '../output';
-import { readDaemonStatusOrNull } from './self/shared';
-import { SHARED_OPTIONS } from './shared-options';
+import { CLI_CONFIG } from '../../config';
+import type { CliContext } from '../../context';
+import { CommandError } from '../../errors';
+import { gitContext } from '../../git-context';
+import { toEnvelopeJson, writeJsonError } from '../../output';
+import { readDaemonStatusOrNull } from '../self/shared';
+import { SHARED_OPTIONS } from '../shared-options';
 
 /**
  * Register `spur status` / `spur self status` (optionally hidden from the top-level help listing).

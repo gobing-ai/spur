@@ -1,7 +1,7 @@
 /**
  * Portable AGENTS.md harness-contract SSOT (task 0242).
  *
- * Root `AGENTS.md` (dogfood instance) and the bundled AGENTS seed (spur init template)
+ * Root `AGENTS.md` (dogfood instance) and the bundled AGENTS seed (spur self init template)
  * must share these H2 headings and Harness tool routing "Need" keys. Keep this list
  * in sync when editing either file — the alignment test fails on drift.
  */

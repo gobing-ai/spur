@@ -1,6 +1,6 @@
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 
-/** Minimal Git context reported by `spur status`. */
+/** Minimal Git context reported by `spur self status`. */
 export interface GitContext {
     root: string | null;
     branch: string | null;

@@ -176,8 +176,8 @@ spur agent run "prompt" --agent <name> --model <model> --mode <mode> --cwd <path
 | `spur rule run/validate/list` | Constraint evaluation |
 | `spur workflow validate/run/list` | Workflow orchestration |
 | `spur history import/analyze/report` | JSONL analytics |
-| `spur init` | Project scaffold |
-| `spur status` / `spur migrate` | Supporting utilities |
+| `spur self init` | Project scaffold |
+| `spur self status` / `spur self migrate` | Supporting utilities |
 
 ### 2.3 What Spur Does NOT Have
 

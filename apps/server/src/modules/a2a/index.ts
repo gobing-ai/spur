@@ -9,13 +9,13 @@ import type { ServerModule } from '../types';
 import { type A2ATask, a2aError, agentCard, cardOrigin, projectState, textParts } from './projection';
 
 /**
- * `spur serve` speaks A2A (feature G9, task 1336; ADR-148, design `a2a-member-transport` §3.5).
+ * `spur self serve` speaks A2A (feature G9, task 1336; ADR-148, design `a2a-member-transport` §3.5).
  *
  * A thin facade over the existing services — no new table and no second inbox writer (ADR-143):
  * each enabled fleet member is published as an Agent Card, `SendMessage` becomes ONE keyed inbox
  * request (`messageId` → request key), `GetTask` reads the `coordination_runs` receipt, and
  * `CancelTask` stops the member's run through the supervisor's existing stop path. The inbox and
- * the run rows are the task store, which is what makes a task survive a `spur serve` restart.
+ * the run rows are the task store, which is what makes a task survive a `spur self serve` restart.
  *
  * Off by default (R1): with `server.a2a.enabled` false no route is mounted at all, so the four
  * paths below answer 404 like any other unknown path.

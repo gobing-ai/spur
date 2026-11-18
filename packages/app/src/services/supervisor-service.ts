@@ -89,8 +89,8 @@ export interface SupervisorOptions {
     /** Pre-loaded specs — omit to load from configDir at first start. */
     agentSpecs?: AgentSpec[];
     /**
-     * `spur serve` API base, injected as `SPUR_SERVE_URL` into supervised
-     * processes (ADR-057 wave 1 R3). Omit when not launched by `spur serve`.
+     * `spur self serve` API base, injected as `SPUR_SERVE_URL` into supervised
+     * processes (ADR-057 wave 1 R3). Omit when not launched by `spur self serve`.
      */
     serveUrl?: string;
 }
@@ -140,7 +140,7 @@ export class SupervisorService {
     private readonly processExecutor: ProcessExecutor;
     private readonly eventBus: ProcessEventBus;
     private readonly configDir: string;
-    /** `spur serve` API base for `SPUR_SERVE_URL` injection (R3). */
+    /** `spur self serve` API base for `SPUR_SERVE_URL` injection (R3). */
     private readonly serveUrl?: string;
     /** Agent ids that already emitted `agent.stopped` via explicit stop(). */
     private readonly stopEmitted = new Set<string>();
@@ -373,7 +373,7 @@ export class SupervisorService {
 
     /**
      * Register specs resolved outside the config dir (G72 R2): fleet members are
-     * derived from `agent.fleet`, not written to `.spur/agents/`, so `spur serve`
+     * derived from `agent.fleet`, not written to `.spur/agents/`, so `spur self serve`
      * hands them over before autostart. Additive and idempotent — the declared
      * fleet spec wins an id clash with a hand-authored file.
      */

@@ -1,13 +1,13 @@
 import type { Command } from '@commander-js/extra-typings';
 import type { CliContext } from '../../context';
-import { registerInitCommand } from '../init';
-import { registerMaintainCommand } from '../maintain';
-import { registerMigrateCommand } from '../migrate';
-import { registerServeCommand } from '../serve';
-import { registerStatusCommand } from '../status';
 import { registerExecCommand } from './exec';
+import { registerInitCommand } from './init';
 import { registerInstallCommand } from './install';
+import { registerMaintainCommand } from './maintain';
+import { registerMigrateCommand } from './migrate';
 import { registerSearchCommand } from './search';
+import { registerServeCommand } from './serve';
+import { registerStatusCommand } from './status';
 import { registerUninstallCommand } from './uninstall';
 
 /**

@@ -1,6 +1,6 @@
 /**
  * Supervisor-backed agent verbs and `task update --assignee` from the CLI boundary:
- * - `agent start|stop` POST to the `spur serve` supervisor and surface its errors.
+ * - `agent start|stop` POST to the `spur self serve` supervisor and surface its errors.
  * - `agent list --specs` merges live run status from the server, falling back to stopped.
  * - `task update --assignee` writes frontmatter via AgentCoordinationService.assignTask and persists
  *   `task.assigned` (0371 R6; renamed by 0860 R2).
@@ -81,7 +81,7 @@ describe('spur agent start|stop', () => {
             await cleanup();
         }
     });
-    test('unreachable server exits 1 naming spur serve', async () => {
+    test('unreachable server exits 1 naming spur self serve', async () => {
         const { cwd, out, cleanup } = await makeCtx();
         try {
             await withMockedFetch(
@@ -90,7 +90,7 @@ describe('spur agent start|stop', () => {
                 },
                 async () => {
                     expect(await main(['agent', 'start', 'planner'], { cwd, output: out, dbUrl: ':memory:' })).toBe(1);
-                    expect(out.errors.at(-1)).toMatch(/Cannot reach server at .* — is spur serve running\?/);
+                    expect(out.errors.at(-1)).toMatch(/Cannot reach server at .* — is spur self serve running\?/);
                 },
             );
         } finally {

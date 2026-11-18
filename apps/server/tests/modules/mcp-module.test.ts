@@ -1,5 +1,5 @@
 /**
- * B9 task 1372 — the embedded `mcpModule` on `spur serve`.
+ * B9 task 1372 — the embedded `mcpModule` on `spur self serve`.
  *
  * The failure modes come first (task Plan step 1): a mounted endpoint when the module is off
  * (AC1), a request that sneaks past bearer auth, a delegation that reaches for a service the

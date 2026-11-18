@@ -17,7 +17,7 @@ import {
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { HISTORY_IMPORT_SCHEMA_SQL } from '@gobing-ai/ts-llm-jsonl-importer';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { checkImporterSchema, renderImporterSchemaCheck } from '../../src/commands/migrate';
+import { checkImporterSchema, renderImporterSchemaCheck } from '../../src/commands/self/migrate';
 import { main } from '../../src/index';
 import { createCapturedOutput } from '../helpers';
 
@@ -74,7 +74,7 @@ async function recorded(dbPath: string): Promise<string | null> {
 }
 
 describe('spur self migrate --check', () => {
-    test('an absent database is OK and is not created by either CLI spelling', async () => {
+    test('an absent database is OK and is not created by the self path', async () => {
         await withProject(null, async (dir, dbPath) => {
             const result = await checkImporterSchema({ cwd: dir, env: {}, fs: createNodeFileSystem() });
             expect(result).toEqual({ state: 'absent', url: dbPath });
@@ -82,7 +82,8 @@ describe('spur self migrate --check', () => {
                 'importer schema OK — database file absent (.spur/spur.db).',
             ]);
             expect(existsSync(dbPath)).toBe(false);
-            for (const argv of [['self', 'migrate'], ['migrate']]) {
+            // Task 1388 removed the top-level spelling; only `self migrate` resolves.
+            for (const argv of [['self', 'migrate']]) {
                 const checked = await run(dir, ['--no-logo', ...argv, '--check', '--json']);
                 expect(checked.exitCode).toBe(0);
                 expect(JSON.parse(checked.stdout)).toMatchObject({ state: 'absent' });

@@ -3,7 +3,7 @@ import { createGatewayHandler } from '../../src/services/project-gateway';
 
 /**
  * The gateway must reach a local serve on whichever loopback family it bound: a registry-spawned
- * serve binds 127.0.0.1, a hand-started `spur serve` binds ::1 on macOS. A dial that only knows
+ * serve binds 127.0.0.1, a hand-started `spur self serve` binds ::1 on macOS. A dial that only knows
  * 127.0.0.1 turned a healthy project into a 502.
  */
 

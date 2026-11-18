@@ -2,7 +2,7 @@
 
 Database maintenance for `.spur/spur.db`: routine optimization and optional compaction.
 
-> **Canonical path:** `spur self maintain`. The legacy `spur maintain` top-level form remains a hidden alias.
+> **Canonical path:** `spur self maintain`. The legacy `spur self maintain` top-level form remains a hidden alias.
 
 ## Usage
 

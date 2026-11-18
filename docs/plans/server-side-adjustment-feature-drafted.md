@@ -30,7 +30,7 @@ fixes **names** and **what each thing is for**. After confirmation (step 3), the
 list narrows scope and feeds task decomposition (step 4).
 
 **Operator decisions applied (2026-06-14):** Q1–Q6 resolved (see "Resolved decisions" appendix);
-board launcher added to scope as `spur serve` (was X03 in rd3-migration-delivery.md §6); build
+board launcher added to scope as `spur self serve` (was X03 in rd3-migration-delivery.md §6); build
 toolchain recommendation added (Vite shared, two deployment modes). One build-toolchain question
 remains (B1).
 
@@ -269,7 +269,7 @@ mobile (quick status checks). daisyUI themes avoid hand-designing a component li
   deployment is single-operator (operator's own Worker); auth is a future concern if the Worker is
   ever shared beyond the operator. Configured via `wrangler` access, not application-layer auth.
 - **Board launcher** — **added back into scope** (see "Board launcher" section above). Was reserved
-  as X03 in rd3-migration-delivery.md §6; now resolved as `spur serve` (hybrid mode).
+  as X03 in rd3-migration-delivery.md §6; now resolved as `spur self serve` (hybrid mode).
 
 ### Deferred / held (may resurface in finalized list)
 
@@ -403,40 +403,40 @@ one vertical slice. No "all contracts first" batch.
 
 ---
 
-## New scope: Board launcher (`spur serve`)
+## New scope: Board launcher (`spur self serve`)
 
 **Status: added back into scope (operator request 2026-06-14). Was reserved as X03 in
 rd3-migration-delivery.md §6.**
 
-The rd3-migration delivery explicitly deferred the board launcher name (`spur serve` vs. running
+The rd3-migration delivery explicitly deferred the board launcher name (`spur self serve` vs. running
 `apps/server` directly) to "that design task's decision" — this is that task. Adding it to scope.
 
-### Recommendation: `spur serve` (unified launcher)
+### Recommendation: `spur self serve` (unified launcher)
 
-**Recommend `spur serve`** — a CLI verb that launches the server + opens the board in one command.
+**Recommend `spur self serve`** — a CLI verb that launches the server + opens the board in one command.
 Pros/cons analysis:
 
 | Option | Pros | Cons |
 |---|---|---|
-| **`spur serve` (recommended)** | One command for the operator; resolves port, DB path, config from the same `.spur/config.yaml` the CLI uses; can auto-open browser; graceful shutdown via SIGINT handled by the CLI's existing `runNodeApplication` lifecycle; consistent with `spur init`/`spur status`/`spur migrate` UX (one binary, all verbs); the server becomes a library call from the CLI, not a separate process to manage. | Adds a `serve` command to the CLI surface (new verb); CLI must depend on the server package (`apps/server` → CLI dep, or extract server entry to a shared location); slightly more coupling between CLI and server. |
+| **`spur self serve` (recommended)** | One command for the operator; resolves port, DB path, config from the same `.spur/config.yaml` the CLI uses; can auto-open browser; graceful shutdown via SIGINT handled by the CLI's existing `runNodeApplication` lifecycle; consistent with `spur self init`/`spur self status`/`spur self migrate` UX (one binary, all verbs); the server becomes a library call from the CLI, not a separate process to manage. | Adds a `serve` command to the CLI surface (new verb); CLI must depend on the server package (`apps/server` → CLI dep, or extract server entry to a shared location); slightly more coupling between CLI and server. |
 | **Run `apps/server` directly** (`bun run apps/server/src/index.ts`) | Zero new CLI surface; server is fully independent; simpler for development (hot reload via `bun --hot`). | Operator must remember a second command + port; config resolution is duplicated (server reads env, CLI reads `.spur/config.yaml`); no browser auto-open; two processes to manage for graceful shutdown; breaks the "one binary" UX. |
-| **Hybrid** (`spur serve` wraps `apps/server`) | Best of both: CLI verb for operators, direct entry for development. Recommended path — `spur serve` calls `createApp()` from `apps/server` and runs `Bun.serve` with CLI-resolved config; `apps/server/src/index.ts` remains as the standalone entry for dev/Docker. | Slight added complexity in maintaining two entry points; must keep them in sync (shared `createApp` makes this safe). |
+| **Hybrid** (`spur self serve` wraps `apps/server`) | Best of both: CLI verb for operators, direct entry for development. Recommended path — `spur self serve` calls `createApp()` from `apps/server` and runs `Bun.serve` with CLI-resolved config; `apps/server/src/index.ts` remains as the standalone entry for dev/Docker. | Slight added complexity in maintaining two entry points; must keep them in sync (shared `createApp` makes this safe). |
 
-**Decision (recommended): hybrid.** `spur serve` is the operator-facing verb; `apps/server/src/index.ts`
+**Decision (recommended): hybrid.** `spur self serve` is the operator-facing verb; `apps/server/src/index.ts`
 remains the standalone entry for development and containerized deployment. Both call the same
 `createApp(appRt)` from `apps/server/src/bootstrap.ts`. This is the same pattern as `apps/cli` where
 `index.ts` is the entry but `main(argv, options)` is the testable/library surface.
 
-### Feature: `spur serve`
+### Feature: `spur self serve`
 
 | Feature ID | Feature | What it's for |
 |---|---|---|
-| **S0** | `spur serve` — unified board launcher | CLI verb that resolves config (port, DB path, `.spur/config.yaml`), builds the `ApplicationRuntime`, calls `createApp(appRt)`, starts `Bun.serve`, optionally opens the browser to the board URL, and handles SIGINT for graceful shutdown via the existing `runNodeApplication` lifecycle. The operator's one command to go from terminal to board. |
+| **S0** | `spur self serve` — unified board launcher | CLI verb that resolves config (port, DB path, `.spur/config.yaml`), builds the `ApplicationRuntime`, calls `createApp(appRt)`, starts `Bun.serve`, optionally opens the browser to the board URL, and handles SIGINT for graceful shutdown via the existing `runNodeApplication` lifecycle. The operator's one command to go from terminal to board. |
 
 **Surface addition (04_DESIGN.md sync, same commit when built):**
 
 ```
-spur serve [--port <n>] [--no-open] [--cwd <path>] [--json]
+spur self serve [--port <n>] [--no-open] [--cwd <path>] [--json]
 ```
 
 - `--port` overrides `config.server.port` (default 3000).
@@ -473,7 +473,7 @@ a `server:` block for serve-specific keys follows the same pattern.
 server:
   port: 3000          # PORT env overrides (already wired)
   host: localhost     # HOST env; 0.0.0.0 for LAN access; default localhost (loopback only)
-  openBrowser: true   # open board on start (spur serve only)
+  openBrowser: true   # open board on start (spur self serve only)
   webDistPath: null   # null = bundled web build; path = custom build location
 ```
 
@@ -555,7 +555,7 @@ mounts into Vite via `@hono/vite-dev-server`; Astro's Vite config integrates the
 | Mode | Target | How | Use case |
 |---|---|---|---|
 | **Cloudflare Workers (default)** | Worker + static assets | `@hono/vite-build/cloudflare-workers` bundles the server; Astro builds the web to static files; Workers Static Assets serves both. **One Worker deployment.** `apps/server/src/worker.ts` is the primary entry; `wrangler deploy` ships it. | The default deployment target. Remote/multi-device access, Cloudflare hosting, zero-server ops. |
-| **Local Bun binary (fallback)** | Bun binary via `spur serve` | `bun build --compile` for the server; web built by `astro build` (Vite) and served as static assets by the Hono server's `serveStatic` middleware. **One binary, one process.** `apps/server/src/index.ts` is this entry. | Local laptop, air-gapped environments, self-hosted servers, or development without Cloudflare. |
+| **Local Bun binary (fallback)** | Bun binary via `spur self serve` | `bun build --compile` for the server; web built by `astro build` (Vite) and served as static assets by the Hono server's `serveStatic` middleware. **One binary, one process.** `apps/server/src/index.ts` is this entry. | Local laptop, air-gapped environments, self-hosted servers, or development without Cloudflare. |
 
 **C. Toolchain summary.**
 
@@ -564,7 +564,7 @@ mounts into Vite via `@hono/vite-dev-server`; Astro's Vite config integrates the
 | Frontend build | **Vite** (via Astro) | Already in use; Astro is a Vite-based meta-framework. Handles React, Tailwind v4, daisyUI. |
 | Server dev | **Vite** (via `@hono/vite-dev-server`) | Unified dev server; no proxy; Cloudflare-official. |
 | Server build (Cloudflare, default) | **`@hono/vite-build/cloudflare-workers`** | Cloudflare-official; bundles for Workers runtime. Primary production target. |
-| Server build (local fallback) | **`bun build --compile`** (existing) | Single binary for `spur serve`; no Node runtime needed. Fallback for local/self-hosted. |
+| Server build (local fallback) | **`bun build --compile`** (existing) | Single binary for `spur self serve`; no Node runtime needed. Fallback for local/self-hosted. |
 | Web build | **`astro build`** (Vite) | Already in use; outputs static files. |
 | Static asset serving (Cloudflare, default) | **Workers Static Assets** | Native Cloudflare; SPA fallback via `not_found_handling`. |
 | Static asset serving (local fallback) | **Hono `serveStatic`** | The server serves the built web assets in local-binary mode. One port, one process. |
@@ -600,7 +600,7 @@ All shared across 2+ workspaces → catalog. Web-only/server-only → literal in
 via `@hono/vite-dev-server`. The server's `bun run dev` shifts from `bun --hot run src/index.ts`
 (standalone Bun.serve) to `vite dev` (Vite serves, delegates API to Hono). This is a dev-only change;
 production builds are unaffected. The standalone `apps/server/src/index.ts` entry remains for the
-Bun-binary production deployment (S0 `spur serve`) where Vite is not involved.
+Bun-binary production deployment (S0 `spur self serve`) where Vite is not involved.
 
 Rationale: eliminates proxy drift and CORS-in-dev friction; `@hono/vite-dev-server` is
 Cloudflare-official and aligned with the Cloudflare deployment mode.
@@ -619,7 +619,7 @@ the runtime to the host.
 | Target | Entry | Runtime | Server host | Static assets host | Deploy command |
 |---|---|---|---|---|---|
 | **Cloudflare Workers (default)** | `apps/server/src/worker.ts` | Workers isolate; `runApplication` bootstraps once per isolate, cached via `getRuntime` | Worker `fetch` handler → `createApp(appRt).fetch` | Workers Static Assets binding (SPA fallback `not_found_handling = "single-page-application"`) | `wrangler deploy` (from `apps/server`) |
-| **Local Bun binary (fallback)** | `apps/server/src/index.ts` + `apps/cli` `serve` command | Node/Bun process via `runNodeApplication` | `Bun.serve({ fetch: createApp(appRt).fetch })` | Hono `serveStatic` middleware on the same port | `spur serve` (or run the binary directly) |
+| **Local Bun binary (fallback)** | `apps/server/src/index.ts` + `apps/cli` `serve` command | Node/Bun process via `runNodeApplication` | `Bun.serve({ fetch: createApp(appRt).fetch })` | Hono `serveStatic` middleware on the same port | `spur self serve` (or run the binary directly) |
 
 **Shared core — both entries reuse these unchanged:**
 - `createApp(appRt)` in `apps/server/src/bootstrap.ts` — Hono app, middleware, oRPC handler mount.
@@ -646,7 +646,7 @@ on the entry. No config-file fork needed.
 **Why Cloudflare is default:** zero-server ops, global edge, built-in TLS, Workers Static Assets
 removes the need for a separate static host. The operator confirmed this is the intended primary
 deployment. The local fallback exists for laptop dev, air-gapped environments, and self-hosted
-servers — `spur serve` is the one command for that path.
+servers — `spur self serve` is the one command for that path.
 
 **Why this is robust:** the business logic (services, contracts, Hono app) is identical across both
 targets. A bug fixed or feature added in `packages/app` or `bootstrap.ts` ships to both. The only
@@ -664,7 +664,7 @@ feature list for the two new `docs/features` groups:
 
 | ID | Name | Priority | Wave | What it's for |
 |---|---|---|---|---|
-| **S0** | Board launcher (`spur serve`) | P1 | S0 | Unified CLI verb to launch the local-fallback server + board; resolves `.spur/config.yaml` `server:` block, starts Bun.serve, optional browser open, graceful shutdown. Primary deployment is Cloudflare (`wrangler deploy`); `spur serve` is the local path. |
+| **S0** | Board launcher (`spur self serve`) | P1 | S0 | Unified CLI verb to launch the local-fallback server + board; resolves `.spur/config.yaml` `server:` block, starts Bun.serve, optional browser open, graceful shutdown. Primary deployment is Cloudflare (`wrangler deploy`); `spur self serve` is the local path. |
 | **S1** | Server foundation: middleware, shutdown, wiring | P1 | S0 | Middleware pipeline (CORS, request-id, logger, error handler, body limit, compress), graceful shutdown, `ServerContext` service wiring, DB/FileSystem wiring, EventBus/JobQueue/Scheduler wiring. |
 | **S2** | Server module system | P1 | S0 | `ServerModule` interface, module registry, per-module OpenAPI — the standard for adding new API domains. |
 | **S3** | Server domain modules (task + feature critical path) | P1 | S1 | Task module (TaskService), Feature module (FeatureService) — the board's API dependency. Others (workflow, rule, agent, history, team) follow incrementally. |

@@ -82,14 +82,14 @@ curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install
 ```
 
 Installs to `~/.local/bin` (override via `SPUR_INSTALL`), embeds the Bun runtime, and runs
-`spur init` for you. The binary is verified against the release `SHA256SUMS` before install — and
+`spur self init` for you. The binary is verified against the release `SHA256SUMS` before install — and
 because the installer then *runs* that binary, the checksum is a code-execution boundary, not just
 an integrity check; keep the `SPUR_SKIP_VERIFY=1` bypass exceptional. Full options, verification,
 optional zg/a2a setup, and Windows/WSL notes live in the [CLI README](./apps/cli/README.md#install).
 
 ```bash
 spur --help
-spur init       # seed ~/.config/spur/ — idempotent
+spur self init       # seed ~/.config/spur/ — idempotent
 ```
 
 ---
@@ -230,7 +230,7 @@ centralized in the root Bun catalog.
 Every command supports `--json` for machine consumption.
 
 ```
-spur init       [--name <name>] [--force] [--minimal] [--json]
+spur self init       [--name <name>] [--force] [--minimal] [--json]
 spur agent      run <prompt> [--agent <name>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--json]
 spur agent      list [--json]
 spur agent      doctor [agent] [--json]
@@ -243,10 +243,10 @@ spur workflow   list [--json]
 spur history    import --source <source> [--file <path>|--root <path>] [--mode <mode>] [--json]
 spur history    analyze [--since <iso-date>] [--json]
 spur history    report [--json]   # reserved; prints a TODO marker for now
-spur status     [path] [--json]   # same as `spur self status`, which also reports the gateway daemon
+spur self status     [path] [--json]   # same as `spur self status`, which also reports the gateway daemon
 spur self       install [--with <tool>]... [--daemon] [--port <n>] [--json]
 spur self       uninstall [--daemon] [--port <n>] [--json]
-spur migrate    [--json]          # temporary helper: apply CLI-owned schema migrations
+spur self migrate    [--json]          # temporary helper: apply CLI-owned schema migrations
 ```
 
 `init`, `agent`, `history`, `rule`, `workflow` are the committed product surface; `status` and
@@ -384,7 +384,7 @@ silence the gate.
 
 ## Configuration
 
-`spur init` writes a single `.spur/config.yaml` (ADR-027; the legacy `.spur/config.json`
+`spur self init` writes a single `.spur/config.yaml` (ADR-027; the legacy `.spur/config.json`
 project marker is retired). It carries a portable `bootstrap:` block (logging, telemetry,
 database, scheduler — consumed by `@gobing-ai/ts-infra`) plus a Spur app section (`agent`,
 `rules`, `workflows`, `tasks`) validated by `spurConfigSchema`. Resolution order: project

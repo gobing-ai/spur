@@ -27,7 +27,7 @@ tags: [system, B6, B7, B8, G66, H53, I31, agent, workflow]
 
 ## 2. Decision — headless stays; dispatch becomes session-pinned
 
-Interactive TTY/PTY mode was evaluated and rejected as a dispatch surface: it has no structured output or exit semantics, permission prompts need a human, and driving it requires the terminal scraping ADR-057 forbids. Its advantages — watching/steering and hooks/MCP parity — already exist headlessly (`spur serve` process streams + `POST /api/processes/:id/stdin`; the agents' own `-p` flags).
+Interactive TTY/PTY mode was evaluated and rejected as a dispatch surface: it has no structured output or exit semantics, permission prompts need a human, and driving it requires the terminal scraping ADR-057 forbids. Its advantages — watching/steering and hooks/MCP parity — already exist headlessly (`spur self serve` process streams + `POST /api/processes/:id/stdin`; the agents' own `-p` flags).
 
 What changes is the *granularity* of headless dispatch:
 
@@ -66,7 +66,7 @@ agent:
 
 ### 3.4 Usage producer (run-once, external schedule)
 
-One command, run by cron/launchd like `spur history daily`, never by `spur serve`:
+One command, run by cron/launchd like `spur history daily`, never by `spur self serve`:
 
 1. Run `codexbar usage --format json` (adapter behind a small `UsageSource` interface so a second source can be added without touching the mapping). The argv deliberately omits `--provider all` (2026-10-16): that sweep fans out over every provider configured in CodexBar — 106 on the reference host, 89 of them uncredentialed — and its wall time is the slowest of all of them. The operator-enabled default measured 6 s there against 16-190 s for the sweep, and 4 of 140 scheduled runs (2026-10-13 → 16) crossed the old 180000 ms deadline and failed the job closed. Which providers are enabled is the operator's own CodexBar setting, and a provider absent from the capture carries no observation and can never imply recovery (0907), so the narrowing is fail-safe rather than fail-open. The run is bounded by a finite capture deadline — 300000 ms default in `CodexbarUsageSource` via `@gobing-ai/ts-runtime` `NodeProcessExecutor.run({ timeout })`, overridable with `bootstrap.options.agentUsageCaptureTimeoutMs` (a positive whole number of milliseconds; a malformed value fails the run closed rather than silently keeping the default — a config option, not an env var, per ADR-120). The previous 180000 ms (0908) was headroom over a single ~113 s sample (I31/0904), not a percentile, and sat below the measured p99 (~188 s). The runtime owns process-group termination and output settlement; the source adds no second watchdog. An interrupted (timeout/cancelled/signal/error) capture is unusable even when its partial stdout parses, and surfaces as `UsageSourceError` naming the deadline and the override — not an installation hint — before any write.
 2. Write `~/.config/spur/agent-usage.json` (`{ captured_at, source, providers: [...] , raw }`). Tests and sandboxes pin the location via `SPUR_AGENT_USAGE_SNAPSHOT` (injected-env override in `defaultAgentUsageSnapshotPath`; bun's `homedir()` ignores `HOME` at runtime).

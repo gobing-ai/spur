@@ -75,7 +75,7 @@ must not sit below the highest `min_tier` among its folded stages.
 ## Role annotations
 
 - **`scribe` (cheap).** Writing derived text — commit messages, changelogs, handovers, daily
-  summaries — plus template scaffolding (`spur init`, rule/workflow authoring). Mechanical,
+  summaries — plus template scaffolding (`spur self init`, rule/workflow authoring). Mechanical,
   high-volume, cheap-tier work. Folds the `changelog` stage.
 - **`coder` (standard).** Implementation and delivery: running the pipeline, unit tests, debugging,
   simplification, fix-everything sweeps, reverse engineering, wrap-up, and the end-to-end

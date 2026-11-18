@@ -13,7 +13,7 @@
 | reachable | ✅ | The canonical server `EventBus` (`eventsBus` in `createServerContext`) receives the emit via an injected `events`/`eventBus`/`observabilityBus` accessor. The `system_events` tap persists it; SSE streams it. |
 | nested-CLI deferred | ⚠️ | The event fires only inside a child agent process (e.g. `sp:dev-*` auto-mode child running `spur workflow run`). The child's `EventBus` is process-local and does not cross the process boundary. This is an intentional v1 scope limit (`serve.ts:137–145`), not a wiring gap. |
 | diagnostic-only | 🔬 | Emitted on a separate internal `lifecycleBus`, not the main server bus. Not captured by the tap unless a forwarder bridges it. By design. |
-| conditional | ◐ | The producer exists but `spur serve` does not perform the registration needed to activate it. |
+| conditional | ◐ | The producer exists but `spur self serve` does not perform the registration needed to activate it. |
 | unwired | ❌ | No production emit path reaches the server bus. |
 
 ## Audit table — all 65 catalog entries
@@ -95,7 +95,7 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 > **Task 0371 wiring.** Catalog entries carry their owning noun's source/renderer (`agent`, `process`, `planning`), the default tier, and `metadata-only` payloads (`memberId`, `agentType`, `taskId`, `outcome` — no bodies or argv; the retired `teamId` is gone with its producer, 0860 R2). `extractSystemEventActor` falls back to `memberId` after `actor`/`agentId` (R4). Unknown members persist with null unresolved fields (R5). 0857 removed the up/down pair with the `agent.team` roster runtime; 0860 then deleted the member-scoped started/stopped pair (it duplicated `agent.started|stopped`) and renamed assignment to `task.assigned`. The `team.member.*` family no longer exists in the catalog.
 >
-> **CLI durability.** `spur task update --assignee` (`apps/cli/src/commands/task.ts`) attaches `attachSystemEventLedger` so `task.assigned` rows land in the shared SQLite ledger without `spur serve` (R6). Supervisor-driven `agent.started|stopped` remain Board-path (same as `process.*` — see Gap 1 residual).
+> **CLI durability.** `spur task update --assignee` (`apps/cli/src/commands/task.ts`) attaches `attachSystemEventLedger` so `task.assigned` rows land in the shared SQLite ledger without `spur self serve` (R6). Supervisor-driven `agent.started|stopped` remain Board-path (same as `process.*` — see Gap 1 residual).
 
 ### Rule (rule.\*)
 
@@ -166,7 +166,7 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 | ⚠️ child-of-child deferred | 0 catalog rows (residual scope — see Gap 4) | Nested agent-inside-agent without surviving the 0370 bridge |
 | ❌ unwired | **0** | — |
 
-**All default-tier catalog entries now have a confirmed production emit path to the server bus and/or the shared CLI ledger**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform) and the `bus.*` family (diagnostic-only by design — separate internal bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus` (Board + CLI when the diagnostic toggle is on). Task 0370 closed the CLI gap for `workflow.*` and direct `agent.invoke.*`. Task 0371 closed the agent lifecycle family on Board + CLI mutation paths; 0857 retired `team.up|down` with the `agent.team` roster runtime and 0860 deleted the member-scoped duplicate, leaving `task.assigned` + `agent.started|stopped`.
+**All default-tier catalog entries now have a confirmed production emit path to the server bus and/or the shared CLI ledger**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur self serve` does not perform) and the `bus.*` family (diagnostic-only by design — separate internal bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus` (Board + CLI when the diagnostic toggle is on). Task 0370 closed the CLI gap for `workflow.*` and direct `agent.invoke.*`. Task 0371 closed the agent lifecycle family on Board + CLI mutation paths; 0857 retired `team.up|down` with the `agent.team` roster runtime and 0860 deleted the member-scoped duplicate, leaving `task.assigned` + `agent.started|stopped`.
 
 ## Systemic Observability Gaps
 
