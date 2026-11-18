@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Produce the usage-driven reduction report
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-18T05:29:39.497Z
-updated_at: "2026-11-18T06:16:06.127Z"
+updated_at: "2026-11-18T08:50:55.894Z"
 feature_id: H85
 priority: P2
 tags:
@@ -60,6 +60,17 @@ Test layer: the report artifact itself (repeatable from the cited history artifa
 - **Wait 30 days?** Not for commands or skills, which already have 8 months of data across 5 sources. MCP tool rows stay `keep — no evidence` until 1376 events cover 30 days.
 - **Subagents?** They are inventoried but unmeasured, so they are kept. Counting Agent tool calls by `subagent_type` is deferred until a subagent cut is actually wanted.
 
+#### Q&A entry — 2026-11-18T08:50:00.000Z
+
+- **Approved cuts (pending operator review): none.** The report proposes 42 `delete` rows; no row is
+  approved here, so by the rule every row not listed is kept. Removing plugin commands is a public
+  surface change and the operator has not confirmed any of them.
+- **Prior-use warning.** 18 of the 42 delete candidates had calls before the 30-day window (e.g.
+  `sp:dev-wrapall` 21 lifetime calls, last 2026-10-08). Each row carries `lifetimeCalls` and
+  `lastCallAt`, so an approval decision sees a used capability rather than an apparently dead file.
+- **MCP tools and subagents stay.** The MCP emitters shipped today (1376/1377), so no tool row has a
+  30-day window — every MCP row reads `keep — no evidence`. Subagents have no `subagent_type` rows at all.
+
 ### Design
 
 **WHAT.** A report-only task. It needs no new code beyond a throwaway query script if the artifact needs reshaping; the inputs are the 1398/1399 artifact fields.
@@ -98,3 +109,6 @@ Test layer: the report artifact itself (repeatable from the cited history artifa
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:50:55.894Z todo → wip (system)
+

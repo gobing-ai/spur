@@ -1,0 +1,1277 @@
+{
+    "schemaVersion": 1,
+    "report": "surface-reduction",
+    "measuredAt": "2026-11-18T08:50:19.895Z",
+    "sourceArtifact": "/tmp/1403-artifact.json",
+    "sourceDatabase": "/Users/robin/xprojects/spur-new/.spur/spur.db",
+    "window": {
+        "since": "2026-10-19T00:00:00.000Z",
+        "until": "2026-11-18T00:00:00.000Z",
+        "days": 30,
+        "comparable": true
+    },
+    "method": "per-item calls folded from history_skill_call by source (read-only); MCP tools and subagents from protocolUsage and the descriptor list",
+    "totals": {
+        "items": 94,
+        "delete": 42,
+        "keep": 43,
+        "keepNoEvidence": 9,
+        "merge": 0
+    },
+    "rows": [
+        {
+            "kind": "command",
+            "name": "sp:dev-wrapall",
+            "lifetimeCalls": 21,
+            "lastCallAt": "2026-10-08T20:44:31.021Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-08 (21 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-job-dump",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-next",
+            "lifetimeCalls": 5,
+            "lastCallAt": "2026-09-14T16:02:21.919Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-09-14 (5 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-feature-change",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-verifyall",
+            "lifetimeCalls": 93,
+            "lastCallAt": "2026-11-17T03:51:12.031Z",
+            "calls": 16,
+            "bySource": {
+                "codex": 9,
+                "grok": 4,
+                "pi": 3
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 16× (codex 9, grok 4, pi 3)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:rule-refine",
+            "lifetimeCalls": 1,
+            "lastCallAt": "2026-09-03T22:07:32.368Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-09-03 (1 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-find-next",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-08-10T06:21:47.966Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-08-10 (2 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:rule-add",
+            "lifetimeCalls": 9,
+            "lastCallAt": "2026-10-14T21:02:06.452Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-14 (9 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-refactor",
+            "lifetimeCalls": 1,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used — (1 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-simplify",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-refresh",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-wrap",
+            "lifetimeCalls": 65,
+            "lastCallAt": "2026-11-15T20:38:52.550Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-idea",
+            "lifetimeCalls": 63,
+            "lastCallAt": "2026-11-18T03:59:03.672Z",
+            "calls": 5,
+            "bySource": {
+                "claude": 1,
+                "codex": 3,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 5× (claude 1, codex 3, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-review-session",
+            "lifetimeCalls": 161,
+            "lastCallAt": "2026-10-25T02:22:51.448Z",
+            "calls": 13,
+            "bySource": {
+                "pi": 13
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 13× (pi 13)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:workflow-refine",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-find-way",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-verify",
+            "lifetimeCalls": 275,
+            "lastCallAt": "2026-11-15T06:19:07.325Z",
+            "calls": 5,
+            "bySource": {
+                "codex": 2,
+                "grok": 1,
+                "pi": 2
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 5× (codex 2, grok 1, pi 2)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-unit",
+            "lifetimeCalls": 26,
+            "lastCallAt": "2026-11-15T05:48:36.871Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-fixgha",
+            "lifetimeCalls": 24,
+            "lastCallAt": "2026-11-18T00:31:44.625Z",
+            "calls": 14,
+            "bySource": {
+                "pi": 14
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 14× (pi 14)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-job-resume",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-pr-review",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-10-04T20:51:41.917Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-04 (2 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:workflow-add",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-handover",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-find-issue",
+            "lifetimeCalls": 5,
+            "lastCallAt": "2026-11-10T07:15:04.727Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-runall",
+            "lifetimeCalls": 366,
+            "lastCallAt": "2026-11-18T07:26:09.883Z",
+            "calls": 39,
+            "bySource": {
+                "codex": 10,
+                "pi": 29
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 39× (codex 10, pi 29)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:rule-scan",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-daily",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-arch",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-fixall",
+            "lifetimeCalls": 147,
+            "lastCallAt": "2026-11-08T23:46:11.120Z",
+            "calls": 15,
+            "bySource": {
+                "codex": 6,
+                "pi": 9
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 15× (codex 6, pi 9)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:spur-init",
+            "lifetimeCalls": 6,
+            "lastCallAt": "2026-11-10T19:36:08.146Z",
+            "calls": 6,
+            "bySource": {
+                "pi": 6
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 6× (pi 6)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-gtd",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-08-16T21:44:17.799Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-08-16 (2 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-changelog",
+            "lifetimeCalls": 176,
+            "lastCallAt": "2026-11-18T01:46:29.070Z",
+            "calls": 27,
+            "bySource": {
+                "pi": 27
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 27× (pi 27)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-refineall",
+            "lifetimeCalls": 64,
+            "lastCallAt": "2026-11-16T23:04:25.959Z",
+            "calls": 8,
+            "bySource": {
+                "claude": 3,
+                "codex": 2,
+                "pi": 3
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 8× (claude 3, codex 2, pi 3)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-find-conflict",
+            "lifetimeCalls": 4,
+            "lastCallAt": "2026-11-14T22:54:54.165Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-brainstorm",
+            "lifetimeCalls": 3,
+            "lastCallAt": "2026-09-03T04:12:19.884Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-09-03 (3 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-reverse",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-dogfood",
+            "lifetimeCalls": 39,
+            "lastCallAt": "2026-11-10T21:14:11.000Z",
+            "calls": 4,
+            "bySource": {
+                "claude": 2,
+                "grok": 1,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 4× (claude 2, grok 1, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-run",
+            "lifetimeCalls": 583,
+            "lastCallAt": "2026-11-18T05:35:27.284Z",
+            "calls": 76,
+            "bySource": {
+                "claude": 2,
+                "codex": 56,
+                "pi": 18
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 76× (claude 2, codex 56, pi 18)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-debug",
+            "lifetimeCalls": 1,
+            "lastCallAt": "2026-11-09T17:45:56.704Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-refine",
+            "lifetimeCalls": 76,
+            "lastCallAt": "2026-11-14T00:52:32.279Z",
+            "calls": 15,
+            "bySource": {
+                "codex": 12,
+                "pi": 3
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 15× (codex 12, pi 3)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-gitmsg",
+            "lifetimeCalls": 600,
+            "lastCallAt": "2026-11-18T07:19:43.486Z",
+            "calls": 81,
+            "bySource": {
+                "pi": 81
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 81× (pi 81)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-review",
+            "lifetimeCalls": 232,
+            "lastCallAt": "2026-11-18T07:01:54.541Z",
+            "calls": 9,
+            "bySource": {
+                "codex": 2,
+                "pi": 7
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 9× (codex 2, pi 7)",
+            "measured": true
+        },
+        {
+            "kind": "command",
+            "name": "sp:dev-plan",
+            "lifetimeCalls": 9,
+            "lastCallAt": "2026-11-08T16:36:30.458Z",
+            "calls": 2,
+            "bySource": {
+                "claude": 1,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 2× (claude 1, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:parallel-execution",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:sys-architecture",
+            "lifetimeCalls": 11,
+            "lastCallAt": "2026-11-09T06:47:51.378Z",
+            "calls": 2,
+            "bySource": {
+                "codex": 1,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 2× (codex 1, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:spur-doctor",
+            "lifetimeCalls": 1,
+            "lastCallAt": "2026-11-09T06:47:51.378Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:next-feature",
+            "lifetimeCalls": 4,
+            "lastCallAt": "2026-11-16T04:32:03.133Z",
+            "calls": 1,
+            "bySource": {
+                "claude": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (claude 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:test-driven-development",
+            "lifetimeCalls": 9,
+            "lastCallAt": "2026-11-15T17:50:24.514Z",
+            "calls": 9,
+            "bySource": {
+                "codex": 7,
+                "pi": 2
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 9× (codex 7, pi 2)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:functional-review",
+            "lifetimeCalls": 126,
+            "lastCallAt": "2026-11-07T01:07:14.586Z",
+            "calls": 9,
+            "bySource": {
+                "codex": 8,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 9× (codex 8, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-verification",
+            "lifetimeCalls": 536,
+            "lastCallAt": "2026-11-17T21:27:26.649Z",
+            "calls": 42,
+            "bySource": {
+                "claude": 13,
+                "codex": 18,
+                "grok": 4,
+                "pi": 7
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 42× (claude 13, codex 18, grok 4, pi 7)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:wayfinder",
+            "lifetimeCalls": 7,
+            "lastCallAt": "2026-10-09T21:44:31.471Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-09 (7 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:spur-cli",
+            "lifetimeCalls": 85,
+            "lastCallAt": "2026-11-18T05:22:35.677Z",
+            "calls": 58,
+            "bySource": {
+                "codex": 47,
+                "grok": 4,
+                "pi": 7
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 58× (codex 47, grok 4, pi 7)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:spur-composer",
+            "lifetimeCalls": 1,
+            "lastCallAt": "2026-10-04T20:55:29.354Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-04 (1 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:brainstorm",
+            "lifetimeCalls": 12,
+            "lastCallAt": "2026-11-16T22:55:30.951Z",
+            "calls": 2,
+            "bySource": {
+                "codex": 2
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 2× (codex 2)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:sp-bot-bootstrap",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:fleet-join",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-review",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-09-13T03:01:13.937Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-09-13 (2 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:history-anatomy",
+            "lifetimeCalls": 81,
+            "lastCallAt": "2026-11-17T13:54:06.000Z",
+            "calls": 28,
+            "bySource": {
+                "grok": 9,
+                "pi": 19
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 28× (grok 9, pi 19)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:indexed-context",
+            "lifetimeCalls": 4,
+            "lastCallAt": "2026-09-24T16:11:11.000Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-09-24 (4 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:sys-debugging",
+            "lifetimeCalls": 5,
+            "lastCallAt": "2026-11-09T17:46:37.126Z",
+            "calls": 2,
+            "bySource": {
+                "pi": 2
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 2× (pi 2)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-testing",
+            "lifetimeCalls": 18,
+            "lastCallAt": "2026-11-15T05:48:39.488Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-implementation",
+            "lifetimeCalls": 291,
+            "lastCallAt": "2026-11-18T07:19:24.422Z",
+            "calls": 51,
+            "bySource": {
+                "claude": 4,
+                "codex": 27,
+                "grok": 10,
+                "pi": 10
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 51× (claude 4, codex 27, grok 10, pi 10)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:reverse-engineering",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:spur-check",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-10-16T15:55:54.003Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-16 (2 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:branch-workflow",
+            "lifetimeCalls": 6,
+            "lastCallAt": "2026-11-14T22:51:44.931Z",
+            "calls": 1,
+            "bySource": {
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:daily-summary",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:dogfood-testing",
+            "lifetimeCalls": 40,
+            "lastCallAt": "2026-11-10T21:14:11.000Z",
+            "calls": 6,
+            "bySource": {
+                "claude": 3,
+                "grok": 2,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 6× (claude 3, grok 2, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:redesign-web-ui",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:spec-decomposition",
+            "lifetimeCalls": 7,
+            "lastCallAt": "2026-11-08T16:36:30.458Z",
+            "calls": 2,
+            "bySource": {
+                "codex": 1,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 2× (codex 1, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:taste-refactoring-api",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-improvement",
+            "lifetimeCalls": 107,
+            "lastCallAt": "2026-11-06T16:09:30.143Z",
+            "calls": 8,
+            "bySource": {
+                "codex": 7,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 8× (codex 7, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:pr-reviewing",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-10-04T20:51:53.374Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-10-04 (2 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:conflict-finding",
+            "lifetimeCalls": 11,
+            "lastCallAt": "2026-11-14T22:55:11.749Z",
+            "calls": 4,
+            "bySource": {
+                "claude": 3,
+                "pi": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 4× (claude 3, pi 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:taste-refactoring-tests",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:doc-evolve",
+            "lifetimeCalls": 74,
+            "lastCallAt": "2026-11-15T20:46:54.825Z",
+            "calls": 18,
+            "bySource": {
+                "codex": 10,
+                "pi": 8
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 18× (codex 10, pi 8)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-refactoring",
+            "lifetimeCalls": 1,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used — (1 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:code-simplification",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:doubt-driven-development",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:source-driven-development",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-10-22T06:21:02.958Z",
+            "calls": 1,
+            "bySource": {
+                "codex": 1
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 1× (codex 1)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:taste-refactoring-architect",
+            "lifetimeCalls": 1,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used — (1 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:taste-refactoring-ui",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the window and no lifetime calls in any source",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:next-router",
+            "lifetimeCalls": 33,
+            "lastCallAt": "2026-11-10T20:37:30.000Z",
+            "calls": 4,
+            "bySource": {
+                "grok": 2,
+                "pi": 2
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 4× (grok 2, pi 2)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:session-review",
+            "lifetimeCalls": 180,
+            "lastCallAt": "2026-10-27T02:20:58.401Z",
+            "calls": 12,
+            "bySource": {
+                "claude": 5,
+                "pi": 7
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 12× (claude 5, pi 7)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:issue-finding",
+            "lifetimeCalls": 5,
+            "lastCallAt": "2026-08-21T05:16:34.306Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "delete",
+            "rationale": "zero calls in the 30-day window; last used 2026-08-21 (5 lifetime)",
+            "measured": true
+        },
+        {
+            "kind": "skill",
+            "name": "sp:spur-dev",
+            "lifetimeCalls": 603,
+            "lastCallAt": "2026-11-18T07:26:38.160Z",
+            "calls": 68,
+            "bySource": {
+                "claude": 21,
+                "codex": 19,
+                "grok": 7,
+                "pi": 21
+            },
+            "failureRate": null,
+            "recommendation": "keep",
+            "rationale": "invoked 68× (claude 21, codex 19, grok 7, pi 21)",
+            "measured": true
+        },
+        {
+            "kind": "subagent",
+            "name": "sp:super-reviewer",
+            "lifetimeCalls": 40,
+            "lastCallAt": "2026-11-17T20:34:56.693Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "history_skill_call does not record Agent-tool invocations by subagent_type, so a cut would rest on no measurement.",
+            "measured": false
+        },
+        {
+            "kind": "subagent",
+            "name": "sp:super-planner",
+            "lifetimeCalls": 1,
+            "lastCallAt": "2026-09-17T23:14:06.000Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "history_skill_call does not record Agent-tool invocations by subagent_type, so a cut would rest on no measurement.",
+            "measured": false
+        },
+        {
+            "kind": "subagent",
+            "name": "sp:super-coder",
+            "lifetimeCalls": 2,
+            "lastCallAt": "2026-09-10T22:45:03.000Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "history_skill_call does not record Agent-tool invocations by subagent_type, so a cut would rest on no measurement.",
+            "measured": false
+        },
+        {
+            "kind": "subagent",
+            "name": "sp:expert-spur",
+            "lifetimeCalls": 3,
+            "lastCallAt": "2026-11-10T17:33:49.316Z",
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "history_skill_call does not record Agent-tool invocations by subagent_type, so a cut would rest on no measurement.",
+            "measured": false
+        },
+        {
+            "kind": "mcp-tool",
+            "name": "task_show",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "MCP tool events cover no 30-day window yet (the emitters shipped 2026-11-18); unmeasured is not zero-use.",
+            "measured": false
+        },
+        {
+            "kind": "mcp-tool",
+            "name": "task_list",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "MCP tool events cover no 30-day window yet (the emitters shipped 2026-11-18); unmeasured is not zero-use.",
+            "measured": false
+        },
+        {
+            "kind": "mcp-tool",
+            "name": "workflow_status",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "MCP tool events cover no 30-day window yet (the emitters shipped 2026-11-18); unmeasured is not zero-use.",
+            "measured": false
+        },
+        {
+            "kind": "mcp-tool",
+            "name": "workflow_run",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "MCP tool events cover no 30-day window yet (the emitters shipped 2026-11-18); unmeasured is not zero-use.",
+            "measured": false
+        },
+        {
+            "kind": "mcp-tool",
+            "name": "workflow_continue",
+            "lifetimeCalls": 0,
+            "lastCallAt": null,
+            "calls": 0,
+            "bySource": {},
+            "failureRate": null,
+            "recommendation": "keep — no evidence",
+            "rationale": "MCP tool events cover no 30-day window yet (the emitters shipped 2026-11-18); unmeasured is not zero-use.",
+            "measured": false
+        }
+    ]
+}
