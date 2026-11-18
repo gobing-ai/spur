@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Produce the per-agent MCP adoption matrix
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-18T05:29:33.333Z
-updated_at: "2026-11-18T05:59:45.510Z"
+updated_at: "2026-11-18T19:54:26.431Z"
 feature_id: B92
 priority: P2
 tags:
@@ -94,3 +94,6 @@ Test layer: document review against cited sources, plus local `server/discover` 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T19:54:26.431Z todo → wip (system)
+
