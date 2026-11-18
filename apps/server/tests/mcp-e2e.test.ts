@@ -9,10 +9,10 @@
  * `serverBootstrapConfig` (task 1370) → `bootConfig.mcp` → module mount.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { registerSystemEventTap } from '@gobing-ai/spur-app';
+import { loadSectionMatrix, registerSystemEventTap } from '@gobing-ai/spur-app';
 import { getEnvVars, type ProjectEntry, setEnvVar } from '@gobing-ai/spur-config';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -34,6 +34,8 @@ let root = '';
 let upstream: ReturnType<typeof Bun.serve> | undefined;
 let gateway: GatewayHandle | undefined;
 let baseUrl = '';
+/** The same context the app serves from: the 1392 tools write through it. */
+let appCtx: ReturnType<typeof createServerContext> | undefined;
 /** 1376: the catalog-driven tap persists the mcp/auth names the module emits onto `ctx.eventBus()`. */
 let eventDao: SystemEventDao;
 
@@ -41,6 +43,13 @@ beforeAll(async () => {
     root = mkdtempSync(join(tmpdir(), 'spur-mcp-e2e-'));
     mkdirSync(join(root, 'docs', 'tasks'), { recursive: true });
     mkdirSync(join(root, '.spur', 'context'), { recursive: true });
+    // Task creation needs the canonical section matrix; the project-local copy is
+    // `.spur/tasks/section-matrix.yaml` (1392).
+    mkdirSync(join(root, '.spur', 'tasks'), { recursive: true });
+    writeFileSync(
+        join(root, '.spur', 'tasks', 'section-matrix.yaml'),
+        readFileSync(join(import.meta.dir, '..', '..', '..', 'config', 'tasks', 'section-matrix.yaml'), 'utf8'),
+    );
     writeFileSync(
         join(root, 'docs', 'tasks', '9001_e2e-probe.md'),
         '---\nname: e2e probe\nstatus: todo\n---\n\nE2E probe task body.\n',
@@ -64,7 +73,10 @@ beforeAll(async () => {
         env,
         bootConfig: serverBootstrapConfig(env),
         eventsBus: bus,
+        // 1392: the server boot loads this; a directly-created context must be handed it.
+        sectionMatrix: await loadSectionMatrix(root),
     });
+    appCtx = ctx;
     eventDao = new SystemEventDao(await ctx.getDb());
     await registerSystemEventTap(bus, eventDao, { warn: () => {}, debug: () => {} }, { diagnosticEnabled: false });
     const app = createApp(mockRuntime(), { ctx });
@@ -450,9 +462,9 @@ describe('1376: mcp events reach the system_events ledger', () => {
             authHeaders(),
         );
         expect(res.status).toBe(200);
-        const [row] = await rowsFor('mcp.tool.called');
-        if (row === undefined) throw new Error('expected an mcp.tool.called row');
-        expect(row.payload.tool).toBe('sp_task_show');
+        const rows = await rowsFor('mcp.tool.called');
+        const row = rows.find((entry) => entry.payload.tool === 'sp_task_show');
+        if (row === undefined) throw new Error('expected an mcp.tool.called row for sp_task_show');
         expect(row.payload.argKeys).toEqual(['wbs']);
         expect(row.payload.outcome).toBe('ok');
         expect(row.payload.wbs).toBe('9001');
@@ -466,9 +478,9 @@ describe('1376: mcp events reach the system_events ledger', () => {
         const res = await mcpPost(rpc('tools/call', { name: 'no_such_tool', arguments: {} }), authHeaders());
         // 1374's adapter maps a non-protocol throw to 500 INTERNAL_ERROR; 1376 adds the event, not a status.
         expect(res.status).toBe(500);
-        const [row] = await rowsFor('mcp.tool.failed');
-        if (row === undefined) throw new Error('expected an mcp.tool.failed row');
-        expect(row.payload.tool).toBe('no_such_tool');
+        const rows = await rowsFor('mcp.tool.failed');
+        const row = rows.find((entry) => entry.payload.tool === 'no_such_tool');
+        if (row === undefined) throw new Error('expected an mcp.tool.failed row for no_such_tool');
         expect(row.payload.errorCode).toBe('unknown_tool');
         expect(row.payload.outcome).toBe('error');
     });
@@ -499,5 +511,138 @@ describe('1376: mcp events reach the system_events ledger', () => {
         expect(mcpRow.payload.reason).toBe('missing');
         expect(mcpRow.payload.path).toBe('/mcp');
         expect(mcpRow.raw).not.toContain(TOKEN);
+    });
+});
+
+/**
+ * 1392 — the corpus write tools delegate to the guarded services, and the guards refuse
+ * identically on MCP and on the CLI. Schema-level exclusions are asserted too: a rejected
+ * argument must never reach a service.
+ */
+describe('1392: guarded corpus write tools', () => {
+    /** Unique per run: `task create` has a 300s duplicate-name window by design. */
+    const unique = (label: string) => `${label} ${Math.random().toString(36).slice(2, 9)}`;
+    /** Call one tool and return its JSON-RPC envelope (result or error). */
+    async function call(name: string, args: Record<string, unknown>) {
+        const res = await mcpPost(rpc('tools/call', { name, arguments: args }), authHeaders());
+        return { status: res.status, body: (await res.json()) as { result?: unknown; error?: { message: string } } };
+    }
+
+    test('tools/list advertises the five write tools with closed schemas (R1, R2, R6)', async () => {
+        const res = await mcpPost(rpc('tools/list'), authHeaders());
+        const body = (await res.json()) as {
+            result: { tools: Array<{ name: string; inputSchema: Record<string, unknown> }> };
+        };
+        const byName = new Map(body.result.tools.map((tool) => [tool.name, tool]));
+        for (const name of [
+            'sp_task_create',
+            'sp_task_update',
+            'sp_task_transition',
+            'sp_feature_check',
+            'sp_rule_run',
+        ]) {
+            expect(byName.has(name), name).toBe(true);
+            expect(byName.get(name)?.inputSchema.additionalProperties).toBe(false);
+        }
+        // A status write and a fix-applying run have no schema slot at all (R5).
+        const update = byName.get('sp_task_update')?.inputSchema as { properties: Record<string, { enum?: string[] }> };
+        expect(update.properties.field?.enum).not.toContain('status');
+        const rule = byName.get('sp_rule_run')?.inputSchema as {
+            properties: Record<string, { enum?: string[] }>;
+        };
+        expect(rule.properties.fixMode?.enum).toEqual(['none', 'suggest']);
+        expect(rule.properties.file).toBeUndefined();
+        expect(update.properties.forceDone).toBeUndefined();
+    });
+
+    test('sp_task_create makes a task without ready-prep (R1)', async () => {
+        const created = await call('sp_task_create', { title: unique('mcp created task'), featureId: 'K41' });
+        if (created.body.result === undefined) throw new Error(`create failed: ${JSON.stringify(created.body)}`);
+        const result = created.body.result as { wbs: string; readiness: string; warnings: unknown[] };
+        expect(result.readiness).toBe('skipped');
+        expect(result.warnings).toEqual([]);
+        expect(result.wbs).toMatch(/^\d+$/);
+    });
+
+    test('sp_task_update writes a field and a section, and refuses a status field (R1, R5)', async () => {
+        const created = await call('sp_task_create', { title: unique('mcp update target') });
+        const wbs = (created.body.result as { wbs: string }).wbs;
+
+        const field = await call('sp_task_update', { wbs, field: 'priority', value: 'P2' });
+        expect((field.body.result as { field: string }).field).toBe('priority');
+
+        const section = await call('sp_task_update', { wbs, section: 'Solution', content: 'written over mcp' });
+        expect((section.body.result as { section: string }).section).toBe('Solution');
+
+        // R5: the enum rejects `status` outright, so no status write can reach a field setter.
+        const refused = await call('sp_task_update', { wbs, field: 'status', value: 'done' });
+        expect(refused.body.error?.message).toContain('priority');
+    });
+
+    test('sp_task_update adds and removes tags, and refuses a malformed tag list (R1, R2)', async () => {
+        const created = await call('sp_task_create', { title: unique('mcp tag target') });
+        const wbs = (created.body.result as { wbs: string }).wbs;
+
+        const tagged = await call('sp_task_update', { wbs, addTags: ['mcp', 'e2e'] });
+        expect((tagged.body.result as { tags: string[] }).tags).toEqual(expect.arrayContaining(['mcp', 'e2e']));
+
+        const untagged = await call('sp_task_update', { wbs, removeTags: ['e2e'] });
+        expect((untagged.body.result as { tags: string[] }).tags).not.toContain('e2e');
+
+        // The schema declares an array of strings, so a scalar never reaches the service.
+        const malformed = await call('sp_task_update', { wbs, addTags: 'mcp' });
+        expect(malformed.body.error?.message).toContain('addTags must be an array');
+    });
+
+    test('a schema-invalid argument is refused before any service runs (R2, R5)', async () => {
+        // `file` is not in sp_rule_run's schema; the dispatcher refuses it before any service runs.
+        const res = await mcpPost(
+            rpc('tools/call', { name: 'sp_rule_run', arguments: { file: '/tmp/x.yaml' } }),
+            authHeaders(),
+        );
+        const body = (await res.json()) as { error: { message: string } };
+        // The adapter's existing mapping turns a dispatcher throw into INTERNAL_ERROR; what
+        // matters here is that the argument never reached the rule service.
+        expect(body.error.message).toContain('unknown argument "file"');
+        expect(body.error.message).toContain('preset');
+    });
+
+    test('sp_rule_run returns findings without writing to stdout (R1, R3)', async () => {
+        const result = await call('sp_rule_run', { preset: 'recommended-pre-check' });
+        const body = result.body.result as { ruleCount: number; exitCode: number; findings: unknown[] };
+        expect(body.ruleCount).toBeGreaterThan(0);
+        expect(Array.isArray(body.findings)).toBe(true);
+        expect(typeof body.exitCode).toBe('number');
+    });
+
+    test('sp_feature_check answers for a real feature (R1)', async () => {
+        // A minimal feature in the scratch project: the tool runs the same service and folders the
+        // HTTP handler uses, so it answers with a report rather than a transport error.
+        if (appCtx === undefined) throw new Error('context missing');
+        const featuresDir = appCtx.planningFolders().featuresDir;
+        mkdirSync(featuresDir, { recursive: true });
+        writeFileSync(
+            join(featuresDir, 'K41_gateway-mcp.md'),
+            '---\nid: K41\nname: gateway mcp\nstatus: active\n---\n\n## Acceptance Criteria\n\n- [ ] AC1 — x\n',
+        );
+        const result = await call('sp_feature_check', { id: 'K41' });
+        expect(result.body.error).toBeUndefined();
+        expect(result.body.result).toBeDefined();
+    });
+
+    test('a done transition without a verdict is refused with the CLI guard message (R4)', async () => {
+        const created = await call('sp_task_create', { title: unique('mcp transition parity') });
+        const wbs = (created.body.result as { wbs: string }).wbs;
+
+        const refused = await call('sp_task_transition', { wbs, to: 'done' });
+        const message = refused.body.error?.message ?? '';
+        // Both surfaces call `transitionTaskGuarded`, so the code and the text are the same ones
+        // the CLI reports — `apps/cli/tests/commands/task/update.test.ts:715` asserts the exact
+        // "missing verify verdict artifact" text on the CLI side of this same guard.
+        expect(message).toContain('GUARD_DENIED');
+        expect(message).toContain('missing verify verdict artifact');
+        // The refusal is a refusal: the task did not move.
+        const after = await call('sp_task_show', { wbs });
+        expect((after.body.result as { frontmatter: { status: string } }).frontmatter.status).not.toBe('done');
     });
 });

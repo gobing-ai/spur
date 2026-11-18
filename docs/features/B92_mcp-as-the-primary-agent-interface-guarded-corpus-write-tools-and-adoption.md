@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B92"
 name: "MCP as the primary agent interface: guarded corpus write tools and adoption"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-18T05:29:32.106Z"
-updated_at: "2026-11-18T05:59:45.109Z"
+updated_at: "2026-11-18T19:50:27.291Z"
 ---
 
 # B92: MCP as the primary agent interface: guarded corpus write tools and adoption
@@ -63,7 +63,7 @@ Feature: MCP as the primary agent interface: guarded corpus write tools and adop
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1394 | Make agent guidance MCP-first with CLI fallback | todo |
-| 1392 | Add guarded corpus write tools to the MCP server | todo |
+| 1392 | Add guarded corpus write tools to the MCP server | testing |
 | 1393 | Produce the per-agent MCP adoption matrix | todo |
 <!-- END AUTO-GENERATED -->
 
@@ -74,3 +74,6 @@ Depends on phase 1 namespacing (1379) and MCP events (1376) so adoption is measu
 Phase 2 of the protocol-surfaces roadmap (2026-11-17 planning session).
 
 ## History
+
+- 2026-11-18T19:50:27.291Z backlog → active (system)
+

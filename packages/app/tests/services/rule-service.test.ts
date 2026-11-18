@@ -122,6 +122,28 @@ async function writeRuleFile(cwd: string, relativePath: string, ruleId: string):
 // ---------------------------------------------------------------------------
 
 describe('RuleService.evaluate()', () => {
+    // 1392 R3: a programmatic caller (the MCP `sp_rule_run` tool) wants the result, not stdout.
+    test('emit: false writes nothing and returns the same result', async () => {
+        const cwd = await createTempProject();
+        const silent = createCapturedOutput();
+        const loud = createCapturedOutput();
+        const options = {
+            preset: 'recommended-pre-check',
+            failOn: 'error' as const,
+            json: true,
+            verbose: false,
+            color: noColor(),
+        };
+        const muted = await new RuleService(makeContext(cwd, silent)).evaluate({ ...options, emit: false });
+        const spoken = await new RuleService(makeContext(cwd, loud)).evaluate(options);
+        expect(silent.messages).toEqual([]);
+        expect(loud.messages.length).toBeGreaterThan(0);
+        // Same result: only the rendering differs.
+        expect(muted.ruleCount).toBe(spoken.ruleCount);
+        expect(muted.exitCode).toBe(spoken.exitCode);
+        expect(muted.findings).toEqual(spoken.findings);
+    });
+
     test('preset run works', async () => {
         const cwd = await createTempProject();
         const service = new RuleService(makeContext(cwd, nullOutput()));

@@ -12,4 +12,11 @@ export const MCP_BUILTIN_TOOL_NAMES: readonly string[] = [
     'sp_workflow_status',
     'sp_workflow_run',
     'sp_workflow_continue',
+    // Corpus write tools (task 1392). They are reserved for the same reason as the read tools:
+    // `workflow validate` must refuse an exposed workflow whose derived name collides.
+    'sp_task_create',
+    'sp_task_update',
+    'sp_task_transition',
+    'sp_feature_check',
+    'sp_rule_run',
 ];

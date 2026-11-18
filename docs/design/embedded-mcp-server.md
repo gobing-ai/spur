@@ -81,6 +81,25 @@ the restriction is chosen on purpose for greppability and collision safety. Thre
 confinement: traversal is refused, an unknown feature id is an error (not empty), an unknown scheme
 is refused.
 
+**Corpus write tools (task 1392).** Five more built-ins make the corpus rules hold by
+construction: each is one call into an existing guarded service, and each schema sets
+`additionalProperties: false` with enums for closed values.
+
+| Tool | Seam | Deliberately absent vs the CLI |
+| --- | --- | --- |
+| `sp_task_create` | `TaskService.create` | ready-prep (a server tool never dispatches a model), dedupe flags |
+| `sp_task_update` | `section`+`content` → `updateSection`, `field`+`value` → `updateField`, `addTags`/`removeTags` → `updateTags` | `status` (the enum has no such value), `--from-file` (content is inline) |
+| `sp_task_transition` | `ctx.transitionTask` → `transitionTaskGuarded` | `forceDone`, `reason` |
+| `sp_feature_check` | `FeatureCheckService.check` with the HTTP handler's folders | none |
+| `sp_rule_run` | `RuleService.evaluate({ emit: false })` | `file` (presets and rule ids only), `fixMode: auto`, `stopOnFirst`, `verbose` |
+
+The schema is enforced at the dispatcher before any service runs, so an undeclared argument is
+refused rather than ignored. A guard refusal travels with the code the CLI reports
+(`GUARD_DENIED: <same message>`, both surfaces calling the same function), and `RuleService.evaluate`
+gained `emit?: boolean` so a programmatic caller gets the result with nothing written to stdout.
+`tools/list` therefore advertises ten tools; at the gateway root each built-in also requires the
+`project` selector (task 1383).
+
 **Workflow tools (task 1381).** `tools/list` additionally advertises every workflow that declares
 `metadata: { mcp: { expose: true } }`, named `<namespace>_<workflow>` (lowercase, non-alphanumerics
 mapped to `_`), described by the workflow's own `description`, with one optional string property per

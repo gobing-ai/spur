@@ -6,11 +6,7 @@ import {
     registeredWorkflowPaths,
     resolveExposedWorkflowTools,
     resolveMcpNamespace,
-    type TaskShowResult,
-    type TaskSummary,
     type WorkflowRunResult,
-    type WorkflowTraceListResult,
-    type WorkflowTraceTimeline,
     workflowLayers,
 } from '@gobing-ai/spur-app';
 import type { Hono } from 'hono';
@@ -42,6 +38,102 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
             type: 'object',
             properties: { wbs: { type: 'string', description: 'Task WBS (e.g. "1372")' } },
             required: ['wbs'],
+        },
+    },
+    {
+        name: 'sp_task_create',
+        description:
+            'Create one task from a title (optionally linked to a feature and parent). Never runs model-backed ready-prep; refine the task explicitly afterwards.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Task title' },
+                featureId: { type: 'string', description: 'Owning feature id (e.g. "K41")' },
+                parentWbs: { type: 'string', description: 'Parent task WBS for a child task' },
+                template: { type: 'string', description: 'Task template name (feature-impl, feature-verify, ...)' },
+                requirements: { type: 'string', description: 'Requirements section body' },
+                plan: { type: 'string', description: 'Plan section body' },
+            },
+            required: ['title'],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: 'sp_task_update',
+        description:
+            'Update one task: exactly one of a section body, a frontmatter field, or a tag add/remove. Status is refused — use sp_task_transition, which runs the guards.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                wbs: { type: 'string', description: 'Task WBS' },
+                section: { type: 'string', description: 'Section name to write' },
+                content: { type: 'string', description: 'Section body (inline, never a file path)' },
+                field: {
+                    type: 'string',
+                    description: 'Frontmatter field to set (status is refused)',
+                    enum: ['priority', 'feature_id', 'ac_numbering', 'ac_altitude'],
+                },
+                value: { type: 'string', description: 'Field value' },
+                addTags: { type: 'array', items: { type: 'string' }, description: 'Tags to add' },
+                removeTags: { type: 'array', items: { type: 'string' }, description: 'Tags to remove' },
+            },
+            required: ['wbs'],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: 'sp_task_transition',
+        description:
+            'Move one task to another status through the guarded transition seam (verdict and structural gates apply exactly as in the CLI).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                wbs: { type: 'string', description: 'Task WBS' },
+                to: { type: 'string', description: 'Target status (todo, wip, verifying, done, blocked, ...)' },
+            },
+            required: ['wbs', 'to'],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: 'sp_feature_check',
+        description: 'Run the feature structure/acceptance check. Read-only.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Feature id (e.g. "J94")' },
+                as: {
+                    type: 'string',
+                    enum: ['backlog', 'active', 'verifying', 'done'],
+                    description: 'Target lifecycle state',
+                },
+                strict: { type: 'boolean', description: 'Fail on any finding rather than advisory ones only' },
+            },
+            required: ['id'],
+            additionalProperties: false,
+        },
+    },
+    {
+        name: 'sp_rule_run',
+        description:
+            'Evaluate a rule preset (default recommended-pre-check) over the project. Presets and rule ids only: no arbitrary file, no source-writing fix mode.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                preset: { type: 'string', description: 'Preset name (default recommended-pre-check)' },
+                rule: { type: 'string', description: 'Single rule id to evaluate' },
+                failOn: {
+                    type: 'string',
+                    enum: ['error', 'warning', 'info'],
+                    description: 'Severity that fails the run',
+                },
+                fixMode: {
+                    type: 'string',
+                    enum: ['none', 'suggest'],
+                    description: 'Fix collection: none, or suggest (never apply)',
+                },
+            },
+            additionalProperties: false,
         },
     },
     {
@@ -125,12 +217,12 @@ const RESOURCE_DESCRIPTORS: McpResourceDescriptor[] = [
 ];
 
 /** One service result the dispatcher serializes verbatim as the tool-call value. */
-type McpToolResult =
-    | TaskShowResult
-    | TaskSummary[]
-    | WorkflowTraceTimeline
-    | WorkflowTraceListResult
-    | WorkflowRunResult;
+/**
+ * What one tool call resolves to. The read tools have precise types; the write tools (1392) return
+ * small result objects, and the protocol serializes any of them verbatim, so the dispatcher's
+ * contract is "a JSON-serializable value", not a closed union.
+ */
+type McpToolResult = unknown;
 
 /** The narrow context slice the dispatcher reads; tests stub these accessors. */
 class McpDispatcher implements McpHandlerRegistry {
@@ -255,6 +347,12 @@ class McpDispatcher implements McpHandlerRegistry {
 
     /** The tool switch itself; the wrapper above owns timing and the event (task 1376). */
     private async dispatchTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
+        // 1392 R2/R5: the advertised schema IS the contract, so an undeclared argument never
+        // reaches a service (no status write, no rule file, no fix-applying mode). The throw
+        // travels through the caller's catch, which records it as `invalid_arguments` (1376 R2).
+        const descriptor = TOOL_DESCRIPTORS.find((tool) => tool.name === name);
+        const violation = descriptor === undefined ? null : validateToolArguments(descriptor, args);
+        if (violation !== null) throw new Error(violation);
         switch (name) {
             case 'sp_task_show':
                 return this.ctx.taskService().show(requiredString(args, 'wbs'));
@@ -271,6 +369,140 @@ class McpDispatcher implements McpHandlerRegistry {
                     vars: stringRecord(args, 'vars'),
                     ...(args.dryRun === true ? { dryRun: true } : {}),
                 });
+            case 'sp_task_create': {
+                const result = await this.ctx.taskService().create({
+                    title: requiredString(args, 'title'),
+                    ...(optionalString(args, 'featureId') !== undefined
+                        ? { featureId: optionalString(args, 'featureId') as string }
+                        : {}),
+                    ...(optionalString(args, 'parentWbs') !== undefined
+                        ? { parentWbs: optionalString(args, 'parentWbs') as string }
+                        : {}),
+                    ...(optionalString(args, 'template') !== undefined
+                        ? { template: optionalString(args, 'template') as string }
+                        : {}),
+                    ...(optionalString(args, 'requirements') !== undefined
+                        ? { requirements: optionalString(args, 'requirements') as string }
+                        : {}),
+                    ...(optionalString(args, 'plan') !== undefined
+                        ? { plan: optionalString(args, 'plan') as string }
+                        : {}),
+                });
+                // 1392 R1: no ready-prep dispatch from a server tool — the agent refines explicitly.
+                return {
+                    wbs: result.ref.id,
+                    filePath: (result as { filePath?: string }).filePath ?? null,
+                    warnings: (result as { warnings?: string[] }).warnings ?? [],
+                    readiness: 'skipped',
+                };
+            }
+            case 'sp_task_update': {
+                const wbs = requiredString(args, 'wbs');
+                const section = optionalString(args, 'section');
+                const field = optionalString(args, 'field');
+                const addTags = stringArray(args, 'addTags');
+                const removeTags = stringArray(args, 'removeTags');
+                const chosen = [
+                    section !== undefined,
+                    field !== undefined,
+                    addTags !== undefined || removeTags !== undefined,
+                ].filter(Boolean).length;
+                if (chosen !== 1) {
+                    throw new Error(
+                        'sp_task_update takes exactly one of section+content, field+value, or addTags/removeTags',
+                    );
+                }
+                if (field === 'status') {
+                    // R5: a status write must go through the guarded transition seam, never here.
+                    throw new Error('sp_task_update refuses field "status": use sp_task_transition so the guards run');
+                }
+                if (section !== undefined) {
+                    const content = requiredString(args, 'content');
+                    // The service's section writer reads a source file (that is how the CLI's
+                    // `--section --from-file` works), so inline content lands in a scoped temp file
+                    // first and is removed afterwards either way.
+                    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+                    const { tmpdir } = await import('node:os');
+                    const { join } = await import('node:path');
+                    const dir = mkdtempSync(join(tmpdir(), 'spur-mcp-section-'));
+                    const sourceFile = join(dir, `${section}.md`);
+                    try {
+                        writeFileSync(sourceFile, content);
+                        const written = await this.ctx.taskService().updateSection(wbs, section, sourceFile, false);
+                        return { wbs, section, ...summarizeWrite(written) };
+                    } finally {
+                        rmSync(dir, { recursive: true, force: true });
+                    }
+                }
+                if (field !== undefined) {
+                    try {
+                        const written = await this.ctx
+                            .taskService()
+                            .updateField(wbs, field, requiredString(args, 'value'));
+                        return { wbs, field, ...summarizeWrite(written) };
+                    } catch (error) {
+                        throw withServiceCode(error);
+                    }
+                }
+                const tagged = await this.ctx.taskService().updateTags(wbs, addTags ?? [], removeTags ?? []);
+                return { wbs, tags: tagged.tags, ...summarizeWrite(tagged) };
+            }
+            case 'sp_task_transition': {
+                const wbs = requiredString(args, 'wbs');
+                const to = requiredString(args, 'to');
+                try {
+                    const transitioned = await this.ctx.transitionTask({ wbs, toStatus: to });
+                    return { ...transitioned };
+                } catch (error) {
+                    // 1392 R4: the guard's code and message travel together, exactly as the CLI
+                    // reports them, so an agent can branch on GUARD_DENIED instead of prose.
+                    throw withServiceCode(error);
+                }
+            }
+            case 'sp_feature_check': {
+                const id = requiredString(args, 'id');
+                const as = optionalString(args, 'as');
+                const strict = args.strict === true;
+                const folders = this.ctx.planningFolders();
+                const feature = await this.ctx.featureService().show(id);
+                if (feature === null) throw new Error(`Feature ${id} not found`);
+                const { FeatureCheckService } = await import('@gobing-ai/spur-app/feature-check');
+                const checked = await new FeatureCheckService(this.ctx.fs).check(feature.filePath, id, {
+                    featuresDir: folders.featuresDir,
+                    tasksDir: folders.tasksDir,
+                    ...(as !== undefined ? { as } : {}),
+                    ...(strict ? { strict: true } : {}),
+                });
+                return Array.isArray(checked) ? [...checked] : { ...checked };
+            }
+            case 'sp_rule_run': {
+                const result = await this.ctx.ruleService().evaluate({
+                    preset: optionalString(args, 'preset') ?? 'recommended-pre-check',
+                    ...(optionalString(args, 'rule') !== undefined
+                        ? { rule: optionalString(args, 'rule') as string }
+                        : {}),
+                    failOn: (optionalString(args, 'failOn') ?? 'error') as 'error' | 'warning' | 'info',
+                    fixMode: (optionalString(args, 'fixMode') ?? 'none') as 'none' | 'suggest',
+                    json: false,
+                    verbose: false,
+                    color: {
+                        enabled: false,
+                        dim: (text: string) => text,
+                        red: (text: string) => text,
+                        green: (text: string) => text,
+                        yellow: (text: string) => text,
+                        cyan: (text: string) => text,
+                    },
+                    // 1392 R3: a programmatic caller wants the result, not stdout.
+                    emit: false,
+                });
+                return {
+                    findings: result.findings,
+                    fixes: result.fixes,
+                    exitCode: result.exitCode,
+                    ruleCount: result.ruleCount,
+                };
+            }
             case 'sp_workflow_continue': {
                 const runId =
                     optionalString(args, 'runId') ?? (await this.ctx.workflowService().latestPausedRun())?.runId;
@@ -355,6 +587,83 @@ export function createMcpHandler(ctx: ServerContext): (req: Request) => Promise<
 }
 
 /** `runId`/`wbs` when the call's arguments or its result already carry them (1376 R2). */
+/**
+ * The JSON-Schema subset the descriptors use: `required`, `type`, `enum`, `additionalProperties`.
+ * Returns a message naming the offending argument (mapped to `invalid_arguments` by the emit site).
+ */
+function validateToolArguments(tool: McpToolDescriptor, args: Record<string, unknown>): string | null {
+    const schema = (tool.inputSchema ?? {}) as {
+        properties?: Record<string, unknown>;
+        required?: unknown;
+        additionalProperties?: unknown;
+    };
+    const properties = (schema.properties ?? {}) as Record<string, unknown>;
+    const required = Array.isArray(schema.required)
+        ? schema.required.filter((key): key is string => typeof key === 'string')
+        : [];
+    for (const key of required) {
+        if (args[key] === undefined) return `${key} is required`;
+    }
+    if (schema.additionalProperties === false) {
+        for (const key of Object.keys(args)) {
+            if (args[key] === undefined) continue;
+            if (!(key in properties)) {
+                const accepted = Object.keys(properties);
+                return accepted.length > 0
+                    ? `unknown argument "${key}"; accepted: ${accepted.join(', ')}`
+                    : `unknown argument "${key}"`;
+            }
+        }
+    }
+    for (const [key, value] of Object.entries(args)) {
+        if (value === undefined) continue;
+        const spec = properties[key];
+        if (typeof spec !== 'object' || spec === null) continue;
+        const rules = spec as { enum?: unknown; type?: unknown };
+        if (Array.isArray(rules.enum) && !rules.enum.includes(value)) {
+            return `${key} must be one of ${rules.enum.join(', ')}`;
+        }
+        const expected = typeof rules.type === 'string' ? rules.type : undefined;
+        if (expected === 'string' && typeof value !== 'string') return `${key} must be a string`;
+        if (expected === 'boolean' && typeof value !== 'boolean') return `${key} must be a boolean`;
+        if (expected === 'array' && !Array.isArray(value)) return `${key} must be an array`;
+    }
+    return null;
+}
+
+/**
+ * Keep a service error's machine code on the way out (1392 R4): `GuardDeniedError` and the write
+ * services carry `code`, and an MCP caller must see the same `CODE: message` the CLI reports.
+ */
+function withServiceCode(error: unknown): Error {
+    const message = error instanceof Error ? error.message : String(error);
+    // The services signal a refusal through the error CLASS (`GuardDeniedError`), not a `code`
+    // field, so the class name is the machine code the CLI's JSON also reports.
+    const name = error instanceof Error ? error.name : '';
+    if (name === 'GuardDeniedError') return new Error(`GUARD_DENIED: ${message}`);
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' && code !== '' ? new Error(`${code}: ${message}`) : new Error(message);
+}
+
+/** A string list from an already-schema-validated argument; absent stays undefined. */
+function stringArray(args: Record<string, unknown>, key: string): string[] | undefined {
+    const value = args[key];
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value)) throw new Error(`${key} must be an array of strings`);
+    return value.map((entry) => {
+        if (typeof entry !== 'string') throw new Error(`${key} must be an array of strings`);
+        return entry;
+    });
+}
+
+/** The small, stable part of a write result an MCP caller needs (never the whole service object). */
+function summarizeWrite(result: { eventName?: string; warnings?: string[] }): Record<string, unknown> {
+    return {
+        eventName: result.eventName ?? null,
+        warnings: result.warnings ?? [],
+    };
+}
+
 function correlation(args: Record<string, unknown>, result: unknown): { runId?: string; wbs?: string } {
     const from = (source: unknown, key: 'runId' | 'wbs'): string | undefined => {
         if (typeof source !== 'object' || source === null) return undefined;

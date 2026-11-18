@@ -100,6 +100,12 @@ export interface RuleEvaluateOptions {
     fixMode?: FixMode;
     /** Preview fixes without writing (only meaningful with fixMode='auto'). */
     dryRun?: boolean;
+    /**
+     * Write the human/JSON summary to `context.output` (default `true`). A programmatic caller
+     * that only wants the result — the MCP `sp_rule_run` tool — passes `false`; the returned
+     * result is unchanged either way (task 1392 R3).
+     */
+    emit?: boolean;
 }
 
 /** Structured result returned by RuleService.evaluate(). */
@@ -332,7 +338,10 @@ export class RuleService {
             exitCode: 0,
         };
 
-        if (json) {
+        const emit = opts.emit !== false;
+        if (!emit) {
+            // 1392 R3: a silent call returns the same result and writes nothing.
+        } else if (json) {
             const payload: Record<string, unknown> = { preset, ruleCount: enabledCount, ...result };
             if (applied) payload.applied = applied;
             this.context.output.write(toEnvelopeJson(payload, { enveloped: opts.enveloped }));

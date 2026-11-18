@@ -186,21 +186,61 @@ describe('AC1 — bearer auth', () => {
     });
 });
 
+describe('namespace resolution degradation (task 1392 coverage)', () => {
+    test('an unreadable plugins dir leaves the namespace unset instead of failing the mount', async () => {
+        // The handler resolves the namespace in the background; a project whose fs cannot answer
+        // (a permissions error, a torn mount) must degrade to "no namespace", never a crash.
+        const ctx = {
+            cwd: tempDir,
+            fs: {
+                ...createNodeFileSystem(),
+                // Only the namespace lookup fails: the mount must degrade, not crash.
+                stat: async (path: string) => {
+                    if (path.includes('plugins')) throw new Error('fs down');
+                    return createNodeFileSystem().stat(path);
+                },
+            },
+            env: { SPUR_MCP_TOKEN: TOKEN },
+            logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+            bootConfig: () => ({ mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' } }),
+            taskService: makeRecorder().taskService,
+            featureService: makeRecorder().featureService,
+            workflowService: makeRecorder().workflowService,
+        } as unknown as ServerContext;
+        const app = new Hono();
+        mcpModule.mount(app, ctx);
+        await Bun.sleep(20);
+        const res = await post(app, { token: TOKEN, body: { jsonrpc: '2.0', id: 1, method: 'server/discover' } });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { result: { namespace?: string } };
+        expect(body.result.namespace).toBeUndefined();
+    });
+});
+
 describe('AC2 — tools delegate to @gobing-ai/spur-app', () => {
     const harness = () => makeHarness({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' });
 
-    test('server/discover advertises the five harness tools and the three spur:// resources', async () => {
+    test('server/discover advertises the ten harness tools and the three spur:// resources', async () => {
         const { app } = harness();
         const result = (await envelopeResult(await post(app, { token: TOKEN }))) as {
             capabilities: { tools: { name: string }[]; resources: { uri: string }[] };
         };
-        expect(result.capabilities.tools.map((tool) => tool.name)).toEqual([
-            'sp_task_show',
-            'sp_task_list',
-            'sp_workflow_status',
-            'sp_workflow_run',
-            'sp_workflow_continue',
-        ]);
+        // Order is the descriptor order, which is not the contract; the SET is.
+        expect([...result.capabilities.tools.map((tool) => tool.name)].sort()).toEqual(
+            [
+                'sp_task_show',
+                'sp_task_list',
+                'sp_workflow_status',
+                'sp_workflow_run',
+                'sp_workflow_continue',
+                // 1392: the guarded corpus write tools.
+                'sp_task_create',
+                'sp_task_update',
+                'sp_task_transition',
+                'sp_feature_check',
+                'sp_rule_run',
+            ].sort(),
+        );
         expect(result.capabilities.resources.map((res) => res.uri)).toEqual([
             'spur://tasks/{wbs}',
             'spur://features/{id}',
@@ -468,7 +508,7 @@ describe('direct handler seam', () => {
         );
         expect(res.status).toBe(200);
         const result = (await res.json()) as { result: { tools: { name: string }[] } };
-        expect(result.result.tools).toHaveLength(5);
+        expect(result.result.tools).toHaveLength(10);
     });
 });
 
