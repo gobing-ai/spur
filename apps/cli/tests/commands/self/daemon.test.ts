@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { FileSystem, ProcessExecutor, ProcessOptions, ProcessResult } from '@gobing-ai/ts-runtime';
-import { registerDaemonCommand } from '../../../src/commands/self/daemon';
+import { readDaemonStatusOrNull, registerDaemonCommand } from '../../../src/commands/self/daemon';
 import type { CliContext } from '../../../src/context';
 
 /**
@@ -123,6 +123,20 @@ describe('spur self daemon (K4 R9/R10)', () => {
         expect(fs.files.has(payload.plistPath)).toBe(true);
     });
 
+    test('install reports the plist path as plain text without --json', async () => {
+        const fs = memoryFs();
+        const { action, out, exit } = capture({
+            ...DARWIN,
+            fs,
+            exec: fakeExec([113, 0]),
+            probeGateway: async () => 'free',
+        });
+        await action('install', {});
+        expect(exit).toEqual([]);
+        expect(out.join('')).toContain('Gateway LaunchAgent installed: ');
+        expect(fs.files.size).toBe(1);
+    });
+
     test('install failure exits 1 with the reason and writes nothing', async () => {
         const fs = memoryFs();
         const { action, out, exit } = capture({
@@ -135,6 +149,37 @@ describe('spur self daemon (K4 R9/R10)', () => {
         expect(exit).toEqual([1]);
         expect(out.join('')).toContain('Gateway port 3111 is in use by another process');
         expect(fs.files.size).toBe(0);
+    });
+
+    test('readDaemonStatusOrNull omits the daemon off macOS', async () => {
+        const result = await readDaemonStatusOrNull('linux');
+        expect(result).toBeNull();
+    });
+
+    test('readDaemonStatusOrNull reports the daemon on macOS', async () => {
+        const plist = '/Users/tester/Library/LaunchAgents/ai.gobing.spur.gateway.plist';
+        const result = await readDaemonStatusOrNull('darwin', {
+            ...DARWIN,
+            fs: memoryFs({ [plist]: 'plist', '/opt/spur': '' }),
+            exec: fakeExec([0]),
+            probeGateway: async () => 'gateway',
+        });
+        expect(result?.installed).toBe(true);
+    });
+
+    test('readDaemonStatusOrNull degrades a failing reader to null', async () => {
+        const result = await readDaemonStatusOrNull('darwin', {
+            ...DARWIN,
+            fs: {
+                ...memoryFs(),
+                exists: () => {
+                    throw new Error('fs down');
+                },
+            } as unknown as FileSystem,
+            exec: fakeExec(),
+            probeGateway: async () => 'gateway',
+        });
+        expect(result).toBeNull();
     });
 
     test('a non-macOS host exits 1 naming the platform', async () => {

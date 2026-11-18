@@ -6,7 +6,7 @@ import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
 import { toEnvelopeJson, writeJsonError } from '../output';
-import { readDaemonStatus } from './self/daemon';
+import { readDaemonStatusOrNull } from './self/daemon';
 import { SHARED_OPTIONS } from './shared-options';
 
 /**
@@ -52,7 +52,7 @@ async function runStatusCore(
     // The gateway LaunchAgent is machine state, not project readiness: it is reported beside the
     // aggregate (never inside its nine sections) so `spur self status` answers "is the gateway
     // daemon on?" without a second command. Read-only; skipped off macOS where it cannot exist.
-    const daemon = process.platform === 'darwin' ? await readDaemonStatusOrNull() : null;
+    const daemon = await readDaemonStatusOrNull();
     const status = {
         ...aggregate,
         ...(target === undefined ? {} : { target }),
@@ -110,13 +110,4 @@ async function readTargetStatus(
     const stat = await context.fs.stat(resolved);
     if (stat === null) throw new CommandError(`status failed: path does not exist at ${resolved}`);
     return { path: targetPath, size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory() };
-}
-
-/** The daemon line is best-effort: a launchctl/fs failure omits it rather than failing `status`. */
-async function readDaemonStatusOrNull(): Promise<Awaited<ReturnType<typeof readDaemonStatus>> | null> {
-    try {
-        return await readDaemonStatus();
-    } catch {
-        return null;
-    }
 }

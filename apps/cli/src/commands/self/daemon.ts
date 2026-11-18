@@ -52,6 +52,23 @@ export async function readDaemonStatus(overrides: Partial<GatewayDaemonDeps> = {
     return gatewayDaemonStatus(resolveDaemonDeps(undefined, overrides));
 }
 
+/**
+ * Best-effort daemon probe for the `status` aggregate: null off macOS or when the reader fails, so
+ * advisory machine state can never fail a readiness report. `platform` is injectable so the guard
+ * and the degradation path are covered by host-independent tests (Linux CI cannot reach darwin).
+ */
+export async function readDaemonStatusOrNull(
+    platform: NodeJS.Platform = process.platform,
+    overrides: Partial<GatewayDaemonDeps> = {},
+): Promise<GatewayStatusResult | null> {
+    if (platform !== 'darwin') return null;
+    try {
+        return await readDaemonStatus(overrides);
+    } catch {
+        return null;
+    }
+}
+
 /** Run one daemon operation and render it. Returns the exit code for the caller to set. */
 export async function runDaemonAction(
     action: DaemonAction,
