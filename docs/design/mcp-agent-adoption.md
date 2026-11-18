@@ -31,6 +31,21 @@ claimed when its own source states it.
 | Hermes | yes | yes | UNVERIFIED | documented (`mcp_servers:` in `~/.hermes/config.yaml`) | yes | not installed locally | <https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp> |
 | Grok | yes | yes | UNVERIFIED | documented (`--transport http`) | yes (`--header "Authorization: Bearer …"`) | CLI present, version not pinned | <https://docs.x.ai/build/features/mcp-servers> |
 
+## 1a. Install route (task 1401)
+
+Every MCP-capable agent gets the entry from one superskill install: the plugin ships
+`plugins/sp/mcp.json` with a single server, `spur` → `spur mcp --gateway`, and superskill writes that
+block into each target's own config format. The bridge resolves
+`http://localhost:<server.gateway.port>/mcp` and takes the bearer from the variable named by
+`server.gateway.mcp.authEnv`, so **no token ever lands in an agent config file** — it is read from the
+environment when the bridge starts.
+
+Observed on a fixture HOME (artifact: `docs/tasks5/artifacts/1401/superskill-dry-run.txt`): one `spur`
+entry in `.gemini/config/mcp_config.json` and one `[mcp_servers.spur]` in `.codex/config.toml`, with a
+second install leaving both counts unchanged. Claude Code receives the entry through the plugin
+registration itself. A target where superskill does not yet adapt an MCP block falls back to
+`spur mcp` (stdio) or the CLI — that gap is reported upstream, never worked around in Spur.
+
 ## 2. Verdicts (consumed by 1394)
 
 | Verdict | Agents |

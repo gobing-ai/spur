@@ -1,0 +1,56 @@
+# 1401 — superskill install of the spur MCP entry (fixture HOME)
+
+Generated: 2026-11-18T20:06Z. The fixture is a fresh temp HOME; the operator's real config was never
+touched.
+
+## Plugin detection (dry-run)
+
+```
+Resolving plugin 'sp'...
+  Skills: 42, Commands: 43, Subagents: 4, Magents: 0, Hooks: true, MCP: true, Scripts: 7
+```
+
+`MCP: true` means superskill found `plugins/sp/mcp.json` (it reads the plugin root's `mcp.json`,
+gated on the plugin's mcp feature) and will emit one `spur` entry per target it adapts MCP into.
+
+## Real install, then a second install (idempotency)
+
+```
+$ HOME=<fixture> superskill install sp
+Installed 'sp' to 9 target(s).
+```
+
+| Target | File | `spur` entries after 1st | after 2nd |
+| --- | --- | ---: | ---: |
+| Antigravity (gemini config tree) | `.gemini/config/mcp_config.json` | 1 | 1 |
+| Codex CLI | `.codex/config.toml` (`[mcp_servers.spur]`) | 1 | 1 |
+
+The second install changes neither count: superskill's merge is idempotent, so a repeated install
+leaves exactly one entry per target.
+
+## Entry written
+
+```json
+{
+  "mcpServers": {
+    "spur": {
+      "command": "spur",
+      "args": [
+        "mcp",
+        "--gateway"
+      ]
+    }
+  }
+}
+```
+
+## Targets and the one gap
+
+Superskill installed the plugin to nine targets. Of those, the table's two take an MCP **config
+file** that it adapts. Claude Code gets the entry through the plugin itself — its
+`.claude/settings.json` registers the plugin directory and the plugin ships `mcp.json` — which is
+superskill's adapter policy, not a Spur special case.
+
+For any target where superskill does not (yet) adapt an MCP block, **no Spur workaround belongs
+here** (task 1401 Step 3): the agent still reaches the corpus through `spur mcp` over stdio or the
+CLI verbs, both documented in `references/mcp-tools.md`. That gap is reported upstream to superskill.

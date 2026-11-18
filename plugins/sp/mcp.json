@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "spur": {
+            "command": "spur",
+            "args": ["mcp", "--gateway"]
+        }
+    }
+}

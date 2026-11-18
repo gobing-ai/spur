@@ -37,6 +37,15 @@ construction rather than by discipline. Run the CLI verb for them:
 Also CLI-only, for the same reason: `spur task record`, `spur task verdict`, `spur feature verify`,
 `spur self …` (lifecycle of the server itself), and anything that edits `.spur/config.yaml`.
 
+## Wiring an agent (gateway entry)
+
+One install wires every MCP-capable agent: the plugin ships `mcp.json` with a single server,
+`spur` → `spur mcp --gateway`, and superskill writes it into each target's own config format.
+`--gateway` targets `http://localhost:<server.gateway.port>/mcp` and takes its bearer from the
+variable named by `server.gateway.mcp.authEnv` — the token stays in the environment, never in an agent
+config file. `--gateway` and `--url` are mutually exclusive, and a disabled gateway, an unset or empty
+token variable, or a gateway that is not answering each fail with the remedy named.
+
 ## When the tools are absent
 
 Every agent in the adoption matrix has an MCP client, but an HTTP entry can still be unavailable

@@ -94,6 +94,38 @@ export async function resolveMcpUrl(projectRoot: string, env: Record<string, str
     return `http://${host}:${port}/mcp`;
 }
 
+/**
+ * Resolve the GATEWAY's own `/mcp` endpoint (task 1401 R1): the root route on the gateway port, with
+ * the token from `server.gateway.mcp.authEnv`. Every refusal names the fix; no token value is ever
+ * printed. Checked before any traffic, so a misconfiguration fails at launch, not mid-session.
+ */
+export async function resolveGatewayMcpUrl(
+    env: Record<string, string | undefined>,
+): Promise<{ url: string; authEnv: string }> {
+    const config = buildConfigFromEnv(env);
+    const gateway = config.server.gateway;
+    if (!gateway.mcp.enabled) {
+        throw new CommandError(
+            'the gateway MCP entry is disabled; set server.gateway.mcp.enabled true (SPUR_GATEWAY_MCP_ENABLED) and name its token variable with server.gateway.mcp.authEnv',
+        );
+    }
+    // `enabled` without `authEnv` never reaches here: the config schema refuses that load, so this
+    // branch would be dead code. The variable it names is read below.
+    const authEnv = gateway.mcp.authEnv as string;
+    const value = env[authEnv];
+    if (value === undefined || value === '') {
+        throw new CommandError(
+            `server.gateway.mcp.authEnv names "${authEnv}" but that variable is unset or empty; the gateway would refuse every request`,
+        );
+    }
+    if (!(await isGatewayAnswering(gateway.port))) {
+        throw new CommandError(
+            `no gateway is answering on port ${gateway.port}; start it with \`spur self serve --gateway\` (or pass --url for a direct project endpoint)`,
+        );
+    }
+    return { url: `http://localhost:${gateway.port}/mcp`, authEnv };
+}
+
 /** Find this project's registry entry over `peek()` — the read-only snapshot never heals, purges
  * or probes, so resolving the URL has no side effects on the registry or on stale processes. */
 function findRegisteredEntry(projectRoot: string) {
@@ -123,12 +155,23 @@ export function registerMcpCommand(program: Command, context: McpBridgeContext):
         .summary('bridge stdio MCP clients to the project MCP endpoint (stdio-to-HTTP transport shim)')
         .option(...SHARED_OPTIONS.cwdServe, context.cwd)
         .option('--url <mcpUrl>', 'MCP endpoint URL (default: gateway prefix when routed, else the direct server port)')
+        .option('--gateway', 'bridge to the gateway-hosted MCP entry at http://localhost:<server.gateway.port>/mcp')
         .action(async (options) => {
             try {
+                if (options.gateway === true && options.url !== undefined) {
+                    throw new CommandError(
+                        '--gateway and --url are mutually exclusive: --gateway targets the gateway root, --url names an explicit endpoint',
+                    );
+                }
                 const projectRoot = resolveServeCwd(options.cwd);
                 const config = buildConfigFromEnv(context.env);
-                const token = bearerToken(config.server.mcp.authEnv, context.env);
-                const url = options.url ?? (await resolveMcpUrl(projectRoot, context.env));
+                // --gateway takes ITS OWN token variable: a gateway credential is not a project's.
+                const gatewayTarget = options.gateway === true ? await resolveGatewayMcpUrl(context.env) : undefined;
+                const token =
+                    gatewayTarget !== undefined
+                        ? bearerToken(gatewayTarget.authEnv, context.env)
+                        : bearerToken(config.server.mcp.authEnv, context.env);
+                const url = gatewayTarget?.url ?? options.url ?? (await resolveMcpUrl(projectRoot, context.env));
                 const exit = await runMcpStdioBridge({
                     url,
                     token,
