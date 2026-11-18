@@ -522,6 +522,22 @@ describe('1376: mcp events reach the system_events ledger', () => {
 describe('1392: guarded corpus write tools', () => {
     /** Unique per run: `task create` has a 300s duplicate-name window by design. */
     const unique = (label: string) => `${label} ${Math.random().toString(36).slice(2, 9)}`;
+    /**
+     * Task creation resolves its folder from the runner's cwd (a context quirk, not this task's
+     * concern), so every created task is recorded and removed: the suite must leave no corpus file
+     * behind, or a later `refresh` sees tasks the fixture invented.
+     */
+    const created: string[] = [];
+    const createTask = async (title: string, extra: Record<string, unknown> = {}) => {
+        const result = await call('sp_task_create', { title: unique(title), ...extra });
+        const created_ = result.body.result as { wbs: string; filePath?: string | null } | undefined;
+        if (created_?.filePath !== undefined && created_.filePath !== null) created.push(created_.filePath);
+        return result;
+    };
+
+    afterAll(() => {
+        for (const path of created) rmSync(path, { force: true });
+    });
     /** Call one tool and return its JSON-RPC envelope (result or error). */
     async function call(name: string, args: Record<string, unknown>) {
         const res = await mcpPost(rpc('tools/call', { name, arguments: args }), authHeaders());
@@ -556,7 +572,7 @@ describe('1392: guarded corpus write tools', () => {
     });
 
     test('sp_task_create makes a task without ready-prep (R1)', async () => {
-        const created = await call('sp_task_create', { title: unique('mcp created task'), featureId: 'K41' });
+        const created = await createTask('mcp created task', { featureId: 'K41' });
         if (created.body.result === undefined) throw new Error(`create failed: ${JSON.stringify(created.body)}`);
         const result = created.body.result as { wbs: string; readiness: string; warnings: unknown[] };
         expect(result.readiness).toBe('skipped');
@@ -565,7 +581,7 @@ describe('1392: guarded corpus write tools', () => {
     });
 
     test('sp_task_update writes a field and a section, and refuses a status field (R1, R5)', async () => {
-        const created = await call('sp_task_create', { title: unique('mcp update target') });
+        const created = await createTask('mcp update target');
         const wbs = (created.body.result as { wbs: string }).wbs;
 
         const field = await call('sp_task_update', { wbs, field: 'priority', value: 'P2' });
@@ -580,7 +596,7 @@ describe('1392: guarded corpus write tools', () => {
     });
 
     test('sp_task_update adds and removes tags, and refuses a malformed tag list (R1, R2)', async () => {
-        const created = await call('sp_task_create', { title: unique('mcp tag target') });
+        const created = await createTask('mcp tag target');
         const wbs = (created.body.result as { wbs: string }).wbs;
 
         const tagged = await call('sp_task_update', { wbs, addTags: ['mcp', 'e2e'] });
@@ -618,8 +634,9 @@ describe('1392: guarded corpus write tools', () => {
     test('sp_feature_check answers for a real feature (R1)', async () => {
         // A minimal feature in the scratch project: the tool runs the same service and folders the
         // HTTP handler uses, so it answers with a report rather than a transport error.
-        if (appCtx === undefined) throw new Error('context missing');
-        const featuresDir = appCtx.planningFolders().featuresDir;
+        // The scratch project's own features dir: never the real repo's (the context's planning
+        // folders can resolve from process.cwd(), which would write into the checkout).
+        const featuresDir = join(root, 'docs', 'features');
         mkdirSync(featuresDir, { recursive: true });
         writeFileSync(
             join(featuresDir, 'K41_gateway-mcp.md'),
@@ -631,7 +648,7 @@ describe('1392: guarded corpus write tools', () => {
     });
 
     test('a done transition without a verdict is refused with the CLI guard message (R4)', async () => {
-        const created = await call('sp_task_create', { title: unique('mcp transition parity') });
+        const created = await createTask('mcp transition parity');
         const wbs = (created.body.result as { wbs: string }).wbs;
 
         const refused = await call('sp_task_transition', { wbs, to: 'done' });
