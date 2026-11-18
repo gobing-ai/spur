@@ -201,6 +201,16 @@ export {
     narrowArtifact,
 } from './narrow-artifact';
 export { type PairingStat, type PairingSummaryOptions, pairingSummary } from './pairings';
+export {
+    type ProtocolA2aUsage,
+    type ProtocolActorUsage,
+    type ProtocolAuthDeniedUsage,
+    type ProtocolResourceUsage,
+    type ProtocolToolUsage,
+    type ProtocolUsage,
+    type ProtocolUsageOptions,
+    protocolUsageSummary,
+} from './protocol-usage';
 export { type ExtractedTokens, extractClaudeTokens } from './query';
 export { renderForensics } from './render-forensics';
 export { MIN_PAIRING_DISPATCHES, renderPairings } from './render-pairings';

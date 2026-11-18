@@ -34,6 +34,7 @@ export function renderForensics(artifact: HistoryArtifact): string {
     lines.push(...renderToolExecutionTime(artifact));
     lines.push(...renderPerStep(artifact));
     lines.push(...renderBottlenecks(derived));
+    lines.push(...renderProtocolUsage(artifact));
     lines.push(...renderRawData(artifact));
 
     return lines.join('\n');
@@ -391,6 +392,65 @@ function renderBottlenecks(derived: DerivedVariables | null): string[] {
         lines.push('| (no bottleneck exceeded the ranking threshold) | | | |');
     }
     lines.push('');
+    return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Section 8 (continued) — Protocol usage: the MCP / A2A / auth surfaces
+// ---------------------------------------------------------------------------
+
+/**
+ * Protocol usage (task 1398 R4). An absent `protocolUsage` block or an empty window renders
+ * `not available (no protocol events in window)` — never zeros, which would read as "measured and
+ * quiet" when nothing was actually measured.
+ */
+function renderProtocolUsage(artifact: HistoryArtifact): string[] {
+    const usage = artifact.protocolUsage;
+    const lines = ['### Protocol Usage', ''];
+    if (usage === undefined) {
+        lines.push('not available (artifact predates protocol usage collection)', '');
+        return lines;
+    }
+    const total = usage.tools.length + usage.resources.length + usage.a2a.length + usage.authDenied.length;
+    if (total === 0) {
+        lines.push('not available (no protocol events in window)', '');
+        return lines;
+    }
+    if (usage.tools.length > 0) {
+        lines.push(
+            '| Tool | Calls | Failures | Failure rate | p50 | p95 | Unmeasured |',
+            '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+        );
+        for (const tool of usage.tools) {
+            lines.push(
+                `| ${tool.tool} | ${tool.calls} | ${tool.failures} | ${Math.round(tool.failureRate * 100)}% | ${naOrValue(tool.p50Ms, fmtDur)} | ${naOrValue(tool.p95Ms, fmtDur)} | ${tool.durationUnmeasured} |`,
+            );
+        }
+        lines.push('');
+    }
+    if (usage.resources.length > 0) {
+        lines.push('| Resource | Reads | Failures |', '| --- | ---: | ---: |');
+        for (const resource of usage.resources) {
+            lines.push(`| ${resource.uri} | ${resource.reads} | ${resource.failures} |`);
+        }
+        lines.push('');
+    }
+    if (usage.a2a.length > 0) {
+        lines.push('| Member | Received | Replayed | Conflict | Cancelled |', '| --- | ---: | ---: | ---: | ---: |');
+        for (const member of usage.a2a) {
+            lines.push(
+                `| ${member.member} | ${member.received} | ${member.replayed} | ${member.conflict} | ${member.cancelled} |`,
+            );
+        }
+        lines.push('');
+    }
+    if (usage.authDenied.length > 0) {
+        lines.push('| Surface | Reason | Count |', '| --- | --- | ---: |');
+        for (const denial of usage.authDenied) {
+            lines.push(`| ${denial.surface} | ${denial.reason} | ${denial.count} |`);
+        }
+        lines.push('');
+    }
     return lines;
 }
 

@@ -62,6 +62,13 @@ Run-cost note (0680 R6): Performance analysis reports what this run's chained `a
 stages cost using the pairing analytics fold (totalCostUsd / meanDurationMs per pairing); a
 pairing without cost signal renders `not available`, never zero.
 
+Protocol-usage note (1398): Performance analysis also cites `protocolUsage` from the same
+selector window — MCP tool calls/failures with nearest-rank p50/p95 and a `durationUnmeasured`
+count, resource reads, per-actor attribution (`unknown` when the shared bearer hides the agent),
+the A2A `received`/`replayed`/`conflict`/`cancelled` split and bearer refusals by surface and
+reason. An absent `protocolUsage` is a section-6 telemetry gap and an empty window renders
+`not available (no protocol events in window)`; neither is ever reported as zeros.
+
 Never fabricate a value, a trend, an anchor, or an applied fix. Never launch a workflow.
 
 ## `validate` rubric

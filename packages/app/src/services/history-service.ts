@@ -52,6 +52,7 @@ import {
     narrowArtifact,
     openExistingDb,
     pairingSummary,
+    protocolUsageSummary,
     type RetentionResult,
     RunSessionDao,
     renderMarkdown,
@@ -907,6 +908,7 @@ export class HistoryService {
             toolDurRows,
             todoRows,
             pairings,
+            protocolUsage,
             stepTokenRows,
             stepDurationRows,
             cacheWasteAggRow,
@@ -928,6 +930,8 @@ export class HistoryService {
             // feature J8 R1: per-(executor, role) pairing stats over the same
             // selector window (system_events plane, not the message plane).
             pairingSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
+            // task 1398: protocol usage (mcp/a2a/auth) over the same window, same plane.
+            protocolUsageSummary(db, { since: selector.since ?? undefined, until: selector.until ?? undefined }),
             // task 0581: per-step rankings + support verdicts, all LIMIT-bounded (R2).
             topStepsByTokens(db, selector, top, queryOpts),
             topStepsByDuration(db, selector, top, queryOpts),
@@ -1017,6 +1021,7 @@ export class HistoryService {
             loops: loopRows,
             warnings,
             pairings,
+            protocolUsage,
             ladderSnapshot,
             derived,
             topStepsByTokens: stepTokenRows,

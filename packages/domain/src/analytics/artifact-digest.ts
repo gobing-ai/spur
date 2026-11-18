@@ -60,10 +60,15 @@ export const ARTIFACT_ARRAY_CLASSIFICATION: Readonly<Record<ArtifactArrayKey, 'r
     ladderSnapshot: 'set',
     stepSupport: 'set',
     phases: 'set', // DerivedVariables.phases.phases (PhaseResult)
-    tools: 'set', // ArtifactSelector.tools
+    tools: 'set', // ArtifactSelector.tools / ProtocolUsage.tools
     skills: 'set', // ArtifactSelector.skills
     sources: 'set', // ArtifactSelector.sources
     models: 'set', // ArtifactSelector.models
+    // ProtocolUsage (task 1398) — every array is a plain list, sorted for digest stability.
+    resources: 'set',
+    byActor: 'set',
+    a2a: 'set',
+    authDenied: 'set',
 };
 
 /**

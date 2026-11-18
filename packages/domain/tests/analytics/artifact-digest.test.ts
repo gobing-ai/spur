@@ -83,3 +83,39 @@ describe('artifact-digest (task 0669)', () => {
         expect(semanticArtifactDigest(withVolatile)).toBe(semanticArtifactDigest(otherVolatile));
     });
 });
+
+describe('protocolUsage arrays (1398 R3)', () => {
+    test('every protocolUsage array is a set: order does not move the digest', () => {
+        const withUsage = {
+            protocolUsage: {
+                tools: [
+                    { tool: 'a', calls: 1 },
+                    { tool: 'b', calls: 2 },
+                ],
+                resources: [
+                    { uri: 'spur://a', reads: 1 },
+                    { uri: 'spur://b', reads: 2 },
+                ],
+                byActor: [
+                    { actor: 'x', calls: 1 },
+                    { actor: 'y', calls: 2 },
+                ],
+                a2a: [
+                    { member: 'm1', received: 1 },
+                    { member: 'm2', received: 2 },
+                ],
+                authDenied: [
+                    { surface: 'mcp', reason: 'missing', count: 1 },
+                    { surface: 'a2a', reason: 'mismatch', count: 2 },
+                ],
+            },
+        };
+        const shuffled = structuredClone(withUsage);
+        shuffled.protocolUsage.tools.reverse();
+        shuffled.protocolUsage.resources.reverse();
+        shuffled.protocolUsage.byActor.reverse();
+        shuffled.protocolUsage.a2a.reverse();
+        shuffled.protocolUsage.authDenied.reverse();
+        expect(semanticArtifactDigest(shuffled)).toBe(semanticArtifactDigest(withUsage));
+    });
+});

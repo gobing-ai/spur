@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add protocol tool usage to the history-anatomy report
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:36.436Z
-updated_at: "2026-11-18T06:18:20.739Z"
+updated_at: "2026-11-18T08:36:58.379Z"
 feature_id: I61
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 4
 
 dependencies: ["1376", "1377"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1398. Add protocol tool usage to the history-anatomy report
@@ -30,20 +32,20 @@ Protocol events (`mcp.tool.called|failed`, `mcp.resource.read`, `auth.denied` fr
 
 ### Requirements
 
-- [ ] R1. Add `protocolUsageSummary(db, { since, until })` in `packages/domain/src/analytics/protocol-usage.ts`, returning `ProtocolUsage`:
+- [x] R1. Add `protocolUsageSummary(db, { since, until })` in `packages/domain/src/analytics/protocol-usage.ts`, returning `ProtocolUsage`:
   - `tools[]`: `{ tool, calls, failures, failureRate, p50Ms, p95Ms, durationUnmeasured }` from `mcp.tool.called`/`mcp.tool.failed`
   - `resources[]`: `{ uri, reads, failures }`
   - `byActor[]`: `{ actor, calls, failures }` (null actor → `unknown`)
   - `a2a[]`: `{ member, received, replayed, conflict, cancelled }`
   - `authDenied[]`: `{ surface, reason, count }`
-- [ ] R2. p50/p95 are nearest-rank values over `payload.durationMs` within the window. A row with no numeric `durationMs` counts in `durationUnmeasured` and is excluded from the percentile, never treated as 0.
-- [ ] R3. `history-service.ts` calls it beside `pairingSummary` over the same selector window and sets `HistoryArtifact.protocolUsage?` (optional, like `pairings`). Register its arrays as `'set'` in `artifact-digest.ts`.
-- [ ] R4. `renderForensics` adds a "Protocol usage" block. An empty window renders `not available (no protocol events in window)`, never zeros.
-- [ ] R5. In `report-contract.md` and `operations.md`, section 8 cites `protocolUsage`. A missing `protocolUsage` is a section-6 telemetry gap. No section is added or renamed.
+- [x] R2. p50/p95 are nearest-rank values over `payload.durationMs` within the window. A row with no numeric `durationMs` counts in `durationUnmeasured` and is excluded from the percentile, never treated as 0.
+- [x] R3. `history-service.ts` calls it beside `pairingSummary` over the same selector window and sets `HistoryArtifact.protocolUsage?` (optional, like `pairings`). Register its arrays as `'set'` in `artifact-digest.ts`.
+- [x] R4. `renderForensics` adds a "Protocol usage" block. An empty window renders `not available (no protocol events in window)`, never zeros.
+- [x] R5. In `report-contract.md` and `operations.md`, section 8 cites `protocolUsage`. A missing `protocolUsage` is a section-6 telemetry gap. No section is added or renamed.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Daily report shows protocol tool usage (req: R1, R2, R3, R4, R5)
+- [x] AC1 — Daily report shows protocol tool usage (req: R1, R2, R3, R4, R5)
 
 Test layer: domain analytics tests on in-memory SQLite with events seeded through the DAO, plus an artifact/render test.
 
@@ -88,18 +90,70 @@ Test layer: domain analytics tests on in-memory SQLite with events seeded throug
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `docs/features/I61_tool-usage-feedback-loop-protocol-events-into-history-anatomy-doctor-and-rule-scan.md:5` |
+| `docs/features/I61_tool-usage-feedback-loop-protocol-events-into-history-anatomy-doctor-and-rule-scan.md:59` |
+| `docs/features/I61_tool-usage-feedback-loop-protocol-events-into-history-anatomy-doctor-and-rule-scan.md:71` |
+| `docs/features/I61_tool-usage-feedback-loop-protocol-events-into-history-anatomy-doctor-and-rule-scan.md:9` |
+| `docs/features/INDEX.md:184` |
+| `packages/app/src/services/history-service.ts:1024` |
+| `packages/app/src/services/history-service.ts:55` |
+| `packages/app/src/services/history-service.ts:911` |
+| `packages/app/src/services/history-service.ts:933` |
+| `packages/domain/src/analytics/artifact-digest.ts:63` |
+| `packages/domain/src/analytics/artifact-digest.ts:67` |
+| `packages/domain/src/analytics/artifact.ts:239` |
+| `packages/domain/src/analytics/artifact.ts:5` |
+| `packages/domain/src/analytics/index.ts:204` |
+| `packages/domain/src/analytics/render-forensics.ts:37` |
+| `packages/domain/src/analytics/render-forensics.ts:398` |
+| `packages/domain/tests/analytics/artifact-digest.test.ts:86` |
+| `packages/domain/tests/analytics/render-forensics.test.ts:518` |
+| `plugins/sp/skills/history-anatomy/references/operations.md:65` |
+| `plugins/sp/skills/history-anatomy/references/report-contract.md:191` |
+| `packages/domain/src/analytics/protocol-usage.ts:1` |
+| `packages/domain/tests/analytics/protocol-usage.test.ts:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — `protocolUsageSummary(db, {since, until})` returning `ProtocolUsage` with `tools[]`, `resources[]`, `byActor[]`, `a2a[]`, `authDenied[]` | MET | `packages/domain/src/analytics/protocol-usage.ts:110` (single windowed `SELECT` over the six 1376/1377 names, folded in TS), types at `:17-97`, exported via `analytics/index.ts`; `packages/domain/tests/analytics/protocol-usage.test.ts` (5 cases: tools/percentiles, resources+actors+a2a+auth, multi-entry ordering, unreadable plane, empty window) |
+| R2 — nearest-rank p50/p95 over `payload.durationMs`; a row without a numeric duration counts in `durationUnmeasured` and is excluded, never 0 | MET | `protocol-usage.ts:244` (`nearestRank`), `:161-168` (measured vs `unmeasured`); assertions `protocol-usage.test.ts:69-73` (p50 10, p95 30 over `[10,30]`, `durationUnmeasured` 1) |
+| R3 — `history-service` calls it beside `pairingSummary` over the same window; optional `HistoryArtifact.protocolUsage`; arrays registered `'set'` in `artifact-digest.ts` | MET | `packages/app/src/services/history-service.ts:934` (same selector window, same `Promise.all`), artifact field `artifact.ts:243`, digest `artifact-digest.ts:67-71`; the `ArtifactArrayKey` exhaustiveness guard (`:84-88`) compiles, and `artifact-digest.test.ts` new case proves order-independence |
+| R4 — `renderForensics` adds a "Protocol usage" block; empty window renders `not available (no protocol events in window)`, never zeros | MET | `render-forensics.ts:407` (`### Protocol Usage`, wired at `:37` inside section 8 after Bottleneck Ranking); `not available` for both an absent artifact field and an empty window; `render-forensics.test.ts` 3 new cases (table values, empty window, absent block) |
+| R5 — `report-contract.md` and `operations.md` section 8 cites `protocolUsage`; missing `protocolUsage` is a section-6 telemetry gap; no section added or renamed | MET | `plugins/sp/skills/history-anatomy/references/report-contract.md` (section-8 paragraph cites `protocolUsage`, states the section-6 gap rule), `operations.md` (protocol-usage note); the frozen 12-section list is untouched (plugin structure tests 34+ invariants pass in the gate log) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Daily report shows protocol tool usage (R1,R2,R3,R4,R5) | MET | test | `packages/domain/tests/analytics/protocol-usage.test.ts` 5/5 + `render-forensics.test.ts` 28/28 + `artifact-digest.test.ts` 4/4; workspace coverage run reports `protocol-usage.ts 100.00% funcs / 100.00% lines`; `history-service.test.ts` 72/72 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:32:12.198Z todo → wip (system)
+- 2026-11-18T08:36:56.507Z wip → testing (system)
+- 2026-11-18T08:36:58.374Z testing → done (system)
+

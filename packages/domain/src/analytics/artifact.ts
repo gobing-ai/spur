@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ReconcileSummary } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { DerivedVariables } from './derived';
 import type { PairingStat } from './pairings';
+import type { ProtocolUsage } from './protocol-usage';
 import type { TokenTotals } from './types';
 import type { VerifiedOutcomeStat } from './verified-outcome';
 import type { SessionState } from './watermark';
@@ -235,6 +236,11 @@ export interface HistoryArtifact {
      * on pre-0573 artifacts so consumers treat absence as unknown (never fabricate).
      */
     pairings?: PairingStat[];
+    /**
+     * Protocol usage across the MCP / A2A / auth surfaces (task 1398, feature I61) — additive,
+     * absent on pre-1398 artifacts. Absence reads `not available`, never zeros (R4).
+     */
+    protocolUsage?: ProtocolUsage;
     /**
      * Executor capability ladder snapshotted from config at analyze time (feature
      * J8 R2) — additive, absent on pre-0573 artifacts.

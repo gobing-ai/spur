@@ -515,3 +515,46 @@ describe('0677 absent-not-zero rendering', () => {
         expect(md).toContain('fully-measured');
     });
 });
+
+describe('renderForensics — protocol usage (1398 R4)', () => {
+    test('renders the tool table with real percentiles and an honest unmeasured column', () => {
+        const a = artifact({
+            protocolUsage: {
+                tools: [
+                    {
+                        tool: 'task_show',
+                        calls: 2,
+                        failures: 1,
+                        failureRate: 1 / 3,
+                        p50Ms: 10,
+                        p95Ms: 30,
+                        durationUnmeasured: 1,
+                    },
+                ],
+                resources: [{ uri: 'spur://tasks/1', reads: 2, failures: 1 }],
+                byActor: [{ actor: 'unknown', calls: 0, failures: 1 }],
+                a2a: [{ member: 'coder', received: 1, replayed: 1, conflict: 1, cancelled: 1 }],
+                authDenied: [{ surface: 'mcp', reason: 'missing', count: 1 }],
+            },
+        } as Partial<HistoryArtifact>);
+        const out = renderForensics(a);
+        expect(out).toContain('### Protocol Usage');
+        expect(out).toContain('| task_show | 2 | 1 | 33% |');
+        expect(out).toContain('| spur://tasks/1 | 2 | 1 |');
+        expect(out).toContain('| coder | 1 | 1 | 1 | 1 |');
+        expect(out).toContain('| mcp | missing | 1 |');
+    });
+
+    test('an empty window reads not available, never zeros', () => {
+        const a = artifact({
+            protocolUsage: { tools: [], resources: [], byActor: [], a2a: [], authDenied: [] },
+        } as Partial<HistoryArtifact>);
+        const out = renderForensics(a);
+        expect(out).toContain('not available (no protocol events in window)');
+    });
+
+    test('an artifact without the block reads not available', () => {
+        const out = renderForensics(artifact());
+        expect(out).toContain('not available (artifact predates protocol usage collection)');
+    });
+});

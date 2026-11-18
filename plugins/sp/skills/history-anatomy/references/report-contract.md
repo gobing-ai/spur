@@ -188,6 +188,15 @@ Performance analysis states what the run itself cost: per-pairing `totalCostUsd`
 paths), so chained `agent.run` stages are reportable instead of "~unknown". Where no cost
 signal exists for a pairing it renders `not available`, never zero.
 
+Performance analysis also cites `protocolUsage` (task 1398): per-tool MCP calls, failures,
+failure rate, nearest-rank p50/p95 over measured `durationMs` and a `durationUnmeasured` count
+(a row with no numeric duration is counted there, never treated as 0), plus per-resource reads,
+per-actor call attribution (`unknown` when the shared bearer hides the agent), the A2A intake
+split (`received` / `replayed` / `conflict` / `cancelled`) and bearer refusals by surface and
+reason. An empty window renders `not available (no protocol events in window)` — never zeros.
+A report whose artifact carries no `protocolUsage` reports that absence in section 6 (Telemetry
+gaps); it is a gap, not a clean bill of health.
+
 ## Projected candidates — section 9 (environment lens, task 0686)
 
 Section 9 (Workflow and process improvements) stays additive report grammar: unprojected numbered
