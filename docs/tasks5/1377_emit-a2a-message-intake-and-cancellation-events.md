@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Emit A2A message intake and cancellation events
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:15.947Z
-updated_at: "2026-11-18T05:36:41.558Z"
+updated_at: "2026-11-18T08:21:37.085Z"
 feature_id: J94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 estimate_hours: 3
 
 dependencies: ["1375"]
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1377. Emit A2A message intake and cancellation events
@@ -27,16 +29,16 @@ The A2A listener (G9, ADR-148/143) maps `SendMessage` to a keyed inbox request (
 
 ### Requirements
 
-- [ ] R1. Add `'a2a'` to `SystemEventSource`, and catalog `a2a.message.received` and `a2a.task.cancelled` with event-specific presenters.
-- [ ] R2. Emit `a2a.message.received` on every authenticated, well-formed `SendMessage`. Payload: `member` (instance id), `messageId`, `requestKey`, `outcome` (`accepted` | `replayed` | `conflict`) and `inboxMessageId` when present.
-- [ ] R3. Emit `a2a.task.cancelled` on the accepted cancel path with `member`, `taskId` and `runStopped`.
-- [ ] R4. No message body text appears in any payload.
+- [x] R1. Add `'a2a'` to `SystemEventSource`, and catalog `a2a.message.received` and `a2a.task.cancelled` with event-specific presenters.
+- [x] R2. Emit `a2a.message.received` on every authenticated, well-formed `SendMessage`. Payload: `member` (instance id), `messageId`, `requestKey`, `outcome` (`accepted` | `replayed` | `conflict`) and `inboxMessageId` when present.
+- [x] R3. Emit `a2a.task.cancelled` on the accepted cancel path with `member`, `taskId` and `runStopped`.
+- [x] R4. No message body text appears in any payload.
 
 Out of scope: the `auth.denied` emitter for A2A (owned by 1376), GetTask read events (low decision value), cross-project delegation (G91).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A2A message intake and cancellation emit events (req: R1, R2, R3, R4)
+- [x] AC1 — A2A message intake and cancellation emit events (req: R1, R2, R3, R4)
 
 Test layer: the real A2A routes with tap and `SystemEventDao` in `apps/server/tests/modules/a2a/routes.test.ts`, plus regression of `scripts/commands/a2a-serve-e2e.ts`.
 
@@ -77,18 +79,65 @@ Presenter summaries look like `[a2a] <member> received <messageId> (replayed)` a
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/server/src/modules/a2a/index.ts:240` |
+| `apps/server/src/modules/a2a/index.ts:251` |
+| `apps/server/src/modules/a2a/index.ts:318` |
+| `apps/server/src/modules/a2a/index.ts:322` |
+| `apps/server/src/modules/a2a/index.ts:331` |
+| `apps/server/tests/modules/a2a/routes.test.ts:106` |
+| `apps/server/tests/modules/a2a/routes.test.ts:116` |
+| `apps/server/tests/modules/a2a/routes.test.ts:13` |
+| `apps/server/tests/modules/a2a/routes.test.ts:31` |
+| `apps/server/tests/modules/a2a/routes.test.ts:476` |
+| `apps/server/tests/modules/a2a/routes.test.ts:60` |
+| `apps/server/tests/modules/a2a/routes.test.ts:85` |
+| `apps/server/tests/modules/a2a/routes.test.ts:90` |
+| `docs/design/event-tracking.md:377` |
+| `packages/app/src/services/event-names.ts:2021` |
+| `packages/app/src/services/event-names.ts:26` |
+| `packages/app/src/services/event-names.ts:428` |
+| `packages/app/src/services/event-names.ts:99` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — add `'a2a'` to `SystemEventSource` and catalog `a2a.message.received` / `a2a.task.cancelled` with presenters | MET | `packages/app/src/services/event-names.ts:26` (source), `:106` (profile), `:431-432` (entries), `:2023,2044` (presenters); `SYSTEM_EVENT_PRESENTERS` is `satisfies Record<SystemEventName,…>`; `event-names.test.ts` 36/36 incl. the §11 two-sided gate |
+| R2 — emit `a2a.message.received` per authenticated well-formed send with `member`, `messageId`, `requestKey`, `outcome` (`accepted`/`replayed`/`conflict`), `inboxMessageId` when present | MET | `apps/server/src/modules/a2a/index.ts:241-247` (send: `sent.replayed ? 'replayed' : 'accepted'`, `inboxMessageId: sent.message.id`), `:252-257` (409 conflict path); tests `tests/modules/a2a/routes.test.ts:482,502,511` |
+| R3 — emit `a2a.task.cancelled` on the accepted cancel path with `member`, `taskId`, `runStopped` | MET | `apps/server/src/modules/a2a/index.ts:318-332` (`runStopped` true after stop, false in the catch); test `tests/modules/a2a/routes.test.ts:519` |
+| R4 — no message body text in any payload | MET | payloads built from ids/keys only (`index.ts:241-257,332`); leak assertions on the stored row `tests/modules/a2a/routes.test.ts:494,533` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A2A message intake and cancellation emit events (R1,R2,R3,R4) | MET | test | `tests/modules/a2a/routes.test.ts` 28/28 through a real `EventBus` + catalog tap + `SystemEventDao` (ledger rows, not an array); `bun run a2a-serve-e2e` exit 0 — the real `a2a` CLI proves the cancel path still completes |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-18T08:20:47.125Z todo → wip (system)
+- 2026-11-18T08:21:35.061Z wip → testing (system)
+- 2026-11-18T08:21:37.078Z testing → done (system)
+

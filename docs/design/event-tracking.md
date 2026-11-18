@@ -374,6 +374,8 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `mcp.tool.failed` | `tool`, `argKeys`, `durationMs`, `outcome`, `errorCode`, `error` (redacted), `runId`, `wbs` | `[mcp] {tool} failed {durationMs}ms` | `errorCode` |
 | `mcp.resource.read` | `uri`, `durationMs`, `outcome`, `errorCode` | `[mcp] read {uri} {durationMs}ms` | `outcome` |
 | `auth.denied` | `surface`, `reason`, `path` | `[auth] {surface} denied ({reason})` | `reason` |
+| `a2a.message.received` | `member`, `messageId`, `requestKey`, `outcome`, `inboxMessageId` | `[a2a] {member} received {messageId} ({outcome})` | `outcome` |
+| `a2a.task.cancelled` | `member`, `taskId`, `runStopped` | `[a2a] {member} cancelled {taskId} ({runStopped})` | `taskId` |
 | `decision.success` | `decisionId`, `value`, `confidence`, `maker` | `[decision] {decisionId} answered {value}` | `value` |
 | `decision.failure` | `decisionId`, `reason`, `fallbackValue`, `confidence`, `maker`, error | `[decision] {decisionId} fell back ({reason})` | `reason` |
 | `decision.end` | `decisionId`, `durationMs`, `value`, `source`, `reason`, `maker`, `confidence` | `[decision] {decisionId} finished via {source}` | `reason` |

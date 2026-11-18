@@ -237,9 +237,24 @@ export const a2aModule: ServerModule = {
                     kind: 'request',
                     requestKey: `a2a:${member.instanceId}:${messageId}`,
                 });
+                // 1377 R2/R4: ids and the inbox's own dedup truth only — never the body text.
+                ctx.eventBus().emit('a2a.message.received', {
+                    member: member.instanceId,
+                    messageId,
+                    requestKey: `a2a:${member.instanceId}:${messageId}`,
+                    outcome: sent.replayed ? 'replayed' : 'accepted',
+                    inboxMessageId: sent.message.id,
+                });
                 return c.json({ task: await projectTask(ctx, inbox, sent.message) });
             } catch (error) {
                 if (error instanceof RequestKeyConflictError) {
+                    // A replay is a benign client retry; a conflict is a client bug — distinct signals.
+                    ctx.eventBus().emit('a2a.message.received', {
+                        member: member.instanceId,
+                        messageId,
+                        requestKey: `a2a:${member.instanceId}:${messageId}`,
+                        outcome: 'conflict',
+                    });
                     return c.json(
                         a2aError(409, 'ALREADY_EXISTS', error.message, {
                             reason: 'REQUEST_KEY_CONFLICT',
@@ -300,9 +315,11 @@ export const a2aModule: ServerModule = {
             } catch (error) {
                 return c.json(a2aError(500, 'INTERNAL', `cannot record the cancel: ${String(error)}`), 500);
             }
+            let runStopped = true;
             try {
                 await ctx.supervisor().stop(member.instanceId);
             } catch (error) {
+                runStopped = false;
                 // Not supervised (a queued request, or a member with no live process): the intent
                 // is recorded and the state reads canceled; there is no process to signal.
                 ctx.logger.warn('a2a cancel: no supervised run stopped', {
@@ -311,6 +328,8 @@ export const a2aModule: ServerModule = {
                     error: String(error),
                 });
             }
+            // 1377 R3: `runStopped` keeps "intent recorded" distinct from "process actually stopped".
+            ctx.eventBus().emit('a2a.task.cancelled', { member: member.instanceId, taskId, runStopped });
             return c.json(await projectTask(ctx, inbox, (await inbox.get(taskId)) ?? message));
         });
     },

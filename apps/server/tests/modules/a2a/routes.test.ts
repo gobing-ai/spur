@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { registerSystemEventTap } from '@gobing-ai/spur-app';
+import { SystemEventDao } from '@gobing-ai/spur-domain';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
@@ -25,6 +28,8 @@ interface Harness {
     stops: string[];
     /** 1376: what the module emitted on `ctx.eventBus()`. */
     events: Array<{ name: string; payload: Record<string, unknown> }>;
+    /** 1377: the persisted ledger rows for one name (tap flushed first), payload = envelope `data`. */
+    rows(name: string): Promise<Array<{ data: Record<string, unknown>; raw: string }>>;
     close(): Promise<void>;
 }
 
@@ -52,6 +57,11 @@ async function makeHarness(
     const inbox = await makeInbox(async () => db);
     const stops: string[] = [];
     const events: Array<{ name: string; payload: Record<string, unknown> }> = [];
+    // The canonical bus + catalog tap over the harness DB: the same path `serve` wires, so a
+    // route's emit is proven to reach the ledger, not just an array (1377 Plan Step 1).
+    const bus = new EventBus<Record<string, (event: unknown) => void>>();
+    const dao = new SystemEventDao(db as never);
+    const tap = registerSystemEventTap(bus, dao, { warn: () => {}, debug: () => {} }, { diagnosticEnabled: false });
     const memberIds = options.members ?? [MEMBER];
     const enabled = options.enabled ?? true;
     const fs = createNodeFileSystem();
@@ -72,11 +82,12 @@ async function makeHarness(
                 memberIds.map((instanceId) => ({ instanceId, executor: 'claude', enabled: true })),
         }),
         env: options.tokenVarUnset === true ? {} : { SPUR_A2A_TOKEN: TOKEN },
-        // A bus slice is enough here: the module only ever calls `emit` (1376 R4); the ledger
-        // proof through the real tap lives in `tests/mcp-e2e.test.ts`.
+        // 1376 R4 / 1377 R1-R3: the module emits onto the canonical bus; the recording handler
+        // keeps the raw payload for the direct assertions while the tap persists the ledger rows.
         eventBus: () => ({
             emit: (name: string, payload: Record<string, unknown>) => {
                 events.push({ name, payload });
+                return bus.emit(name, payload);
             },
         }),
         logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
@@ -92,7 +103,17 @@ async function makeHarness(
         inbox,
         stops,
         events,
+        rows: async (name: string) => {
+            await tap.flush();
+            const rows = await dao.query({ name, limit: 20 });
+            return rows.map((row) => {
+                const raw = row.payload_json ?? '';
+                const parsed = JSON.parse(raw === '' ? '{}' : raw) as { data?: Record<string, unknown> };
+                return { data: parsed.data ?? {}, raw };
+            });
+        },
         close: async () => {
+            tap.unsubscribe();
             await db.close();
         },
     };
@@ -450,5 +471,66 @@ describe('a2a module — CancelTask stops the run (R5)', () => {
             status: { state: string };
         };
         expect(task.status.state).toBe('TASK_STATE_COMPLETED');
+    });
+});
+
+/**
+ * 1377 — A2A intake and cancellation are observable: the module's emit reaches the real catalog
+ * tap and the `system_events` ledger, and the message body never appears in a payload (R4).
+ */
+describe('a2a module — intake and cancellation events (1377)', () => {
+    test('a first authenticated send emits a2a.message.received with outcome accepted (R2)', async () => {
+        const res = await sendMessage('ev-1', 'deploy the docs site');
+        expect(res.status).toBe(200);
+        const rows = await harness.rows('a2a.message.received');
+        const row = rows[0];
+        if (row === undefined) throw new Error('expected an a2a.message.received row');
+        expect(row.data.member).toBe(MEMBER);
+        expect(row.data.messageId).toBe('ev-1');
+        expect(row.data.requestKey).toBe(`a2a:${MEMBER}:ev-1`);
+        expect(row.data.outcome).toBe('accepted');
+        expect(typeof row.data.inboxMessageId).toBe('string');
+        // R4: the body is the risk — it must not survive into the stored payload.
+        expect(row.raw).not.toContain('deploy the docs site');
+    });
+
+    test('the same message id again emits outcome replayed (R2)', async () => {
+        await sendMessage('ev-dup', 'first work');
+        await sendMessage('ev-dup', 'first work');
+        const outcomes = (await harness.rows('a2a.message.received')).map((row) => row.data.outcome);
+        expect(outcomes).toContain('accepted');
+        expect(outcomes).toContain('replayed');
+    });
+
+    test('a reused message id with different work emits outcome conflict (R2)', async () => {
+        await sendMessage('ev-conflict', 'first work');
+        const res = await sendMessage('ev-conflict', 'different work');
+        expect(res.status).toBe(409);
+        const row = (await harness.rows('a2a.message.received')).find(
+            (entry) => entry.data.messageId === 'ev-conflict',
+        );
+        if (row === undefined) throw new Error('expected a row for the conflicting message id');
+        // Newest-first is not guaranteed; the conflict row is the last one written for this id.
+        const outcomes = (await harness.rows('a2a.message.received'))
+            .filter((entry) => entry.data.messageId === 'ev-conflict')
+            .map((entry) => entry.data.outcome);
+        expect(outcomes).toContain('conflict');
+        expect(row.raw).not.toContain('different work');
+    });
+
+    test('an accepted cancel emits a2a.task.cancelled with runStopped (R3)', async () => {
+        const first = (await (await sendMessage('ev-cancel')).json()) as { task: { id: string } };
+        await seedRun(first.task.id, 'running');
+        const res = await harness.app.request(
+            memberUrl(`tasks/${first.task.id}:cancel`),
+            authed({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
+        );
+        expect(res.status).toBe(200);
+        const row = (await harness.rows('a2a.task.cancelled'))[0];
+        if (row === undefined) throw new Error('expected an a2a.task.cancelled row');
+        expect(row.data.member).toBe(MEMBER);
+        expect(row.data.taskId).toBe(first.task.id);
+        expect(row.data.runStopped).toBe(true);
+        expect(row.raw).not.toContain('deploy the docs site');
     });
 });

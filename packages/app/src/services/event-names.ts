@@ -23,6 +23,7 @@ export type SystemEventSource =
     | 'bus'
     | 'api'
     | 'mcp'
+    | 'a2a'
     | 'decision';
 /** Visibility tier for board consumers. Diagnostic entries only persist/stream when the runtime toggle is on. */
 export type SystemEventTier = 'default' | 'diagnostic';
@@ -95,6 +96,7 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
     bus: { producerPackage: '@gobing-ai/ts-infra', subsystem: 'event-bus', remediationKind: 'prefix-filter' },
     api: { producerPackage: 'spur', subsystem: 'http-api', remediationKind: 'prefix-filter' },
     mcp: { producerPackage: 'spur', subsystem: 'embedded-mcp', remediationKind: 'prefix-filter' },
+    a2a: { producerPackage: 'spur', subsystem: 'a2a-listener', remediationKind: 'prefix-filter' },
     decision: { producerPackage: 'spur', subsystem: 'decision', remediationKind: 'prefix-filter' },
 };
 
@@ -423,6 +425,11 @@ const BASE_CATALOG = [
     // Transport refusal shared by the a2a/mcp mounts; 1377 adds a2a's own
     // message/cancel names under the same file.
     baseEvent('auth.denied', 'api', 'api'),
+    // ── a2a.* (task 1377 — A2A listener intake and cancellation) ─────────
+    // Metadata-only: the message body is the payload risk, so only ids, keys and
+    // the inbox's own dedup outcome are recorded.
+    baseEvent('a2a.message.received', 'a2a', 'a2a'),
+    baseEvent('a2a.task.cancelled', 'a2a', 'a2a'),
     baseEvent('bus.emit.done', 'bus', 'bus', 'metadata-only', 'diagnostic'),
     baseEvent('bus.emit.noop', 'bus', 'bus', 'metadata-only', 'diagnostic'),
     baseEvent('bus.handler.error', 'bus', 'bus', 'metadata-only', 'diagnostic'),
@@ -2010,6 +2017,43 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return '[auth] request denied';
         },
         outcome: derivedFrom('reason'),
+    },
+
+    // ── a2a (task 1377 — A2A listener intake and cancellation) ───────────
+    'a2a.message.received': {
+        description:
+            'An authenticated A2A SendMessage resolved into one inbox request, naming the member, message id and the inbox dedup outcome.',
+        fields: [
+            field('member', 'Member'),
+            field('messageId', 'Message id'),
+            field('requestKey', 'Request key'),
+            field('outcome', 'Outcome'),
+            field('inboxMessageId', 'Inbox message'),
+        ],
+        summary: ({ data }) => {
+            const member = s(data, 'member');
+            const messageId = s(data, 'messageId');
+            const outcome = s(data, 'outcome');
+            const detail = outcome !== undefined ? ` (${outcome})` : '';
+            return member !== undefined && messageId !== undefined
+                ? `[a2a] ${member} received ${messageId}${detail}`
+                : '[a2a] message received';
+        },
+        outcome: derivedFrom('outcome'),
+    },
+    'a2a.task.cancelled': {
+        description:
+            'An accepted A2A CancelTask recorded its cancel intent, naming whether a supervised run actually stopped.',
+        fields: [field('member', 'Member'), field('taskId', 'Task id'), field('runStopped', 'Run stopped')],
+        summary: ({ data }) => {
+            const member = s(data, 'member');
+            const taskId = s(data, 'taskId');
+            const stopped = data?.runStopped === true ? 'run stopped' : 'no run stopped';
+            return member !== undefined && taskId !== undefined
+                ? `[a2a] ${member} cancelled ${taskId} (${stopped})`
+                : `[a2a] task cancelled (${stopped})`;
+        },
+        outcome: derivedFrom('taskId'),
     },
 } satisfies Record<SystemEventName, SystemEventPresenterSpec>;
 
