@@ -79,13 +79,19 @@ describe('board runtime manifest (task 0988 R2)', () => {
         expect(source).not.toContain('export *');
         // `default` is emitted once, through the interop-aware line, and is never shadowed by a
         // named `export const default` (which is not valid module syntax anyway).
-        expect(source).toContain("export default typeof ns.default === 'undefined' ? ns : ns.default;");
-        expect(source.split('\n').filter((line) => line !== '')).toHaveLength(4);
+        expect(source).toContain("const defaultExport = Reflect.get(ns, 'default');");
+        expect(source).toContain('export default defaultExport === undefined ? ns : defaultExport;');
+        expect(source.split('\n').filter((line) => line !== '')).toHaveLength(5);
     });
 
     test('facade source for a specifier without any measured name still yields a valid module', () => {
         expect(facadeSource('react-router', [])).toBe(
-            "import * as ns from 'react-router';\nexport default typeof ns.default === 'undefined' ? ns : ns.default;\n",
+            [
+                "import * as ns from 'react-router';",
+                "const defaultExport = Reflect.get(ns, 'default');",
+                'export default defaultExport === undefined ? ns : defaultExport;',
+                '',
+            ].join('\n'),
         );
     });
 

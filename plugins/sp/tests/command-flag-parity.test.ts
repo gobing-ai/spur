@@ -580,6 +580,12 @@ describe('task 1390 — no live surface spells the batch schedule as --mode', ()
             .map((rel) => join(dir, rel));
     }
 
+    test('the deprecated batch command translates only the old schedule flag', () => {
+        const redirect = readFileSync(join(ROOT, 'plugins/sp/commands/dev-runall.md'), 'utf8');
+        expect(redirect).toContain('translate `--mode <schedule>` to `--schedule <schedule>`');
+        expect(redirect).toContain('Forward all other arguments verbatim');
+    });
+
     test('only the dev-runall redirect keeps the --mode batch spelling', () => {
         const offenders: string[] = [];
         for (const rel of [...LIVE_ROOTS.flatMap(markdownUnder), ...LIVE_FILES]) {

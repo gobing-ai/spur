@@ -42,5 +42,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
+- Before dispatching, translate `--mode <schedule>` to `--schedule <schedule>`, including the
+  `--mode=<schedule>` form. Forward all other arguments verbatim.
 - Dispatch the batch operation the replacement names — `Skill(skill="sp:spur-dev", args="runall-inline <forwarded flags>")` for interactive sequential omit/`inline`, otherwise `runall` (→ `sp:super-planner`).
 - The workflow YAML, the batch driver and the operation name are unchanged; only the command surface moved.

@@ -98,7 +98,9 @@ export function facadeSource(specifier: BoardFacadeSpecifier, exportNames: reado
         if (name === 'default') continue;
         lines.push(`export const ${name} = ns.${name};`);
     }
-    lines.push("export default typeof ns.default === 'undefined' ? ns : ns.default;");
+    // A static namespace lookup asks the bundler for a missing export on named-only modules.
+    lines.push("const defaultExport = Reflect.get(ns, 'default');");
+    lines.push('export default defaultExport === undefined ? ns : defaultExport;');
     return `${lines.join('\n')}\n`;
 }
 

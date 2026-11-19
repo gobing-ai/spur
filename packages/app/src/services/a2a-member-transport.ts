@@ -535,7 +535,6 @@ export class A2aMemberTransport {
         if (member.a2a === undefined && !(member.project !== undefined && this.deps.cardRefs !== undefined)) {
             return { status: 'failed', messageId, reason: `member "${member.instanceId}" has no a2a declaration` };
         }
-        const target = await this.withCardRef(member);
         const inbox = new InboxService({ getDb: this.deps.getDb });
         const runs = new CoordinationRunDao(await this.deps.getDb());
         const existing = (await runs.listByMessageId(messageId)).find((row) => row.spec_id === member.instanceId);
@@ -572,6 +571,7 @@ export class A2aMemberTransport {
         let remoteContextId = existing?.remote_context_id ?? undefined;
         const secret = member.authEnv === undefined ? undefined : this.env[member.authEnv];
         try {
+            const target = await this.withCardRef(member);
             const card = await this.cli.card(target);
             const mutation = a2aMutationReason(options.work, a2aWriteFencingSupported(card));
             if (mutation !== null) {

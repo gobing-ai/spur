@@ -429,7 +429,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
     };
     const inFlight = new Map<string, Promise<number>>();
     /** Answering loopback family per entry, so a later request does not re-probe a known-dead one. */
-    const familyByEntry = new Map<string, string>();
+    const familyByEntry = new Map<string, (typeof LOOPBACK_FAMILIES)[number]>();
     /**
      * Since-creation counters (1385 R1). Closure-local on purpose: the gateway is stateless and the
      * durable history of what broke lives in each project's event log, so a restart resets these.
@@ -502,6 +502,32 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         });
     }
 
+    /** Dial the project's loopback listener, remembering the family that answers. */
+    async function dialUpstream(
+        key: string,
+        port: number,
+        attempt: (authority: string) => Promise<Response>,
+    ): Promise<Response> {
+        const cached = familyByEntry.get(key);
+        const families = cached === '::1' ? ([cached, '127.0.0.1'] as const) : LOOPBACK_FAMILIES;
+        const dialed: string[] = [];
+        let lastError: unknown = null;
+        for (const family of families) {
+            const authority = loopbackAuthority(family, port);
+            dialed.push(authority);
+            try {
+                const response = await attempt(authority);
+                familyByEntry.set(key, family);
+                return response;
+            } catch (err) {
+                if (!isConnectionRefused(err)) throw err;
+                lastError = err;
+            }
+        }
+        const message = lastError instanceof Error ? lastError.message : String(lastError);
+        throw new UnreachableUpstream(dialed, message);
+    }
+
     async function proxy(
         req: Request,
         entry: ProjectEntry,
@@ -516,41 +542,19 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         /** The authority the client dialed, so a card can advertise the stable gateway URL (1395 R3). */
         const gatewayAuthority = req.headers.get('host')?.trim() ?? `localhost:${deps.port}`;
 
-        const attempt = async (family: string, port: number): Promise<Response> => {
-            const authority = loopbackAuthority(family, port);
-            const target = `http://${authority}${rest === '' ? '/' : rest}${search}`;
-            const init: RequestInit = {
-                method: req.method,
-                headers: upstreamRequestHeaders(req, authority, { prefix, host: gatewayAuthority }),
-                redirect: 'manual',
-                signal: req.signal,
-            };
-            if (body !== null) init.body = body;
-            const upstreamRes = await fetchUpstream(target, init);
-            return adaptResponse(upstreamRes, prefix, rest, req.method);
-        };
-
-        /** Dial each candidate family in turn, remembering whichever one answers. */
-        async function dial(port: number): Promise<Response> {
-            const cached = familyByEntry.get(key);
-            const families = cached === undefined ? LOOPBACK_FAMILIES : [cached];
-            const dialed: string[] = [];
-            let lastError: unknown = null;
-            for (const family of families) {
-                const authority = loopbackAuthority(family, port);
-                dialed.push(authority);
-                try {
-                    const res = await attempt(family, port);
-                    familyByEntry.set(key, family);
-                    return res;
-                } catch (err) {
-                    if (!isConnectionRefused(err)) throw err;
-                    lastError = err;
-                }
-            }
-            const message = lastError instanceof Error ? lastError.message : String(lastError);
-            throw new UnreachableUpstream(dialed, message);
-        }
+        const dial = (port: number): Promise<Response> =>
+            dialUpstream(key, port, async (authority) => {
+                const target = `http://${authority}${rest === '' ? '/' : rest}${search}`;
+                const init: RequestInit = {
+                    method: req.method,
+                    headers: upstreamRequestHeaders(req, authority, { prefix, host: gatewayAuthority }),
+                    redirect: 'manual',
+                    signal: req.signal,
+                };
+                if (body !== null) init.body = body;
+                const upstreamRes = await fetchUpstream(target, init);
+                return adaptResponse(upstreamRes, prefix, rest, req.method);
+            });
 
         const ensureStarted = Date.now();
         let port: number;
@@ -807,25 +811,27 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 throw toolError(`could not start project "${route.entry.name}" for tool "${name}": ${message}`);
             }
 
-            const upstreamUrl = `http://${loopbackAuthority('127.0.0.1', port)}${route.prefix}/mcp`;
             let response: Response;
             try {
-                response = await fetchUpstream(upstreamUrl, {
-                    method: 'POST',
-                    headers: {
-                        'content-type': 'application/json',
-                        ...(deps.mcpProtocolVersion !== undefined
-                            ? { 'mcp-protocol-version': deps.mcpProtocolVersion }
-                            : {}),
-                        authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        jsonrpc: '2.0',
-                        id: name,
-                        method: 'tools/call',
-                        params: { name, arguments: forwarded },
+                response = await dialUpstream(identityKey(route.entry), port, (authority) =>
+                    fetchUpstream(`http://${authority}/mcp`, {
+                        method: 'POST',
+                        redirect: 'manual',
+                        headers: {
+                            'content-type': 'application/json',
+                            ...(deps.mcpProtocolVersion !== undefined
+                                ? { 'mcp-protocol-version': deps.mcpProtocolVersion }
+                                : {}),
+                            authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            id: name,
+                            method: 'tools/call',
+                            params: { name, arguments: forwarded },
+                        }),
                     }),
-                });
+                );
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 throw toolError(`project "${route.entry.name}" is unreachable for tool "${name}": ${message}`);
@@ -836,23 +842,24 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                     `project "${route.entry.name}" refused the gateway's MCP token (401); point the gateway at this project's token variable (server.mcp.authEnv)`,
                 );
             }
-            if (response.status >= 500) {
+            const body = (await response.json().catch(() => null)) as {
+                jsonrpc?: unknown;
+                result?: unknown;
+                error?: { message?: string } | null;
+            } | null;
+            const refusal = body?.jsonrpc === '2.0' ? body.error?.message : undefined;
+            if (typeof refusal === 'string') {
+                throw toolError(
+                    `project "${route.entry.name}" refused tool "${name}": ${refusal.replaceAll(token, '[redacted]')}`,
+                );
+            }
+            if (!response.ok) {
                 throw toolError(
                     `project "${route.entry.name}" failed to answer tool "${name}" (${response.status}); check its serve log`,
                 );
             }
-
-            const body = (await response.json().catch(() => null)) as {
-                result?: unknown;
-                error?: { message?: string };
-            } | null;
-            if (body === null) {
-                throw toolError(`project "${route.entry.name}" returned no JSON for tool "${name}"`);
-            }
-            if (body.error !== undefined) {
-                throw toolError(
-                    `project "${route.entry.name}" refused tool "${name}": ${body.error.message ?? 'unspecified error'}`,
-                );
+            if (body === null || !Object.hasOwn(body, 'result')) {
+                throw toolError(`project "${route.entry.name}" returned no result for tool "${name}"`);
             }
             // The upstream result travels unchanged (R3): the gateway never reshapes a project's answer.
             return body.result;

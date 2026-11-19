@@ -626,7 +626,8 @@ the same file: every registered project rendered with exactly one state.
 | `remote-not-proxied` | a non-local registry entry; never requested (ADR-151) |
 
 Reads are `GET <gateway>/<prefix>/api/health` and
-`GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=50`, each with a 3 s budget. The
+`GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=50` with cursor pagination. The health
+read and the complete history read each have a 3 s budget. The
 event read is "since today", so `--all-projects` with a past `--date` is a usage error (exit 2) rather
 than a summary that reports today's events under an older heading. Aggregation lives in the caller
 (`packages/app/src/services/projects-summary.ts`); the gateway stays a path and gains no endpoint.

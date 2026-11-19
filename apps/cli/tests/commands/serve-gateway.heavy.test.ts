@@ -53,6 +53,7 @@ describe('spur self serve --gateway (heavy)', () => {
         'routes two prefixes to two distinct serves on one port',
         async () => {
             const ports: Record<string, number> = { alpha: freePort(), beta: freePort() };
+            const env = { ...getEnvVars(), SPUR_PROJECTS_FILE: registryFile };
             for (const name of ['alpha', 'beta']) {
                 const dir = join(root, name);
                 mkdirSync(dir, { recursive: true });
@@ -61,6 +62,7 @@ describe('spur self serve --gateway (heavy)', () => {
                     [
                         'bun',
                         cliEntry,
+                        'self',
                         'serve',
                         '--cwd',
                         dir,
@@ -70,7 +72,7 @@ describe('spur self serve --gateway (heavy)', () => {
                         '127.0.0.1',
                         '--no-open',
                     ],
-                    { cwd: dir, stdout: 'ignore', stderr: 'ignore' },
+                    { cwd: dir, env, stdout: 'ignore', stderr: 'ignore' },
                 );
                 children.push(serve);
                 await waitForOk(`http://127.0.0.1:${ports[name as string]}/api/health`, 60_000);
@@ -99,7 +101,7 @@ describe('spur self serve --gateway (heavy)', () => {
             const gateway = Bun.spawn(
                 ['bun', cliEntry, 'self', 'serve', '--gateway', '--port', String(gatewayPort), '--host', '127.0.0.1'],
                 {
-                    env: { ...getEnvVars(), SPUR_PROJECTS_FILE: registryFile },
+                    env,
                     cwd: root,
                     stdout: 'ignore',
                     stderr: 'ignore',

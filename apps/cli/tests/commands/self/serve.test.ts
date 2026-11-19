@@ -322,58 +322,34 @@ describe('serve --cwd project root (task 0805 R2)', () => {
         // The probe payload {port,url,pid,running} was never emitted — only the error.
         expect(writes.some((w) => w.includes('"port"'))).toBe(false);
     });
-
-    test('canonical self serve and hidden serve alias behave identically for --cwd', async () => {
-        const b = mkdtempSync(join(tmpdir(), 'spur-serve-cwd-alias-'));
-        const { ctx } = makeCtx({ cwd: '/tmp/project-a' });
-
-        const visible = captureServe(ctx);
-        const hidden = captureServe(ctx, { hidden: true });
-
-        await visible.action({ port: 3000, host: 'localhost', open: false, cwd: b });
-        await hidden.action({ port: 3001, host: 'localhost', open: false, cwd: b });
-
-        expect(visible.cmds).toEqual(['serve']);
-        expect(hidden.cmds).toEqual(['serve']);
-        expect(visible.launched).toHaveLength(1);
-        expect(hidden.launched).toHaveLength(1);
-        expect(visible.launched[0]?.cwd).toBe(b);
-        expect(hidden.launched[0]?.cwd).toBe(b);
-        // Both pass the same resolved root + DB scoping.
-        expect(visible.launched[0]?.dbUrl).toBe(hidden.launched[0]?.dbUrl);
-    });
 });
 
-test('main dispatches both serve forms without booting or closing a CLI database', async () => {
+test('main dispatches self serve without booting or closing a CLI database', async () => {
     const { main } = await import('../../../src/index');
     const root = mkdtempSync(join(tmpdir(), 'spur-db-free-serve-'));
     const invalidConfig = join(root, '.spur.yaml');
     writeFileSync(invalidConfig, 'invalid: [');
     let closed = false;
     const captured: StartServerOptions[] = [];
-    // Task 1388: `self serve` is the only spelling left.
-    for (const prefix of [['--no-logo', 'self', 'serve']]) {
-        const code = await main([...prefix, '--cwd', root, '--no-open'], {
-            cwd: root,
-            db: {
-                close: async () => {
-                    closed = true;
-                },
-            } as never,
-            output: {
-                write() {},
-                error(message) {
-                    throw new Error(message);
-                },
+    const code = await main(['--no-logo', 'self', 'serve', '--cwd', root, '--no-open'], {
+        cwd: root,
+        db: {
+            close: async () => {
+                closed = true;
             },
-            startServer: async (options) => {
-                captured.push(options);
+        } as never,
+        output: {
+            write() {},
+            error(message) {
+                throw new Error(message);
             },
-        });
-        expect(code).toBe(0);
-    }
+        },
+        startServer: async (options) => {
+            captured.push(options);
+        },
+    });
+    expect(code).toBe(0);
     expect(closed).toBe(false);
-    // One spelling left after task 1388 removed the top-level alias.
     expect(captured).toHaveLength(1);
     expect(
         captured.every((options) => options.cwd === root && options.dbUrl === join(root, DEFAULT_DATABASE_URL)),

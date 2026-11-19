@@ -23,15 +23,17 @@ function startUpstream(eventNames: string[]): Upstream {
             const url = new URL(req.url);
             if (url.pathname === '/api/health') return Response.json({ ok: true });
             if (url.pathname === '/api/events/history') {
+                const offset = Number(url.searchParams.get('cursor') ?? 0);
+                const end = offset + Number(url.searchParams.get('limit') ?? 50);
                 return Response.json({
-                    events: eventNames.map((eventName, index) => ({
+                    events: eventNames.slice(offset, end).map((eventName, index) => ({
                         id: `e-${index}`,
                         eventName,
                         occurredAt: SINCE,
                         prefix: eventName.split('.')[0],
                         payload: { summary: `${eventName} summary` },
                     })),
-                    count: eventNames.length,
+                    nextCursor: end < eventNames.length ? String(end) : null,
                 });
             }
             return new Response('not found', { status: 404 });
@@ -78,11 +80,12 @@ describe('collectProjectsView through the real gateway handler (1402 R1/R2)', ()
             'history.imported',
             'task.updated',
             'flow.exited',
+            ...Array<string>(50).fill('task.updated'),
         ]);
         cleanups.push(healthy.stop);
         const entries = [
             entry('alpha', '/tmp/alpha', { prefix: '/alpha', port: healthy.port }),
-            entry('beta', '/tmp/beta', { prefix: '/beta', port: 0 }),
+            entry('alpha', '/tmp/beta', { prefix: '/beta', port: 0 }),
         ];
         const gateway = await gatewayFor(entries, { '/tmp/alpha': healthy.port });
 
@@ -91,20 +94,18 @@ describe('collectProjectsView through the real gateway handler (1402 R1/R2)', ()
             gatewayPort: gateway.port,
             since: SINCE,
         });
-        expect(rows.map((row) => [row.name, row.state])).toEqual([
-            ['alpha', 'ok'],
-            ['beta', 'stopped'],
+        expect(rows.map((row) => [row.name, row.prefix, row.state])).toEqual([
+            ['alpha', '/alpha', 'ok'],
+            ['alpha', '/beta', 'stopped'],
         ]);
-        expect(rows[0]?.eventCounts?.[0]).toEqual({ prefix: 'task', count: 4 });
+        expect(rows[0]?.eventCounts?.[0]).toEqual({ prefix: 'task', count: 54 });
         expect(rows[0]?.latest).toHaveLength(5);
         expect(rows[0]?.latest?.[0]).toEqual({
             eventName: 'task.created',
             occurredAt: SINCE,
             summary: 'task.created summary',
         });
-        // R2: a stopped project is never requested — the gateway would have started it. The two
-        // reads (health, history) each ensure the upstream; that is the handler's normal path.
-        expect(gateway.ensured).toEqual(['alpha', 'alpha']);
+        expect(gateway.ensured).toEqual(['alpha', 'alpha', 'alpha']);
     });
 
     test('a running project whose upstream refuses is unreachable, with the cause', async () => {

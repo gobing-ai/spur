@@ -26,6 +26,8 @@ import { mockRuntime } from './middleware/helpers';
 
 const TOKEN = 'e2e-mcp-token-9001';
 const TOKEN_VAR = 'SPUR_E2E_MCP_TOKEN';
+const GATEWAY_TOKEN_VAR = 'SPUR_E2E_GATEWAY_TOKEN';
+const GATEWAY_TOKEN = 'e2e-root-gateway-token';
 const PREFIX = '/e2e';
 /** Newest legacy pre-2.0 version: `2026-07-28`+ is the only accepted line (AC2). */
 const LEGACY_VERSIONS = ['2024-11-05', '2025-03-26', '2025-11-25'];
@@ -53,6 +55,11 @@ beforeAll(async () => {
         '---\nname: e2e probe\nstatus: todo\n---\n\nE2E probe task body.\n',
     );
     writeFileSync(join(root, '.spur', 'context', 'learnings.md'), 'indexed context body\n');
+    mkdirSync(join(root, 'docs', 'features'), { recursive: true });
+    writeFileSync(
+        join(root, 'docs', 'features', 'K41_gateway-mcp.md'),
+        '---\nid: K41\nname: gateway mcp\nstatus: active\n---\n\n## Acceptance Criteria\n\n- [ ] AC1 — x\n',
+    );
 
     // The module resolves the token value through the env funnel — the live record
     // `getEnvVars()` returns — exactly as `spur self serve` does; a real ServerContext has no
@@ -82,6 +89,12 @@ beforeAll(async () => {
     gateway = startGateway({
         port: 0,
         host: '127.0.0.1',
+        mcp: {
+            enabled: true,
+            authEnv: GATEWAY_TOKEN_VAR,
+            projectTokenEnv: TOKEN_VAR,
+            env: { [GATEWAY_TOKEN_VAR]: GATEWAY_TOKEN, [TOKEN_VAR]: TOKEN },
+        },
         deps: {
             port: 0,
             listProjects: async () => [
@@ -517,40 +530,7 @@ describe('1376: mcp events reach the system_events ledger', () => {
  * argument must never reach a service.
  */
 describe('1392: guarded corpus write tools', () => {
-    /**
-     * Task creation resolves its folder from the runner's cwd (a context quirk, not this task's
-     * concern), so every created task is recorded and removed: the suite must leave no corpus file
-     * behind, or a later `refresh` sees tasks the fixture invented.
-     */
-    /** Every title carries a random token, so the cleanup can find the file wherever it landed. */
-    const tokens: string[] = [];
-    const createTask = async (title: string, extra: Record<string, unknown> = {}) => {
-        const token = Math.random().toString(36).slice(2, 9);
-        tokens.push(token);
-        return call('sp_task_create', { title: `${title} ${token}`, ...extra });
-    };
-
-    // ts-runtime's node FileSystem applies its root only in `resolve()`; readDir/readFile/exists
-    // take the context's relative planning folders against process.cwd(). Running this group from
-    // the scratch root keeps feature lookups and task writes inside it, never in the checkout.
-    let previousCwd = '';
-    beforeAll(() => {
-        previousCwd = process.cwd();
-        process.chdir(root);
-    });
-
-    afterAll(() => {
-        process.chdir(previousCwd);
-        // The service resolves its tasks folder from the runner's cwd, which is not always the
-        // scratch root, so the sweep looks in both places instead of trusting one path.
-        for (const dir of [join(root, 'docs', 'tasks'), join(process.cwd(), 'docs', 'tasks')]) {
-            for (const token of tokens) {
-                for (const name of new Bun.Glob(`*${token}*.md`).scanSync({ cwd: dir, onlyFiles: true })) {
-                    rmSync(join(dir, name), { force: true });
-                }
-            }
-        }
-    });
+    const createTask = (title: string) => call('sp_task_create', { title });
     /** Call one tool and return its JSON-RPC envelope (result or error). */
     async function call(name: string, args: Record<string, unknown>) {
         const res = await mcpPost(rpc('tools/call', { name, arguments: args }), authHeaders());
@@ -584,13 +564,26 @@ describe('1392: guarded corpus write tools', () => {
         expect(update.properties.forceDone).toBeUndefined();
     });
 
-    test('sp_task_create makes a task without ready-prep (R1)', async () => {
-        const created = await createTask('mcp created task', { featureId: 'K41' });
-        if (created.body.result === undefined) throw new Error(`create failed: ${JSON.stringify(created.body)}`);
-        const result = created.body.result as { wbs: string; readiness: string; warnings: unknown[] };
+    test('root gateway creates a task in the selected project when the server cwd is elsewhere', async () => {
+        const res = await fetch(`http://127.0.0.1:${gateway?.port}/mcp`, {
+            method: 'POST',
+            headers: authHeaders({ Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+            body: JSON.stringify(
+                rpc('tools/call', {
+                    name: 'sp_task_create',
+                    arguments: { project: PREFIX, title: 'mcp created task', featureId: 'K41' },
+                }),
+            ),
+        });
+        const { result } = await jsonBody<{
+            result: { wbs: string; readiness: string; warnings: unknown[]; filePath: string };
+        }>(res);
+        expect(res.status).toBe(200);
         expect(result.readiness).toBe('skipped');
         expect(result.warnings).toEqual([]);
         expect(result.wbs).toMatch(/^\d+$/);
+        expect(result.filePath).toBe(join(root, 'docs', 'tasks', `${result.wbs}_mcp-created-task.md`));
+        expect(readFileSync(result.filePath, 'utf8')).toContain('name: mcp created task');
     });
 
     test('sp_task_update writes a field and a section, and refuses a status field (R1, R5)', async () => {
@@ -645,16 +638,6 @@ describe('1392: guarded corpus write tools', () => {
     });
 
     test('sp_feature_check answers for a real feature (R1)', async () => {
-        // A minimal feature in the scratch project: the tool runs the same service and folders the
-        // HTTP handler uses, so it answers with a report rather than a transport error.
-        // The scratch project's own features dir: never the real repo's (the context's planning
-        // folders can resolve from process.cwd(), which would write into the checkout).
-        const featuresDir = join(root, 'docs', 'features');
-        mkdirSync(featuresDir, { recursive: true });
-        writeFileSync(
-            join(featuresDir, 'K41_gateway-mcp.md'),
-            '---\nid: K41\nname: gateway mcp\nstatus: active\n---\n\n## Acceptance Criteria\n\n- [ ] AC1 — x\n',
-        );
         const result = await call('sp_feature_check', { id: 'K41' });
         expect(result.body.error).toBeUndefined();
         expect(result.body.result).toBeDefined();
@@ -664,8 +647,18 @@ describe('1392: guarded corpus write tools', () => {
         const created = await createTask('mcp transition parity');
         const wbs = (created.body.result as { wbs: string }).wbs;
 
-        const refused = await call('sp_task_transition', { wbs, to: 'done' });
-        const message = refused.body.error?.message ?? '';
+        const refused = await fetch(`http://127.0.0.1:${gateway?.port}/mcp`, {
+            method: 'POST',
+            headers: authHeaders({ Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+            body: JSON.stringify(
+                rpc('tools/call', {
+                    name: 'sp_task_transition',
+                    arguments: { project: PREFIX, wbs, to: 'done' },
+                }),
+            ),
+        });
+        const { error } = await jsonBody<{ error: { message: string } }>(refused);
+        const message = error.message;
         // Both surfaces call `transitionTaskGuarded`, so the code and the text are the same ones
         // the CLI reports — `apps/cli/tests/commands/task/update.test.ts:715` asserts the exact
         // "missing verify verdict artifact" text on the CLI side of this same guard.

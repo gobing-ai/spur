@@ -71,7 +71,9 @@ class FakeCli implements A2aCli {
     }
 }
 
-async function harness(options: { env?: Record<string, string>; cli?: FakeCli; now?: () => number } = {}) {
+async function harness(
+    options: { env?: Record<string, string>; cli?: FakeCli; now?: () => number; cardRefs?: () => Promise<string> } = {},
+) {
     let db: DbAdapter | undefined;
     const getDb = async () => (db ??= await createMigratedDb({ url: ':memory:' }));
     const cli = options.cli ?? new FakeCli();
@@ -83,6 +85,7 @@ async function harness(options: { env?: Record<string, string>; cli?: FakeCli; n
         pollIntervalMs: 1,
         sleep: async () => undefined,
         ...(options.now !== undefined ? { now: options.now } : {}),
+        ...(options.cardRefs !== undefined ? { cardRefs: options.cardRefs } : {}),
     });
     const inbox = new InboxService({ getDb });
     const dispatcher = {
@@ -360,6 +363,26 @@ describe('1334: one keyed inbox request becomes one A2A turn', () => {
             expect(driven?.status).toBe('completed');
             expect(h.cli.sendCount).toBe(1);
         }
+    });
+
+    test('a failed project address settles a claimed request before the next claim runs', async () => {
+        let lookups = 0;
+        const h = await harness({
+            cardRefs: async () => {
+                if (++lookups === 1) throw new Error('gateway unavailable');
+                return 'http://127.0.0.1:18081';
+            },
+        });
+        const member = { ...MEMBER, a2a: undefined, project: 'remote-project', member: 'worker' };
+        const first = await h.inbox.send({ from: 'operator', to: member.instanceId, body: 'first', kind: 'request' });
+        const second = await h.inbox.send({ from: 'operator', to: member.instanceId, body: 'second', kind: 'request' });
+        const firstClaim = await h.inbox.claimById(first.message.id);
+        const secondClaim = await h.inbox.claimById(second.message.id);
+        if (firstClaim === null || secondClaim === null) throw new Error('fixture claim failed');
+        const receipts = await h.transport.runClaimed(member, [firstClaim, secondClaim]);
+        expect(receipts.map((receipt) => receipt.status)).toEqual(['not-started', 'completed']);
+        expect((await h.inbox.get(first.message.id))?.status).toBe('failed');
+        expect(h.cli.sendCount).toBe(1);
     });
 
     test('an unexpected post-enqueue error is outcome-unknown, never a not-started retry', async () => {

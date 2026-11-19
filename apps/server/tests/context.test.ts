@@ -140,8 +140,12 @@ describe('createServerContext', () => {
 
         const folders = ctx.planningFolders();
         expect(folders).toBeDefined();
-        expect(typeof folders.tasksDir).toBe('string');
-        expect(typeof folders.featuresDir).toBe('string');
+        expect(folders.tasksDir).toBe('/tmp/test/docs/tasks');
+        expect(folders.featuresDir).toBe('/tmp/test/docs/features');
+        expect(folders.foldersConfig).toEqual({
+            active_folder: '/tmp/test/docs/tasks',
+            folders: { '/tmp/test/docs/tasks': { baseCounter: 0 } },
+        });
     });
 
     test('planningFolders() honors folders passed via options', () => {

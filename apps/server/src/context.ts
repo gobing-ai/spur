@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type {
     AgentCoordinationService,
     AgentService,
@@ -431,9 +431,23 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
     const eventProjectContext = makeSystemEventProjectContext(cwd);
     const eventSecretValues = configuredSecretValues(options.env ?? getEnvVars());
-    // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
-    // serve.ts — never hardcoded here. Fall back to schema defaults when absent.
-    const folders = options.folders ?? DEFAULT_PLANNING_FOLDERS;
+    // Services pass these paths directly to the filesystem. Anchor them to the
+    // served project so a different process working directory cannot redirect writes.
+    const configuredFolders = options.folders ?? DEFAULT_PLANNING_FOLDERS;
+    const folders: PlanningFolders = {
+        ...configuredFolders,
+        tasksDir: resolve(cwd, configuredFolders.tasksDir),
+        featuresDir: resolve(cwd, configuredFolders.featuresDir),
+        foldersConfig: {
+            active_folder: resolve(cwd, configuredFolders.foldersConfig.active_folder),
+            folders: Object.fromEntries(
+                Object.entries(configuredFolders.foldersConfig.folders).map(([dir, config]) => [
+                    resolve(cwd, dir),
+                    config,
+                ]),
+            ),
+        },
+    };
     // Default boot config — matches `serverBootstrapConfig({})` with everything off
     // except `events.enabled`. Tests pass a real config via the bootConfig option.
     const bootConfig: ServerBootConfig = options.bootConfig ?? {

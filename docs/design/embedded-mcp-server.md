@@ -100,6 +100,9 @@ gained `emit?: boolean` so a programmatic caller gets the result with nothing wr
 `tools/list` therefore advertises ten tools; at the gateway root each built-in also requires the
 `project` selector (task 1383).
 
+The server resolves planning folders against the served project root. Corpus operations use
+that root even when the server process was started from another working directory.
+
 **Workflow tools (task 1381).** `tools/list` additionally advertises every workflow that declares
 `metadata: { mcp: { expose: true } }`, named `<namespace>_<workflow>` (lowercase, non-alphanumerics
 mapped to `_`), described by the workflow's own `description`, with one optional string property per

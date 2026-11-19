@@ -92,11 +92,11 @@ every request — no cache, and **listing never starts a project**.
 
 | Aspect | Contract |
 | --- | --- |
-| `tools/list` | the five `sp_*` built-ins exactly once, each input schema extended with a required `project` selector, plus every local project's exposed workflow tools under its manifest namespace |
+| `tools/list` | the `sp_*` built-ins exactly once, each input schema extended with a required `project` selector, plus every local project's exposed workflow tools under its manifest namespace |
 | Resolution | a built-in routes by its `project` argument (stripped before forwarding); a workflow tool routes by the namespace that owns it |
-| Upstream call | the gateway starts the project through the shared `ensureUpstream` (de-duplicated) and POSTs `tools/call` to `/<prefix>/mcp` with the project's bearer token and `MIN_MCP_PROTOCOL_VERSION`; the upstream `result` is returned unchanged |
+| Upstream call | the gateway starts the project through the shared `ensureUpstream` (de-duplicated) and POSTs `tools/call` to the project's loopback `/mcp` route with the project's bearer token and `MIN_MCP_PROTOCOL_VERSION`. It uses the same loopback family selection as the proxy and returns the upstream `result` unchanged. |
 | Namespace collision | a namespace claimed by 2+ local projects is reported in discover `diagnostics` (`namespace-collision`), its tools are withheld from `tools/list`, and a call to one is refused naming both projects |
-| Refusals | unknown or ambiguous `project`, missing project token, upstream 401 and 5xx each produce a tool error naming the cause and the remedy. Token values never appear in any message |
+| Refusals | unknown or ambiguous `project`, missing project token, and upstream HTTP errors produce a tool error. JSON-RPC refusals preserve the project's error details and redact its token. |
 | Resources | `resources/list` is `[]` at the gateway root, by scope |
 
 The gateway forwards ONE project token (from the env variable named by `projectTokenEnv`), because
@@ -134,8 +134,8 @@ its environment describes the gateway, not N projects; a per-project token map i
    connection error, because a serve started outside the registry binds `localhost` → `::1` on
    macOS while a registry-spawned serve binds `127.0.0.1` (`project-start.ts:466`). Reachability
    follows the same both-families rule `isPortLive` already implements
-   (`project-process.ts:226-238`); a family that answers is remembered for the entry so the retry
-   path does not re-probe a known-dead family on every request.
+   (`project-process.ts:226-238`). The gateway tries the last successful family first. A connection
+   refusal tries the other family so a restarted project can change its listener.
    `fetch('<family>:<port>/<rest>?<query>', { method, headers, body,
    signal, redirect: 'manual', duplex: 'half' })` with:
    - `Host` set to `<family>:<port>`; `Origin` (when present) rewritten to

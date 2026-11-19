@@ -22,12 +22,13 @@ interface Upstream {
     seen: Array<{ tool: string; args: Record<string, unknown>; auth: string | null }>;
 }
 
-function upstream(behavior: 'ok' | 'unauthorized' | 'error' = 'ok'): Upstream {
+function upstream(behavior: 'ok' | 'unauthorized' | 'error' = 'ok', hostname = '127.0.0.1'): Upstream {
     const seen: Upstream['seen'] = [];
     const server = Bun.serve({
         port: 0,
-        hostname: '127.0.0.1',
+        hostname,
         fetch: async (req) => {
+            if (new URL(req.url).pathname !== '/mcp') return new Response('not found', { status: 404 });
             const body = (await req.json()) as { params?: { name?: string; arguments?: Record<string, unknown> } };
             seen.push({
                 tool: body.params?.name ?? '',
@@ -147,21 +148,28 @@ describe('gateway MCP routing (task 1383)', () => {
 
     test('a built-in call routes by `project` and strips the selector (R3)', async () => {
         const alpha = project('alpha');
-        const up = upstream();
+        const ipv6 = upstream('ok', '::1');
+        const ipv4 = upstream();
+        let port = ipv6.port;
         try {
-            await withGateway({ projects: [alpha], portFor: () => up.port, token: TOKEN }, async (call) => {
-                const res = await call('tools/call', {
-                    name: 'sp_task_show',
-                    arguments: { project: alpha.split('-').slice(-2).join('-'), wbs: '1383' },
-                });
-                const body = (await res.json()) as { result: { content: Array<{ text: string }> } };
-                expect(body.result.content[0]?.text).toBe('ran sp_task_show');
+            await withGateway({ projects: [alpha], portFor: () => port, token: TOKEN }, async (call) => {
+                for (const up of [ipv6, ipv4]) {
+                    port = up.port;
+                    const res = await call('tools/call', {
+                        name: 'sp_task_show',
+                        arguments: { project: alpha.split('-').slice(-2).join('-'), wbs: '1383' },
+                    });
+                    const body = (await res.json()) as { result: { content: Array<{ text: string }> } };
+                    expect(res.status).toBe(200);
+                    expect(body.result.content[0]?.text).toBe('ran sp_task_show');
+                    expect(up.seen).toHaveLength(1);
+                    expect(up.seen[0]?.args).toEqual({ wbs: '1383' });
+                    expect(up.seen[0]?.auth).toBe(`Bearer ${TOKEN}`);
+                }
             });
-            expect(up.seen).toHaveLength(1);
-            expect(up.seen[0]?.args).toEqual({ wbs: '1383' });
-            expect(up.seen[0]?.auth).toBe(`Bearer ${TOKEN}`);
         } finally {
-            up.server.stop(true);
+            ipv6.server.stop(true);
+            ipv4.server.stop(true);
         }
     });
 

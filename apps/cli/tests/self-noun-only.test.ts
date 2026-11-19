@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createCliContext } from '../src/context';
-import { buildProgram } from '../src/index';
+import { buildProgram, main } from '../src/index';
 import type { CommandOutput } from '../src/output';
 
 /**
@@ -30,16 +30,19 @@ describe('legacy top-level nouns are removed (task 1388)', () => {
         }
     });
 
-    test('`spur serve` and `spur status` are unknown commands', async () => {
-        for (const legacy of ['serve', 'status']) {
-            let message = '';
-            try {
-                await program().parseAsync(['node', 'spur', legacy], { from: 'node' });
-            } catch (error) {
-                message = error instanceof Error ? error.message : String(error);
-            }
-            process.exitCode = 0;
-            expect(message, legacy).toContain('unknown command');
+    test('the CLI entry point rejects retired aliases even on boot-free invocations', async () => {
+        for (const argv of [['serve', '--port', 'invalid'], ['status'], ['migrate', '--check']]) {
+            let error = '';
+            const code = await main([...argv, '--no-logo'], {
+                output: {
+                    ...output,
+                    error: (message) => {
+                        error += message;
+                    },
+                },
+            });
+            expect(code, argv[0]).toBe(1);
+            expect(error, argv[0]).toContain('unknown command');
         }
     });
 });

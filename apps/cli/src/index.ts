@@ -65,7 +65,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     // Serve owns its sole runtime and database. Dispatch before the CLI's adapter
     // and configuration runtime boot, including the canonical `self serve` form.
     const commandTokens = argv.filter((token) => !['--no-logo', '--cli-verbose', '-v'].includes(token));
-    if (commandTokens[0] === 'serve' || (commandTokens[0] === 'self' && commandTokens[1] === 'serve')) {
+    if (commandTokens[0] === 'self' && commandTokens[1] === 'serve') {
         const program = new Command().name('spur').exitOverride();
         program.option('--no-logo').option('-v, --cli-verbose');
         program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
@@ -77,7 +77,6 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 exitCode = code;
             },
         };
-        registerServeCommand(program, context, { startServer: options.startServer });
         registerServeCommand(program.command('self'), context, { startServer: options.startServer });
         try {
             await program.parseAsync(argv, { from: 'user' });
@@ -90,14 +89,11 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         }
     }
 
-    const migrationCheck =
-        (commandTokens[0] === 'migrate' || (commandTokens[0] === 'self' && commandTokens[1] === 'migrate')) &&
-        argv.includes('--check');
+    const migrationCheck = commandTokens[0] === 'self' && commandTokens[1] === 'migrate' && argv.includes('--check');
     const taskGate = commandTokens[0] === 'task' && commandTokens[1] === 'gate';
-    // `status` / `self status` report readiness (A93 1352): booting the adapter would create the very
+    // `self status` reports readiness (A93 1352): booting the adapter would create the very
     // database and schema the aggregate inspects, so it joins the boot-free dispatch set.
-    const statusReport =
-        commandTokens[0] === 'status' || (commandTokens[0] === 'self' && commandTokens[1] === 'status');
+    const statusReport = commandTokens[0] === 'self' && commandTokens[1] === 'status';
     // `self install` is machine setup: it must not require a project config or create a project DB.
     const selfInstall = commandTokens[0] === 'self' && commandTokens[1] === 'install';
     const builderArtifact =

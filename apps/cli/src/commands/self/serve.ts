@@ -14,7 +14,7 @@ import { SHARED_OPTIONS } from '../shared-options';
 
 /**
  * Where `serve --gateway` writes its structured event log (task 1384): next to the launchd logs on
- * darwin, under the config dir elsewhere — a foreground `spur serve --gateway` on any OS has no
+ * darwin, under the config dir elsewhere — a foreground `spur self serve --gateway` on any OS has no
  * launchd log directory of its own.
  */
 function gatewayEventLogPath(): string {
@@ -24,7 +24,7 @@ function gatewayEventLogPath(): string {
         : `${home}/.config/spur/logs/gateway.events.jsonl`;
 }
 
-/** Resolve the database URL used by `spur serve`, matching normal CLI DB defaults. */
+/** Resolve the database URL used by `spur self serve`, matching normal CLI DB defaults. */
 export function resolveServeDbUrl(cwd: string, env: Record<string, string | undefined>, configuredUrl: string): string {
     return env.DATABASE_URL === undefined ? join(cwd, DEFAULT_DATABASE_URL) : configuredUrl;
 }
@@ -33,8 +33,7 @@ export function resolveServeDbUrl(cwd: string, env: Record<string, string | unde
  * Resolve the `serve --cwd` project root (task 0805 R2): a relative target is
  * resolved against the invocation directory (path.resolve), and the result must
  * exist and be a directory BEFORE server startup. A missing/non-directory target
- * is a command error, not a server that silently serves the wrong root. Both the
- * canonical `self serve` spelling and the hidden `serve` alias share this path.
+ * is a command error, not a server that silently serves the wrong root.
  */
 export function resolveServeCwd(cwd: string): string {
     const resolved = resolve(cwd);
@@ -52,8 +51,6 @@ export function resolveServeCwd(cwd: string): string {
 
 /** Options for {@link registerServeCommand}. */
 export interface RegisterServeOptions {
-    /** Hide the command from the top-level help listing (legacy alias). */
-    hidden?: boolean;
     /**
      * Injectable `startServer` for tests (defaults to the real server entry).
      * Mirrors the server's StartServerDeps seam so the CLI startup composition
@@ -64,7 +61,7 @@ export interface RegisterServeOptions {
     startGateway?: typeof startGateway;
 }
 
-/** Register `spur serve` command (optionally hidden from the top-level help listing). */
+/** Register the `self serve` command. */
 export function registerServeCommand(
     program: Command,
     context: Pick<CliContext, 'cwd' | 'output' | 'env' | 'setExitCode'>,
@@ -73,7 +70,7 @@ export function registerServeCommand(
     const launch = options.startServer ?? startServer;
     const launchGateway = options.startGateway ?? startGateway;
     program
-        .command('serve', { hidden: options.hidden === true })
+        .command('serve')
         .summary('start the Spur web server (local fallback)')
         .option(...SHARED_OPTIONS.portServe, parseInt)
         .option('--host <addr>', 'Bind address (env: HOST, default: localhost)')

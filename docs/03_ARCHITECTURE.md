@@ -5,7 +5,7 @@ authority: derived
 version: 1.80.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-16
+updated_at: 2026-11-18
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1311,7 +1311,7 @@ Mechanisms, the catalogue reconciliation table and the measured-promotion gate:
 
 ## 29. Parallel Batch Execution — built (ADR-127; tasks 0931–0933)
 
-A batch (`/sp:dev-runall`) is a driver loop over per-task `task-pipeline.yaml` runs, not a second
+A batch (`/sp:dev-run --all`) is a driver loop over per-task `task-pipeline.yaml` runs, not a second
 workflow definition. Sequential mode is unchanged; `--schedule parallel` makes the task the isolation
 unit:
 

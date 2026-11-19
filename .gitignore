@@ -195,6 +195,7 @@ docs/.ftree/
 
 /apps/web/coverage
 /apps/web/.coverage
+/packages/domain/coverage/
 # Local dogfood run reports (gitignored); keep README and the tracked ledger.
 # INDEX.md is the L4.dogfood-missing gate's evidence source (0700 R4 / ADR-090): the gate
 # must decide a feature's fate from repository state, not from whatever run reports happen
