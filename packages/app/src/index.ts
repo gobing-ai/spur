@@ -585,6 +585,8 @@ export {
     type McpExposureIssue,
     type McpExposureReason,
     resolveExposedWorkflowTools,
+    resolveProjectWorkflowTools,
+    workflowToolDescriptor,
     workflowToolName,
 } from './services/mcp-workflow-tools';
 // 1333 (ADR-148): the named-member delivery ladder — one definition for the run path and doctor.

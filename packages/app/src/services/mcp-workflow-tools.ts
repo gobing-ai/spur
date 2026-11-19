@@ -1,5 +1,8 @@
 import { join } from 'node:path';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import { type FileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
+import { registeredWorkflowPaths, workflowLayers } from '../workflow/workflow-resolver';
+import { MCP_BUILTIN_TOOL_NAMES } from './mcp-builtin-tools';
 
 /** One workflow exposed as an MCP tool (task 1381 R2). */
 export interface ExposedWorkflowTool {
@@ -158,4 +161,37 @@ export async function resolveExposedWorkflowTools(input: {
     }
 
     return { tools, issues };
+}
+
+/** Resolve the same project workflow inventory for discovery, dispatch and validation. */
+export function resolveProjectWorkflowTools(input: {
+    cwd: string;
+    config: SpurConfig | null;
+    namespace: string | null;
+    fs: FileSystem;
+}): ReturnType<typeof resolveExposedWorkflowTools> {
+    return resolveExposedWorkflowTools({
+        namespace: input.namespace,
+        reserved: MCP_BUILTIN_TOOL_NAMES,
+        roots: workflowLayers({
+            cwd: input.cwd,
+            registered: registeredWorkflowPaths(input.config),
+        }).map(({ path }) => path),
+        fs: input.fs,
+    });
+}
+
+/** Describe a workflow with the defaults and argument constraints its dispatcher enforces. */
+export function workflowToolDescriptor(tool: ExposedWorkflowTool) {
+    return {
+        name: tool.tool,
+        description: tool.description ?? `Run the "${tool.workflow}" workflow.`,
+        inputSchema: {
+            type: 'object',
+            properties: Object.fromEntries(
+                Object.entries(tool.vars).map(([name, value]) => [name, { type: 'string', default: value }]),
+            ),
+            additionalProperties: false,
+        },
+    };
 }

@@ -83,7 +83,7 @@ how many projects are registered.
 | CSRF | root `/mcp` is exempt from the same-origin check (bearer-authenticated, like `/<prefix>/mcp`); the host allowlist still applies |
 | Reserved | `mcp` joined `RESERVED_PREFIX_SEGMENTS`, so a project can never be prefixed `/mcp` and silently shadow the endpoint |
 | Composition | `apps/server/src/gateway.ts` builds the handler from `{ enabled, authEnv, env }` and injects it as `GatewayDeps.mcp`; `packages/app` stays transport-free |
-| `server/discover` | additive `projects: [{ name, prefix, namespace }]` (local entries only; namespace from the plugin manifest, because the gateway env cannot describe N projects) and `diagnostics: [{ name, reason: 'remote-not-proxied (ADR-151)', remedy: 'run the project locally and spur projects add <path>' }]` |
+| `server/discover` | additive `projects: [{ name, prefix, namespace }]` for local entries and `diagnostics: [{ name, reason: 'remote-not-proxied (ADR-151)', remedy: 'run the project locally and spur projects add <path>' }]` |
 
 ### 4.1b Tool aggregation and call routing (task 1383)
 
@@ -92,7 +92,7 @@ every request — no cache, and **listing never starts a project**.
 
 | Aspect | Contract |
 | --- | --- |
-| `tools/list` | the `sp_*` built-ins exactly once, each input schema extended with a required `project` selector, plus every local project's exposed workflow tools under its manifest namespace |
+| `tools/list` | the `sp_*` built-ins exactly once, each input schema extended with a required `project` selector. Workflow tools use the same inventory and argument schemas as the project endpoint. |
 | Resolution | a built-in routes by its `project` argument (stripped before forwarding); a workflow tool routes by the namespace that owns it |
 | Upstream call | the gateway starts the project through the shared `ensureUpstream` (de-duplicated) and POSTs `tools/call` to the project's loopback `/mcp` route with the project's bearer token and `MIN_MCP_PROTOCOL_VERSION`. It uses the same loopback family selection as the proxy and returns the upstream `result` unchanged. |
 | Namespace collision | a namespace claimed by 2+ local projects is reported in discover `diagnostics` (`namespace-collision`), its tools are withheld from `tools/list`, and a call to one is refused naming both projects |
@@ -101,6 +101,9 @@ every request — no cache, and **listing never starts a project**.
 
 The gateway forwards ONE project token (from the env variable named by `projectTokenEnv`), because
 its environment describes the gateway, not N projects; a per-project token map is deferred.
+Offline discovery uses the gateway's `SPUR_MCP_NAMESPACE` when set, otherwise each project's plugin
+manifest. Use distinct manifests for multi-project discovery. A separately launched project must
+use the same namespace setting as the gateway would use to discover it.
 
 ### 4.2 Request flow
 

@@ -1,5 +1,5 @@
 import { createGatewayHandler, type GatewayDeps, type McpGatewayRegistry } from '@gobing-ai/spur-app';
-import { getEnvVars } from '@gobing-ai/spur-config';
+import { getEnvVars, SPUR_ENV_VARS } from '@gobing-ai/spur-config';
 import { bearerGuard } from './middleware/bearer-guard';
 import { TOOL_DESCRIPTORS } from './modules/mcp';
 import { handleMcpHttpRequest, type McpHandlerRegistry, MIN_MCP_PROTOCOL_VERSION } from './modules/mcp/protocol';
@@ -92,6 +92,7 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
         ...deps,
         // Task 1383 R1/R3: the five `sp_*` descriptors and the upstream protocol version.
         builtinTools: () => TOOL_DESCRIPTORS,
+        projectMcpNamespace: env[SPUR_ENV_VARS.mcpNamespace],
         projectMcpToken: () => {
             if (projectTokenEnv === undefined) return undefined;
             const value = env[projectTokenEnv];

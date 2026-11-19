@@ -19,9 +19,9 @@ function project(name: string, options: { namespace?: string; workflow?: string 
         writeFileSync(join(path, 'plugins', 'fixture', 'plugin.json'), JSON.stringify({ name: options.namespace }));
     }
     if (options.workflow !== undefined) {
-        mkdirSync(join(path, 'config', 'workflows'), { recursive: true });
+        mkdirSync(join(path, '.spur', 'workflows'), { recursive: true });
         writeFileSync(
-            join(path, 'config', 'workflows', `${options.workflow}.yaml`),
+            join(path, '.spur', 'workflows', `${options.workflow}.yaml`),
             [
                 `name: ${options.workflow}`,
                 'kind: state-machine',

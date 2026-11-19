@@ -107,7 +107,9 @@ that root even when the server process was started from another working director
 `metadata: { mcp: { expose: true } }`, named `<namespace>_<workflow>` (lowercase, non-alphanumerics
 mapped to `_`), described by the workflow's own `description`, with one optional string property per
 declared `vars` entry carrying its default (`additionalProperties: false`). Roots are the workflow
-layers — project, registered `workflows.paths`, shared — so an opt-in is per file. `tools/call` on
+layers — project, registered `workflows.paths`, shared. The gateway uses the same inventory
+and schema without starting a project. Register any additional folder in `workflows.paths` so
+its tools are both discoverable and callable. `tools/call` on
 such a name runs the file through `WorkflowService.run(file, { vars })`; an argument outside the
 declared vars is refused with `invalid_arguments`. `listTools` and `spur workflow validate` share
 one resolver (`packages/app/src/services/mcp-workflow-tools.ts`), so a name is never advertised

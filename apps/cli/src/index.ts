@@ -77,7 +77,11 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 exitCode = code;
             },
         };
-        registerServeCommand(program.command('self'), context, { startServer: options.startServer });
+        registerServeCommand(program.command('self'), context, {
+            startServer: options.startServer,
+            loadProjectConfig: (root) =>
+                loadSpurConfig(root, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }).catch(() => null),
+        });
         try {
             await program.parseAsync(argv, { from: 'user' });
             return exitCode;

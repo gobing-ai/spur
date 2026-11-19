@@ -484,6 +484,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     return {
         cwd,
         fs,
+        ...(options.spurConfig != null ? { spurConfig: options.spurConfig } : {}),
         runDir: join(cwd, '.spur', 'run'),
         webDistPath: options.webDistPath,
         boardModules: options.boardModules,

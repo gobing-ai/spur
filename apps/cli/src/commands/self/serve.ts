@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { createJsonlEventSink, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
-import { startGateway, startServer } from '@gobing-ai/spur-server';
+import { type StartGatewayOptions, startGateway, startServer } from '@gobing-ai/spur-server';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../../context';
 import { CommandError, errorMessage } from '../../errors';
@@ -59,16 +59,18 @@ export interface RegisterServeOptions {
     startServer?: typeof startServer;
     /** Injectable `startGateway` for tests (defaults to the real gateway listener). */
     startGateway?: typeof startGateway;
+    /** Read project workflow configuration for gateway discovery. */
+    loadProjectConfig?: StartGatewayOptions['deps']['loadProjectConfig'];
 }
 
 /** Register the `self serve` command. */
 export function registerServeCommand(
     program: Command,
     context: Pick<CliContext, 'cwd' | 'output' | 'env' | 'setExitCode'>,
-    options: RegisterServeOptions = {},
+    registration: RegisterServeOptions = {},
 ): void {
-    const launch = options.startServer ?? startServer;
-    const launchGateway = options.startGateway ?? startGateway;
+    const launch = registration.startServer ?? startServer;
+    const launchGateway = registration.startGateway ?? startGateway;
     program
         .command('serve')
         .summary('start the Spur web server (local fallback)')
@@ -109,6 +111,7 @@ export function registerServeCommand(
                         // Task 1382: the gateway's own MCP entry, with its own token variable.
                         mcp: { ...config.server.gateway.mcp, env },
                         deps: {
+                            loadProjectConfig: registration.loadProjectConfig,
                             // Read-only snapshot: routing must not heal, purge or probe on every request.
                             listProjects: async () => registry.peek().projects,
                             removeProject: async (path, host) => registry.remove(path, host),

@@ -35,9 +35,8 @@ import {
     resolveWorkflowFile,
     workflowLayers,
 } from '../workflow/workflow-resolver';
-import { MCP_BUILTIN_TOOL_NAMES } from './mcp-builtin-tools';
 import { resolveMcpNamespace } from './mcp-namespace';
-import { resolveExposedWorkflowTools } from './mcp-workflow-tools';
+import { resolveProjectWorkflowTools } from './mcp-workflow-tools';
 import { resolveRunRecordDir } from './run-storage';
 import type { WorkflowListEntryIdentity } from './workflow-catalog-scan';
 import { extractWorkflowMeta, scanWorkflowFiles } from './workflow-catalog-scan';
@@ -433,13 +432,10 @@ export class WorkflowInspectOps {
             projectRoot: this.ctx.cwd,
             fs,
         });
-        const { issues } = await resolveExposedWorkflowTools({
+        const { issues } = await resolveProjectWorkflowTools({
             namespace,
-            reserved: MCP_BUILTIN_TOOL_NAMES,
-            roots: workflowLayers({
-                cwd: this.ctx.cwd,
-                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
-            }).map((layer) => layer.path),
+            cwd: this.ctx.cwd,
+            config: this.ctx.spurConfig ?? null,
             fs,
         });
         return issues

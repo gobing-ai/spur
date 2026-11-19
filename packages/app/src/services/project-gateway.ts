@@ -1,10 +1,14 @@
-import { join } from 'node:path';
-import { findPrefixCollisions, isLocalHost, type ProjectEntry, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import {
+    findPrefixCollisions,
+    isLocalHost,
+    type ProjectEntry,
+    resolveProjectPrefix,
+    type SpurConfig,
+} from '@gobing-ai/spur-config';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
-import { MCP_BUILTIN_TOOL_NAMES } from './mcp-builtin-tools';
 import { resolveMcpNamespace } from './mcp-namespace';
-import { type ExposedWorkflowTool, resolveExposedWorkflowTools } from './mcp-workflow-tools';
+import { resolveProjectWorkflowTools, workflowToolDescriptor } from './mcp-workflow-tools';
 import { type GatewayIndexProject, renderGatewayIndex } from './project-gateway-html';
 
 /**
@@ -41,6 +45,10 @@ export interface GatewayDeps {
     builtinTools?: () => McpGatewayTool[];
     /** Project bearer token for upstream calls; the gateway env holds one shared value (closed Q&A). */
     projectMcpToken?: () => string | undefined;
+    /** MCP namespace inherited by project servers the gateway starts. */
+    projectMcpNamespace?: string;
+    /** Read workflow layer configuration without starting the project. */
+    loadProjectConfig?: (root: string) => Promise<SpurConfig | null>;
     /** The MCP protocol version header the project adapter requires (task 1383 R3). */
     mcpProtocolVersion?: string;
 }
@@ -653,39 +661,31 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
 
     /**
      * Route table for the gateway's MCP surface (task 1383 R1/R2): every local project's prefix,
-     * manifest namespace and exposed workflow tools, recomputed per call so listing never starts a
+     * namespace and exposed workflow tools, recomputed per call so listing never starts a
      * project and no cache can go stale.
      */
     async function mcpRoutes(fs: FileSystem): Promise<GatewayMcpRoute[]> {
         const routes: GatewayMcpRoute[] = [];
         for (const { entry, prefix } of await localEntries()) {
-            const resolved = await resolveMcpNamespace({ configured: undefined, projectRoot: entry.path, fs });
-            const exposed =
-                resolved.namespace === null
-                    ? { tools: [] as ExposedWorkflowTool[] }
-                    : await resolveExposedWorkflowTools({
-                          namespace: resolved.namespace,
-                          reserved: MCP_BUILTIN_TOOL_NAMES,
-                          roots: [join(entry.path, 'config', 'workflows')],
+            const { namespace } = await resolveMcpNamespace({
+                configured: deps.projectMcpNamespace,
+                projectRoot: entry.path,
+                fs,
+            });
+            const { tools } =
+                namespace === null
+                    ? { tools: [] }
+                    : await resolveProjectWorkflowTools({
+                          cwd: entry.path,
+                          config: (await deps.loadProjectConfig?.(entry.path)) ?? null,
+                          namespace,
                           fs,
                       });
             routes.push({
                 entry,
                 prefix,
-                namespace: resolved.namespace,
-                tools: exposed.tools.map((tool) => ({
-                    name: tool.tool,
-                    ...(tool.description !== undefined ? { description: tool.description } : {}),
-                    inputSchema: {
-                        type: 'object',
-                        properties: Object.fromEntries(
-                            Object.entries(tool.vars).map(([name, description]) => [
-                                name,
-                                { type: 'string', description },
-                            ]),
-                        ),
-                    },
-                })),
+                namespace,
+                tools: tools.map(workflowToolDescriptor),
             });
         }
         return routes;
@@ -899,7 +899,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 diagnostics.push({
                     name: names.join(', '),
                     reason: 'namespace-collision',
-                    remedy: `namespace "${namespace}" is claimed by ${names.join(' and ')}; give each project a distinct plugins/<name>/plugin.json name`,
+                    remedy: `namespace "${namespace}" is claimed by ${names.join(' and ')}; unset a shared SPUR_MCP_NAMESPACE override and give each project a distinct plugins/<name>/plugin.json name`,
                 });
             }
             return { projects, diagnostics };

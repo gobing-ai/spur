@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadSectionMatrix, registerSystemEventTap } from '@gobing-ai/spur-app';
 import { getEnvVars, type ProjectEntry, setEnvVar } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -348,12 +349,16 @@ describe('mcp E2E through the project gateway (task 1374)', () => {
 
     test('R2/R3 (1381): an opted-in workflow is a namespaced tool that runs through the service path', async () => {
         const wfRoot = mkdtempSync(join(tmpdir(), 'spur-mcp-e2e-wf-'));
+        let workflowGateway: GatewayHandle | undefined;
+        let workflowUpstream: ReturnType<typeof Bun.serve> | undefined;
         try {
             mkdirSync(join(wfRoot, 'plugins', 'kk'), { recursive: true });
             writeFileSync(join(wfRoot, 'plugins', 'kk', 'plugin.json'), JSON.stringify({ name: 'kk' }));
             mkdirSync(join(wfRoot, '.spur', 'workflows'), { recursive: true });
+            mkdirSync(join(wfRoot, 'operations'));
+            writeFileSync(join(wfRoot, '.spur', 'config.yaml'), 'workflows:\n  paths: [operations]\n');
             writeFileSync(
-                join(wfRoot, '.spur', 'workflows', 'daily-report.yaml'),
+                join(wfRoot, 'operations', 'daily-report.yaml'),
                 `name: daily-report
 description: build the daily report
 kind: state-machine
@@ -390,6 +395,7 @@ terminalStates:
                 NODE_ENV: 'test',
                 SPUR_MCP_ENABLED: 'true',
                 SPUR_MCP_AUTH_ENV: TOKEN_VAR,
+                SPUR_MCP_NAMESPACE: 'ops',
             };
             const wfApp = createApp(mockRuntime(), {
                 ctx: createServerContext(mockRuntime(), {
@@ -398,6 +404,7 @@ terminalStates:
                     dbUrl: ':memory:',
                     env,
                     bootConfig: serverBootstrapConfig(env),
+                    spurConfig: await loadSpurConfig(wfRoot),
                 }),
             });
             const post = (body: unknown) =>
@@ -414,9 +421,9 @@ terminalStates:
             // resolver's fs awaits usually settle first. The `namespaceReady` await in
             // exposedWorkflowTools is the actual guard.)
             const firstCall = await post(
-                rpc('tools/call', { name: 'kk_daily_report', arguments: { target: 'first' } }),
+                rpc('tools/call', { name: 'ops_daily_report', arguments: { target: 'first' } }),
             );
-            expect(firstCall.status).toBe(200);
+            expect(firstCall.status, await firstCall.text()).toBe(200);
 
             const listed = await post(rpc('tools/list'));
             expect(listed.status).toBe(200);
@@ -424,26 +431,69 @@ terminalStates:
                 result: { tools: Array<{ name: string; description?: string; inputSchema: unknown }> };
             }>(listed);
             const byName = new Map(listedBody.result.tools.map((tool) => [tool.name, tool]));
-            expect([...byName.keys()]).toContain('kk_daily_report');
-            expect([...byName.keys()]).not.toContain('kk_hidden_flow');
-            expect(byName.get('kk_daily_report')?.description).toBe('build the daily report');
-            expect(byName.get('kk_daily_report')?.inputSchema).toEqual({
+            expect([...byName.keys()]).toContain('ops_daily_report');
+            expect([...byName.keys()]).not.toContain('ops_hidden_flow');
+            expect(byName.get('ops_daily_report')?.description).toBe('build the daily report');
+            expect(byName.get('ops_daily_report')?.inputSchema).toEqual({
                 type: 'object',
                 properties: { target: { type: 'string', default: 'default-target' } },
                 additionalProperties: false,
             });
 
-            const refused = await post(rpc('tools/call', { name: 'kk_daily_report', arguments: { bogus: 'x' } }));
+            let starts = 0;
+            workflowGateway = startGateway({
+                port: 0,
+                host: '127.0.0.1',
+                mcp: {
+                    enabled: true,
+                    authEnv: GATEWAY_TOKEN_VAR,
+                    projectTokenEnv: TOKEN_VAR,
+                    env: { ...env, [TOKEN_VAR]: TOKEN, [GATEWAY_TOKEN_VAR]: GATEWAY_TOKEN },
+                },
+                deps: {
+                    port: 0,
+                    listProjects: async () => [{ name: 'workflows', path: wfRoot, port: 0 }],
+                    loadProjectConfig: loadSpurConfig,
+                    ensureUpstream: async () => {
+                        starts++;
+                        workflowUpstream ??= Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: wfApp.fetch });
+                        return workflowUpstream.port ?? 0;
+                    },
+                },
+            });
+            const gatewayPost = (body: unknown) =>
+                fetch(`${workflowGateway?.url}/mcp`, {
+                    method: 'POST',
+                    headers: authHeaders({ Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+                    body: JSON.stringify(body),
+                });
+            const discovery = await jsonBody<
+                DiscoverBody & {
+                    result: { projects: Array<{ namespace: string }> };
+                }
+            >(await gatewayPost(rpc('server/discover')));
+            expect(discovery.result.projects[0]?.namespace).toBe('ops');
+            expect(discovery.result.capabilities.tools.find((tool) => tool.name === 'ops_daily_report')).toEqual(
+                byName.get('ops_daily_report'),
+            );
+            expect(starts).toBe(0);
+
+            const refused = await post(rpc('tools/call', { name: 'ops_daily_report', arguments: { bogus: 'x' } }));
             expect(refused.status).toBe(500);
             const refusedBody = await jsonBody<{ error: { message: string } }>(refused);
             expect(refusedBody.error.message).toContain('invalid_arguments');
 
-            const called = await post(rpc('tools/call', { name: 'kk_daily_report', arguments: { target: 'today' } }));
+            const called = await gatewayPost(
+                rpc('tools/call', { name: 'ops_daily_report', arguments: { target: 'today' } }),
+            );
             expect(called.status).toBe(200);
             const calledBody = await jsonBody<{ result: { runId: string; status: string } }>(called);
             expect(typeof calledBody.result.runId).toBe('string');
             expect(calledBody.result.status).toBe('done');
+            expect(starts).toBe(1);
         } finally {
+            workflowGateway?.stop();
+            workflowUpstream?.stop(true);
             rmSync(wfRoot, { recursive: true, force: true });
         }
     });

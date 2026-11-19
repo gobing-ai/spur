@@ -2,12 +2,10 @@ import { join } from 'node:path';
 import {
     type ExposedWorkflowTool,
     type FeatureShowResult,
-    MCP_BUILTIN_TOOL_NAMES,
-    registeredWorkflowPaths,
-    resolveExposedWorkflowTools,
     resolveMcpNamespace,
+    resolveProjectWorkflowTools,
     type WorkflowRunResult,
-    workflowLayers,
+    workflowToolDescriptor,
 } from '@gobing-ai/spur-app';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
@@ -195,20 +193,6 @@ const RENAMED_TOOLS: Readonly<Record<string, string>> = {
 /** The built-in tool names in their final `sp` form (handoff: 1381 collision checks). */
 export const BUILTIN_TOOL_NAMES: readonly string[] = TOOL_DESCRIPTORS.map((tool) => tool.name);
 
-/**
- * A workflow's tool descriptor (task 1381 R2): one optional string property per declared var,
- * carrying its default, and no other accepted argument (R3 refuses extras).
- */
-function workflowToolDescriptor(tool: ExposedWorkflowTool): McpToolDescriptor {
-    const properties: Record<string, { type: 'string'; default: string }> = {};
-    for (const [name, value] of Object.entries(tool.vars)) properties[name] = { type: 'string', default: value };
-    return {
-        name: tool.tool,
-        description: tool.description ?? `Run the "${tool.workflow}" workflow.`,
-        inputSchema: { type: 'object', properties, additionalProperties: false },
-    };
-}
-
 /** The `spur://` resources the embedded server advertises (frozen URIs, task 1372 R3). */
 const RESOURCE_DESCRIPTORS: McpResourceDescriptor[] = [
     { uri: 'spur://tasks/{wbs}', name: 'Task by WBS', mimeType: 'text/markdown' },
@@ -262,13 +246,10 @@ class McpDispatcher implements McpHandlerRegistry {
         // The namespace resolves asynchronously; a `tools/call` can be the very first request,
         // so awaiting here is what stops it reading a not-yet-resolved `null` (task 1381 R3).
         await this.namespaceReady;
-        const { tools } = await resolveExposedWorkflowTools({
+        const { tools } = await resolveProjectWorkflowTools({
             namespace: this.resolvedNamespace,
-            reserved: MCP_BUILTIN_TOOL_NAMES,
-            roots: workflowLayers({
-                cwd: this.ctx.cwd,
-                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
-            }).map((layer) => layer.path),
+            cwd: this.ctx.cwd,
+            config: this.ctx.spurConfig ?? null,
             fs: this.ctx.fs,
         });
         return tools;
