@@ -210,7 +210,8 @@ fallback (`source: default`, reason `no-backend`), which is why it is usable in 
 with no model access — the outcome is deterministic, not model-judged.
 
 **Available makers:** the four upstream built-ins (`typesafe`, `fm-local`, `laya-local`,
-`llm-agent`) plus Spur's hosted `clef` (Cloudflare Workers AI via `@gobing-ai/ts-decision-clef`).
+`llm-agent`) plus Spur's hosted `clef` (Cloudflare Workers AI via `@gobing-ai/ts-decision-clef`),
+`gemini` (`@gobing-ai/ts-decision-gemini`) and `openai` (`@gobing-ai/ts-decision-openai`).
 
 - `llm-agent` samples an installed coding agent: by default the first installed tier-1 agent, 3
   one-shot samples, accepted only when every sample agrees. Spur passes it no driver options, so
@@ -220,6 +221,8 @@ with no model access — the outcome is deterministic, not model-judged.
   the environment; without them it is absent from `registeredMakers`, so naming it in config or
   `--maker` is a config error, never a silent fallback. Its model defaults to `clef-flash` (a
   catalog `model` selects `clef`).
+- `gemini` registers only when `GEMINI_API_KEY` is set, `openai` only when `OPENAI_API_KEY` is set
+  (non-empty); otherwise naming either is the same config error as an absent `clef`.
 
 ## Workflow consumption
 

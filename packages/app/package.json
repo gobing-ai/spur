@@ -53,6 +53,8 @@
         "yaml": "catalog:",
         "@gobing-ai/ts-ai-decision": "catalog:",
         "@gobing-ai/ts-decision-clef": "catalog:",
+        "@gobing-ai/ts-decision-gemini": "catalog:",
+        "@gobing-ai/ts-decision-openai": "catalog:",
         "@gobing-ai/ts-laya-mlx": "catalog:"
     },
     "devDependencies": {

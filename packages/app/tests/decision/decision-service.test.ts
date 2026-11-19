@@ -386,6 +386,53 @@ describe('DecisionService — hosted clef maker (design §3.6)', () => {
     });
 });
 
+/**
+ * Hosted API-key makers. Ways the wiring could go wrong, each pinned here: registering with no key
+ * (or an empty one) so every call silently degrades, failing to register when the key is set, a
+ * catalog naming the maker loading anyway while unregistered, and a construction failure escaping
+ * as a throw instead of the declared fallback.
+ */
+describe.each([
+    { maker: 'gemini', envVar: 'GEMINI_API_KEY' },
+    { maker: 'openai', envVar: 'OPENAI_API_KEY' },
+])('DecisionService — hosted $maker maker', ({ maker, envVar }) => {
+    const catalog = CLEF_CATALOG.replace('maker: clef', `maker: ${maker}`);
+
+    for (const absent of [undefined, '']) {
+        test(`${envVar}=${JSON.stringify(absent)} leaves the maker unregistered and a catalog naming it fails closed`, async () => {
+            await withEnv(absent === undefined ? {} : { [envVar]: absent }, async () => {
+                if (absent === undefined) removeEnvVar(envVar);
+                const root = await newRoot();
+                roots.push(root);
+                await writeCatalog(root, `${maker}.yaml`, catalog);
+                const service = await getDecisionService(null as never, root, join(root, 'shared'));
+                expect(service.status().registeredMakers).not.toContain(maker);
+                expect(service.status().ok).toBe(false);
+                expect(service.status().errors.join(' ')).toContain(`maker '${maker}' that is not registered`);
+            });
+        });
+    }
+
+    test(`${envVar} registers the maker and a driver construction failure serves the declared fallback`, async () => {
+        // A key with whitespace is rejected by the driver at construction: no socket is opened,
+        // yet env -> driver -> hub wiring is proven end to end.
+        await withEnv({ [envVar]: 'bad key' }, async () => {
+            const root = await newRoot();
+            roots.push(root);
+            await writeCatalog(root, `${maker}.yaml`, catalog);
+            const service = await getDecisionService(null as never, root, join(root, 'shared'));
+            expect(service.status().registeredMakers).toContain(maker);
+            expect(service.status().ok).toBe(true);
+            await expect(service.decide('hosted-pick', {})).resolves.toMatchObject({
+                value: 'slow',
+                source: 'default',
+                reason: 'no-backend',
+                maker,
+            });
+        });
+    });
+});
+
 describe('DecisionService — fallback cause (task 1262 R3)', () => {
     // AC3: a hub fallback that came from a caught failure names the error class and message,
     // with every configured secret redacted before it reaches the event or the row.

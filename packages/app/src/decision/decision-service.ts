@@ -16,6 +16,8 @@ import {
 } from '@gobing-ai/ts-ai-decision';
 import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
 import { type ClefDriverOptions, createClefDriver } from '@gobing-ai/ts-decision-clef';
+import { createGeminiDecisionDriver } from '@gobing-ai/ts-decision-gemini';
+import { createOpenAIDecisionDriver } from '@gobing-ai/ts-decision-openai';
 import { dirnamePath, joinPath, nodeBunFactory } from '@gobing-ai/ts-runtime';
 import { configuredSecretValues, redactAndBound } from '../observability/agent-execution';
 import type { SystemEventBus } from '../services/system-event-tap';
@@ -295,10 +297,7 @@ export class DecisionService {
                 },
             },
         });
-        const clef = clefCredentials(env);
-        if (clef !== undefined) {
-            this.registry.register('clef', () => createDecisionMaker({ driver: createClefDriver(clef) }));
-        }
+        registerHostedMakers(this.registry, env);
         this.hub = new DecisionHub({ registry: this.registry });
         this.catalogErrors.push(...this.loadCatalogs(this.hub));
     }
@@ -429,10 +428,7 @@ export class DecisionService {
                 },
             },
         });
-        const clef = clefCredentials(env);
-        if (clef !== undefined) {
-            registry.register('clef', () => createDecisionMaker({ driver: createClefDriver(clef) }));
-        }
+        registerHostedMakers(registry, env);
         const hub = new DecisionHub({ registry });
         this.loadCatalogs(hub);
         this.probeOnlyHub = hub;
@@ -769,6 +765,30 @@ function clefCredentials(env: Record<string, string | undefined>): ClefDriverOpt
     const { CLOUDFLARE_ACCOUNT_ID: accountId, CLOUDFLARE_AUTH_TOKEN: apiToken } = env;
     if (accountId === undefined || accountId === '' || apiToken === undefined || apiToken === '') return undefined;
     return { accountId, apiToken };
+}
+
+/**
+ * Register the hosted makers whose credentials are present (design §3.6). Each is environment-gated:
+ * with no credential the maker stays unregistered, so a catalog or `--maker` naming it is a config
+ * error rather than a maker that silently degrades on every call. Hosted drivers keep their own
+ * request timeout; the probe's long budget exists for cold local models only.
+ */
+function registerHostedMakers(registry: DecisionMakerRegistry, env: Record<string, string | undefined>): void {
+    const clef = clefCredentials(env);
+    if (clef !== undefined) {
+        registry.register('clef', () => createDecisionMaker({ driver: createClefDriver(clef) }));
+    }
+    const { GEMINI_API_KEY: geminiKey, OPENAI_API_KEY: openaiKey } = env;
+    if (geminiKey !== undefined && geminiKey !== '') {
+        registry.register('gemini', () =>
+            createDecisionMaker({ driver: createGeminiDecisionDriver({ apiKey: geminiKey }) }),
+        );
+    }
+    if (openaiKey !== undefined && openaiKey !== '') {
+        registry.register('openai', () =>
+            createDecisionMaker({ driver: createOpenAIDecisionDriver({ apiKey: openaiKey }) }),
+        );
+    }
 }
 
 /**

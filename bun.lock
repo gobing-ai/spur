@@ -152,6 +152,8 @@
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-decision-clef": "catalog:",
+        "@gobing-ai/ts-decision-gemini": "catalog:",
+        "@gobing-ai/ts-decision-openai": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
         "@gobing-ai/ts-infra": "catalog:",
         "@gobing-ai/ts-laya-mlx": "catalog:",
@@ -485,6 +487,10 @@
     "@gobing-ai/ts-decision-clef": ["@gobing-ai/ts-decision-clef@0.8.0", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.0", "@gobing-ai/ts-infra": "^0.8.0" } }, "sha512-9DhwRn+r5m/xy98Hv0Cq4WSOnjTthy22R/ksXY7mPyl0Qm/UxlfYzvN4ayN82u2Eie2iRY/xoLuVOC5NSv4n+w=="],
 
     "@gobing-ai/ts-decision-fm": ["@gobing-ai/ts-decision-fm@0.8.0", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.0", "@gobing-ai/ts-runtime": "^0.8.0" } }, "sha512-McHllHFE1gdkr+7zqK5fbpYemhpT2okGZpqPn3XtwatoqzSDF+QCZsjCFwA8pxGzowhbRoCe+fC/dwGoZDQr6A=="],
+
+    "@gobing-ai/ts-decision-gemini": ["@gobing-ai/ts-decision-gemini@0.8.0", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.0", "@gobing-ai/ts-infra": "^0.8.0" } }, "sha512-HH7TWe3UzCmUT0+RrGLSuuBqs8TzKPUgt+GBctEUGWQFrVO1aNAn1EY9UeiVFB1zxi7OkQC1A6q4w7nPiamB2w=="],
+
+    "@gobing-ai/ts-decision-openai": ["@gobing-ai/ts-decision-openai@0.8.0", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.0", "@gobing-ai/ts-infra": "^0.8.0" } }, "sha512-928T8ZA+0UQbgbFrXkWLsGd1qXmyhcmF/ovxsjC5vhZeqYU/IRO5vy0hz5ge/q2OMs7+4ikGsit6J/1EwC7L3w=="],
 
     "@gobing-ai/ts-dual-workflow-engine": ["@gobing-ai/ts-dual-workflow-engine@0.8.0", "", { "dependencies": { "@gobing-ai/ts-db": "^0.8.0", "@gobing-ai/ts-infra": "^0.8.0", "@gobing-ai/ts-runtime": "^0.8.0", "zod": "^4.1.0" } }, "sha512-176dOBtBgf0nZ4yzE/XDytGtVRpfFJuK95gb2yJPJRVhVjox8KKMN6r19uHUg2EsgxhJsrZ+PpgyK3UO0DMslw=="],
 

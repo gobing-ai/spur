@@ -260,6 +260,11 @@ Cloudflare Workers AI backend from `@gobing-ai/ts-decision-clef`, wrapped as
   clef` exits 1 before any backend call (§3.6).
 - **Model:** the driver defaults to `clef-flash`; a catalog `model` (or an `ask({ model })` call)
   selects `clef` instead. Per-decision model selection in config stays out of scope (§1).
+- **`gemini` and `openai`** follow the same gated pattern over `@gobing-ai/ts-decision-gemini` and
+  `@gobing-ai/ts-decision-openai`: each registers only when its key is set (non-empty) —
+  `GEMINI_API_KEY` / `OPENAI_API_KEY` — and the value is passed explicitly as the driver's `apiKey`.
+  Models are fixed by the drivers (`gemini-decision-1`, `gpt-6-luna`); request timeout is the
+  driver default (30 s), also under the probe.
 - **Credential-free host checks stay lazy.** `laya-local` and `fm-local` are registered
   unconditionally because registration cannot detect Apple Silicon; their host checks run at first
   resolve, and a construction failure is the hub's `no-backend`. `DecisionService` builds the
