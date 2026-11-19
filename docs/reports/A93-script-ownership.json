@@ -544,6 +544,19 @@
             "disposition": "retained"
         },
         {
+            "path": "scripts/commands/fleet-e2e-batch-perf.heavy.test.ts",
+            "responsibility": "Heavy-lane real serial-vs-parallel measurement of the fleet batch benchmark arm",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [],
+            "subject": "scripts/commands/fleet-e2e-batch-perf.ts",
+            "noRuntimeCaller": true,
+            "retainedReason": "Companion heavy test travels with its retained benchmark arm",
+            "disposition": "retained"
+        },
+        {
             "path": "scripts/commands/fleet-e2e-batch-perf.test.ts",
             "responsibility": "Companion tests for the fleet batch benchmark arm's decision rows",
             "destination": "scripts",
@@ -562,7 +575,10 @@
             "destination": "scripts",
             "action": "retain",
             "waveWbs": null,
-            "tests": ["scripts/commands/fleet-e2e-batch-perf.test.ts"],
+            "tests": [
+                "scripts/commands/fleet-e2e-batch-perf.heavy.test.ts",
+                "scripts/commands/fleet-e2e-batch-perf.test.ts"
+            ],
             "callers": [
                 {
                     "path": "scripts/commands/fleet-e2e.ts",
