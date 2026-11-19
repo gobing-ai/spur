@@ -1,6 +1,6 @@
 ---
 name: execution-worktree
-description: "Worktree lifecycle for `--worktree [<name>]` (task 1343; formerly execution-worktree-setup): WT-1 dirty precheck, WT-2 create/reuse + evidence staging, WT-3 crash-safe marker, WT-3b the batch commit, WT-6 `--continue` re-entry and WT-7 exclusions — plus the engine-owned contract for `--mode parallel`. Landing is read at batch end: execution-worktree-landing.md."
+description: "Worktree lifecycle for `--worktree [<name>]` (task 1343; formerly execution-worktree-setup): WT-1 dirty precheck, WT-2 create/reuse + evidence staging, WT-3 crash-safe marker, WT-3b the batch commit, WT-6 `--continue` re-entry and WT-7 exclusions — plus the engine-owned contract for `--schedule parallel`. Landing is read at batch end: execution-worktree-landing.md."
 see_also:
   - execution-batch
   - execution-worktree-landing
@@ -22,8 +22,8 @@ Read with `--worktree` at batch start (task 1128 R1).
 When a batch command (`dev-run --all`, `dev-refine --all`, `dev-verify --all`) is invoked with
 [`--worktree [<name>]`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an
 isolated git worktree instead of the operator's working directory. This section owns the worktree
-lifecycle for the sequential batch loop. `--mode parallel` no longer uses this file at all — see
-[§ parallel mode](#-mode-parallel--engine-owned-g76-134113421343); `--worktree --schedule parallel` is
+lifecycle for the sequential batch loop. `--schedule parallel` no longer uses this file at all — see
+[§ parallel schedule](#-schedule-parallel--engine-owned-g76-134113421343); `--worktree --schedule parallel` is
 rejected there (parallel mode already isolates each task in its own worktree).
 
 **Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
@@ -442,7 +442,7 @@ fallback, because `<name>` was explicit and unambiguous intent.
 - **`dev-next`** does not get `--worktree` — it dispatches a single step; per-step isolation is not
   worth the worktree cost. `dev-run` is different: it drives a whole task pipeline, so it does get
   the flag.
-- **`--mode parallel`** is rejected when combined with `--worktree` — parallel mode already
+- **`--schedule parallel`** is rejected when combined with `--worktree` — parallel mode already
   isolates each task in its own worktree
   ([§ Parallel isolation](#parallel-isolation---schedule-parallel)), and reuse mode
   (`--worktree <name>`) has no per-task meaning.
@@ -461,7 +461,7 @@ While the batch runs, corpus writes (`spur task update`, `spur feature update`) 
 the merge (WT-4) or manual integration (WT-5) propagates the writes back. Worth one line in each
 command doc so it does not read as a bug.
 
-## `--mode parallel` — engine-owned (G76 1341/1342/1343)
+## `--schedule parallel` — engine-owned (G76 1341/1342/1343)
 
 Parallel mode no longer runs per-task worktree prose. The frozen set is tagged `fleet:auto`, the
 fleet tick opens one **lane** per write dispatch (`packages/app/src/services/worktree-lane-service.ts`),
@@ -473,7 +473,7 @@ terminal output, and a project without an enabled fleet, a coder member or `agen
 refuses parallel mode with the fix named (`parallelRefusal`) rather than falling back to serial.
 
 Contracts that survive the move, unchanged: per-task isolation is still one tree per task;
-`--worktree` is rejected under `--mode parallel`; a task becomes eligible only when its in-set
+`--worktree` is rejected under `--schedule parallel`; a task becomes eligible only when its in-set
 dependencies are **integrated**, not merely pipeline-terminal, and admission reads
 `fleet.task.integrated`, never corpus status; `--defer-gate` runs the one full gate on the
 integrated base ref before the deferred feature sync; any rebase conflict aborts, retains lane and

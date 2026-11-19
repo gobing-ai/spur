@@ -157,7 +157,7 @@ the first failure, run without `--auto`.
 
 ### `--defer-gate` — opt-in parallel-batch gate policy (task 1111 / H15)
 
-**Applies to:** `/sp-dev-run --all --mode parallel`, and `--mode auto` when it resolves to parallel.
+**Applies to:** `/sp-dev-run --all --schedule parallel`, and `--schedule auto` when it resolves to parallel.
 **Default:** off — every task pipeline runs its own FULL project gate inside its worktree.
 
 With `--defer-gate`, each task's `gate` state (every visit) runs the **light tier** (changed-scope
@@ -177,8 +177,8 @@ Two properties are load-bearing and are asserted structurally:
   guard accepts it only while `deferQualityGate = "true"` (the pipeline default since the
   incremental gate; pass `"false"` for a full gate on every task).
 
-`--defer-gate` with `--mode sequential` (or omitted `--mode`) is rejected — the flag exists to move
-one full gate from N worktrees to the one place the integrated tree exists. Under `--mode auto` it
+`--defer-gate` with `--schedule sequential` (or omitted `--schedule`) is rejected — the flag exists to move
+one full gate from N worktrees to the one place the integrated tree exists. Under `--schedule auto` it
 applies only if the batch resolves to parallel; a sequential resolution drops it with a report note.
 Sequential and inline batches never set the var. ADR-124 carries the dated clarification.
 
@@ -581,7 +581,7 @@ merges but never removes. This keeps the continue-the-work loop stable — after
 `-`**, so `--worktree --auto` is the bare create form and `--agent`/`--feature`/etc. are never
 swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev-next` does not get
 the flag (single _step_; not worth the worktree cost — unlike `dev-run`, which isolates a whole
-task pipeline), `--worktree --mode parallel` is rejected (parallel mode already isolates each task
+task pipeline), `--worktree --schedule parallel` is rejected (parallel mode already isolates each task
 in its own worktree — [execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---schedule-parallel)),
 and `--worktree --mode implement` is rejected on `dev-run` (that mode _is_ the pipeline's
 implement stage and runs in the driver's tree). The full lifecycle — name resolution, dirty-tree

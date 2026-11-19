@@ -4,7 +4,7 @@ name: Merge the dev-find-* commands into dev-find <lens>
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:31.773Z
-updated_at: "2026-11-18T20:39:08.852Z"
+updated_at: "2026-11-19T00:52:05.414Z"
 feature_id: H84
 priority: P1
 tags:
@@ -74,11 +74,11 @@ Dispatch: `Skill(skill="<lens skill>", args="<ARGUMENTS minus lens>")`.
 
 ### Plan
 
-- [ ] Step 1 (test first, R1/R3): add `command-flag-parity` and `help-docs-parity` cases for `dev-find`.
-- [ ] Step 2 (R1/R2/R3): write `dev-find.md` with the lens table and the moved `way` preamble.
-- [ ] Step 3 (R4): write the redirects.
-- [ ] Step 4 (R5): migrate docs and prose.
-- [ ] Step 5: run the plugin parity tests, `bun run plugin-smoke`, then `bun run spur-check`.
+- [x] Step 1 (test first, R1/R3): add `command-flag-parity` and `help-docs-parity` cases for `dev-find`.
+- [x] Step 2 (R1/R2/R3): write `dev-find.md` with the lens table and the moved `way` preamble.
+- [x] Step 3 (R4): write the redirects.
+- [x] Step 4 (R5): migrate docs and prose.
+- [x] Step 5: run the plugin parity tests, `bun run plugin-smoke`, then `bun run spur-check`.
 
 ### Solution
 
@@ -105,16 +105,16 @@ Public-surface probe: no new CLI/HTTP route. One command added (`dev-find`), fou
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 `dev-find` with a required lens, four skills, verbatim args, unknown/missing lens stops | MET | static-ref: `plugins/sp/commands/dev-find.md:5` (hint), `:50-60` (usage + lens table), `:64-78` (dispatch per lens + the stop rule); test: `plugins/sp/tests/command-flag-parity.test.ts` § 1391 R1 |
-| R2 the `way` lens keeps the worktree lifecycle and `--wrap` behavior verbatim | MET | static-ref: `plugins/sp/commands/dev-find.md:75-78` (three moved lines), still present in `dev-find-way.md:78-80`; test: `command-flag-parity` § 1391 R2 asserts both files |
-| R3 description trigger union, hint grouped by lens, `dev-operations.md` row matches | MET | static-ref: `dev-find.md:2` (twelve trigger phrases), `:5` (`conflict:`/`issue:`/`next:`/`way:` groups), `dev-operations.md:90` (row 12b, flag cell = hint); test: `command-flag-parity` § 1391 R3 + R8 hint↔row parity for `dev-find` |
-| R4 four old files are one-release redirects naming `dev-find <lens>` and dispatching identically | MET | static-ref: `dev-find-{conflict,issue,next,way}.md` banner + `Redirect dispatch` bullet (`/sp:dev-find <lens> $ARGUMENTS`); test: `command-flag-parity` § 1391 R4 |
-| R5 AGENTS.md routing, README, templates, prose; parity suites + plugin-smoke | MET | static-ref: `plugins/sp/README.md:103,146-149`, `config/templates/AGENTS.md:170`, 20 prose files (skills/help/design); test: `plugins/sp` + `scripts/commands` 1,766 pass, `bun run plugin-smoke` PASS, `flag-contract-parity` real-tree 0 violations |
+| R1 | MET | `plugins/sp/commands/dev-find.md:5` (hint), `plugins/sp/commands/dev-find.md:17` (required lens; unknown/missing stops), `plugins/sp/commands/dev-find.md:59` (Implementation lens→skill dispatch); test `plugins/sp/tests/command-flag-parity.test.ts:502` |
+| R2 | MET | `plugins/sp/commands/dev-find.md:59` (`way` lens keeps worktree lifecycle + `--wrap`); test `plugins/sp/tests/command-flag-parity.test.ts:502` asserts both files |
+| R3 | MET | `plugins/sp/commands/dev-find.md:2` (trigger union), `plugins/sp/commands/dev-find.md:5` (per-lens groups); `plugins/sp/skills/spur-dev/references/dev-operations.md:90` (row 12b = hint); test `plugins/sp/tests/command-flag-parity.test.ts:113` R8 parity |
+| R4 | MET | `plugins/sp/commands/dev-find-conflict.md:66`, `plugins/sp/commands/dev-find-issue.md:53`, `plugins/sp/commands/dev-find-next.md:71`, `plugins/sp/commands/dev-find-way.md:83` (Redirect dispatch with lens prepended) |
+| R5 | MET | `plugins/sp/README.md:103`; fix pass: `plugins/sp/commands/dev-brainstorm.md:47` scope-check exit now `/sp:dev-find way`, guarded at `plugins/sp/tests/skill-structure.test.ts:1783` (red → green); plugins/sp 1319 pass; `bun run plugin-smoke` PASS this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 one `dev-find` command routes by lens (R1, R2, R3) | MET | test | `command-flag-parity` § 1391 R1/R2/R3; `dev-operations.md` row 12b parity |
-| AC2 former names redirect for one release (R4, R5) | MET | test | `command-flag-parity` § 1391 R4; `scripts/commands` heading/frontmatter/thin-wrapper over 44 commands; README R43 |
+| AC1 | MET | test | `plugins/sp/tests/command-flag-parity.test.ts:502` (1391 R1/R2/R3); `plugins/sp/skills/spur-dev/references/dev-operations.md:90` row parity |
+| AC2 | MET | test | `plugins/sp/tests/command-flag-parity.test.ts:502` (1391 R4); `plugins/sp/tests/skill-structure.test.ts:1783`; `bun run plugin-smoke` PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

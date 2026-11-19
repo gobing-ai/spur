@@ -44,7 +44,7 @@ exclusive (passing both is an error); the operator confirms the chosen approach 
 writes to the corpus. `--next` is ignored without `--feature`.
 
 If discovery shows the destination itself is too foggy to spec in one session, stop and recommend
-`/sp:dev-find-way "<topic>"` with the resolved decision tree as its starting notes. Never chart a
+`/sp:dev-find way "<topic>"` with the resolved decision tree as its starting notes. Never chart a
 multi-session map from this command.
 
 ## Implementation

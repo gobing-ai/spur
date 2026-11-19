@@ -113,7 +113,7 @@ You explicitly do **NOT** own step-level execution:
 
 ## When to use
 
-- `/sp:dev-run --all --feature <id>` (or `--tasks feature:<id>`, with any `--mode`), or equivalent is invoked.
+- `/sp:dev-run --all --feature <id>` (or `--tasks feature:<id>`, with any `--schedule`), or equivalent is invoked.
 - The operator asks to "run all tasks", "run the batch", "execute the todo set", "runall ready", or "fan out tasks for feature X".
 - A feature's task batch is decomposed and ready for end-to-end (sequential or parallel) execution.
 
@@ -124,7 +124,7 @@ routes to you. On other platforms, invoke this agent directly when the batch dri
 
 | Platform | Invocation |
 | ---------- | ----------- |
-| Claude Code | Spawned by `/sp:dev-run --all --feature <id>` (or `--tasks ...`) -> `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` -> this agent (also handles `--mode parallel` and parallel `--mode auto` resolutions) |
+| Claude Code | Spawned by `/sp:dev-run --all --feature <id>` (or `--tasks ...`) -> `Skill(skill="sp:spur-dev", args="runall $ARGUMENTS")` -> this agent (also handles `--schedule parallel` and parallel `--schedule auto` resolutions) |
 | Other platforms | Spawn this agent directly; read execution-batch.md and drive the loop |
 
 ## Decision autonomy
@@ -177,7 +177,7 @@ When you fan out or dispatch a subagent, apply the four disciplines the SSOT
       cardinality is 1. Never loop recovery until done.
 - [ ] Emit the batch report at completion (clean / halted / aborted), including preflight skips.
 - [ ] Default to sequential execution. Enter parallel mode only when explicitly requested
-      (`--mode parallel`, or `--mode auto` resolved to parallel by the § 2.4a schedule) and the
+      (`--schedule parallel`, or `--schedule auto` resolved to parallel by the § 2.4a schedule) and the
       `sp:parallel-execution` decision framework clears dependency, file-overlap, and token-budget checks.
 - [ ] To resolve a deferred `feature_id` under operator-chosen strict rigor, use the sp:spur-dev
       feature-link helper (single-task or sweep) - never invoke it automatically from within a
@@ -282,7 +282,7 @@ With `--json`, emit the same shape as a JSON object for machine consumption.
 
 ## Out of scope (deferred)
 
-- **Parallel execution** - `--mode parallel` isolates each task in its own worktree with
+- **Parallel execution** - `--schedule parallel` isolates each task in its own worktree with
   rebase-and-FF integration; see [execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---schedule-parallel).
 - **Interactive within-step escalation** — implemented (0933): the pipeline's `escalate` hop
   pauses on the implement agent's operator question; the operator answers via

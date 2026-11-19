@@ -12,10 +12,10 @@ import { join } from 'node:path';
  * spread of prose. Measured 2026-10-08 on the split tree: 56,975 / 80,707 / 65,125 B.
  */
 const BOOTSTRAP_BUDGETS_BYTES = {
-    // task 1128 R2 — sequential-inline, --worktree, --mode parallel
+    // task 1128 R2 — sequential-inline, --worktree, --schedule parallel
     'sequential-inline': 90_000,
     '--worktree': 110_000,
-    '--mode parallel': 110_000,
+    '--schedule parallel': 110_000,
 } as const;
 
 const SPUR_DEV = join(import.meta.dir, '..', 'skills', 'spur-dev');

@@ -53,7 +53,7 @@ current metadata. Anything less is not a valid skip.
 
 ### BC-3 — Ordering, write ownership, terminal mix, evidence (R3/R4; AC3/AC4)
 
-Sequential dependency-correct execution remains the default; opt-in `--mode parallel` keeps the
+Sequential dependency-correct execution remains the default; opt-in `--schedule parallel` keeps the
 existing proven-independence requirements with one writer per tree (Step 3). Mixed terminal
 results resume under the unchanged failure policy (Step 4). The Step 5 report keeps per-task
 outcomes distinct — `done | failed | blocked | skipped | not-attempted` plus the resume-only

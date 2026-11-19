@@ -675,7 +675,7 @@ never a parallel process.
 | --- | --- | --- |
 | `/sp:dev-next <wbs\|feature-id>` | "which verb next?" guessing | You want the **single best next step** for a task or feature frontier. `sp:next-router` inspects status, applies light gates, and dispatches exactly one `/sp:dev-*` command (or stops with a reason). New — also backs the `--next` auto-chains. |
 | `/sp:dev-run --all --feature <id>` (or `--tasks feature:<id>`) | Steps 3–6 hand-walked per task | Drive a **batch** of tasks through `task-pipeline.yaml` in dependency-correct order. Delegates to **`sp:super-planner`** — the batch driver now **preflights** each WBS against stop-conditions (`plugins/sp/scripts/batch-preflight.ts`) and does at most **one** recovery hop via `sp:next-router` before continue/halt. |
-| `/sp:dev-run --all --feature <id> --mode auto` | Choosing sequential vs parallel by hand | Computes the batch's dependency waves (`batch-plan.mjs order`) and fans out per-task worktrees only when a wave holds ≥2 independent tasks; file overlap serializes. `--mode parallel` forces fan-out. |
+| `/sp:dev-run --all --feature <id> --schedule auto` | Choosing sequential vs parallel by hand | Computes the batch's dependency waves (`batch-plan.mjs order`) and fans out per-task worktrees only when a wave holds ≥2 independent tasks; file overlap serializes. `--schedule parallel` forces fan-out. |
 | `/sp:dev-verify --all` / `/sp:dev-wrap --all` | Per-task verify/wrap loops | Batch-verify a feature's tasks, then batch-wrap (learnings, metrics, doc-sync, feature transition). |
 
 Single task? `/sp:dev-run <wbs>` (or delegate to `sp:super-planner` directly). Review-only?

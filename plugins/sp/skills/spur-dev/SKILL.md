@@ -111,9 +111,9 @@ Read this `SKILL.md` plus your mode's files below before the first dispatch; eve
 
 - sequential-inline: `references/execution-batch.md`
 - --worktree: `references/execution-batch.md`, `references/execution-worktree.md`
-- --mode parallel: `references/execution-batch.md`, `references/execution-worktree.md`
+- --schedule parallel: `references/execution-batch.md`, `references/execution-worktree.md`
 
-`--mode auto` reads as sequential-inline until § 2.4a resolves it.
+`--schedule auto` reads as sequential-inline until § 2.4a resolves it.
 
 ## Step routing
 

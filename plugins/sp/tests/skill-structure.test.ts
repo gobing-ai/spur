@@ -1779,6 +1779,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const devBrainstorm = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-brainstorm.md'), 'utf8');
         expect(devBrainstorm).not.toContain('--wayfind');
         expect(devBrainstorm).not.toContain('sp:wayfinder');
+        // 1391: the scope-check exit names the merged command, not the one-release redirect.
+        expect(devBrainstorm).toContain('/sp:dev-find way');
+        expect(devBrainstorm).not.toContain('/sp:dev-find-way');
         const devFindWay = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-find-way.md'), 'utf8');
         expect(devFindWay).toContain('Skill(skill="sp:wayfinder"');
         expect(devFindWay).toContain('--worktree');

@@ -72,7 +72,7 @@ verdict **stops the chain** with findings written into the task — there is no 
 ```text
 /sp:dev-run 0061 --auto        # full pipeline, HITL gates auto-confirmed
 /sp:dev-run --all --feature F7 --auto
-/sp:dev-run --all --feature F7 --mode auto  # fan out only when dependency waves allow
+/sp:dev-run --all --feature F7 --schedule auto  # fan out only when dependency waves allow
 ```
 
 `--auto` skips objective confirmations only. Irreversible gates (branch cleanup, merges) always

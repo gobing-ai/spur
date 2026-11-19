@@ -4,7 +4,7 @@ name: Fold the *all commands into --all on their base commands
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:31.770Z
-updated_at: "2026-11-18T20:08:22.624Z"
+updated_at: "2026-11-19T00:52:04.189Z"
 feature_id: H84
 priority: P1
 tags:
@@ -69,11 +69,11 @@ Test layer: plugin parity suites over the real command files, plus unit tests on
 
 ### Plan
 
-- [ ] Step 1 (test first, R1/R2/R4): add `command-flag-parity` expectations for the merged hints, plus unit tests for `pipeline-detect` (`dev-refine --all` is pipeline-driving, `dev-run --all` is implement-heavy) and the two suggestion emitters.
-- [ ] Step 2 (R1/R2): edit the base commands and the `dev-operations.md` rows, then update the argument contract design.
-- [ ] Step 3 (R3): write the redirects.
-- [ ] Step 4 (R4/R5): code emitters, the detector and the prose migration (from an `rg` inventory, excluding history).
-- [ ] Step 5: run `(cd plugins/sp && bun test tests/command-flag-parity.test.ts tests/help-docs-parity.test.ts)`, the `packages/app` focused tests, `bun run plugin-smoke`, then `bun run spur-check`.
+- [x] Step 1 (test first, R1/R2/R4): add `command-flag-parity` expectations for the merged hints, plus unit tests for `pipeline-detect` (`dev-refine --all` is pipeline-driving, `dev-run --all` is implement-heavy) and the two suggestion emitters.
+- [x] Step 2 (R1/R2): edit the base commands and the `dev-operations.md` rows, then update the argument contract design.
+- [x] Step 3 (R3): write the redirects.
+- [x] Step 4 (R4/R5): code emitters, the detector and the prose migration (from an `rg` inventory, excluding history).
+- [x] Step 5: run `(cd plugins/sp && bun test tests/command-flag-parity.test.ts tests/help-docs-parity.test.ts)`, the `packages/app` focused tests, `bun run plugin-smoke`, then `bun run spur-check`.
 
 ### Solution
 
@@ -104,16 +104,16 @@ Test layer: plugin parity suites over the real command files, plus unit tests on
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 `--all` (+ former `*all` flags) on the four base commands, hints and `dev-operations.md` rows | MET | static-ref: `plugins/sp/commands/dev-run.md:5,13-30`, `dev-refine.md:5`, `dev-verify.md:5`, `dev-wrap.md:5`; `plugins/sp/skills/spur-dev/references/dev-operations.md:74-91`; test: `plugins/sp/tests/command-flag-parity.test.ts` R8 forward+reverse over all four (hint ↔ table row) |
-| R2 `dev-run --all` uses `--schedule`, `--mode` keeps its per-task meaning, recorded in the argument contract | MET | static-ref: `plugins/sp/commands/dev-run.md:5,22,38-41` (`--mode <full\|implement>` row kept, `--schedule` row added); `docs/design/dev-command-argument-contract.md` § "Batch scope on the base commands" ; `plugins/sp/skills/spur-dev/references/execution-batch.md` §2.4a retitled |
-| R3 four `*all` files are one-release redirects naming the replacement and dispatching the same action | MET | static-ref: `plugins/sp/commands/dev-{run,refine,verify,wrap}all.md` (description + `## Usage` + `## Implementation` naming the unchanged `sp:spur-dev` operation); test: `scripts/commands/command-contract.test.ts` heading/frontmatter/thin-wrapper gates, `plugins/sp/tests/skill-structure.test.ts` R21b/R30 |
-| R4 `pipeline-detect` classifies `dev-<base> --all` as the retired token; emitters emit the new spelling; unit tests | MET | static-ref: `packages/app/src/services/dogfood/pipeline-detect.ts:17-42` (`batchScopeBase`), `:96-105`, `:150-157`; `packages/app/src/services/task-readiness.ts:62`; `packages/app/src/workflow/idea-handoff.ts:459-461`; test: `packages/app/tests/services/dogfood/pipeline-detect.test.ts` (4 positives, 4 negatives, implement-heavy split, retired spellings), `idea-handoff.test.ts`, `task-readiness.test.ts` |
-| R5 AGENTS.md, README, templates, skill/reference prose; parity gates + plugin-smoke pass | MET | static-ref: 58-file prose migration (`AGENTS.md`, `config/templates/AGENTS.md`, `plugins/sp/**`, `docs/help/**`), README index (redirect rows + batch-scope note); test: `command-flag-parity` (113), `help-docs-parity`, `skill-structure` (99), `scripts/commands` contract suites, `bun run plugin-smoke` PASS; remaining old spellings only in README redirect rows, glossary declarer lists, dev-operations redirect rows and the machine-checked dogfood token inventory |
+| R1 | MET | `plugins/sp/commands/dev-run.md:5` (hint carries `--all` + former `dev-runall` flags), `plugins/sp/commands/dev-refine.md:5`, `plugins/sp/commands/dev-verify.md:5`, `plugins/sp/commands/dev-wrap.md:5`; `plugins/sp/skills/spur-dev/references/dev-operations.md:76` (run row = union); test `plugins/sp/tests/command-flag-parity.test.ts:113` (R8 hint↔row parity, 219 pass this run) |
+| R2 | MET | `plugins/sp/commands/dev-run.md:21` (`--schedule` row; `--mode` keeps `full\|implement`); `docs/design/dev-command-argument-contract.md:107`; fix pass: 25 stale `--mode parallel\|auto\|sequential` batch spellings rewritten to `--schedule` across 13 live docs (e.g. `AGENTS.md:34`, `config/templates/AGENTS.md:40`, `plugins/sp/skills/spur-dev/references/flag-glossary.md:160`), guarded by `plugins/sp/tests/command-flag-parity.test.ts:572` (red 25 offenders → green) |
+| R3 | MET | `plugins/sp/commands/dev-runall.md:37` (Usage shows `/sp:dev-run --all`), `plugins/sp/commands/dev-runall.md:43` (Implementation names unchanged `runall` op); `plugins/sp/commands/dev-verifyall.md:34`; `plugins/sp/README.md:131` (`--mode` → `--schedule` mapping) |
+| R4 | MET | `packages/app/src/services/dogfood/pipeline-detect.ts:103` (`batchScopeBase`), `packages/app/src/services/task-readiness.ts:62`, `packages/app/src/workflow/idea-handoff.ts:459`; test `packages/app/tests/services/dogfood/pipeline-detect.test.ts:179` (64 pass this run) |
+| R5 | MET | `config/templates/AGENTS.md:40`, `AGENTS.md:34`, `plugins/sp/README.md:125`; `bun test` in plugins/sp 1319 pass / 0 fail; `bun run plugin-smoke` PASS this run; `scripts/commands/flag-contract-parity.test.ts` + `command-contract.test.ts` 106 pass this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 batch variants are flags on their base commands (R1, R2, R4) | MET | test | `command-flag-parity` hint/table parity for the four bases; `pipeline-detect` unit block; `flag-contract-parity` real-tree gate reports 0 violations |
-| AC2 former command names redirect for one release (R3, R5) | MET | test | `command-contract` heading/frontmatter/thin-wrapper over all 43 commands; `skill-structure` R21b/R30; README index (R43) |
+| AC1 | MET | test | `plugins/sp/tests/command-flag-parity.test.ts:113` hint/row parity on the four bases; `plugins/sp/tests/command-flag-parity.test.ts:572` no stale `--mode` batch spelling; `packages/app/tests/services/dogfood/pipeline-detect.test.ts:179` |
+| AC2 | MET | test | `plugins/sp/commands/dev-runall.md:43` redirect dispatch; `scripts/commands/command-contract.test.ts` heading/frontmatter/thin-wrapper gates pass; `bun run plugin-smoke` PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

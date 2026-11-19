@@ -14,8 +14,8 @@ const PLUGIN_SP = join(ROOT, 'plugins', 'sp');
  * `packages/app/tests/services/fleet-integration-queue.test.ts` and `fleet-lanes-e2e.test.ts`.
  */
 const WORKTREE_REFERENCE = referencePath('execution-worktree.md');
-const SECTION_HEADING = '## `--mode parallel` — engine-owned (G76 1341/1342/1343)';
-const SECTION_LINK = '#-mode-parallel--engine-owned-g76-134113421343';
+const SECTION_HEADING = '## `--schedule parallel` — engine-owned (G76 1341/1342/1343)';
+const SECTION_LINK = '#-schedule-parallel--engine-owned-g76-134113421343';
 const NEW_REJECTION_REASON = 'parallel mode already isolates each task in its own worktree';
 const ENGINE_OWNERS = [
     'packages/app/src/services/worktree-lane-service.ts',
@@ -83,7 +83,7 @@ describe('task 1343 — parallel mode is engine-owned', () => {
     test('surviving contracts: integrated-not-terminal, --worktree rejection, defer-gate, conflict retention', () => {
         expect(prose).toContain('only when its in-set dependencies are **integrated**, not merely pipeline-terminal');
         expect(prose).toContain('admission reads `fleet.task.integrated`, never corpus status');
-        expect(prose).toContain('`--worktree` is rejected under `--mode parallel`');
+        expect(prose).toContain('`--worktree` is rejected under `--schedule parallel`');
         expect(prose).toContain('`--defer-gate` runs the one full gate on the integrated base ref');
         expect(prose).toContain('rebase conflict aborts, retains lane and branch');
         expect(prose).toContain('`integration-conflict`');

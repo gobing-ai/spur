@@ -267,9 +267,9 @@ describe('execution-batch spec contract (task 0477 — worktree isolation lifecy
         expect(SPEC).toContain('**Not found** → fail loudly: "no resolvable worktree marker');
     });
 
-    test('R8.1 — --worktree --mode parallel is rejected in the command doc and WT-7', () => {
+    test('R8.1 — --worktree --schedule parallel is rejected in the command doc and WT-7', () => {
         expect(RUNALL).toContain('`--worktree --schedule parallel` is **rejected**');
-        expect(SPEC).toContain('**`--mode parallel`** is rejected when combined with `--worktree`');
+        expect(SPEC).toContain('**`--schedule parallel`** is rejected when combined with `--worktree`');
     });
 
     test('R9.1 — the flag glossary documents --worktree', () => {

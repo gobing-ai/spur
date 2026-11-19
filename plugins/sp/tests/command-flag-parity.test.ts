@@ -563,3 +563,33 @@ describe('task 1391 — dev-find routes four lenses and the old names redirect',
         }
     });
 });
+
+// ---------- task 1390 R2/R5: the batch schedule is spelled --schedule on every live surface ----------
+//
+// `dev-run --all` reads `--mode` as the per-task `full|implement` switch, so prose that still says
+// `--mode parallel|auto|sequential` hands the operator an invocation the command rejects. Only the
+// one-release `dev-runall` redirect (and lines describing it) may keep the old spelling.
+describe('task 1390 — no live surface spells the batch schedule as --mode', () => {
+    const STALE = /--mode (?:parallel|auto|sequential)\b|--mode <sequential|--mode parallel\\?\|auto/;
+    const LIVE_ROOTS = ['plugins/sp', 'docs/help', 'docs/help2'];
+    const LIVE_FILES = ['AGENTS.md', join('config', 'templates', 'AGENTS.md'), join('docs', '03_ARCHITECTURE.md')];
+
+    function markdownUnder(dir: string): string[] {
+        return readdirSync(join(ROOT, dir), { recursive: true, encoding: 'utf8' })
+            .filter((rel) => rel.endsWith('.md') && !rel.includes('node_modules'))
+            .map((rel) => join(dir, rel));
+    }
+
+    test('only the dev-runall redirect keeps the --mode batch spelling', () => {
+        const offenders: string[] = [];
+        for (const rel of [...LIVE_ROOTS.flatMap(markdownUnder), ...LIVE_FILES]) {
+            if (rel.endsWith('dev-runall.md')) continue;
+            readFileSync(join(ROOT, rel), 'utf8')
+                .split('\n')
+                .forEach((line, i) => {
+                    if (STALE.test(line) && !line.includes('dev-runall')) offenders.push(`${rel}:${i + 1}`);
+                });
+        }
+        expect(offenders).toEqual([]);
+    });
+});

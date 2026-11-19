@@ -37,7 +37,7 @@ All product development work goes through the harness by default.
 | Plan a feature (intake → AC → tasks) | `/sp:dev-plan`, `/sp:dev-idea` | Freeform feature files without gates |
 | Corpus reads/writes when the session exposes `sp_*` MCP tools | the `sp_*` tool (map: `plugins/sp/skills/spur-cli/references/mcp-tools.md`); otherwise the CLI verb unchanged | Assuming the CLI is unavailable, or re-implementing the guard in prose |
 | Drive one task end-to-end | `/sp:dev-run <wbs>` or **`sp:super-planner`** | Implement with no task / no pipeline |
-| Batch or parallel task runs | `/sp:dev-run --all` (host sequential; `--mode parallel\|auto` → **`sp:super-planner`**) | Unordered multi-task thrash |
+| Batch or parallel task runs | `/sp:dev-run --all` (host sequential; `--schedule parallel\|auto` → **`sp:super-planner`**) | Unordered multi-task thrash |
 | Batch-refine tasks under a feature | `/sp:dev-refine --all --feature <id> --auto` | Hand-looping `/sp:dev-refine` per WBS |
 | Multi-step corpus CLI (tasks/features/rules/workflows) | **`sp:expert-spur`** | Raw Write/Edit on corpus files |
 | Look up `spur` verbs / flags / `--json` | Skill **`sp:spur-cli`** | Inventing flags from memory |
