@@ -4,7 +4,7 @@ name: Migrate callers and remove hidden legacy top-level nouns
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:30.253Z
-updated_at: "2026-11-18T18:31:03.144Z"
+updated_at: "2026-11-19T00:41:49.836Z"
 feature_id: A36
 priority: P1
 tags:
@@ -70,11 +70,11 @@ Test layer: the real commander program, the real `startProject` spawn seam, and 
 
 ### Plan
 
-- [ ] Step 1 (test first, R1/R4): add a `startProject` spawn-seam test asserting the argv contains `self serve`, and a program test asserting `spur serve` / `spur status` are unknown commands on both the normal path and the fast path.
-- [ ] Step 2 (R1): migrate the executable callers.
-- [ ] Step 3 (R2): migrate strings and docs, file by file from the `rg` inventory, and regenerate generated files.
-- [ ] Step 4 (R3): remove the registrations.
-- [ ] Step 5 (R4): `bun run --filter @gobing-ai/spur build:bundle`, then a real `spur projects start` plus a gateway proxy smoke on a temp project. Then the parity suites, `bun run spur-check`, and `bun run test:heavy` for the gateway e2e.
+- [x] Step 1 (test first, R1/R4): add a `startProject` spawn-seam test asserting the argv contains `self serve`, and a program test asserting `spur serve` / `spur status` are unknown commands on both the normal path and the fast path.
+- [x] Step 2 (R1): migrate the executable callers.
+- [x] Step 3 (R2): migrate strings and docs, file by file from the `rg` inventory, and regenerate generated files.
+- [x] Step 4 (R3): remove the registrations.
+- [x] Step 5 (R4): `bun run --filter @gobing-ai/spur build:bundle`, then a real `spur projects start` plus a gateway proxy smoke on a temp project. Then the parity suites, `bun run spur-check`, and `bun run test:heavy` for the gateway e2e.
 
 ### Solution
 
@@ -588,7 +588,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — migrate every executable caller (`project-start.ts` spawn argv, script spawns, package scripts) | MET | `packages/app/src/services/project-start.ts` spawns `[..., 'self', 'serve', ...]`; the seam test in `packages/app/tests/services/project-start.test.ts` was red before the change and asserts `spawned[serveIndex - 1] === 'self'` now. Four e2e scripts (`a2a-serve-e2e`, `a2a-member-e2e`, `a2a-two-install-e2e`, `delegate-workflow-e2e`) and the drift inventory's probe argv migrated. **Runtime proof:** `spur projects start` spawned a healthy serve (`running: true`, port 3014) and `self serve --gateway` proxied `/spur-new/api/health` → 200 |
+| R1 — migrate every executable caller (`packages/app/src/services/project-start.ts` spawn argv, script spawns, package scripts) | MET | `packages/app/src/services/project-start.ts` spawns `[..., 'self', 'serve', ...]`; the seam test in `packages/app/tests/services/project-start.test.ts` was red before the change and asserts `spawned[serveIndex - 1] === 'self'` now. Four e2e scripts (`a2a-serve-e2e`, `a2a-member-e2e`, `a2a-two-install-e2e`, `delegate-workflow-e2e`) and the drift inventory's probe argv migrated. **Runtime proof:** `spur projects start` spawned a healthy serve (`running: true`, port 3014) and `self serve --gateway` proxied `/spur-new/api/health` → 200 |
 | R2 — migrate user-facing strings, help summaries, plugin references, templates, READMEs and drift rows | MET | 170 files swept (`spur serve |
 | R3 — remove the five hidden registrations, the fast-path `migrate`/`status` registrations, keeping the `self` fast path | MET | `apps/cli/src/index.ts` no longer registers any of the five at the top level (normal boot) and drops both fast-path aliases; `self` retains all five. `apps/cli/tests/self-noun-only.test.ts` drives `buildProgram`: no top-level noun list entry, `self` still has all five, and `spur serve`/`spur status` are unknown commands |
 | R4 — prove `projects start` spawns a healthy serve, the gateway proxies, `spur serve` is unknown, parity suites pass; no legacy spelling in executable sources | MET | `projects start` → `running: true`; gateway index 200 + proxy 200; unknown-command test above; `cli-surface-parity` + `help-docs-parity` 25/25, `apps/cli` 1887/1887, `recommended-pre-check` 51/51; `rg` over executable sources returns only the removal test that names the old spelling on purpose |

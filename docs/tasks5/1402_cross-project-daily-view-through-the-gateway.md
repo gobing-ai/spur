@@ -4,7 +4,7 @@ name: Cross-project daily view through the gateway
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:38.013Z
-updated_at: "2026-11-18T09:57:37.268Z"
+updated_at: "2026-11-19T00:41:48.285Z"
 feature_id: K43
 priority: P2
 tags:
@@ -77,9 +77,9 @@ Test layer: e2e with fixture projects and a real gateway handler (no handler moc
 
 ### Plan
 
-- [ ] Step 1 (test first, R1-R4): an e2e with three fixture projects behind a real gateway handler: one running with events, one stopped, one running whose upstream refuses. Assert the statuses, and that the stopped project's upstream was never started. Add a unit case for a remote entry, and one for `--date yesterday --all-projects` giving a usage error.
-- [ ] Step 2: implement the builder and the flag.
-- [ ] Step 3 (R5): docs, then `bun run spur-check`.
+- [x] Step 1 (test first, R1-R4): an e2e with three fixture projects behind a real gateway handler: one running with events, one stopped, one running whose upstream refuses. Assert the statuses, and that the stopped project's upstream was never started. Add a unit case for a remote entry, and one for `--date yesterday --all-projects` giving a usage error.
+- [x] Step 2: implement the builder and the flag.
+- [x] Step 3 (R5): docs, then `bun run spur-check`.
 
 ### Solution
 
@@ -117,10 +117,10 @@ CLI's app layer with seams a test can drive.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `collectProjectsView` (`packages/app/src/services/projects-summary.ts:60`) lists registry entries via the injected `listProjects`, then for each running LOCAL project issues exactly `GET <gateway>/<prefix>/api/health` and `GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=50`, each under `PROJECTS_VIEW_TIMEOUT_MS` = 3 s (`:47`, `:120-146`). Tests: `projects-summary.test.ts` through the real gateway handler. |
+| R1 | MET | `collectProjectsView` (`packages/app/src/services/projects-summary.ts:60`) lists registry entries via the injected `listProjects`, then for each running LOCAL project issues exactly `GET <gateway>/<prefix>/api/health` and `GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=50`, each under `PROJECTS_VIEW_TIMEOUT_MS` = 3 s (`:47`, `:120-146`). Tests: `packages/app/tests/services/projects-summary.test.ts` through the real gateway handler. |
 | R2 | MET | Five states, one per row: `ok` with `eventCounts` by name prefix and the five latest events (`countByPrefix`, `toSummary`), `stopped` for `port <= 0` (never requested), `unreachable` with the cause for a failed/timed-out read, `gateway-down` for every running project when one gateway probe fails (`probeGateway`), and `remote-not-proxied` for non-local entries. Tests: 5 cases covering every state, including the 502 cause and the timeout. |
-| R3 | MET | `--all-projects` adds `projects` to `DailySummary` and a `## Projects` table plus `### Latest events` to `generateMarkdown` (printed by `--dry-run`, which prints the whole markdown); a past `--date` with the flag returns exit 2 with the reason BEFORE any collection (`daily-summary.ts`, `runDailySummary`). Tests: 4 cases in `daily-summary.test.ts` (flag parse, usage error, section render per state, absence without the flag). |
-| R4 | MET | `isLocalHost` is checked first; a remote entry becomes `{ state: 'remote-not-proxied', prefix: null }` and is never requested — asserted with an empty `ensureUpstream` log in `projects-summary.test.ts`. |
+| R3 | MET | `--all-projects` adds `projects` to `DailySummary` and a `## Projects` table plus `### Latest events` to `generateMarkdown` (printed by `--dry-run`, which prints the whole markdown); a past `--date` with the flag returns exit 2 with the reason BEFORE any collection (`packages/app/src/services/daily-summary.ts`, `runDailySummary`). Tests: 4 cases in `packages/app/tests/services/daily-summary.test.ts` (flag parse, usage error, section render per state, absence without the flag). |
+| R4 | MET | `isLocalHost` is checked first; a remote entry becomes `{ state: 'remote-not-proxied', prefix: null }` and is never requested — asserted with an empty `ensureUpstream` log in `packages/app/tests/services/projects-summary.test.ts`. |
 | R5 | MET | `plugins/sp/commands/dev-daily.md` usage line + the flag's behaviour, and `plugins/sp/skills/daily-summary/SKILL.md` (example + CLI line); `docs/design/history-cli-contracts.md` gained the state table, the two reads, the budget, the today-only rule and the known race. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |

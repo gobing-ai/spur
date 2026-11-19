@@ -4,7 +4,7 @@ name: Structured gateway log with size cap
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:27.369Z
-updated_at: "2026-11-18T08:14:28.629Z"
+updated_at: "2026-11-19T00:41:43.504Z"
 feature_id: K42
 priority: P1
 tags:
@@ -78,10 +78,10 @@ The emit points are the existing return sites: `gatewayGuard` (421 host, 403 CSR
 
 ### Plan
 
-- [ ] Step 1 (test first, R1/R3): a gateway test with a capturing `onEvent` drives a host-guard refusal, a CSRF refusal, a collision, a failing `ensureUpstream` and an unreachable upstream. Assert one event of each kind, and no header, query or token in any of them.
-- [ ] Step 2 (test first, R2): sink test on a temp dir with a small `maxBytes`. Lines stay valid JSON, rotation produces `.1`, the active file never exceeds the cap, and a failing fs never throws.
-- [ ] Step 3: implement the events and the sink, then compose the sink in `serve.ts`.
-- [ ] Step 4: update `docs/design/project-gateway.md`, run `(cd packages/app && bun test tests/services/project-gateway*.test.ts)`, then `bun run spur-check`.
+- [x] Step 1 (test first, R1/R3): a gateway test with a capturing `onEvent` drives a host-guard refusal, a CSRF refusal, a collision, a failing `ensureUpstream` and an unreachable upstream. Assert one event of each kind, and no header, query or token in any of them.
+- [x] Step 2 (test first, R2): sink test on a temp dir with a small `maxBytes`. Lines stay valid JSON, rotation produces `.1`, the active file never exceeds the cap, and a failing fs never throws.
+- [x] Step 3: implement the events and the sink, then compose the sink in `serve.ts`.
+- [x] Step 4: update `docs/design/project-gateway.md`, run `(cd packages/app && bun test tests/services/project-gateway*.test.ts)`, then `bun run spur-check`.
 
 ### Solution
 
@@ -128,7 +128,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Six kinds emitted per occurrence, each stamped with ISO `ts` in the `emit` wrapper (`packages/app/src/services/project-gateway.ts:370`): `upstream.ensure` ok at `:486` and failed+`ms` at `:489`, `upstream.restart` at `:514`, `proxy.unreachable` with name/prefix/dialed/reason at `:536`, `guard.host`/`guard.csrf` with path+status at `:575`, `route.collision` with prefix+both names at `:608`. Covered by `packages/app/tests/services/project-gateway-events.test.ts` (421, 403, 409, 502 start failure, GET retry sequence). |
+| R1 | MET | Six kinds emitted per occurrence, each stamped with ISO `ts` in the `emit` wrapper (`packages/app/src/services/project-gateway.ts:427`): `upstream.ensure` ok at `:559` and failed+`ms` at `:563`, `upstream.restart` at `:594`, `proxy.unreachable` with name/prefix/dialed/reason at `:616`, `guard.host`/`guard.csrf` with path+status at `:909`, `route.collision` with prefix+both names at `:947`. Covered by `packages/app/tests/services/project-gateway-events.test.ts` (421, 403, 409, 502 start failure, GET retry sequence). |
 | R2 | MET | `createJsonlEventSink` at `packages/app/src/services/gateway-event-log.ts:20`; default cap `GATEWAY_EVENT_LOG_MAX_BYTES` = 5 MiB at `:6`; serialized stat→rotate→append chain at `:34`; rotate to `<path>.1` before writing the crossing line; write failure reported once via `echoError` then dropped at `:50`. Covered by `packages/app/tests/services/gateway-event-log.test.ts` (append, parent mkdir, rotation, default 5 MiB cap, report-once). |
 | R3 | MET | Emit sites pass the URL `pathname` only; the leak test asserts request headers, query string and body substrings never appear in serialized events (`packages/app/tests/services/project-gateway-events.test.ts`, "never records request headers, query strings or bodies"). |
 

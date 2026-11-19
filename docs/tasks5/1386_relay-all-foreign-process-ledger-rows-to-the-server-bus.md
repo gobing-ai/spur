@@ -4,7 +4,7 @@ name: Relay all foreign-process ledger rows to the server bus
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:28.838Z
-updated_at: "2026-11-18T16:36:34.092Z"
+updated_at: "2026-11-19T00:41:54.627Z"
 feature_id: D92
 priority: P1
 tags:
@@ -79,10 +79,10 @@ registerSystemEventTap(bus, dao, logger, { …, skip: (e) => isRelayed(e) });
 
 ### Plan
 
-- [ ] Step 1 (test first, R2/R4): an events-module test with an in-memory DB inserts a foreign `workflow.run.started` row directly through `SystemEventDao`. Assert the bus emits it once. Insert one malformed row and assert the loop continues.
-- [ ] Step 2 (test first, R1/R3): emit an event on the server bus with the tap attached. Assert it is persisted once and emitted on the bus once, with no relay echo and no second ledger row. A relayed foreign row must not be re-persisted (the ledger row count stays at 1).
-- [ ] Step 3: an e2e that spawns a real `spur workflow run` child against a running test server's DB and asserts the SSE stream receives the streamed workflow event exactly once.
-- [ ] Step 4: implement the DAO wrapper, `ownIds`, the `skip` options and the relay rename. Update the comment and docs, run `(cd apps/server && bun test tests/modules/events)` plus `packages/app` tap tests, then `bun run spur-check`.
+- [x] Step 1 (test first, R2/R4): an events-module test with an in-memory DB inserts a foreign `workflow.run.started` row directly through `SystemEventDao`. Assert the bus emits it once. Insert one malformed row and assert the loop continues.
+- [x] Step 2 (test first, R1/R3): emit an event on the server bus with the tap attached. Assert it is persisted once and emitted on the bus once, with no relay echo and no second ledger row. A relayed foreign row must not be re-persisted (the ledger row count stays at 1).
+- [x] Step 3: an e2e that spawns a real `spur workflow run` child against a running test server's DB and asserts the SSE stream receives the streamed workflow event exactly once.
+- [x] Step 4: implement the DAO wrapper, `ownIds`, the `skip` options and the relay rename. Update the comment and docs, run `(cd apps/server && bun test tests/modules/events)` plus `packages/app` tap tests, then `bun run spur-check`.
 
 ### Solution
 
@@ -126,15 +126,15 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 — wrap the shared ledger DAO so every server insert registers its id in a process-local `ownIds` set exposed on `ServerContext`; no schema change | MET | `apps/server/src/context.ts:308` (accessor), `:467` (the set), `:848` (impl); `apps/server/src/serve.ts:599` (`trackOwnInserts`, exported + wired at the tap composition); test `apps/server/tests/modules/events/ledger-relay-loop.test.ts` (`trackOwnInserts` — the id is in the set at insert time, so the relay cannot race the write). No migration touched |
-| R2 — rename to `startLedgerRelay`; match every row, skip+remove `ownIds` ids, emit all others (in-server `message.*` and child `workflow.*`/`rule.*`) | MET | `apps/server/src/modules/events/index.ts:158` (`startLedgerRelay`), `:173` (`!ownIds.delete(row.id)` — one call tests and prunes); tests `index.test.ts` (`a foreign workflow row is relayed` — the old `message.*` filter is gone; `an own row is skipped and its id pruned`), `ledger-relay-loop.test.ts` (relayed foreign row emitted once) |
-| R3 — `registerSystemEventTap` and `createSystemEventCatchAllSink` accept `skip?: (event) => boolean`; the server passes a relayed-payload predicate | MET | `packages/app/src/services/system-event-tap.ts:64` + handler early-return, `packages/app/src/services/system-event-catch-all.ts:109` + sink early-return; predicate `apps/server/src/modules/events/index.ts:146` (`isRelayedPayload`) wired at both `serve.ts` call sites; test `ledger-relay-loop.test.ts` (`a relayed foreign row … not persisted a second time` — ledger stays at one row) |
-| R4 — per-row failure isolation and the boot snapshot are kept | MET | `index.ts` keeps the per-row `try/catch` around parse+emit and still starts at `latestSequence()`; test `a malformed row is skipped and the loop continues` (`{not json` then a good row: the good row still surfaces) |
-| R5 — replace the v1 scope-limit comment, the relay doc comment, and update `docs/design/observability-contracts.md` | MET | `apps/server/src/serve.ts` `runTaskActionJob` doc comment rewritten (the "child events do NOT cross back" v1 limit is gone, two guards documented), relay doc comment rewritten at `index.ts:128-145`, `docs/design/observability-contracts.md:282` new §7.9b with the four rules |
+| R2 — rename to `startLedgerRelay`; match every row, skip+remove `ownIds` ids, emit all others (in-server `message.*` and child `workflow.*`/`rule.*`) | MET | `apps/server/src/modules/events/index.ts:158` (`startLedgerRelay`), `:173` (`!ownIds.delete(row.id)` — one call tests and prunes); tests `apps/server/tests/modules/events/index.test.ts` (`a foreign workflow row is relayed` — the old `message.*` filter is gone; `an own row is skipped and its id pruned`), `apps/server/tests/modules/events/ledger-relay-loop.test.ts` (relayed foreign row emitted once) |
+| R3 — `registerSystemEventTap` and `createSystemEventCatchAllSink` accept `skip?: (event) => boolean`; the server passes a relayed-payload predicate | MET | `packages/app/src/services/system-event-tap.ts:64` + handler early-return, `packages/app/src/services/system-event-catch-all.ts:109` + sink early-return; predicate `apps/server/src/modules/events/index.ts:146` (`isRelayedPayload`) wired at both `apps/server/src/serve.ts` call sites; test `apps/server/tests/modules/events/ledger-relay-loop.test.ts` (`a relayed foreign row … not persisted a second time` — ledger stays at one row) |
+| R4 — per-row failure isolation and the boot snapshot are kept | MET | `apps/server/src/modules/events/index.ts` keeps the per-row `try/catch` around parse+emit and still starts at `latestSequence()`; test `a malformed row is skipped and the loop continues` (`{not json` then a good row: the good row still surfaces) |
+| R5 — replace the v1 scope-limit comment, the relay doc comment, and update `docs/design/observability-contracts.md` | MET | `apps/server/src/serve.ts` `runTaskActionJob` doc comment rewritten (the "child events do NOT cross back" v1 limit is gone, two guards documented), relay doc comment rewritten at `apps/server/src/modules/events/index.ts:128-145`, `docs/design/observability-contracts.md:282` new §7.9b with the four rules |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Child-process workflow events reach the live Board stream (R2, R4) | MET | test | `ledger-relay-loop.test.ts` — a **real child CLI process** (`bun apps/cli/src/index.ts workflow run <fixture>`) writes `workflow.run.started` into a file-backed ledger; the in-process relay surfaces it on the bus. Plus the module-level test proving the `workflow.*` family is no longer filtered |
-| AC2 — The server never re-emits its own rows (R1, R3, R5) | MET | test | `index.test.ts` (own row skipped, id pruned, following foreign row still relayed) + `ledger-relay-loop.test.ts` (own emit: one ledger row, one bus delivery, no echo after 200ms) |
+| AC1 — Child-process workflow events reach the live Board stream (R2, R4) | MET | test | `apps/server/tests/modules/events/ledger-relay-loop.test.ts` — a **real child CLI process** (`bun apps/cli/src/index.ts workflow run <fixture>`) writes `workflow.run.started` into a file-backed ledger; the in-process relay surfaces it on the bus. Plus the module-level test proving the `workflow.*` family is no longer filtered |
+| AC2 — The server never re-emits its own rows (R1, R3, R5) | MET | test | `apps/server/tests/modules/events/index.test.ts` (own row skipped, id pruned, following foreign row still relayed) + `apps/server/tests/modules/events/ledger-relay-loop.test.ts` (own emit: one ledger row, one bus delivery, no echo after 200ms) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Apply approved surface cuts and trim agent guidance
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:39.500Z
-updated_at: "2026-11-18T20:16:41.433Z"
+updated_at: "2026-11-19T00:52:03.219Z"
 feature_id: H85
 priority: P2
 tags:
@@ -96,9 +96,9 @@ Test layer: existing plugin parity suites and plugin-smoke over the real tree, p
 
 ### Plan
 
-- [ ] Step 1 (test first): before deleting, run `rg` for each approved name and record the reference list. This is the checklist that R1 and R2 must empty.
-- [ ] Step 2: apply deletes and merges, then the AGENTS.md and template edits.
-- [ ] Step 3: run the R4 gates and the superskill dry-run, and add the CHANGELOG lines.
+- [x] Step 1 (test first): before deleting, run `rg` for each approved name and record the reference list. This is the checklist that R1 and R2 must empty.
+- [x] Step 2: apply deletes and merges, then the AGENTS.md and template edits.
+- [x] Step 3: run the R4 gates and the superskill dry-run, and add the CHANGELOG lines.
 
 ### Solution
 

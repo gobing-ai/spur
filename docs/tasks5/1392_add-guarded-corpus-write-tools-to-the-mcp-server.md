@@ -4,7 +4,7 @@ name: Add guarded corpus write tools to the MCP server
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:33.330Z
-updated_at: "2026-11-18T19:50:28.173Z"
+updated_at: "2026-11-19T00:51:59.504Z"
 feature_id: B92
 priority: P2
 tags:
@@ -106,14 +106,14 @@ Plus one option in `packages/app/src/services/rule-service.ts` (`emit`).
 
 ### Plan
 
-- [ ] Step 1 (test first, R4/R5): in `mcp-e2e.test.ts`, add:
+- [x] Step 1 (test first, R4/R5): in `mcp-e2e.test.ts`, add:
   - a done-without-verdict parity case running MCP and the CLI against the same fixture tree, comparing code, message and file bytes;
   - a `--no-lifecycle` structural-gate parity case;
   - schema-refusal cases for `status`, `file`, `fixMode: auto` and `forceDone`.
-- [ ] Step 2 (test first, R3): a unit test showing `evaluate({ emit: false })` writes nothing and returns the same result.
-- [ ] Step 3 (R1/R2/R3): implement `emit`, then the descriptors and dispatcher cases.
-- [ ] Step 4 (R6/R7): extend the gateway built-in list if 1383 has landed, and update §4.
-- [ ] Step 5: `(cd apps/server && bun test tests/mcp-e2e.test.ts tests/modules/mcp-module.test.ts)`, `(cd packages/app && bun test tests/services/rule-service.test.ts)`, `bun run spur-check`.
+- [x] Step 2 (test first, R3): a unit test showing `evaluate({ emit: false })` writes nothing and returns the same result.
+- [x] Step 3 (R1/R2/R3): implement `emit`, then the descriptors and dispatcher cases.
+- [x] Step 4 (R6/R7): extend the gateway built-in list if 1383 has landed, and update §4.
+- [x] Step 5: `(cd apps/server && bun test tests/mcp-e2e.test.ts tests/modules/mcp-module.test.ts)`, `(cd packages/app && bun test tests/services/rule-service.test.ts)`, `bun run spur-check`.
 
 ### Solution
 

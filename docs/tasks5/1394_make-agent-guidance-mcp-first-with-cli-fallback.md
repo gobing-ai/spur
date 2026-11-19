@@ -4,7 +4,7 @@ name: Make agent guidance MCP-first with CLI fallback
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:33.333Z
-updated_at: "2026-11-18T20:02:17.919Z"
+updated_at: "2026-11-19T00:52:02.306Z"
 feature_id: B92
 priority: P2
 tags:
@@ -74,10 +74,10 @@ Test layer: plugin parity suites over the real files.
 
 ### Plan
 
-- [ ] Step 1 (test first, R4): write `mcp-tool-map-parity.test.ts`. It fails until the map exists.
-- [ ] Step 2 (R1): write `mcp-tools.md`.
-- [ ] Step 3 (R2/R3): insert the rules and template rows.
-- [ ] Step 4 (R5): `(cd plugins/sp && bun test tests/mcp-tool-map-parity.test.ts tests/cli-surface-parity.test.ts tests/help-docs-parity.test.ts tests/bootstrap-budget.test.ts)`, `bun run plugin-smoke`, `bun run spur-check`.
+- [x] Step 1 (test first, R4): write `mcp-tool-map-parity.test.ts`. It fails until the map exists.
+- [x] Step 2 (R1): write `mcp-tools.md`.
+- [x] Step 3 (R2/R3): insert the rules and template rows.
+- [x] Step 4 (R5): `(cd plugins/sp && bun test tests/mcp-tool-map-parity.test.ts tests/cli-surface-parity.test.ts tests/help-docs-parity.test.ts tests/bootstrap-budget.test.ts)`, `bun run plugin-smoke`, `bun run spur-check`.
 
 ### Solution
 

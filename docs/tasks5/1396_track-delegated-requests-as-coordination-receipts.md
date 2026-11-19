@@ -4,7 +4,7 @@ name: Track delegated requests as coordination receipts
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:34.908Z
-updated_at: "2026-11-18T09:07:46.684Z"
+updated_at: "2026-11-19T00:41:46.726Z"
 feature_id: G91
 priority: P2
 tags:
@@ -70,10 +70,10 @@ Test layer: transport unit tests on the golden fixtures, plus the two-project ga
 
 ### Plan
 
-- [ ] Step 1 (test first, R1/R3): unit tests on `refresh` with the golden `task get` fixtures already used by the transport parser. Cover completed, failed, still-working, terminal no-op and target down.
-- [ ] Step 2 (test first, R2/R4): extend the 1395 two-project e2e. Dispatch with a short `timeoutMs` so the row ends `outcome-unknown`, let the target complete, then check that `spur agent trace <runId> --json` shows `completed` with `remoteTaskId`. Assert that no second send happened.
-- [ ] Step 3: implement.
-- [ ] Step 4: update the design note, then `bun run spur-check`.
+- [x] Step 1 (test first, R1/R3): unit tests on `refresh` with the golden `task get` fixtures already used by the transport parser. Cover completed, failed, still-working, terminal no-op and target down.
+- [x] Step 2 (test first, R2/R4): extend the 1395 two-project e2e. Dispatch with a short `timeoutMs` so the row ends `outcome-unknown`, let the target complete, then check that `spur agent trace <runId> --json` shows `completed` with `remoteTaskId`. Assert that no second send happened.
+- [x] Step 3: implement.
+- [x] Step 4: update the design note, then `bun run spur-check`.
 
 ### Solution
 
@@ -113,13 +113,13 @@ that is where the receipt is completed.
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `A2aMemberTransport.refresh(runId)` (`packages/app/src/services/a2a-member-transport.ts:381`) reads the row, returns it unchanged when terminal or without a remote task id (no CLI call), and otherwise performs exactly one `get` applying `a2aTaskToReceipt`: completed → `updateExit('exited')` with artifact refs carrying `remoteBranch`, failed → `errored`, still working → unchanged. It never sends. Tests: `packages/app/tests/services/a2a-refresh.test.ts` (8) — one-get-zero-send, completed, failed, terminal no-op, no-remote-task-id, unknown run, target down, unset credential. |
-| R2 | MET | `AgentTraceService.trace` attaches `delegated()` (`agent-trace-service.ts:152`) which calls the injected `refresh` once for a delegated non-terminal row; `--follow` goes through `trace()` per poll, so it refreshes each tick. `TraceNode` carries `member`/`remoteTaskId`/`remoteContextId`/`remoteBranch`/`remoteState`/`refreshError` (`:22-31`), rendered in text as `remote=<member>/<task> <state> branch=<branch>` and in `--json` through the tree (`apps/cli/src/commands/agent/trace.ts:53`). Tests: `agent-trace-service.test.ts` (+5), `apps/cli/tests/commands/agent/trace.test.ts` (+2). |
-| R3 | MET | A refresh failure (or a member/credential that cannot resolve, or a throwing refresh) returns the row unchanged with `refreshError`, and `delegated()` catches a throw into the same field, so the trace still renders. Tests: `a2a-refresh.test.ts` target-down and unset-credential; `agent-trace-service.test.ts` error + throwing; CLI test asserts the human line carries `refresh-error=` and `--json` carries `refreshError`. |
-| R4 | MET | Regression, not new work: a stored remote task id suppresses re-send (`a2a-member-transport.ts:487-495`), pinned by "a transport error after a task id exists is outcome-unknown, never a re-send", and `CoordinationRunDao.reapOrphanedRunning` filters `remote_task_id IS NULL` (`packages/domain/src/dao/coordination-run-dao.ts:251`), so a delegated row is never reaped. |
+| R2 | MET | `AgentTraceService.trace` attaches `delegated()` (`packages/app/src/services/agent-trace-service.ts:152`) which calls the injected `refresh` once for a delegated non-terminal row; `--follow` goes through `trace()` per poll, so it refreshes each tick. `TraceNode` carries `member`/`remoteTaskId`/`remoteContextId`/`remoteBranch`/`remoteState`/`refreshError` (`:22-31`), rendered in text as `remote=<member>/<task> <state> branch=<branch>` and in `--json` through the tree (`apps/cli/src/commands/agent/trace.ts:53`). Tests: `packages/app/tests/services/agent-trace-service.test.ts` (+5), `apps/cli/tests/commands/agent/trace.test.ts` (+2). |
+| R3 | MET | A refresh failure (or a member/credential that cannot resolve, or a throwing refresh) returns the row unchanged with `refreshError`, and `delegated()` catches a throw into the same field, so the trace still renders. Tests: `packages/app/tests/services/a2a-refresh.test.ts` target-down and unset-credential; `packages/app/tests/services/agent-trace-service.test.ts` error + throwing; CLI test asserts the human line carries `refresh-error=` and `--json` carries `refreshError`. |
+| R4 | MET | Regression, not new work: a stored remote task id suppresses re-send (`packages/app/src/services/a2a-member-transport.ts:487-495`), pinned by "a transport error after a task id exists is outcome-unknown, never a re-send", and `CoordinationRunDao.reapOrphanedRunning` filters `remote_task_id IS NULL` (`packages/domain/src/dao/coordination-run-dao.ts:251`), so a delegated row is never reaped. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Delegated work tracked to terminal: transport-level receipt transitions (`a2a-refresh.test.ts`, 8 tests) plus the trace-level render/refresh contract (5+2 tests), all on real DAO rows in a migrated in-memory DB. |
+| AC1 | MET | test | Delegated work tracked to terminal: transport-level receipt transitions (`packages/app/tests/services/a2a-refresh.test.ts`, 8 tests) plus the trace-level render/refresh contract (5+2 tests), all on real DAO rows in a migrated in-memory DB. |
 | AC1 | MET | command | `(cd packages/app && bun test tests/services/{a2a-refresh,agent-trace-service,a2a-member-transport}.test.ts)` → 41 pass / 0 fail; `(cd apps/cli && bun test tests/commands/agent/)` → 186 pass / 0 fail; `bun run a2a-two-install-e2e` → 9/9; pipeline light gate PASS (`.spur/run/1396-gate.log`). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

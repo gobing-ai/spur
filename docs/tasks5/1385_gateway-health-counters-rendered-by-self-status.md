@@ -4,7 +4,7 @@ name: Gateway health counters rendered by self status
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:27.372Z
-updated_at: "2026-11-18T08:21:38.007Z"
+updated_at: "2026-11-19T00:41:45.003Z"
 feature_id: K42
 priority: P1
 tags:
@@ -65,10 +65,10 @@ Test layer: the real gateway handler plus `collectSelfStatus` with an injected f
 
 ### Plan
 
-- [ ] Step 1 (test first, R1/R2): drive a real handler through 200, 404, 421 and 502 responses plus one restart, then assert the `/api/health` counters and that the existing fields are unchanged.
-- [ ] Step 2 (test first, R3): a self-status test with an injected `fetchImpl` covering the gateway, free-port and foreign-listener cases, plus a text-render snapshot of the counters line.
-- [ ] Step 3: implement the counters, the health field and the self-status section and renderer.
-- [ ] Step 4: update `cli-contracts.md` and `project-gateway.md`, run the focused tests in `packages/app` and `apps/cli`, then `bun run spur-check`.
+- [x] Step 1 (test first, R1/R2): drive a real handler through 200, 404, 421 and 502 responses plus one restart, then assert the `/api/health` counters and that the existing fields are unchanged.
+- [x] Step 2 (test first, R3): a self-status test with an injected `fetchImpl` covering the gateway, free-port and foreign-listener cases, plus a text-render snapshot of the counters line.
+- [x] Step 3: implement the counters, the health field and the self-status section and renderer.
+- [x] Step 4: update `cli-contracts.md` and `project-gateway.md`, run the focused tests in `packages/app` and `apps/cli`, then `bun run spur-check`.
 
 ### Solution
 
@@ -105,9 +105,9 @@ never fails when no gateway runs.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `counters` is created once per handler with `since`, `requests`, `status4xx`, `status5xx`, `upstreamRestarts` (`packages/app/src/services/project-gateway.ts:381`); the returned wrapper counts every final `Response` — 5xx checked before 4xx — so guard refusals and 502s are counted (`:617`); the single restart branch increments `upstreamRestarts[prefix]` (`:521`). Tests: `packages/app/tests/services/project-gateway-counters.test.ts` — buckets for 200/404/502, a 421 in the 4xx bucket, restarts keyed by prefix across two retry rounds, a fresh handler back at zero. |
-| R2 | MET | `health()` spreads `counters` (deep copy of `upstreamRestarts`) next to the unchanged `ok`/`gateway`/`port`/`projects` fields (`project-gateway.ts:414`). `isGatewayAnswering`/`probeGatewayPort` read only `gateway` (`:92-130`). Test: `project-gateway.test.ts` "answers the gateway index and /api/health at the root" now asserts the same four fields plus additive counters; `project-gateway-counters.test.ts` re-asserts the four legacy fields verbatim. |
-| R3 | MET | New machine-scoped `gateway` section in `SelfStatusSections` and the section map (`packages/app/src/services/self-status.ts:62`, `:471`), probed by `probeGateway` under the shared `bounded` deadline (`:261`): `ready` with `data.counters` when the body says `gateway: true`, `not-applicable` when nothing listens, `degraded` naming the port for a foreign listener. Text mode prints one line via `gatewayCountersLine` (`apps/cli/src/commands/status.ts:97`) only when counters exist. Tests: `packages/app/tests/services/self-status-gateway.test.ts` (4 cases), `apps/cli/tests/commands/status-gateway.test.ts` (3 cases). |
+| R1 | MET | `counters` is created once per handler with `since`, `requests`, `status4xx`, `status5xx`, `upstreamRestarts` (`packages/app/src/services/project-gateway.ts:437`); the returned wrapper counts every final `Response` — 5xx checked before 4xx — so guard refusals and 502s are counted (`:963-966`); the single restart branch increments `upstreamRestarts[prefix]` (`:593`). Tests: `packages/app/tests/services/project-gateway-counters.test.ts` — buckets for 200/404/502, a 421 in the 4xx bucket, restarts keyed by prefix across two retry rounds, a fresh handler back at zero. |
+| R2 | MET | `health()` spreads `counters` (deep copy of `upstreamRestarts`) next to the unchanged `ok`/`gateway`/`port`/`projects` fields (`packages/app/src/services/project-gateway.ts:488`). `isGatewayAnswering`/`probeGatewayPort` read only `gateway` (`:145`, `:166`). Test: `packages/app/tests/services/project-gateway.test.ts` "answers the gateway index and /api/health at the root" now asserts the same four fields plus additive counters; `packages/app/tests/services/project-gateway-counters.test.ts` re-asserts the four legacy fields verbatim. |
+| R3 | MET | New machine-scoped `gateway` section in `SelfStatusSections` and the section map (`packages/app/src/services/self-status.ts:62`, `:501`), probed by `probeGateway` under the shared `bounded` deadline (`:261`, `:437`): `ready` with `data.counters` when the body says `gateway: true`, `not-applicable` when nothing listens, `degraded` naming the port for a foreign listener. Text mode prints one line via `gatewayCountersLine` (`apps/cli/src/commands/self/status.ts:109`) only when counters exist. Tests: `packages/app/tests/services/self-status-gateway.test.ts` (4 cases), `apps/cli/tests/commands/status-gateway.test.ts` (3 cases). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|

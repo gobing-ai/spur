@@ -4,7 +4,7 @@ name: Produce the per-agent MCP adoption matrix
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:33.333Z
-updated_at: "2026-11-18T19:56:22.137Z"
+updated_at: "2026-11-19T00:52:00.447Z"
 feature_id: B92
 priority: P2
 tags:
@@ -74,10 +74,10 @@ Test layer: document review against cited sources, plus local `server/discover` 
 
 ### Plan
 
-- [ ] Step 1 (R1): for each agent, read its official MCP docs and changelog (via `sp:source-driven-development`) and fill the row with URLs.
-- [ ] Step 2 (R4): run a `server/discover` round-trip for the agents installed locally.
-- [ ] Step 3 (R2/R3): derive the verdicts, write the satellite and add the 04 index row.
-- [ ] Step 4: run `sp:doc-evolve`'s contract check on the new satellite.
+- [x] Step 1 (R1): for each agent, read its official MCP docs and changelog (via `sp:source-driven-development`) and fill the row with URLs.
+- [x] Step 2 (R4): run a `server/discover` round-trip for the agents installed locally.
+- [x] Step 3 (R2/R3): derive the verdicts, write the satellite and add the 04 index row.
+- [x] Step 4: run `sp:doc-evolve`'s contract check on the new satellite.
 
 ### Solution
 

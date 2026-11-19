@@ -4,7 +4,7 @@ name: Aggregate tools and route calls across projects
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:25.889Z
-updated_at: "2026-11-18T22:35:56.121Z"
+updated_at: "2026-11-19T00:51:58.580Z"
 feature_id: K41
 priority: P1
 tags:
@@ -78,10 +78,10 @@ interface RouteEntry { entry: ProjectEntry; prefix: string; namespace: string | 
 
 ### Plan
 
-- [ ] Step 1 (test first, R1–R3): build an e2e with two fixture projects with distinct manifest namespaces, each exposing one workflow, behind a real gateway. Assert the merged `tools/list` (built-ins once, with a required `project`), a `sp_task_show` call routed by `project`, and a workflow-tool call that starts the stopped project, with the result returned unchanged.
-- [ ] Step 2 (R2/R5): add a third fixture that shares a namespace (collision diagnostics and refusal), plus unknown-`project`, missing-token and upstream-401 cases.
-- [ ] Step 3: implement the registry inside the handler closure and the adapter/token deps in `startGateway`.
-- [ ] Step 4: run the gateway and mcp e2e tests (`(cd apps/server && bun test tests/mcp-e2e.test.ts)` plus the new gateway e2e), then `bun run spur-check`.
+- [x] Step 1 (test first, R1–R3): build an e2e with two fixture projects with distinct manifest namespaces, each exposing one workflow, behind a real gateway. Assert the merged `tools/list` (built-ins once, with a required `project`), a `sp_task_show` call routed by `project`, and a workflow-tool call that starts the stopped project, with the result returned unchanged.
+- [x] Step 2 (R2/R5): add a third fixture that shares a namespace (collision diagnostics and refusal), plus unknown-`project`, missing-token and upstream-401 cases.
+- [x] Step 3: implement the registry inside the handler closure and the adapter/token deps in `startGateway`.
+- [x] Step 4: run the gateway and mcp e2e tests (`(cd apps/server && bun test tests/mcp-e2e.test.ts)` plus the new gateway e2e), then `bun run spur-check`.
 
 ### Solution
 

@@ -4,7 +4,7 @@ name: Wire one gateway MCP entry per supported agent at install
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:38.011Z
-updated_at: "2026-11-18T20:14:43.057Z"
+updated_at: "2026-11-19T00:52:01.386Z"
 feature_id: K43
 priority: P2
 tags:
@@ -80,10 +80,10 @@ Test layer: real gateway listener for the bridge, plus a superskill dry-run agai
 
 ### Plan
 
-- [ ] Step 1 (test first, R1): bridge tests against a real gateway listener with `server.gateway.mcp` enabled. Cover the round-trip `tools/list`, disabled, unset variable, gateway down, and `--gateway` with `--url`.
-- [ ] Step 2: implement `--gateway`.
-- [ ] Step 3 (R2/R3): add `plugins/sp/mcp.json`, run `HOME=<fixture> superskill install sp --dry-run` twice, and save the output under `docs/tasks5/artifacts/1401/`. If a target that is MCP-capable per 1393 lacks the entry, file the gap upstream with superskill. Don't add a Spur workaround.
-- [ ] Step 4 (R4): docs. Run `bun run plugin-smoke`, then `bun run spur-check`.
+- [x] Step 1 (test first, R1): bridge tests against a real gateway listener with `server.gateway.mcp` enabled. Cover the round-trip `tools/list`, disabled, unset variable, gateway down, and `--gateway` with `--url`.
+- [x] Step 2: implement `--gateway`.
+- [x] Step 3 (R2/R3): add `plugins/sp/mcp.json`, run `HOME=<fixture> superskill install sp --dry-run` twice, and save the output under `docs/tasks5/artifacts/1401/`. If a target that is MCP-capable per 1393 lacks the entry, file the gap upstream with superskill. Don't add a Spur workaround.
+- [x] Step 4 (R4): docs. Run `bun run plugin-smoke`, then `bun run spur-check`.
 
 ### Solution
 

@@ -4,7 +4,7 @@ name: Gateway MCP config, bearer guard and discover
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:25.886Z
-updated_at: "2026-11-18T22:35:55.511Z"
+updated_at: "2026-11-19T00:51:57.591Z"
 feature_id: K41
 priority: P1
 tags:
@@ -79,11 +79,11 @@ In the handler, a route branch before prefix matching sends `url.pathname === '/
 
 ### Plan
 
-- [ ] Step 1 (test first, R2/R3): in a gateway e2e built like `apps/server/tests/mcp-e2e.test.ts` (real `startGateway`), assert 401 + realm, 500 when unset, 404 when disabled, and discover listing a local fixture project with its namespace and a remote entry in diagnostics.
-- [ ] Step 2 (R1): add the config schema, env mapping and a config load-failure test.
-- [ ] Step 3 (R4): reserve `mcp`, with a `resolveProjectPrefix` test, and add the guard exemption, with a `gatewayGuard` test.
-- [ ] Step 4 (R2/R3): add the injection seam, the composition in `startGateway` and the stub registry.
-- [ ] Step 5: update `docs/design/project-gateway.md`, then run the focused tests in `packages/config`, `packages/app` and `apps/server`, then `bun run spur-check`.
+- [x] Step 1 (test first, R2/R3): in a gateway e2e built like `apps/server/tests/mcp-e2e.test.ts` (real `startGateway`), assert 401 + realm, 500 when unset, 404 when disabled, and discover listing a local fixture project with its namespace and a remote entry in diagnostics.
+- [x] Step 2 (R1): add the config schema, env mapping and a config load-failure test.
+- [x] Step 3 (R4): reserve `mcp`, with a `resolveProjectPrefix` test, and add the guard exemption, with a `gatewayGuard` test.
+- [x] Step 4 (R2/R3): add the injection seam, the composition in `startGateway` and the stub registry.
+- [x] Step 5: update `docs/design/project-gateway.md`, then run the focused tests in `packages/config`, `packages/app` and `apps/server`, then `bun run spur-check`.
 
 ### Solution
 

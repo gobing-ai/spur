@@ -4,7 +4,7 @@ name: Resolve cross-project member addresses through the gateway
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:34.906Z
-updated_at: "2026-11-18T08:56:23.225Z"
+updated_at: "2026-11-19T00:41:45.852Z"
 feature_id: G91
 priority: P2
 tags:
@@ -86,16 +86,16 @@ Resolution produces a card URL and then follows the existing A2A path unchanged:
 
 ### Plan
 
-- [ ] Step 1 (test first, R1-R4): an e2e using two fixture projects registered behind a real gateway handler, with the target running A2A. A sender member `{project, member}` dispatches. Assert:
+- [x] Step 1 (test first, R1-R4): an e2e using two fixture projects registered behind a real gateway handler, with the target running A2A. A sender member `{project, member}` dispatches. Assert:
   - the card's interface URL is the gateway prefix URL;
   - the target inbox receives a `request` row;
   - the sender receipt stores `remote_task_id`.
   Add negative cases for an unknown project, a remote entry, and a missing `authEnv`.
-- [ ] Step 2 (R1): schema change and its config tests.
-- [ ] Step 3 (R2/R5): resolution and doctor.
-- [ ] Step 4 (R3/R4): gateway headers and card origin.
-- [ ] Step 5 (R6): update the design satellite.
-- [ ] Step 6: run the focused `packages/config`, `packages/app` and `apps/server` tests, `bun run a2a-two-install-e2e` (regression), then `bun run spur-check`.
+- [x] Step 2 (R1): schema change and its config tests.
+- [x] Step 3 (R2/R5): resolution and doctor.
+- [x] Step 4 (R3/R4): gateway headers and card origin.
+- [x] Step 5 (R6): update the design satellite.
+- [x] Step 6: run the focused `packages/config`, `packages/app` and `apps/server` tests, `bun run a2a-two-install-e2e` (regression), then `bun run spur-check`.
 
 ### Solution
 
@@ -144,11 +144,11 @@ only affect the advertised URL (the upstream binds loopback, and auth still come
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `project` and `member` on `FleetMemberSchema` (`packages/config/src/index.ts:589`, `:591`); item-level rules reject `project`×`a2a`, `project`×`executor`, `member` without `project`, `project` without `member`/`authEnv`, and count `project` toward the one-target rule (`:639-682`). Tests: `packages/config/tests/fleet-member-project.test.ts` (5). |
-| R2 | MET | `resolveProjectCardTarget` (`packages/app/src/services/a2a-member-address.ts:34`) resolves name or prefix → `http://localhost:<gatewayPort><prefix>/a2a/members/<registryName>-<member>/.well-known/agent-card.json`, refusing unknown (`:47`), remote (`:53`, ADR-151), ambiguous (`:58`), a non-answering gateway and a foreign listener (`probeGateway`, `:85`); `createProjectCardRefResolver`/`envProjectCardRefResolver` (`:113`, `:129`) adapt it for the transport, which resolves once per turn into a `{...member, a2a}` view (`a2a-member-transport.ts:344`) — never cached. Tests: `a2a-member-address.test.ts` (10), `a2a-member-transport.test.ts` (project-addressed turn). |
-| R3 | MET | `proxy` computes the dialed authority and passes `{prefix, host}` into `upstreamRequestHeaders` (`project-gateway.ts:218-221`), which strips any inbound copy first and sets `x-forwarded-host`/`x-forwarded-prefix` while keeping `host` as the loopback authority. Tests: `project-gateway-forwarded.test.ts` (3). |
+| R1 | MET | `project` and `member` on `FleetMemberSchema` (`packages/config/src/index.ts:552`, `:554`); item-level rules reject `project`×`a2a`, `project`×`executor`, `member` without `project`, `project` without `member`/`authEnv`, and count `project` toward the one-target rule (`:602-645`). Tests: `packages/config/tests/fleet-member-project.test.ts` (5). |
+| R2 | MET | `resolveProjectCardTarget` (`packages/app/src/services/a2a-member-address.ts:34`) resolves name or prefix → `http://localhost:<gatewayPort><prefix>/a2a/members/<registryName>-<member>/.well-known/agent-card.json`, refusing unknown (`:47`), remote (`:53`, ADR-151), ambiguous (`:58`), a non-answering gateway and a foreign listener (`probeGateway`, `:85`); `createProjectCardRefResolver`/`envProjectCardRefResolver` (`:113`, `:129`) adapt it for the transport, which resolves once per turn into a `{...member, a2a}` view (`packages/app/src/services/a2a-member-transport.ts:344`) — never cached. Tests: `packages/app/tests/services/a2a-member-address.test.ts` (10), `packages/app/tests/services/a2a-member-transport.test.ts` (project-addressed turn). |
+| R3 | MET | `proxy` computes the dialed authority and passes `{prefix, host}` into `upstreamRequestHeaders` (`packages/app/src/services/project-gateway.ts:307-310`), which strips any inbound copy first and sets `x-forwarded-host`/`x-forwarded-prefix` while keeping `host` as the loopback authority. Tests: `packages/app/tests/services/project-gateway-forwarded.test.ts` (3). |
 | R4 | MET | `cardOrigin(forwarded, fallback)` (`apps/server/src/modules/a2a/projection.ts:70`) returns `http://<x-forwarded-host><x-forwarded-prefix>` only when both are non-empty, else the previous `new URL(c.req.url).origin`; the card route passes both headers (`apps/server/src/modules/a2a/index.ts:234`). Tests: `apps/server/tests/modules/a2a/routes.test.ts` — both headers, each missing, empty prefix. |
-| R5 | MET | `memberDeliveryRows` (`apps/cli/src/commands/agent/shared.ts:625-643`) resolves the project member's card URL per row and prints `card <url>; <binary>; <card reachability>` beside the rung, or `card unresolved (<actionable message>)`; all three transports in the CLI and the workflow engine now carry the resolver. Static-ref: `shared.ts:559` (`projectCardRefs`), `workflow-engine-factory.ts:213`. |
+| R5 | MET | `memberDeliveryRows` (`apps/cli/src/commands/agent/shared.ts:625-643`) resolves the project member's card URL per row and prints `card <url>; <binary>; <card reachability>` beside the rung, or `card unresolved (<actionable message>)`; all three transports in the CLI and the workflow engine now carry the resolver. Static-ref: `apps/cli/src/commands/agent/shared.ts:559` (`projectCardRefs`), `packages/app/src/services/workflow-engine-factory.ts:213`. |
 | R6 | MET | `docs/design/a2a-member-transport.md` §4.1 (new keys, resolution rule, mutual exclusion) and §3.5 (card origin + forwarded-identity row) updated in this change. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
