@@ -1080,23 +1080,18 @@ describe('main entrypoint (in-process)', () => {
         expect(output).toContain('Commits:');
     });
 
-    /**
-     * Load-flake budget (cross-cutting.md § Isolation rerun for load-flakes): this case runs the CLI entrypoint in-process; it timed out at 20s in two consecutive worktree gate runs (2026-10-13), green alone.
-     */
-    const loadFlakeTest = (name: string, fn: () => Promise<void> | void): void => void test(name, fn, 60_000);
-
-    loadFlakeTest('a generation failure is reported on the error sink and returns 1', async () => {
+    test('a generation failure is reported on the error sink and returns 1', async () => {
         const today = todayLocal();
-        // Force an error: chdir to a directory we then remove so the write fails.
-        const badDir = mkdtempSync(join(tmpdir(), 'daily-summary-bad-'));
-        process.chdir(badDir);
-        rmSync(badDir, { recursive: true, force: true });
-        try {
-            expect(await main(['--date', today, '--no-ccusage', '--no-git'], sink)).toBe(1);
-            expect(captured.err.join('\n')).toContain('Failed to generate summary');
-        } finally {
-            process.chdir(tmpRepo);
-        }
+        // Force the write to fail: the output's parent is a regular file. This used to chdir into a
+        // removed directory, which broke process.cwd() for the whole test process (timed out at 20s
+        // and 60s in loaded gate runs, green alone) and failed before the write it meant to test.
+        const blocker = join(tmpRepo, 'not-a-dir');
+        writeFileSync(blocker, '');
+        expect(
+            await main(['--date', today, '--no-ccusage', '--no-git', '--output', join(blocker, 'summary.md')], sink),
+        ).toBe(1);
+        expect(captured.err.join('\n')).toContain('Failed to generate summary');
+        expect(captured.err.join('\n')).toMatch(/ENOTDIR|EEXIST/);
     });
 
     test('--help prints usage through the sink and returns 0', async () => {

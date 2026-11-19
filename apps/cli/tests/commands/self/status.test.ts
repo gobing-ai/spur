@@ -332,14 +332,14 @@ describe('spur self status — aggregate deadline', () => {
                 fx.env.SPUR_PROJECTS_FILE as string,
                 `${JSON.stringify({ schema_version: 1, projects: [{ name: 'fixture', path: fx.cwd, port: silent.port }] })}\n`,
             );
-            const startedAt = Date.now();
             const result = await runCli(['self', 'status', '--json'], fx.cwd, fx.env);
-            const elapsed = Date.now() - startedAt;
-            // 5000ms aggregate budget + process start/teardown margin; a missing deadline would hang.
-            expect(elapsed).toBeLessThan(9_000);
+            // Prove the deadline fired from its own report, not a wall-clock budget: a <9s ceiling also
+            // counted the CLI process spawn and failed at 10066ms on a loaded host (load 22, 10 cores).
+            // A missing deadline still hangs and trips the 20s test timeout below.
             expect(result.code).toBe(0);
             const json = result.json as SelfStatusJson;
-            expect(['degraded', 'unavailable']).toContain(json.sections.projects?.state ?? '');
+            expect(json.sections.projects?.state).toBe('unavailable');
+            expect(json.sections.projects?.message).toBe('project readiness exceeded the collection deadline');
             expect(json.sections.configuration?.state).toBe('ready');
         } finally {
             silent.stop(true);

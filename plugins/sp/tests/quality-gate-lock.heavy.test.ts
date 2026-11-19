@@ -300,22 +300,22 @@ describe('quality-gate host-wide lock (task 1127, restored by D65 1235)', () => 
             const holder = taskRepo('spur-lock-ac6l-h-');
             const lightTask = taskRepo('spur-lock-ac6l-l-');
             const statusTask = taskRepo('spur-lock-ac6l-s-');
-            const holderChild = spawnGate(holder, lockDir, { wbs: '1127h', cmd: TIMED_GATE_CMD });
+            // A long holder makes the proof an ordering, not a wall-clock budget: a tier that waited on
+            // the claim could only finish after the holder exits. A fixed <2s budget also counted two
+            // process spawns and failed on a loaded host (2082ms at load 28 on 10 cores).
+            const holderChild = spawnGate(holder, lockDir, { wbs: '1127h', cmd: 'sleep 15' });
+            let holderExited = false;
+            void holderChild.code.then(() => {
+                holderExited = true;
+            });
             await new Promise((resolve) => setTimeout(resolve, 1000)); // let the holder take the lock
 
-            const timed = async (spec: GateSpec, task: string): Promise<{ code: number; wall: number }> => {
-                const started = Date.now();
-                const code = await spawnGate(task, lockDir, spec).code;
-                return { code, wall: Date.now() - started };
-            };
-            const light = await timed({ wbs: '1127l', mode: 'light' }, lightTask);
-            const status = await timed({ wbs: '1127x', mode: 'status' }, statusTask);
-            // The holder's gate sleeps 3s from ~1s before these started: finishing under 2s proves
-            // neither tier ever waited on the holder's claim (R4/probe scope).
-            expect(light.code).toBe(0);
-            expect(light.wall).toBeLessThan(2000);
-            expect(status.code).toBe(0);
-            expect(status.wall).toBeLessThan(2000);
+            const light = await spawnGate(lightTask, lockDir, { wbs: '1127l', mode: 'light' }).code;
+            const status = await spawnGate(statusTask, lockDir, { wbs: '1127x', mode: 'status' }).code;
+            expect(light).toBe(0);
+            expect(status).toBe(0);
+            // Both tiers finished while the holder still held the claim (R4/probe scope).
+            expect(holderExited).toBe(false);
             expect(gateLog(lightTask, '1127l')).not.toContain('waiting for holder');
             expect(gateLog(statusTask, '1127x')).not.toContain('waiting for holder');
             expect(await holderChild.code).toBe(0);
