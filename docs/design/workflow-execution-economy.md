@@ -184,6 +184,12 @@ cross-scope model rework those failures trigger (`resolve-scope` 43%, `doc-sync`
 The feature-scoped pass is deliberately the slow one, run once per feature (invoked at
 `verifying` entry), and a feature is not done until it passes.
 
+"Once per feature" means once per settled tree, not once per feature id: the pass command takes no
+feature input and its tree digest excludes the corpus, so a PASS over tree T with the same command
+and verifier is reused by every feature (and every re-entry of `verifying`) on T instead of
+re-running ~10 min of identical work. Closing 8 features on one tree took 1 h 50 m before reuse
+(each ran the pass, and `sync` from `active` ran it again); reuse makes that one pass.
+
 ### 4.1 Per-check classification (task 0872)
 
 The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qualityGateCmd`). Task
@@ -338,7 +344,10 @@ schema `feature-verification-receipt/v1`):
 Receipt fields: `schemaVersion`, `featureId`, `runId`, `workdir` (diagnostic; the
 digest is path-relative), `verifier` (`name`, `sourcePath`, `layer`, `definitionDigest`),
 `verificationCmd`, `status` (`PASS`/`FAIL`/`RUNNING`), `startedAt`, `completedAt`
-(null while `RUNNING`), `inputDigest` — the proof-input fingerprint (feature
+(null while `RUNNING`), optional `treeDigest` (tree + learnings without the feature spec; the
+reuse key — absent on `--cmd` overrides and legacy receipts, which are never reused), optional
+`reusedFromRunId` (this PASS was certified from that run's PASS on the same tree, nothing launched),
+`inputDigest` — the proof-input fingerprint (feature
 markdown + git tree of tracked sources, shared `ProofInputFingerprint` engine)
 captured at completion, i.e. the tree *after* the pass; completion re-checks it
 against current inputs. The script additionally captures a before digest around

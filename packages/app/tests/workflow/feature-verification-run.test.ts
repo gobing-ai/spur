@@ -14,6 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RunDao } from '@gobing-ai/spur-domain';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { openInlineRunProjectDb } from '../../src/services/inline-run-attribution';
 import {
     completeFeatureVerificationReceipt,
@@ -255,5 +256,159 @@ describe('runFeatureVerification — receipt lifecycle (task 1176 R2)', () => {
         expect(spec?.path).toContain('A91_');
         expect(spec?.content).toContain('# A91');
         expect(await lookup('ZZ')).toBeNull();
+    });
+});
+
+/**
+ * Tree-keyed reuse. The pass is one repo-wide command whose inputs are the checked tree (corpus
+ * excluded) plus learnings — never the feature id. Closing N features on one tree used to re-run the
+ * same ~10 min suite N times, and `sync` from `active` re-ran it again right after `verify`.
+ * Ways reuse could go wrong, each pinned below: reusing across a changed tree, reusing a FAIL or a
+ * pass still RUNNING, reusing under a different definition or command, reusing for a `--cmd`
+ * override, trusting a legacy receipt without a tree digest, and choking on a malformed file.
+ */
+describe('runFeatureVerification — tree-keyed reuse', () => {
+    /** A harness whose tree digest is settable; launches are counted. */
+    function reuseHarness(featureId: string, runId: string, workdir?: string) {
+        const h = harness({ featureId, runId });
+        let tree = 'tree:A';
+        let launches = 0;
+        if (workdir !== undefined) h.input.workdir = workdir;
+        h.input.launch = () => {
+            launches += 1;
+            return { status: 0 };
+        };
+        h.input.receipts = {
+            ...(h.input.receipts as NonNullable<FeatureVerificationRunInput['receipts']>),
+            captureTreeDigest: async () => tree,
+        };
+        return {
+            h,
+            setTree: (value: string) => {
+                tree = value;
+            },
+            launches: () => launches,
+        };
+    }
+
+    function receiptOf(workdir: string, featureId: string, runId: string): Record<string, unknown> {
+        return JSON.parse(
+            readFileSync(featureReceiptPaths(join(workdir, '.spur', 'run'), featureId, runId).runScoped, 'utf8'),
+        ) as Record<string, unknown>;
+    }
+
+    test('a second feature on the same tree reuses the PASS without launching', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        expect((await runFeatureVerification(a.h.input)).status).toBe('PASS');
+        expect(a.launches()).toBe(1);
+        expect(receiptOf(a.h.workdir, 'H99', 'run-a').treeDigest).toBe('tree:A');
+
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        const result = await runFeatureVerification(b.h.input);
+        expect(result.status).toBe('PASS');
+        expect(result.message).toContain('reused');
+        expect(b.launches()).toBe(0);
+        const receipt = receiptOf(a.h.workdir, 'H98', 'run-b');
+        expect(receipt.status).toBe('PASS');
+        expect(receipt.featureId).toBe('H98');
+        expect(receipt.reusedFromRunId).toBe('run-a');
+        expect(receipt.treeDigest).toBe('tree:A');
+        // The receipt still binds this feature's own full digest, which the done gate re-checks.
+        expect(receipt.inputDigest).toBe('sha256:before');
+        // And it is registered as an artifact of this pass's own run, as the done gate requires.
+        expect(b.h.artifacts.map((x) => x.runId)).toEqual(['run-b']);
+    });
+
+    test('the same feature re-verified on an unchanged tree (sync after verify) reuses', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        await runFeatureVerification(a.h.input);
+        const again = reuseHarness('H99', 'run-a2', a.h.workdir);
+        expect((await runFeatureVerification(again.h.input)).status).toBe('PASS');
+        expect(again.launches()).toBe(0);
+    });
+
+    test('a changed tree launches the real pass', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        await runFeatureVerification(a.h.input);
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        b.setTree('tree:B');
+        await runFeatureVerification(b.h.input);
+        expect(b.launches()).toBe(1);
+        expect(receiptOf(a.h.workdir, 'H98', 'run-b').reusedFromRunId).toBeUndefined();
+    });
+
+    test('a prior FAIL is never reused', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        a.h.input.launch = () => ({ status: 1 });
+        expect((await runFeatureVerification(a.h.input)).status).toBe('FAIL');
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        await runFeatureVerification(b.h.input);
+        expect(b.launches()).toBe(1);
+    });
+
+    test('a pass still RUNNING is never reused', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        await startFeatureVerificationReceipt(createNodeFileSystem(), join(a.h.workdir, '.spur', 'run'), {
+            featureId: 'H97',
+            runId: 'run-running',
+            workdir: a.h.workdir,
+            verifier: {
+                name: 'feature-lifecycle',
+                sourcePath: 'x',
+                layer: 'shared',
+                definitionDigest: 'sha256:definition',
+            },
+            verificationCmd: 'spur self exec check-feature',
+            inputDigest: 'sha256:x',
+        });
+        await runFeatureVerification(a.h.input);
+        expect(a.launches()).toBe(1);
+    });
+
+    test('a different verifier definition is never reused', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        await runFeatureVerification(a.h.input);
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        const resolve = b.h.input.resolveDefinition as NonNullable<FeatureVerificationRunInput['resolveDefinition']>;
+        b.h.input.resolveDefinition = async (...args) => ({ ...(await resolve(...args)), digest: 'sha256:other' });
+        await runFeatureVerification(b.h.input);
+        expect(b.launches()).toBe(1);
+    });
+
+    test('a --cmd override neither reuses nor becomes reusable', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        await runFeatureVerification(a.h.input);
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        b.h.input.cmdOverride = 'printf hi';
+        await runFeatureVerification(b.h.input);
+        expect(b.launches()).toBe(1);
+        expect(receiptOf(a.h.workdir, 'H98', 'run-b').treeDigest).toBeUndefined();
+    });
+
+    test('legacy receipts without a tree digest and malformed files are ignored', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        // A real PASS recorded without the tree seam is a legacy-shaped receipt.
+        a.h.input.receipts = { ...(a.h.input.receipts as NonNullable<FeatureVerificationRunInput['receipts']>) };
+        delete (a.h.input.receipts as { captureTreeDigest?: unknown }).captureTreeDigest;
+        await runFeatureVerification(a.h.input);
+        expect(receiptOf(a.h.workdir, 'H99', 'run-a').treeDigest).toBeUndefined();
+        writeFileSync(join(a.h.workdir, '.spur', 'memory', 'evidence', 'junk-feature-verification.json'), '{not json');
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        await runFeatureVerification(b.h.input);
+        expect(b.launches()).toBe(1);
+    });
+
+    test('a tree capture failure falls back to the real pass', async () => {
+        const a = reuseHarness('H99', 'run-a');
+        await runFeatureVerification(a.h.input);
+        const b = reuseHarness('H98', 'run-b', a.h.workdir);
+        b.h.input.receipts = {
+            ...(b.h.input.receipts as NonNullable<FeatureVerificationRunInput['receipts']>),
+            captureTreeDigest: async () => {
+                throw new Error('git failed');
+            },
+        };
+        expect((await runFeatureVerification(b.h.input)).status).toBe('PASS');
+        expect(b.launches()).toBe(1);
     });
 });

@@ -101,6 +101,14 @@ export interface FeatureVerificationReceipt {
     verificationCmd: string;
     /** Proof-input fingerprint over feature markdown + checked tree after the pass. */
     inputDigest: string;
+    /**
+     * Fingerprint of the pass's real inputs only — checked tree (corpus excluded) + learnings, no
+     * feature spec. Lets another feature on the same tree reuse this PASS. Absent on legacy receipts
+     * and on `--cmd` overrides, which are therefore never reused.
+     */
+    treeDigest?: string;
+    /** Set when this PASS was certified from another run's PASS on the same tree, not a fresh launch. */
+    reusedFromRunId?: string;
     /** Outcome of the verification pass. Only PASS satisfies completion. */
     status: FeatureReceiptStatus;
     /** ISO-8601 UTC start time of the pass. */
@@ -171,6 +179,8 @@ export interface StartFeatureReceiptOptions {
     verificationCmd: string;
     /** Before-pass proof-input digest (compared with the after digest at completion). */
     inputDigest: string;
+    /** Tree-only digest that makes a PASS reusable; omit for overrides. */
+    treeDigest?: string;
     startedAt?: string;
 }
 
@@ -193,6 +203,7 @@ export async function startFeatureVerificationReceipt(
         verifier: options.verifier,
         verificationCmd: options.verificationCmd,
         inputDigest: options.inputDigest,
+        ...(options.treeDigest !== undefined ? { treeDigest: options.treeDigest } : {}),
         status: 'RUNNING',
         startedAt: options.startedAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
         completedAt: null,
@@ -209,6 +220,8 @@ export interface CompleteFeatureReceiptOptions {
     status: Exclude<FeatureReceiptStatus, 'RUNNING'>;
     /** After-pass proof-input digest; defaults to the before digest (PASS when equal). */
     inputDigest?: string;
+    /** The run whose PASS this one reuses (no command was launched). */
+    reusedFromRunId?: string;
     completedAt?: string;
 }
 
@@ -230,6 +243,7 @@ export async function completeFeatureVerificationReceipt(
         ...running,
         status: options.status,
         inputDigest: options.inputDigest ?? running.inputDigest,
+        ...(options.reusedFromRunId !== undefined ? { reusedFromRunId: options.reusedFromRunId } : {}),
         completedAt: options.completedAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
     };
     const paths = featureReceiptPaths(runDir, receipt.featureId, receipt.runId);
@@ -524,6 +538,62 @@ export async function captureFeatureReceiptDigest(
     learningsContent?: string,
 ): Promise<string> {
     return ProofInputFingerprint.compute({ cwd: repoRoot, featureContent, learningsContent });
+}
+
+/**
+ * The pass's real inputs: checked tree (corpus excluded) + learnings, without the feature spec. The
+ * verification command takes no feature argument, so two features with the same tree digest would
+ * run the identical suite over identical inputs.
+ */
+export async function captureFeatureTreeDigest(repoRoot: string, learningsContent?: string): Promise<string> {
+    return ProofInputFingerprint.compute({ cwd: repoRoot, learningsContent });
+}
+
+/** What a prior PASS must match to be reused: same inputs, same command, same verifier identity. */
+export interface ReusablePassQuery {
+    treeDigest: string;
+    verificationCmd: string;
+    verifier: FeatureVerifierIdentity;
+}
+
+/**
+ * Newest PASS receipt in `evidenceDir` (any feature) recorded over the same tree with the same
+ * command and verifier identity, or null. Unreadable, malformed, legacy (no tree digest), RUNNING
+ * and FAIL receipts never match.
+ */
+export async function findReusableFeaturePass(
+    fs: FileSystem,
+    evidenceDir: string,
+    query: ReusablePassQuery,
+): Promise<FeatureVerificationReceipt | null> {
+    let names: string[];
+    try {
+        names = await fs.readDir(evidenceDir);
+    } catch {
+        return null;
+    }
+    let best: FeatureVerificationReceipt | null = null;
+    for (const name of names) {
+        if (!name.endsWith('-feature-verification.json')) continue;
+        let receipt: FeatureVerificationReceipt;
+        try {
+            receipt = parseFeatureVerificationReceipt(await fs.readFile(join(evidenceDir, name)));
+        } catch {
+            continue;
+        }
+        if (
+            receipt.status !== 'PASS' ||
+            receipt.treeDigest !== query.treeDigest ||
+            receipt.verificationCmd !== query.verificationCmd ||
+            receipt.verifier.name !== query.verifier.name ||
+            receipt.verifier.layer !== query.verifier.layer ||
+            receipt.verifier.definitionDigest !== query.verifier.definitionDigest
+        ) {
+            continue;
+        }
+        if (best === null || (receipt.completedAt ?? '') > (best.completedAt ?? '')) best = receipt;
+    }
+    return best;
 }
 
 /** True when the capture failure should surface as the stale/deny path (fail-closed). */

@@ -18,7 +18,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { ArtifactDao, createId } from '@gobing-ai/spur-domain';
 import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
@@ -27,11 +27,13 @@ import { openInlineRunProjectDb } from '../services/inline-run-attribution';
 import { withRunIdentityRecording, workflowVersionLiteral } from '../services/workflow-run-recording';
 import {
     captureFeatureReceiptDigest,
+    captureFeatureTreeDigest,
     completeFeatureVerificationReceipt,
     DEFAULT_FEATURE_VERIFICATION_CMD,
     FEATURE_VERIFIER_DEFINITION,
     type FeatureVerificationReceipt,
     featureReceiptPaths,
+    findReusableFeaturePass,
     startFeatureVerificationReceipt,
 } from './feature-verification-receipt';
 import { splitLaunchCommand } from './split-launch-command';
@@ -118,6 +120,8 @@ export interface FeatureReceiptSeams {
     start: typeof startFeatureVerificationReceipt;
     complete: typeof completeFeatureVerificationReceipt;
     captureDigest: typeof captureFeatureReceiptDigest;
+    /** Tree-only digest for reuse; omitted → no reuse (the pass always launches). */
+    captureTreeDigest?: typeof captureFeatureTreeDigest;
 }
 
 /** One verification pass: identity, workdir, and the injectable seams around it. */
@@ -299,6 +303,7 @@ async function runFeatureVerificationPass(
         start: startFeatureVerificationReceipt,
         complete: completeFeatureVerificationReceipt,
         captureDigest: captureFeatureReceiptDigest,
+        captureTreeDigest: captureFeatureTreeDigest,
     };
     const registerArtifact = input.registerArtifact ?? ((artifact) => defaultRegisterArtifact(input.workdir, artifact));
     const lookup = input.resolveFeatureSpec ?? (await createFeatureLookup(input.workdir, fileSystem));
@@ -323,24 +328,63 @@ async function runFeatureVerificationPass(
 
     // 2. Before digest + RUNNING receipt (both copies) + artifact registration.
     const beforeDigest = await receipts.captureDigest(input.workdir, spec.content, learningsContent);
+    const verifier = {
+        name: FEATURE_VERIFIER_DEFINITION,
+        sourcePath: selected.path,
+        layer: selected.layer,
+        definitionDigest: selected.digest,
+    };
+    // The tree digest is what makes a PASS reusable. An override never completes a feature, so it is
+    // neither recorded as reusable nor allowed to reuse; a capture failure just means a real launch.
+    let treeDigest: string | undefined;
+    if (effectiveCmd === DEFAULT_FEATURE_VERIFICATION_CMD && receipts.captureTreeDigest !== undefined) {
+        try {
+            treeDigest = await receipts.captureTreeDigest(input.workdir, learningsContent);
+        } catch {
+            treeDigest = undefined;
+        }
+    }
+    const { runScoped } = featureReceiptPaths(runDir, input.featureId, input.runId);
+    const reusable =
+        treeDigest === undefined
+            ? null
+            : await findReusableFeaturePass(fileSystem, dirname(runScoped), {
+                  treeDigest,
+                  verificationCmd: effectiveCmd,
+                  verifier,
+              });
     const receipt: FeatureVerificationReceipt = await receipts.start(fileSystem, runDir, {
         featureId: input.featureId,
         runId: input.runId,
         workdir: input.workdir,
-        verifier: {
-            name: FEATURE_VERIFIER_DEFINITION,
-            sourcePath: selected.path,
-            layer: selected.layer,
-            definitionDigest: selected.digest,
-        },
+        verifier,
         verificationCmd: effectiveCmd,
         inputDigest: beforeDigest,
+        ...(treeDigest !== undefined ? { treeDigest } : {}),
     });
-    const { runScoped } = featureReceiptPaths(runDir, input.featureId, input.runId);
     await registerArtifact({ runId: input.runId, path: runScoped, kind: 'feature-verification' });
 
     const logPath = join(runDir, `${input.runId}-feature-verification.log`);
     const base = { featureId: input.featureId, runId: input.runId, effectiveCmd, logPath, receiptPath: runScoped };
+
+    // 2b. Same tree, same command, same verifier already PASSed (any feature): the suite would re-run
+    // over identical inputs, so certify from that run instead of spending another full pass on it.
+    if (reusable !== null) {
+        await fileSystem.writeFile(
+            logPath,
+            `reused PASS of run ${reusable.runId} (feature ${reusable.featureId}, completed ${reusable.completedAt}) — same tree ${treeDigest}, command and verifier; nothing re-run\n`,
+        );
+        await receipts.complete(fileSystem, runDir, receipt, {
+            status: 'PASS',
+            inputDigest: beforeDigest,
+            reusedFromRunId: reusable.runId,
+        });
+        return {
+            ...base,
+            status: 'PASS',
+            message: `verification PASS (reused run ${reusable.runId} on the same tree; run ${input.runId}, log ${logPath})`,
+        };
+    }
 
     // 3. Run the effective command via the safe splitter (no `sh -c` interpolation).
     const launchSplit = split(effectiveCmd, 'feature verification command');
