@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { gitContext } from '../src/git-context';
 
 describe('git context', () => {
     test('returns null git context for non-git directory', async () => {
-        const ctx = await gitContext('/tmp');
+        const ctx = await gitContext(mkdtempSync(join(tmpdir(), 'git-ctx-')));
         expect(ctx.root).toBeNull();
         expect(ctx.branch).toBeNull();
         expect(ctx.dirty).toBeFalse();

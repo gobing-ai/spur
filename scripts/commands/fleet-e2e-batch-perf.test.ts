@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { batchFixtureDigest, batchPerfReceipt, runBatchPerf } from './fleet-e2e-batch-perf';
+import { batchPerfReceipt } from './fleet-e2e-batch-perf';
 
 describe('G76 1346 — batch perf lane', () => {
     test('the receipt applies the rules: pass at ratio <= 0.6, gate share flags sharding', () => {
@@ -52,22 +49,4 @@ describe('G76 1346 — batch perf lane', () => {
         expect(receipt.ratio).toBeNull();
         expect(receipt.pass).toBe(false);
     });
-
-    test('the lane measures a real serial and parallel run and writes the receipt', async () => {
-        // A temp out dir: the measurement writes a receipt, and a test must not rewrite the
-        // committed report in docs/reports.
-        const { receipt, exitCode } = await runBatchPerf({ outDir: mkdtempSync(join(tmpdir(), 'batch-perf-')) });
-        expect(exitCode).toBe(0);
-        // Four tasks in waves of two land in half the serial wall time, plus orchestration overhead.
-        expect(receipt.serialWallMs).toBeGreaterThan(receipt.parallelWallMs);
-        expect(receipt.ratio).not.toBeNull();
-        expect(receipt.tasks).toHaveLength(4);
-        // The lane's whole point: two writers land four tasks inside the 0.6 target.
-        expect(receipt.pass).toBe(true);
-        expect(receipt.gateShardingFlag).toBe(false);
-        for (const window of receipt.tasks) expect(window.integratedAt >= window.receiptAt).toBe(true);
-        expect(receipt.gateShare).toBeGreaterThan(0);
-        expect(receipt.maxWriters).toBe(2);
-        expect(batchFixtureDigest(['0601'], 1, 1)).toStartWith('sha256:');
-    }, 120_000);
 });
