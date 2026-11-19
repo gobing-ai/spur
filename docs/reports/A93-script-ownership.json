@@ -313,6 +313,26 @@
             "disposition": "retained"
         },
         {
+            "path": "scripts/commands/delegate-workflow-e2e.ts",
+            "responsibility": "Two-install delegation workflow E2E proof (1397): install A's workflow delegates through install B's A2A surface and links the created task, writing its receipt",
+            "destination": "scripts",
+            "action": "retain",
+            "waveWbs": null,
+            "tests": [],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 70
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 188
+                }
+            ],
+            "retainedReason": "Two-install E2E fixture with its own executables; runtime must never orchestrate a second install",
+            "disposition": "retained"
+        },
+        {
             "path": "scripts/commands/dependency-drift-check.test.ts",
             "responsibility": "Companion tests for lockfile versus installed `@gobing-ai` version drift",
             "destination": "scripts",

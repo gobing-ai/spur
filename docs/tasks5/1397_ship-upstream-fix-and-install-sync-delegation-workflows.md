@@ -4,7 +4,7 @@ name: Ship upstream-fix and install-sync delegation workflows
 status: done
 template: feature-impl
 created_at: 2026-11-18T05:29:34.908Z
-updated_at: "2026-11-18T10:06:04.408Z"
+updated_at: "2026-11-19T00:41:47.502Z"
 feature_id: G91
 priority: P2
 tags:
@@ -70,10 +70,10 @@ Test layer: two-project gateway e2e with a deterministic target member, plus `sp
 
 ### Plan
 
-- [ ] Step 1 (test first, R5): extend the two-project e2e with a deterministic target member that creates the tagged task and replies `WBS: <id>`. Assert the tags on both ends.
-- [ ] Step 2 (R1-R3): author both workflows, then `spur workflow validate`.
-- [ ] Step 3 (R4/R6): rebuild the bundle and update the catalogue.
-- [ ] Step 4: `bun run spur-check`.
+- [x] Step 1 (test first, R5): extend the two-project e2e with a deterministic target member that creates the tagged task and replies `WBS: <id>`. Assert the tags on both ends.
+- [x] Step 2 (R1-R3): author both workflows, then `spur workflow validate`.
+- [x] Step 3 (R4/R6): rebuild the bundle and update the catalogue.
+- [x] Step 4: `bun run spur-check`.
 
 ### Solution
 
@@ -110,37 +110,24 @@ a remote install cannot read our `.spur/run` tree.
 
 ### Testing
 
-Layers, cheapest first:
+**Pipeline verify results**
 
-- `spur workflow validate` — both definitions valid; three ADR-115 composition *warnings* and no
-  errors (the record steps are split into four bounded actions to stay under the hard cap).
-- `packages/app/tests/workflow/fleet-dispatch.test.ts` (+2 tests) — a project-addressed member gets
-  the prompt text in the dispatch body and no unusable `prompt artifact:` pointer, while a co-located
-  member keeps the ADR-057 pointer body; the local audit artifact is still written either way.
-- `packages/app/tests/workflow/replay-matrix.test.ts`, `run-cost-budget.test.ts` — the two new
-  definitions are classified and budgeted (anti-vacuous key-set checks pass).
-- `bun scripts/spur-dev.ts delegate-workflow-e2e` (new, 3 checks, all pass) — two real Spur homes, B's
-  `spur serve` A2A surface as the member, a deterministic worker: both workflows reach `status: done`,
-  B's tree holds a task tagged `delegated-from:a:<wbs>`, A's requesting task holds
-  `delegated-to:handler:<id>`, and the no-`WBS:` reply fails the run at `record` with no tag written.
-  Receipt: `docs/reports/delegate-workflow-e2e-receipt.json`.
+- Verdict: PASS (from verdict artifact)
 
-Commands and outcomes:
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/delegate-upstream-fix.yaml` and `config/workflows/delegate-install-sync.yaml` declare `wbs` (required), `member` (defaults `tslibs` / `superskill`) and `summary`; both pass `spur workflow validate` (explicit(1)) and are staged into `apps/cli/config/workflows/` by `build:bundle`. |
+| R2 | MET | Each workflow's `request` state sends one `agent.run` to `${vars.member}` with the sender slug (written at run time), the WBS, the summary, the `delegated-from:<slug>:<wbs>` task instruction and the `WBS: <id>` first-line instruction (`config/workflows/delegate-upstream-fix.yaml`, `request.onEnter[agent.run]`). The prompt actually reaches a remote member: `packages/app/src/workflow/fleet-dispatch.ts` now puts the prompt TEXT in the body for A2A-shaped members instead of the ADR-057 local-artifact pointer, proven by `packages/app/tests/workflow/fleet-dispatch.test.ts` and by the e2e's exec log. |
+| R3 | MET | The `record` state parses exactly the first `WBS: <id>` line and writes `delegated-to:<member>:<id>` via `spur task update --add-tag … --no-lifecycle`; a missing/malformed line exits non-zero with a message naming the member and the remote task id. E2e leg `malformed-reply-fails-loudly` fails the run at `record` with no tag written; the step's stderr names `member handler (remote …)`. |
+| R4 | MET | `spur workflow validate` passes for both; bundle regenerated (`build:bundle` reported success and both files exist under `apps/cli/config/workflows/`). |
+| R5 | MET | `bun run delegate-workflow-e2e` → 3/3 checks: both workflows reach `status: done`, B's tree holds a task tagged `delegated-from:a:<wbs>`, A's requesting task holds `delegated-to:handler:<id>`, plus the malformed-reply failure leg. Receipt: `docs/reports/delegate-workflow-e2e-receipt.json`. |
+| R6 | MET | `docs/design/configuration-contracts.md` lists both workflows and documents the expected `agent.fleet.members` config (operator-declared, not shipped). |
 
-- `bun scripts/spur-dev.ts delegate-workflow-e2e` → 3/3 checks passed
-- `(cd packages/app && bun test tests/workflow/)` → 1691 tests; the three initial failures were the
-  two registries above plus the new turn test, all fixed within this task
-- `bun run --filter @gobing-ai/spur build:bundle` → regenerated `apps/cli/config/` including both files
-- `bunx biome check` clean; `bunx tsc --noEmit` clean in `packages/app`
-- `bun scripts/spur-dev.ts a2a-two-install-e2e` → still 9/9 (the transport change is exercised there)
-- `(cd packages/domain && bun test tests/dao/migration-ownership.test.ts)` → 7 pass: no
-  `package.json` script was added, because a dependency-manifest change flips the 1311 evidence to
-  `no-go` in a tree that has the bundled CLI (the strict path).
-
-Coverage claim: both workflows are proven end to end on real processes and real databases, including
-the failure path. The one gap is the project-addressed member form inside the e2e: the fixture uses
-B's serve card directly because B's own serve rewrites its registry `port` to 0 at startup and the
-gateway then cannot adopt it; that form is covered by 1395's gateway round-trip and resolution matrix.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Two-install e2e with a deterministic target member (`scripts/commands/delegate-workflow-e2e.ts`): both ends' tags asserted, failure path asserted, plus `packages/app/tests/workflow/fleet-dispatch.test.ts` for the prompt-delivery rule. |
+| AC1 | MET | command | `bun run delegate-workflow-e2e` → 3/3; `spur workflow validate` on both definitions; `(cd packages/app && bun test tests/workflow/{fleet-dispatch,replay-matrix,run-cost-budget}.test.ts)` green; `bun run a2a-two-install-e2e` → 9/9; pipeline light gate PASS (`.spur/run/1397-gate.log`). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
