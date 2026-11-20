@@ -44,53 +44,9 @@ idea → agent detection + health → constraint checking → workflow orchestra
 
 ## Install
 
-Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both expose a global
-`spur` command and seed defaults into `~/.config/spur/` on first run.
-
-**With Bun (`>= 1.3.0`) — recommended:**
-
-```bash
-# go with bun, suggested
-bun add -g @gobing-ai/superskill @gobing-ai/spur
-
-# or, run ad-hoc, no install:
-bunx @gobing-ai/spur --help
-
-# or, go with npm
-npm i -g @gobing-ai/superskill @gobing-ai/spur
-```
-
-As we also need `@gobing-ai/superskill` to installed `sp` plugin, so I also installed it. The npm package also ships the `sp` plugin and its marketplace manifest. Install the plugin into your supported coding agents without cloning this repo:
-
-```bash
-# go with owner/repo shorthand → GitHub
-superskill install sp --marketplace gobing-ai/spur
-# or, go with the full path of the github URL
-superskill install sp --marketplace https://github.com/gobing-ai/spur
-# or, go with pre-installed via bun
-superskill install sp --marketplace $(dirname $(bun pm bin -g))/install/global/node_modules/@gobing-ai/spur
-# or, go with pre-installed via npm
-superskill install sp --marketplace $(dirname $(npm root -g))/node_modules/@gobing-ai/spur
-# or, go with already downloaded source code
-superskill install sp --marketplace /Users/robin/xprojects/spur-new
-```
-
-**Without Bun — standalone binary (macOS / Linux):**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install.sh | sh
-```
-
-Installs to `~/.local/bin` (override via `SPUR_INSTALL`), embeds the Bun runtime, and runs
-`spur self init` for you. The binary is verified against the release `SHA256SUMS` before install — and
-because the installer then *runs* that binary, the checksum is a code-execution boundary, not just
-an integrity check; keep the `SPUR_SKIP_VERIFY=1` bypass exceptional. Full options, verification,
-optional zg/a2a setup, and Windows/WSL notes live in the [CLI README](./apps/cli/README.md#install).
-
-```bash
-spur --help
-spur self init       # seed ~/.config/spur/ — idempotent
-```
+Give your coding agent the [Spur install guide](docs/install.md) and ask it to set up Spur for
+your project. The guide covers CLI installation, project initialization, the agent plugin and MCP
+tool discovery.
 
 ---
 
@@ -108,7 +64,7 @@ bun run apps/cli/src/index.ts --help
 
 # Scaffold a project: writes .spur/config.yaml, local rules + an example
 # workflow, and seeds ~/.config/spur/rules from the bundled presets
-bun run apps/cli/src/index.ts init --name my-project
+bun run apps/cli/src/index.ts self init --name my-project
 
 # Evaluate constraint rules over the working tree
 bun run apps/cli/src/index.ts rule run --preset recommended

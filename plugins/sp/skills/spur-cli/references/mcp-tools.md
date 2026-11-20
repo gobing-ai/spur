@@ -39,8 +39,9 @@ Also CLI-only, for the same reason: `spur task record`, `spur task verdict`, `sp
 
 ## Wiring an agent (gateway entry)
 
-One install wires every MCP-capable agent: the plugin ships `mcp.json` with a single server,
-`spur` → `spur mcp --gateway`, and superskill writes it into each target's own config format.
+Use the [Spur install guide](https://github.com/gobing-ai/spur/blob/main/docs/install.md) for setup
+and live `tools/list` and `server/discover` probes. The plugin ships one server in `mcp.json`,
+`spur` → `spur mcp --gateway`. Superskill owns writing the entry for supported targets.
 `--gateway` targets `http://localhost:<server.gateway.port>/mcp` and takes its bearer from the
 variable named by `server.gateway.mcp.authEnv` — the token stays in the environment, never in an agent
 config file. `--gateway` and `--url` are mutually exclusive, and a disabled gateway, an unset or empty
@@ -48,6 +49,7 @@ token variable, or a gateway that is not answering each fail with the remedy nam
 
 ## When the tools are absent
 
-Every agent in the adoption matrix has an MCP client, but an HTTP entry can still be unavailable
-(no network path, no token variable configured, an agent whose config cannot be edited). In that
-case the CLI verbs above are the operational path, unchanged — never block on MCP being present.
+If the bridge probe passes and the agent still shows no tools, check the target's MCP startup
+diagnostics and confirm the process receives the gateway environment. The bridge supports legacy
+stdio tool clients, and the plugin supplies the default gateway variable allowlist for Codex.
+Use the CLI verbs above when the agent has no usable tools.

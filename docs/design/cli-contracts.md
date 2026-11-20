@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-11-10
+updated_at: 2026-11-20
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081", "1326"]
 tags: [contract, cli, agent]
 ---
@@ -888,18 +888,18 @@ attach is `GET /api/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
 <a id="spur-rule-run---preset-name---file-path---rule-id---fail-on-severity---stop-on-first-severity---fix-mode-mode---dry-run---verbose---json"></a>
 
-#### `spur mcp [--cwd <path>] [--url <mcpUrl>]`
+#### `spur mcp [--cwd <path>] [--url <mcpUrl> | --gateway]`
 
 Thin stdio→HTTP bridge to the embedded MCP 2.0+ server (`POST /mcp` on `spur self serve`, feature B9,
-ADR-152): reads NDJSON from stdin, forwards one `POST` per non-blank line, echoes each JSON response
-line to stdout (no banner). Always sends `Mcp-Protocol-Version: 2026-07-28` and
+ADR-152): reads NDJSON from stdin, proxies stateless calls and translates the legacy stdio tool
+lifecycle. Always sends `Mcp-Protocol-Version: 2026-07-28` and
 `Content-Type: application/json`; attaches `Authorization: Bearer` only when the environment
 variable `server.mcp.authEnv` names is set — unset/empty is a loud `CommandError`, never a silent
 unauthenticated call. URL resolution: `--url` → the cwd project's gateway prefix
 (`http://127.0.0.1:<gateway.port><prefix>/mcp`, when the registry entry is local and the gateway
-answers) → the registry entry's live port → `server.port`. Transport-only by invariant: tool and
-resource execution lives in the server (`[embedded MCP server](embedded-mcp-server.md)`); the
-bridge never duplicates it.
+answers) → the registry entry's live port → `server.port`. `--gateway` uses the fixed gateway port
+and its own bearer setting. The [embedded MCP server](embedded-mcp-server.md) owns tool and
+resource execution.
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]`
 

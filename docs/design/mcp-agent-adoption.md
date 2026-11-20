@@ -33,18 +33,21 @@ claimed when its own source states it.
 
 ## 1a. Install route (task 1401)
 
-Every MCP-capable agent gets the entry from one superskill install: the plugin ships
-`plugins/sp/mcp.json` with a single server, `spur` → `spur mcp --gateway`, and superskill writes that
-block into each target's own config format. The bridge resolves
+The plugin ships `plugins/sp/mcp.json` with a single server, `spur` → `spur mcp --gateway`.
+Superskill translates that entry for targets with an MCP config adapter. The bridge resolves
 `http://localhost:<server.gateway.port>/mcp` and takes the bearer from the variable named by
 `server.gateway.mcp.authEnv`, so **no token ever lands in an agent config file** — it is read from the
 environment when the bridge starts.
 
 Observed on a fixture HOME (artifact: `docs/tasks5/artifacts/1401/superskill-dry-run.txt`): one `spur`
 entry in `.gemini/config/mcp_config.json` and one `[mcp_servers.spur]` in `.codex/config.toml`, with a
-second install leaving both counts unchanged. Claude Code receives the entry through the plugin
-registration itself. A target where superskill does not yet adapt an MCP block falls back to
-`spur mcp` (stdio) or the CLI — that gap is reported upstream, never worked around in Spur.
+second install leaving both counts unchanged. Claude Code loads the entry through the native
+plugin manifest. Use the [install guide](../install.md) to verify the entry for your target.
+
+**Verified 2026-11-20 (task 1417).** Codex CLI 0.171.0 discovered the ten built-ins and a fixture
+workflow through the Superskill-generated stdio entry. Claude Code 2.1.221 reported
+`plugin:sp:spur` connected after installing the native plugin. These checks used the stdio bridge
+and a local gateway.
 
 ## 2. Verdicts (consumed by 1394)
 
@@ -54,7 +57,8 @@ registration itself. A target where superskill does not yet adapt an MCP block f
 | `mcp-stdio-bridge` | none needed — every agent above also has a stdio client, which is the fallback when an HTTP entry cannot be configured |
 | `cli-only` | none |
 
-Every row is `documented`, not `observed`, except the server side. The one attempted client
+The direct HTTP rows remain based on documentation, except the server-side observation noted
+above. The direct Codex attempt
 round-trip (Codex) did **not** prove the stateless handshake: `codex mcp list` showed the server as
 `enabled` with a bearer-token env var, but an `codex exec` session reported no tools from it. Treat
 that row as "configures cleanly, handshake unproven" rather than as a pass.
@@ -65,7 +69,7 @@ that row as "configures cleanly, handshake unproven" rather than as a pass.
   supported MCP spec revision, and the server accepts only the `2026-07-28` line (ADR-152). An agent
   whose client speaks an older revision will fail the version check at request time rather than at
   configuration time — the failure is a protocol error, not a silent downgrade.
-- **No client-side `server/discover` round-trip is recorded here.** Nine of the ten CLIs are
+- **No direct HTTP client `server/discover` round-trip is recorded here.** Nine of the ten CLIs are
   installed, but proving a handshake per agent needs a tool call in each one's own session model,
   which this task did not run (the Codex attempt above is the only one, and it was inconclusive).
   A future pass should record `server/discover` per agent the way the server side was recorded here.

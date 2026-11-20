@@ -108,8 +108,7 @@ export function registerServeCommand(
                     const handle = launchGateway({
                         port: gatewayPort,
                         host: gatewayHost,
-                        // Task 1382: the gateway's own MCP entry, with its own token variable.
-                        mcp: { ...config.server.gateway.mcp, env },
+                        mcp: { ...config.server.gateway.mcp, projectTokenEnv: config.server.mcp.authEnv, env },
                         deps: {
                             loadProjectConfig: registration.loadProjectConfig,
                             // Read-only snapshot: routing must not heal, purge or probe on every request.

@@ -4,6 +4,7 @@ import type { Command } from '@commander-js/extra-typings';
 import { isGatewayAnswering, normalizeProjectPath, ProjectRegistry } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, isLocalHost, resolveProjectPrefix } from '@gobing-ai/spur-config';
 import { bootFree } from '../boot-free-route';
+import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
 import type { CommandOutput } from '../output';
@@ -12,9 +13,8 @@ import { SHARED_OPTIONS } from './shared-options';
 
 /**
  * `spur mcp` — thin stdio-to-HTTP bridge (feature B9, task 1373) so stdio-only MCP clients can
- * reach the embedded `/mcp` endpoint mounted by task 1372. Strictly a transport shim: every
- * stdin line is one `POST /mcp` request and each response body is echoed to stdout verbatim —
- * no tool/resource execution here (anti-pattern), the endpoint owns the whole protocol.
+ * reach the embedded `/mcp` endpoint mounted by task 1372. Stateless requests are proxied verbatim.
+ * The bridge translates the legacy stdio lifecycle and result envelopes for tool clients.
  *
  * Server settings (`server.mcp.authEnv`, ports) read from the same app-layer env config as
  * `spur self serve` (`buildConfigFromEnv`) — the server config surface is env-scoped, not project-file.
@@ -23,6 +23,25 @@ import { SHARED_OPTIONS } from './shared-options';
 /** Mirrors the server adapter's `MIN_MCP_PROTOCOL_VERSION` (`apps/server/src/modules/mcp/protocol.ts`);
  * the server barrel does not re-export it and deep cross-workspace imports are forbidden. */
 export const MCP_PROTOCOL_VERSION = '2026-07-28';
+
+const LEGACY_VERSIONS = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
+
+interface RpcMessage {
+    jsonrpc?: unknown;
+    id?: unknown;
+    method?: unknown;
+    params?: { protocolVersion?: unknown };
+    result?: unknown;
+}
+
+function parseRpc(text: string): RpcMessage | undefined {
+    try {
+        const message = JSON.parse(text) as RpcMessage | null;
+        return message?.jsonrpc === '2.0' ? message : undefined;
+    } catch {
+        return undefined;
+    }
+}
 
 /** The context slice the bridge reads — the same shape `registerServeCommand` takes. */
 type McpBridgeContext = Pick<CliContext, 'cwd' | 'output' | 'env' | 'setExitCode'>;
@@ -40,17 +59,28 @@ export interface McpStdioBridgeOptions {
 }
 
 /**
- * Forward newline-delimited JSON-RPC from `input` to `POST url`, echoing each response body
- * verbatim. Returns 0 on clean EOF, 1 when the upstream is unreachable (transport failures stop
+ * Forward newline-delimited JSON-RPC from `input` to `POST url`. Returns 0 on clean EOF, 1 when
+ * the upstream is unreachable (transport failures stop
  * the bridge — every later line would fail the same way). HTTP error statuses are NOT failures:
  * their JSON bodies are forwarded like any other response.
  */
 export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise<number> {
     const reader = createInterface({ input: options.input });
+    let legacy = false;
     try {
         for await (const line of reader) {
             const body = line.trim();
             if (body === '') continue;
+            const message = parseRpc(body);
+            const id = message?.id;
+            const hasId = typeof id === 'string' || typeof id === 'number';
+            if (legacy && message?.method === 'notifications/initialized' && id === undefined) continue;
+            if (legacy && message?.method === 'ping' && hasId) {
+                options.output.write(JSON.stringify({ jsonrpc: '2.0', id, result: {} }));
+                continue;
+            }
+            const requestedVersion = message?.params?.protocolVersion;
+            const initialize = message?.method === 'initialize' && hasId && typeof requestedVersion === 'string';
             let res: Response;
             try {
                 res = await fetch(options.url, {
@@ -60,13 +90,49 @@ export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise
                         'Mcp-Protocol-Version': MCP_PROTOCOL_VERSION,
                         ...(options.token !== null ? { Authorization: `Bearer ${options.token}` } : {}),
                     },
-                    body,
+                    // A successful discovery proves the endpoint and bearer before we acknowledge stdio startup.
+                    body: initialize ? JSON.stringify({ jsonrpc: '2.0', id, method: 'server/discover' }) : body,
                 });
             } catch (err) {
                 options.output.error(`spur mcp: cannot reach ${options.url}: ${errorMessage(err)}`);
                 return 1;
             }
-            options.output.write(await res.text());
+            const response = await res.text();
+            if (!res.ok || (!initialize && !(legacy && message?.method === 'tools/call'))) {
+                options.output.write(response);
+                continue;
+            }
+            const reply = parseRpc(response);
+            if (reply?.result === undefined) {
+                options.output.write(response);
+                continue;
+            }
+            if (initialize) {
+                legacy = true;
+                options.output.write(
+                    JSON.stringify({
+                        jsonrpc: '2.0',
+                        id,
+                        result: {
+                            protocolVersion: LEGACY_VERSIONS.includes(requestedVersion)
+                                ? requestedVersion
+                                : '2025-11-25',
+                            capabilities: { tools: {} },
+                            serverInfo: { name: CLI_CONFIG.binaryName, version: CLI_CONFIG.binaryVersion },
+                        },
+                    }),
+                );
+                continue;
+            }
+            const result = reply.result as { content?: unknown } | null;
+            options.output.write(
+                Array.isArray(result?.content)
+                    ? response
+                    : JSON.stringify({
+                          ...reply,
+                          result: { content: [{ type: 'text', text: JSON.stringify(reply.result) }] },
+                      }),
+            );
         }
         return 0;
     } finally {

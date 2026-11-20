@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.75.0
+version: 1.76.0
 owner: Robin Min
-updated_at: 2026-11-16
+updated_at: 2026-11-20
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -2972,6 +2972,9 @@ re-import pressure this entry already records).
   (`sp_task_show`, `sp_task_list`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue`) —
   a breaking rename with no alias period; a call to an old unprefixed name is refused with a rename
   hint. Built-ins are Spur's in every project, independent of any future project namespace (1380).
+- **Amended 2026-11-20 (task 1417):** `spur mcp` translates the legacy stdio tool lifecycle before
+  forwarding to the stateless endpoint. The HTTP version floor and bearer checks apply to every
+  request sent by the bridge.
 - **Decision:** `spur serve` mounts `mcpModule` on `POST /mcp` (registered in the server module
   registry, off unless `server.mcp.enabled`) speaking stateless MCP 2.0+ Streamable HTTP only: a
   `2026-07-28` protocol-version floor is enforced on every request and legacy versions
@@ -2999,7 +3002,6 @@ re-import pressure this entry already records).
   session store and SSE lifecycle inside a process-scoped serve, and a weaker default);
   CLI-spawning per call (the shell path ADR-057 forbids, with no structured results).
 - **Consequence:** the tool/resource set is a public contract bounded by `@gobing-ai/spur-app`
-  service signatures; growing it is a surface-consent change. `spur mcp` must stay a transport shim
-  — protocol logic lives only in the server adapter. The version floor makes pre-2.0 MCP clients
-  unsupported by design rather than mis-negotiated.
+  service signatures, and growing it requires surface consent. The bridge owns stdio compatibility.
+  The server owns HTTP version enforcement, authorization, and execution.
 - **Detail:** [Embedded MCP server](design/embedded-mcp-server.md).

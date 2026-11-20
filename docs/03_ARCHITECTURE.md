@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.80.0
+version: 1.81.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-18
+updated_at: 2026-11-20
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1441,11 +1441,10 @@ registry) on `POST /mcp` only when `server.mcp.enabled` is true (default off; en
 `server.mcp.authEnv` fails the config load), speaking stateless MCP 2.0+ Streamable HTTP: a
 `2026-07-28` protocol-version floor rejects legacy versions and sessions instead of negotiating
 them, and every request is self-contained (`application/json` or one request-scoped SSE frame).
-Five harness tools (`task_show`, `task_list`, `workflow_status`, `workflow_run`, `workflow_continue`)
-and three `spur://` resources (tasks/features/context) delegate directly to `@gobing-ai/spur-app`
-services — the invariant is that neither the server adapter nor the `spur mcp` stdio bridge spawns
-the CLI or duplicates the workflow FSM; the bridge (`apps/cli/src/commands/mcp.ts`) is a
-transport-only NDJSON→HTTP shim that forwards the protocol version and bearer token. The gateway
+The `sp_*` harness tools and three `spur://` resources delegate directly to `@gobing-ai/spur-app`
+services. The `spur mcp` bridge (`apps/cli/src/commands/mcp.ts`) adapts legacy stdio tool clients
+and sends stateless HTTP requests with the configured bearer. Tool and resource execution stays
+on the server. The gateway
 treats `/<prefix>/mcp` like `/<prefix>/a2a`: CSRF-exempt (bearer-authenticated), host allowlist
 still first. Exact protocol, tools, resource confinement and bridge URL resolution:
 [embedded MCP server](design/embedded-mcp-server.md).

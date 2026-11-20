@@ -2,7 +2,13 @@
     "mcpServers": {
         "spur": {
             "command": "spur",
-            "args": ["mcp", "--gateway"]
+            "args": ["mcp", "--gateway"],
+            "envVars": [
+                "SPUR_GATEWAY_PORT",
+                "SPUR_GATEWAY_MCP_ENABLED",
+                "SPUR_GATEWAY_MCP_AUTH_ENV",
+                "SPUR_GATEWAY_MCP_TOKEN"
+            ]
         }
     }
 }

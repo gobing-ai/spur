@@ -3,7 +3,7 @@ kind: design
 title: "Configuration and asset contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-10-04
+updated_at: 2026-11-20
 related: ["0857", "0858", "0861", "0890"]
 tags: [contract, config]
 ---
@@ -128,6 +128,7 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 | `server.mcp.enabled`   | `SPUR_MCP_ENABLED`        | `false` (embedded MCP server in `spur self serve`; off mounts no route)                                                   |
 | `server.mcp.authEnv`   | `SPUR_MCP_AUTH_ENV`       | — (NAME of the variable holding the MCP bearer token; required when `enabled` is true, never stored)                 |
 | `server.mcp.namespace` | `SPUR_MCP_NAMESPACE`      | — (optional project MCP namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load)               |
+| `server.gateway.port`  | `SPUR_GATEWAY_PORT`       | `3000` (shared by the gateway and its stdio bridge)                                                                      |
 | `telemetry.enabled`  | `SPUR_TELEMETRY_ENABLED`  | `false`                                                                                                              |
 | `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | —                                                                                                                    |
 | `logging.level`      | `SPUR_LOG_LEVEL`          | `info` (debug\|info\|warn\|error)                                                                                    |

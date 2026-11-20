@@ -2,7 +2,7 @@
 kind: design
 title: "Project gateway — one port, path prefixes, LaunchAgent (feature K4)"
 created_at: 2026-11-16
-updated_at: 2026-11-17
+updated_at: 2026-11-20
 related: [K4, K1]
 tags: [system, K4, server, web, cli]
 doc: design/project-gateway
@@ -64,7 +64,8 @@ projectEntrySchema = z.object({
 | `spur self install --daemon [--port <n>] [--json]` · `spur self uninstall [--daemon]` · `spur self status` | Flat verbs, no `daemon` sub-noun; the `spur self daemon <action>` alias was removed on 2026-11-18 (task 1387) |
 | `spur projects add --prefix <slug>` | New flag |
 
-Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**),
+Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**,
+set with `SPUR_GATEWAY_PORT` for both the gateway and MCP bridge),
 `server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`) and, since task 1382,
 `server.gateway.mcp: { enabled: boolean (default false), authEnv?: string }` mapped from
 `SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`. `enabled` without `authEnv` fails the
@@ -99,8 +100,10 @@ every request — no cache, and **listing never starts a project**.
 | Refusals | unknown or ambiguous `project`, missing project token, and upstream HTTP errors produce a tool error. JSON-RPC refusals preserve the project's error details and redact its token. |
 | Resources | `resources/list` is `[]` at the gateway root, by scope |
 
-The gateway forwards ONE project token (from the env variable named by `projectTokenEnv`), because
-its environment describes the gateway, not N projects; a per-project token map is deferred.
+The gateway forwards one shared project token. The CLI passes `server.mcp.authEnv`
+(`SPUR_MCP_AUTH_ENV`) as `projectTokenEnv`, and project servers started by the gateway inherit those
+settings. Gateway clients use the separate gateway credential. See the
+[install guide](../install.md#2-connect-the-coding-agent) for the environment and live probes.
 Offline discovery uses the gateway's `SPUR_MCP_NAMESPACE` when set, otherwise each project's plugin
 manifest. Use distinct manifests for multi-project discovery. A separately launched project must
 use the same namespace setting as the gateway would use to discover it.

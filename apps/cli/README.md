@@ -65,15 +65,15 @@ missing `SHA256SUMS` leaves an existing install untouched and exits non-zero. `S
 overrides the download base URL (a mirror, or a `file://` directory in tests).
 
 The checksum is a **code-execution** boundary, not just an integrity check: having verified the
-download, the installer *runs* it (`spur self init`), so a release whose `SHA256SUMS` cannot be verified
+download, the installer *runs* it (`spur self install`), so a release whose `SHA256SUMS` cannot be verified
 is a release you cannot safely install. `SPUR_SKIP_VERIFY=1` is the single explicit bypass and
 prints a warning — keep it for local or air-gapped installs, and pipe the script into `sh` only from
 a source you trust.
 
 **Optional external CLIs.** After the verified install, `scripts/install.sh` independently detects
 `zg` (used by hybrid search) and `a2a` (used by fleet transport). If either is missing, it uses
-Homebrew when available, npm for zg otherwise, and the official a2a installer otherwise. Dependency
-failures are warnings with the exact manual remedy and never undo the verified Spur install.
+Homebrew when available, npm for zg otherwise, and the official a2a installer otherwise. A
+requested setup step that fails leaves the verified binary installed and returns a nonzero exit.
 Disable either optional step with `SPUR_INSTALL_ZG=0` or `SPUR_INSTALL_A2A=0`; re-running the
 installer is idempotent.
 

@@ -21,6 +21,7 @@ export const SPUR_ENV_VARS = {
     mcpEnabled: 'SPUR_MCP_ENABLED',
     mcpAuthEnv: 'SPUR_MCP_AUTH_ENV',
     mcpNamespace: 'SPUR_MCP_NAMESPACE',
+    gatewayPort: 'SPUR_GATEWAY_PORT',
     gatewayMcpEnabled: 'SPUR_GATEWAY_MCP_ENABLED',
     gatewayMcpAuthEnv: 'SPUR_GATEWAY_MCP_AUTH_ENV',
 } as const;
@@ -1529,6 +1530,7 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = get
                 namespace: env[SPUR_ENV_VARS.mcpNamespace],
             },
             gateway: {
+                port: env[SPUR_ENV_VARS.gatewayPort],
                 mcp: {
                     enabled: parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]),
                     authEnv: env[SPUR_ENV_VARS.gatewayMcpAuthEnv],

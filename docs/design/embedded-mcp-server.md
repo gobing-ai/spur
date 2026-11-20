@@ -3,7 +3,7 @@ kind: design
 title: "Embedded MCP 2.0+ server in spur self serve"
 status: accepted
 created_at: 2026-11-17
-updated_at: 2026-11-17
+updated_at: 2026-11-20
 related:
   - docs/features/B9_embedded-mcp-2-0-server-in-spur-serve.md
   - docs/design/configuration-contracts.md
@@ -118,14 +118,20 @@ definitions deriving the same name omit the tool and fail validate with the reas
 
 ## 5. `spur mcp` stdio bridge
 
-`spur mcp [--cwd <path>] [--url <mcpUrl>]` reads NDJSON from stdin, forwards one `POST` per
-non-blank line to the resolved URL, and echoes each JSON response line to stdout (no banner).
+`spur mcp [--cwd <path>] [--url <mcpUrl> | --gateway]` reads NDJSON from stdin and writes JSON-RPC
+replies to stdout. Stateless requests and replies pass through unchanged.
 Headers always include `Mcp-Protocol-Version: 2026-07-28` and `Content-Type: application/json`;
 `Authorization: Bearer` is attached only when the `server.mcp.authEnv` variable is set — unset is a
 loud `CommandError`, never a silent unauthenticated call. URL resolution order: `--url` → the
 project's gateway prefix (`http://127.0.0.1:<gateway.port><prefix>/mcp`, when the registry entry is
-local and the gateway answers) → the registry entry's live port → `server.port`. Config parity with
-`spur self serve` through the `@gobing-ai/spur-config` env funnel.
+local and the gateway answers) → the registry entry's live port → `server.port`. `--gateway`
+targets the gateway root at `server.gateway.port` and reads the bearer from the variable named
+by `server.gateway.mcp.authEnv`. Both commands use the same env-derived configuration.
+
+For legacy stdio clients, the bridge verifies access with `server/discover` before accepting
+`initialize`, declares the tools capability, acknowledges pings and consumes
+`notifications/initialized`. It wraps raw tool results as JSON text content for that connection.
+The HTTP endpoint continues to accept stateless requests only.
 
 ## 6. Gateway interaction
 
@@ -142,8 +148,8 @@ bypasses it.
 - Tool/resource execution delegates to `@gobing-ai/spur-app`; neither the adapter nor the bridge
   spawns the CLI or duplicates the workflow FSM.
 - Legacy protocol versions and stateful transports are rejected explicitly, never negotiated.
-- `spur mcp` stays a stdio↔HTTP shim: protocol logic lives only in the server adapter
-  (`MCP_PROTOCOL_VERSION` in the bridge mirrors `MIN_MCP_PROTOCOL_VERSION`).
+- `spur mcp` adapts legacy framing at the stdio boundary. Tool and resource execution stay on the
+  server, and `MCP_PROTOCOL_VERSION` in the bridge mirrors `MIN_MCP_PROTOCOL_VERSION`.
 
 ## 8. Proof
 
