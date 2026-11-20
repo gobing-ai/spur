@@ -222,18 +222,16 @@ describe('1271 — transaction isolation and claim ownership', () => {
         expect(await dao.list('proj-coder', 'in', 10)).toEqual([]);
     });
 
-    test('the facade rejects asynchronous callbacks and expires their handle', async () => {
-        await db.exec('CREATE TABLE sync_transaction (id TEXT PRIMARY KEY)');
-        if (db.transaction === undefined) throw new Error('missing transaction capability');
-        let escaped: Parameters<Parameters<NonNullable<DbAdapter['transaction']>>[0]>[0] | undefined;
-        await expect(
-            db.transaction(async (tx) => {
-                escaped = tx;
-                tx.run('INSERT INTO sync_transaction VALUES (?)', 'rolled-back');
-            }),
-        ).rejects.toThrow('must be synchronous');
-        expect(await db.queryAll('SELECT id FROM sync_transaction')).toEqual([]);
-        expect(() => escaped?.run('INSERT INTO sync_transaction VALUES (?)', 'late')).toThrow('no longer active');
+    test('a rolled-back bracket releases the write lock for the next mutation', async () => {
+        // ts-db 0.8.1 removed the sync transaction facade; the inbox now owns BEGIN IMMEDIATE …
+        // COMMIT/ROLLBACK, so what matters is that a failure unwinds the bracket instead of leaving
+        // the connection mid-transaction (the next insert would otherwise fail on BEGIN).
+        await db.exec(`CREATE TRIGGER fail_sent_event BEFORE INSERT ON system_events
+            WHEN NEW.event_name = 'message.sent' BEGIN SELECT RAISE(ABORT, 'event failed'); END;`);
+        await expect(seed()).rejects.toThrow();
+        await db.exec('DROP TRIGGER fail_sent_event');
+        await expect(seed()).resolves.toBeDefined();
+        expect((await dao.list('proj-coder', 'in', 10)).length).toBe(1);
     });
 
     test('stale settlement and release never affect a replacement claim or emit events', async () => {
@@ -265,11 +263,17 @@ describe('1271 — transaction isolation and claim ownership', () => {
     });
 });
 
-test('1271 — an adapter without synchronous transactions fails before inbox writes', async () => {
+test('1271 — an adapter without a synchronous client fails before inbox writes', async () => {
+    // ts-db 0.8.1 has no `DbAdapter.transaction`; the capability the DAO needs is the synchronous
+    // `bun:sqlite` client behind `adapter.db.$client`. Strip it and the guard must fire before any
+    // statement runs (a driver without a sync connection cannot deliver the atomic bracket).
     const unsupported = new InboxDao(
         new Proxy(db, {
             get(target, property) {
-                if (property === 'transaction') return undefined;
+                if (property === 'db') {
+                    const inner = Reflect.get(target, property) as unknown as Record<string, unknown>;
+                    return { ...inner, $client: undefined };
+                }
                 const value = Reflect.get(target, property);
                 return typeof value === 'function' ? value.bind(target) : value;
             },

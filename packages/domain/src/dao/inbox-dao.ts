@@ -1,4 +1,3 @@
-import type { DbSyncTransaction } from '@gobing-ai/ts-db';
 import { BaseDao, type DbAdapter } from '@gobing-ai/ts-db';
 import { type CreateSystemEventInput, systemEventInsertSql } from './system-event-dao';
 
@@ -157,20 +156,86 @@ function toMessage(row: InboxRow): InboxMessage {
  * makes the event set exactly the changed set: a guarded transition that matches no row
  * emits nothing.
  */
+/**
+ * The synchronous transaction-scoped handle this DAO writes against.
+ *
+ * ts-db 0.8.1 removed `DbAdapter.transaction` / `DbSyncTransaction`; the adapter still exposes the
+ * underlying `bun:sqlite` client (`adapter.db.$client`), whose `transaction()` gives the SAME
+ * synchronous bracket the removed facade provided. Synchronous matters twice over: the read-then-
+ * write ladder is atomic by construction, and no other caller on this single connection can
+ * interleave a write between BEGIN and COMMIT (a foreign write would otherwise be absorbed by the
+ * bracket and rolled back with it).
+ */
+interface InboxTx {
+    queryAll<T>(sql: string, ...params: unknown[]): T[];
+    run(sql: string, ...params: unknown[]): void;
+}
+
+/** The bun:sqlite surface this DAO needs; absent on a driver without a synchronous connection. */
+interface SyncClient {
+    /** bun:sqlite returns a callable wrapper; the bracket opens when it is invoked. */
+    transaction: <T>(fn: () => T) => () => T;
+    prepare: (sql: string) => {
+        all: (...params: unknown[]) => unknown[];
+        run: (...params: unknown[]) => unknown;
+    };
+}
+
+/** The synchronous client behind the adapter, or undefined when the driver has none. */
+function syncClient(adapter: DbAdapter): SyncClient | undefined {
+    const client = (adapter.db as unknown as { $client?: Partial<SyncClient> }).$client;
+    return client?.transaction === undefined || client.prepare === undefined ? undefined : (client as SyncClient);
+}
+
+/** Statement cache: `prepare` per call dominated the guard write loops. */
+const statements = new WeakMap<SyncClient, Map<string, ReturnType<SyncClient['prepare']>>>();
+
+/** Construct the tx handle for one open transaction. */
+function txHandle(client: SyncClient): InboxTx {
+    let cache = statements.get(client);
+    if (cache === undefined) {
+        cache = new Map();
+        statements.set(client, cache);
+    }
+    const statement = (sql: string): ReturnType<SyncClient['prepare']> => {
+        let prepared = cache.get(sql);
+        if (prepared === undefined) {
+            prepared = client.prepare(sql);
+            cache.set(sql, prepared);
+        }
+        return prepared;
+    };
+    return {
+        queryAll: <T>(sql: string, ...params: unknown[]): T[] => (statement(sql).all(...params) as T[]) ?? [],
+        run: (sql: string, ...params: unknown[]): void => {
+            statement(sql).run(...params);
+        },
+    };
+}
+
+/**
+ * The inbox plane's only DAO (G11 R2, ADR-143): guarded transitions, receipt reconciliation and
+ * the joined request read, each writing its `system_events` row inside the same synchronous bracket.
+ */
 export class InboxDao extends BaseDao {
     constructor(adapter: DbAdapter) {
         super(adapter);
     }
 
-    private async withTransaction<T>(fn: (tx: DbSyncTransaction) => T): Promise<T> {
-        if (this.adapter.transaction === undefined) {
+    private async withTransaction<T>(fn: (tx: InboxTx) => T): Promise<T> {
+        const client = syncClient(this.adapter);
+        if (client === undefined) {
             throw new Error('Inbox mutations require the atomic synchronous transaction capability');
         }
-        return this.adapter.transaction(fn);
+        // One synchronous bracket: BEGIN … COMMIT never yields, so a concurrent write on this
+        // connection cannot land inside it and be rolled back with it. bun:sqlite's `transaction()`
+        // returns a callable wrapper — it only opens a bracket when that wrapper is invoked.
+        const bracket = client.transaction(() => fn(txHandle(client)));
+        return bracket();
     }
 
     /** Write the event rows for `changed` inside the open transaction. */
-    private writeEvents(tx: DbSyncTransaction, toEvent: InboxEventFactory, changed: readonly InboxMessage[]): void {
+    private writeEvents(tx: InboxTx, toEvent: InboxEventFactory, changed: readonly InboxMessage[]): void {
         for (const row of changed) {
             const statement = systemEventInsertSql(toEvent(row));
             tx.run(statement.sql, ...statement.params);
