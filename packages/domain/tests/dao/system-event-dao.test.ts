@@ -3,6 +3,26 @@ import { createDbAdapter } from '@gobing-ai/ts-db';
 import { applyCliMigrations, createId, SystemEventDao } from '../../src/index';
 
 describe('SystemEventDao', () => {
+    test('counts prefixes for the retained day without fetching event payloads', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        try {
+            await applyCliMigrations(adapter);
+            const dao = new SystemEventDao(adapter);
+            const since = '2026-07-04T00:00:00.000Z';
+            const names = ['task.created', 'task.created', 'task.updated', 'message.sent', 'message.sent'];
+            for (const event_name of names) {
+                await dao.insert({ id: createId('sev'), event_name, occurred_at: since, payload_json: '{invalid' });
+            }
+            await dao.insert({ id: createId('sev'), event_name: 'task.done', occurred_at: '2026-07-03T23:59:59.999Z' });
+            expect(await dao.countByPrefix({ since })).toEqual([
+                { prefix: 'task', count: 3 },
+                { prefix: 'message', count: 2 },
+            ]);
+        } finally {
+            adapter.close();
+        }
+    });
+
     test('insert and query returns events newest-first', async () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);

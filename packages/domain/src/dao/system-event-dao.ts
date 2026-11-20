@@ -464,6 +464,28 @@ export class SystemEventDao {
         }
     }
 
+    /** Count retained events by name prefix without reading their payloads. */
+    async countByPrefix({ since }: { since: string }): Promise<Array<{ prefix: string; count: number }>> {
+        try {
+            const rows = await this.db.queryAll<{ prefix: string; count: number }>(
+                `SELECT CASE WHEN instr(event_name, '.') > 0
+                            THEN substr(event_name, 1, instr(event_name, '.') - 1)
+                            ELSE event_name END AS prefix,
+                        COUNT(*) AS count
+                 FROM system_events
+                 WHERE occurred_at >= ?1
+                 GROUP BY prefix
+                 HAVING prefix <> ''
+                 ORDER BY count DESC, MAX(occurred_at) DESC, prefix ASC`,
+                since,
+            );
+            return rows.map(({ prefix, count }) => ({ prefix, count: Number(count) }));
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('no such table: system_events')) return [];
+            throw error;
+        }
+    }
+
     /**
      * Keyset-follow over the append-only ledger (G4 R8 / task 0531): rows with
      * `sequence > afterSequence` in ascending `(sequence, id)` order, capped at

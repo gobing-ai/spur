@@ -53,6 +53,12 @@ interface HistoryEvent {
     payload?: unknown;
 }
 
+interface HistoryPage {
+    events: HistoryEvent[];
+    nextCursor?: unknown;
+    prefixCounts?: unknown;
+}
+
 /** Collect the cross-project rows: registry first, gateway reads only for running local projects. */
 export async function collectProjectsView(input: ProjectsViewInput): Promise<ProjectViewRow[]> {
     const entries = await input.listProjects();
@@ -113,18 +119,25 @@ async function readProject(input: ProjectsViewInput, name: string, prefix: strin
         const signal = AbortSignal.timeout(timeoutMs);
         const url = new URL(`${base}/api/events/history`);
         url.searchParams.set('since', input.since);
+        url.searchParams.set('limit', '5');
+        url.searchParams.set('counts', 'prefix');
+        const currentPage = await readHistoryPage(fetchImpl, url, signal);
+        if (Array.isArray(currentPage.prefixCounts)) {
+            const eventCounts = currentPage.prefixCounts
+                .filter((entry) => typeof entry?.prefix === 'string' && Number.isFinite(entry.count))
+                .sort((a, b) => b.count - a.count);
+            return { name, prefix, state: 'ok', eventCounts, latest: currentPage.events.slice(0, 5).map(toSummary) };
+        }
+
+        // Older project servers ignore the option. Read their full paged history to count it.
+        url.searchParams.delete('counts');
         url.searchParams.set('limit', '50');
         const counts = new Map<string, number>();
         const latest: ProjectEventSummary[] = [];
         let cursor: string | null = null;
         do {
             if (cursor !== null) url.searchParams.set('cursor', cursor);
-            signal.throwIfAborted();
-            const history = await fetchImpl(url, { redirect: 'error', signal });
-            if (!history.ok) throw new Error(`event history answered ${history.status}`);
-            const body = (await history.json()) as { events?: unknown; nextCursor?: unknown } | null;
-            if (!Array.isArray(body?.events)) throw new Error('event history response is missing events');
-            const events = body.events as HistoryEvent[];
+            const { events, nextCursor } = await readHistoryPage(fetchImpl, url, signal);
             for (const event of events) {
                 const eventName = typeof event.eventName === 'string' ? event.eventName : '';
                 const eventPrefix =
@@ -132,9 +145,9 @@ async function readProject(input: ProjectsViewInput, name: string, prefix: strin
                 if (eventPrefix) counts.set(eventPrefix, (counts.get(eventPrefix) ?? 0) + 1);
                 if (latest.length < 5) latest.push(toSummary(event));
             }
-            if (typeof body.nextCursor === 'string' && body.nextCursor !== '') {
-                if (cursor === body.nextCursor) throw new Error('event history returned the same cursor twice');
-                cursor = body.nextCursor;
+            if (typeof nextCursor === 'string' && nextCursor !== '') {
+                if (cursor === nextCursor) throw new Error('event history returned the same cursor twice');
+                cursor = nextCursor;
             } else {
                 cursor = null;
             }
@@ -149,6 +162,15 @@ async function readProject(input: ProjectsViewInput, name: string, prefix: strin
     } catch (error) {
         return { name, prefix, state: 'unreachable', message: reasonOf(error) };
     }
+}
+
+async function readHistoryPage(fetchImpl: typeof fetch, url: URL, signal: AbortSignal): Promise<HistoryPage> {
+    signal.throwIfAborted();
+    const response = await fetchImpl(url, { redirect: 'error', signal });
+    if (!response.ok) throw new Error(`event history answered ${response.status}`);
+    const body = (await response.json()) as HistoryPage | null;
+    if (!Array.isArray(body?.events)) throw new Error('event history response is missing events');
+    return body;
 }
 
 /** One event line: the name and, when the payload says it plainly, a one-line summary. */

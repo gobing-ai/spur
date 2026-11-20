@@ -11,11 +11,17 @@ function entry(name: string, path: string, extra: Partial<ProjectEntry> = {}): P
 
 interface Upstream {
     port: number;
+    historyQueries: Array<{ limit: string | null; counts: string | null }>;
     stop(): void;
 }
 
 /** A real project upstream: `/api/health` plus a history page with the given event names. */
-function startUpstream(eventNames: string[]): Upstream {
+function startUpstream(
+    eventNames: string[],
+    counts?: Array<{ prefix: string; count: number }>,
+    failure?: 'http-error' | 'repeated-cursor',
+): Upstream {
+    const historyQueries: Upstream['historyQueries'] = [];
     const server = Bun.serve({
         port: 0,
         hostname: '127.0.0.1',
@@ -23,6 +29,9 @@ function startUpstream(eventNames: string[]): Upstream {
             const url = new URL(req.url);
             if (url.pathname === '/api/health') return Response.json({ ok: true });
             if (url.pathname === '/api/events/history') {
+                const aggregate = url.searchParams.get('counts');
+                historyQueries.push({ limit: url.searchParams.get('limit'), counts: aggregate });
+                if (failure === 'http-error') return new Response(null, { status: 500 });
                 const offset = Number(url.searchParams.get('cursor') ?? 0);
                 const end = offset + Number(url.searchParams.get('limit') ?? 50);
                 return Response.json({
@@ -33,13 +42,14 @@ function startUpstream(eventNames: string[]): Upstream {
                         prefix: eventName.split('.')[0],
                         payload: { summary: `${eventName} summary` },
                     })),
-                    nextCursor: end < eventNames.length ? String(end) : null,
+                    nextCursor: failure === 'repeated-cursor' ? '50' : end < eventNames.length ? String(end) : null,
+                    ...(aggregate === 'prefix' && counts !== undefined ? { prefixCounts: counts } : {}),
                 });
             }
             return new Response('not found', { status: 404 });
         },
     });
-    return { port: server.port as number, stop: () => server.stop(true) };
+    return { port: server.port as number, historyQueries, stop: () => server.stop(true) };
 }
 
 const cleanups: Array<() => void> = [];
@@ -105,7 +115,54 @@ describe('collectProjectsView through the real gateway handler (1402 R1/R2)', ()
             occurredAt: SINCE,
             summary: 'task.created summary',
         });
-        expect(gateway.ensured).toEqual(['alpha', 'alpha', 'alpha']);
+        expect(gateway.ensured).toEqual(['alpha', 'alpha', 'alpha', 'alpha']);
+        expect(healthy.historyQueries).toEqual([
+            { limit: '5', counts: 'prefix' },
+            { limit: '50', counts: null },
+            { limit: '50', counts: null },
+        ]);
+    });
+
+    test('uses ledger totals and requests only the latest five payloads from upgraded servers', async () => {
+        const counts = [
+            { prefix: 'task', count: 100 },
+            { prefix: 'message', count: 20 },
+        ];
+        const names = [...Array<string>(100).fill('task.updated'), ...Array<string>(20).fill('message.sent')];
+        const modern = startUpstream(names, counts);
+        const legacy = startUpstream(names);
+        cleanups.push(modern.stop, legacy.stop);
+        const entries = [
+            entry('alpha', '/tmp/alpha', { port: modern.port }),
+            entry('beta', '/tmp/beta', { port: legacy.port }),
+        ];
+        const gateway = await gatewayFor(entries, { '/tmp/alpha': modern.port, '/tmp/beta': legacy.port });
+        const [row, fallback] = await collectProjectsView({
+            listProjects: async () => entries,
+            gatewayPort: gateway.port,
+            since: SINCE,
+        });
+        expect(row?.eventCounts).toEqual(counts);
+        expect(row?.latest).toHaveLength(5);
+        expect(modern.historyQueries).toEqual([{ limit: '5', counts: 'prefix' }]);
+        expect(fallback).toMatchObject({ state: 'ok', eventCounts: counts, latest: row?.latest });
+        expect(legacy.historyQueries.map(({ limit }) => limit)).toEqual(['5', '50', '50', '50']);
+    });
+
+    test.each([
+        ['http-error', 'event history answered 500'],
+        ['repeated-cursor', 'event history returned the same cursor twice'],
+    ] as const)('reports %s as unreachable', async (failure, message) => {
+        const upstream = startUpstream([], undefined, failure);
+        cleanups.push(upstream.stop);
+        const entries = [entry('alpha', '/tmp/alpha', { port: upstream.port })];
+        const gateway = await gatewayFor(entries, { '/tmp/alpha': upstream.port });
+        const [row] = await collectProjectsView({
+            listProjects: async () => entries,
+            gatewayPort: gateway.port,
+            since: SINCE,
+        });
+        expect(row).toMatchObject({ state: 'unreachable', message });
     });
 
     test('a running project whose upstream refuses is unreachable, with the cause', async () => {

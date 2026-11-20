@@ -339,6 +339,7 @@ cursor is a total order under concurrent inserts.
 | Surface                   | Contract                                                                                               |
 | ------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `GET /api/events/history` | Newest-first page over `system_events`                                                                 |
+| `GET /api/events/history?counts=prefix` | Adds `prefixCounts: [{ prefix, count }]` over retained events at or after `since`, independent of the page, cursor and other filters. The aggregate reads no event payloads. |
 | Query (v1, preserved)     | `name`, `since`, `limit` (default **100**, max **500**)                                                |
 | Query (0372)              | `prefix`, `names` (comma or repeated), `runId`, `actor`, `cursor`                                      |
 | Success body              | `{ events, count, catalog, nextCursor, hasMore }` — `nextCursor`/`hasMore` are additive                |

@@ -625,9 +625,10 @@ the same file: every registered project rendered with exactly one state.
 | `gateway-down` | every running project, when the gateway itself is not answering (one probe decides it) |
 | `remote-not-proxied` | a non-local registry entry; never requested (ADR-151) |
 
-Reads are `GET <gateway>/<prefix>/api/health` and
-`GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=50` with cursor pagination. The health
-read and the complete history read each have a 3 s budget. The
+Reads use `GET <gateway>/<prefix>/api/health`, then
+`GET <gateway>/<prefix>/api/events/history?since=<day start>&limit=5&counts=prefix` for ledger totals
+and the latest event payloads. If an older server omits `prefixCounts`, the caller counts its history
+pages. Health and the event reads each have a 3 s budget. The
 event read is "since today", so `--all-projects` with a past `--date` is a usage error (exit 2) rather
 than a summary that reports today's events under an older heading. Aggregation lives in the caller
 (`packages/app/src/services/projects-summary.ts`); the gateway stays a path and gains no endpoint.

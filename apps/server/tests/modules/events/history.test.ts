@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { SystemEventQuery, SystemEventRow } from '@gobing-ai/spur-domain';
+import { createMigratedDb, SystemEventDao, type SystemEventQuery, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import {
@@ -77,6 +77,39 @@ describe('history cursor helpers', () => {
 });
 
 describe('GET /api/events/history', () => {
+    test('counts retained events by prefix independently of the latest history page', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const dao = new SystemEventDao(db);
+            const app = new Hono();
+            eventsModule.mount(app, { ...ctxWithRows([]), systemEventDao: async () => dao });
+            const since = '2026-07-04T00:00:00.000Z';
+            await dao.insert({ id: 'previous', event_name: 'task.updated', occurred_at: '2026-07-03T23:59:59.000Z' });
+            for (let i = 0; i < 60; i++) {
+                await dao.insert({
+                    id: `today-${i}`,
+                    event_name: i < 55 ? 'task.updated' : 'custom.notice',
+                    occurred_at: '2026-07-04T01:00:00.000Z',
+                });
+            }
+            const path = `/api/events/history?since=${encodeURIComponent(since)}&limit=5`;
+            const ordinary = (await (await app.request(path)).json()) as { events: unknown[] };
+            expect(ordinary.events).toHaveLength(5);
+            expect(ordinary).not.toHaveProperty('prefixCounts');
+            const counted = await app.request(`${path}&counts=prefix`);
+            expect(counted.status).toBe(200);
+            expect(await counted.json()).toEqual({
+                ...ordinary,
+                prefixCounts: [
+                    { prefix: 'task', count: 55 },
+                    { prefix: 'custom', count: 5 },
+                ],
+            });
+        } finally {
+            db.close();
+        }
+    });
+
     test('returns events newest-first with parsed payload', async () => {
         const rows: SystemEventRow[] = [
             {

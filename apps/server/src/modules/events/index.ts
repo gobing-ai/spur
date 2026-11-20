@@ -400,7 +400,10 @@ export const eventsModule: ServerModule = {
             };
 
             const dao = await ctx.systemEventDao();
-            const rows = await dao.query(query);
+            const [rows, prefixCounts] = await Promise.all([
+                dao.query(query),
+                c.req.query('counts') === 'prefix' ? dao.countByPrefix({ since: sinceParam ?? '' }) : undefined,
+            ]);
             const hasMore = rows.length > limit;
             const page = hasMore ? rows.slice(0, limit) : rows;
             const last = page.at(-1);
@@ -435,6 +438,7 @@ export const eventsModule: ServerModule = {
                 catalog: SYSTEM_EVENT_CATALOG_METADATA,
                 nextCursor,
                 hasMore,
+                ...(prefixCounts !== undefined ? { prefixCounts } : {}),
             });
         });
     },
