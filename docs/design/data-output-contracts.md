@@ -231,6 +231,7 @@ Row-level deltas from the default rule:
 | builder | bundle-laya-worker | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: `worker`, `source`) | adopted |
 | builder | emit-board-types | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: board declaration + kit mirror) | adopted |
 | builder | emit-migration-sql | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: migration-sql module) | adopted |
+| builder | check-deps | `apps/cli/src/commands/builder/build.ts` `registerBuilderCheckDepsCommand` (A94 1411) | `{ok, findings:[{kind,package,detail}], skipped?}` / `{ok:false, findings, error}` | adopted — 0 clean / 1 findings / 2 input error |
 | builder | verify-pack | `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact', message}}` | adopted — inspects an artifact, so `sourceRoot` is the invocation cwd |
 | rule (3) | run | service-side (`packages/app/src/services/rule-service.ts` `RuleService.evaluate`, JSON branch) | flat-object `{preset, ruleCount, …engine result}` | unwrapped; adopted 0697 — honors flag/env via threaded `enveloped` |
 | rule | validate | service-side (`RuleService.validate`, both JSON branches) | flat-object `{valid, kind, source, …}` (`valid: false` carries `errors`) | unwrapped; adopted 0697 — `valid` stays a payload field; envelope `ok` is command success |

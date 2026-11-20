@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its eighteen verbs (A93 artifacts + A94 staging/generators)', () => {
+    test('registers the noun with exactly its nineteen verbs (A93 artifacts + A94 staging/generators + check-deps)', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -50,6 +50,7 @@ describe('spur builder command wiring', () => {
             'verify-pack',
             'build-server',
             'build-binaries',
+            'check-deps',
             'bump-ver',
             'drop-tags',
             'publish',

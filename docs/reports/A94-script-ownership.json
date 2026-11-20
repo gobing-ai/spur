@@ -1,12 +1,12 @@
 {
     "schemaVersion": 2,
-    "generatedAt": "2026-11-20T09:32:25Z",
-    "sourceCommit": "d2cf837be0e0957640a50c1806895f46e9873878",
+    "generatedAt": "2026-11-20T10:30:45Z",
+    "sourceCommit": "50ef01cb1428b3fceb22512b2f395274e89b184b",
     "consentStatus": {
         "state": "granted",
         "at": "2026-11-19",
         "by": "Robin",
-        "record": "docs/design/downstream-tooling-absorption.md §5",
+        "record": "docs/design/downstream-tooling-absorption.md \u00a75",
         "amendment": "2026-11-20 surface-shape"
     },
     "waves": ["1410", "1411", "1412", "1413", "1414", "1415"],
@@ -18,11 +18,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 101
+                    "line": 104
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 180
+                    "line": 38
                 }
             ],
             "downstream": "retain",
@@ -36,11 +36,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 100
+                    "line": 103
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 177
+                    "line": 37
                 }
             ],
             "downstream": "retain",
@@ -54,35 +54,16 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 102
+                    "line": 105
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 183
+                    "line": 39
                 }
             ],
             "downstream": "retain",
             "disposition": "retained",
             "downstreamReason": "Retained: isolated multi-install A2A fixture, not runtime behavior"
-        },
-        {
-            "path": "scripts/commands/build-binaries.ts",
-            "responsibility": "Cross-compile per-platform `spur` release assets with checksums",
-            "tests": ["packages/app/tests/builder/binaries.test.ts"],
-            "callers": [
-                {
-                    "path": "apps/cli/package.json",
-                    "line": 55
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 165
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder build-binaries",
-            "waveWbs": "1411"
         },
         {
             "path": "scripts/commands/command-contract.test.ts",
@@ -133,11 +114,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 78
+                    "line": 81
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 84
+                    "line": 21
                 }
             ],
             "downstream": "move",
@@ -152,51 +133,16 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 70
+                    "line": 40
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 188
+                    "line": 40
                 }
             ],
             "downstream": "retain",
             "disposition": "retained",
             "downstreamReason": "Retained: two-install delegation scenario fixture, not runtime behavior"
-        },
-        {
-            "path": "scripts/commands/dependency-drift-check.test.ts",
-            "responsibility": "Companion tests for lockfile versus installed `@gobing-ai` version drift",
-            "tests": [],
-            "callers": [],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder check-deps",
-            "waveWbs": "1411",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/dependency-drift-check.ts"
-        },
-        {
-            "path": "scripts/commands/dependency-drift-check.ts",
-            "responsibility": "Assert lockfile `@gobing-ai` versions match the installed dependency tree",
-            "tests": ["scripts/commands/dependency-drift-check.test.ts"],
-            "callers": [
-                {
-                    "path": "package.json",
-                    "line": 89
-                },
-                {
-                    "path": "package.json",
-                    "line": 103
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 88
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder check-deps",
-            "waveWbs": "1411"
         },
         {
             "path": "scripts/commands/dev-all.heavy.test.ts",
@@ -217,7 +163,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 168
+                    "line": 34
                 }
             ],
             "downstream": "generalize",
@@ -244,7 +190,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 171
+                    "line": 35
                 }
             ],
             "downstream": "generalize",
@@ -293,7 +239,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: pins Spur’s own CLI flag surface, a repository contract",
+            "downstreamReason": "Retained: pins Spur\u2019s own CLI flag surface, a repository contract",
             "subject": "plugins/sp/commands"
         },
         {
@@ -303,7 +249,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -314,7 +260,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -333,7 +279,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches"
+            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches"
         },
         {
             "path": "scripts/commands/fleet-e2e-host-probe.test.ts",
@@ -405,11 +351,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 99
+                    "line": 102
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 174
+                    "line": 36
                 }
             ],
             "downstream": "retain",
@@ -428,48 +374,17 @@
             "subject": "scripts/install.sh"
         },
         {
-            "path": "scripts/commands/link-check.test.ts",
-            "responsibility": "Companion tests for linked package dist freshness checks",
-            "tests": [],
-            "callers": [],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder check-deps",
-            "waveWbs": "1411",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/link-check.ts"
-        },
-        {
-            "path": "scripts/commands/link-check.ts",
-            "responsibility": "Fail when a linked `@gobing-ai` package serves a stale `dist/`",
-            "tests": ["scripts/commands/link-check.test.ts"],
-            "callers": [
-                {
-                    "path": "package.json",
-                    "line": 98
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 186
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder check-deps",
-            "waveWbs": "1411"
-        },
-        {
             "path": "scripts/commands/plugin-install-smoke.ts",
             "responsibility": "Release gate proving the bundled plugin surface is standalone and installs clean",
             "tests": [],
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 84
+                    "line": 88
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 85
+                    "line": 12
                 },
                 {
                     "path": "apps/cli/src/release-ops.ts",
@@ -498,20 +413,20 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 81
+                    "line": 85
                 },
                 {
                     "path": "package.json",
-                    "line": 90
+                    "line": 85
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 83
+                    "line": 20
                 }
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo’s suite policy"
+            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo\u2019s suite policy"
         },
         {
             "path": "scripts/commands/script-contract-check.test.ts",
@@ -531,7 +446,7 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 95
+                    "line": 93
                 },
                 {
                     "path": "config/rules/boundary/sp-script-placement.yaml",
@@ -539,7 +454,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 86
+                    "line": 25
                 }
             ],
             "downstream": "retain",
@@ -564,11 +479,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 93
+                    "line": 97
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 92
+                    "line": 43
                 }
             ],
             "downstream": "retain",
@@ -593,7 +508,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 91
+                    "line": 30
                 }
             ],
             "downstream": "retain",
@@ -607,7 +522,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo’s suite",
+            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/test-suite-termination.ts"
         },
@@ -623,7 +538,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo’s suite"
+            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite"
         },
         {
             "path": "scripts/commands/transition-shim-check.test.ts",
@@ -644,7 +559,7 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 94
+                    "line": 93
                 },
                 {
                     "path": "config/transition-shims.json",
@@ -652,7 +567,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 87
+                    "line": 26
                 }
             ],
             "downstream": "generalize",
@@ -667,11 +582,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 97
+                    "line": 101
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 89
+                    "line": 28
                 }
             ],
             "downstream": "retain",
@@ -685,27 +600,12 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 90
+                    "line": 75
                 }
             ],
             "downstream": "retain",
             "disposition": "retained",
             "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
-        },
-        {
-            "path": "scripts/commands/verify-pack.ts",
-            "responsibility": "Extract and assert the packed tarball ships plugin and marketplace content",
-            "tests": ["packages/app/tests/builder/verify-pack.test.ts"],
-            "callers": [
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 153
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder verify-pack",
-            "waveWbs": "1411"
         },
         {
             "path": "scripts/commands/workflow-promotion.e2e.test.ts",
@@ -738,11 +638,11 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 96
+                    "line": 93
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 189
+                    "line": 62
                 }
             ],
             "downstream": "move",
@@ -775,7 +675,7 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 73
+                    "line": 81
                 },
                 {
                     "path": "apps/cli/package.json",

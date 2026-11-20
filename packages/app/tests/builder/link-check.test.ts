@@ -2,7 +2,7 @@
  * Behavioral checks for the linked-package staleness guard.
  *
  * Included in `bun run test`; run this focused check with:
- *   bun test scripts/commands/link-check.test.ts
+ *   bun test packages/app/tests/builder/link-check.test.ts
  *
  * The staleness comparison is the whole point of the module and its sense is
  * easy to invert (it was, once, before this test existed), so each case pins
@@ -12,7 +12,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmdirSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findStaleLinks } from './link-check';
+import { findStaleLinks } from '../../src/builder/check-deps';
+
+/** The scope these cases exercise (A94 1411: the check is scope-driven, not hardcoded). */
+const SCOPE = ['@gobing-ai/*'];
 
 /** Seconds since epoch — utimesSync takes seconds, not ms. */
 const T0 = 1_700_000_000;
@@ -54,18 +57,18 @@ describe('findStaleLinks', () => {
     ])('ignores packages that do not export dist output: %j', (exports) => {
         const consumer = scaffold({ srcAge: T0 + 20, distAge: null });
         writeFileSync(join(consumer, '..', 'linked-pkg', 'package.json'), JSON.stringify({ exports }));
-        expect(findStaleLinks(consumer)).toEqual([]);
+        expect(findStaleLinks(consumer, SCOPE)).toEqual([]);
     });
     test('flags an unbuilt linked package with no dist directory', () => {
         const cwd = scaffold({ srcAge: T0, distAge: null });
         rmdirSync(join(cwd, '..', 'linked-pkg', 'dist'));
-        const stale = findStaleLinks(cwd);
+        const stale = findStaleLinks(cwd, SCOPE);
         expect(stale).toHaveLength(1);
         expect(stale[0]?.dist).toBeNull();
     });
     test('flags a linked package whose dist is older than its src', () => {
         const cwd = scaffold({ srcAge: T0 + 500, distAge: T0 });
-        const stale = findStaleLinks(cwd);
+        const stale = findStaleLinks(cwd, SCOPE);
         expect(stale).toHaveLength(1);
         expect(stale[0]?.pkg).toBe('@gobing-ai/ts-fake');
         expect(stale[0]?.src.rel).toBe('index.ts');
@@ -73,17 +76,17 @@ describe('findStaleLinks', () => {
 
     test('passes a linked package whose dist is newer than its src', () => {
         const cwd = scaffold({ srcAge: T0, distAge: T0 + 500 });
-        expect(findStaleLinks(cwd)).toHaveLength(0);
+        expect(findStaleLinks(cwd, SCOPE)).toHaveLength(0);
     });
 
     test('passes when dist and src share an mtime (a build that just ran)', () => {
         const cwd = scaffold({ srcAge: T0, distAge: T0 });
-        expect(findStaleLinks(cwd)).toHaveLength(0);
+        expect(findStaleLinks(cwd, SCOPE)).toHaveLength(0);
     });
 
     test('flags a linked package that was never built at all', () => {
         const cwd = scaffold({ srcAge: T0, distAge: null });
-        const stale = findStaleLinks(cwd);
+        const stale = findStaleLinks(cwd, SCOPE);
         expect(stale).toHaveLength(1);
         expect(stale[0]?.dist).toBeNull();
     });
@@ -95,11 +98,11 @@ describe('findStaleLinks', () => {
     // over-reporting one), so a colocated test now counts like any other input.
     test('counts every src .ts as a build input, including a colocated test file', () => {
         const cwd = scaffold({ srcAge: T0 + 500, distAge: T0, srcName: 'mappers.test.ts' });
-        expect(findStaleLinks(cwd)).toHaveLength(1);
+        expect(findStaleLinks(cwd, SCOPE)).toHaveLength(1);
     });
 
     test('returns empty when the consumer has no @gobing-ai scope dir', () => {
-        expect(findStaleLinks(mkdtempSync(join(tmpdir(), 'spur-linkcheck-bare-')))).toHaveLength(0);
+        expect(findStaleLinks(mkdtempSync(join(tmpdir(), 'spur-linkcheck-bare-')), SCOPE)).toHaveLength(0);
     });
 
     // Bun store copies are symlinks too, and these packages publish `src/`
@@ -123,6 +126,6 @@ describe('findStaleLinks', () => {
         mkdirSync(scope, { recursive: true });
         symlinkSync(store, join(scope, 'ts-fake'));
 
-        expect(findStaleLinks(consumer)).toHaveLength(0);
+        expect(findStaleLinks(consumer, SCOPE)).toHaveLength(0);
     });
 });

@@ -99,6 +99,11 @@ redaction:
 # defaults; adjust here instead of patching release code when conventions
 # change (schema: packages/config/src/index.ts BuilderBumpVerConfigSchema).
 builder:
+  # A94 1411: the package scope `spur builder check-deps` reports on (stale `bun link` dist +
+  # lockfile drift). Empty scope skips both checks; this repo names its own packages instead of
+  # the retired scripts' hardcoded `@gobing-ai`.
+  dependencyScope:
+    - '@gobing-ai/*'
   # A92 / docs/design/sdlc-actions.md §3.5: `bun` binds the reserved action
   # vocabulary to this repo's bun scripts (the default, declared so the dogfood
   # exercises the map); the custom actions below are this repo's own names, each

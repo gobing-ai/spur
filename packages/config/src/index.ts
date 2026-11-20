@@ -1165,6 +1165,12 @@ export const BuilderConfigSchema = z
         preset: z.enum(SDLC_PRESETS).default('bun'),
         /** `action name → shell command | composite step list` (see {@link SDLC_ACTIONS}). */
         actions: z.record(z.string(), BuilderActionValueSchema).default({}),
+        /**
+         * Package globs `spur builder check-deps` reports on (stale `bun link` dist + lockfile
+         * drift). Empty skips both checks; a downstream project names its own scope instead of
+         * inheriting `@gobing-ai/*` (A94 1411).
+         */
+        dependencyScope: z.array(z.string()).default([]),
     })
     .superRefine(refineBuilderActions);
 

@@ -6,7 +6,14 @@
  * reads a project database, so a build never boots the CLI's project runtime.
  */
 
-export { binaryAssetName, buildBinaries, releaseAssetNames, writeSha256Sums } from './binaries';
+export {
+    BINARY_TARGETS,
+    type BuildBinariesOptions,
+    binaryAssetName,
+    buildBinaries,
+    releaseAssetNames,
+    writeSha256Sums,
+} from './binaries';
 export { bundleConfig } from './bundle-config';
 export { type BundleLayaWorkerOptions, bundleLayaWorker } from './bundle-laya-worker';
 export { type BundlePluginsOptions, bundlePlugins } from './bundle-plugins';
@@ -16,6 +23,19 @@ export {
     type BuildRunner as WebBuildRunner,
     bundleWeb,
 } from './bundle-web';
+export {
+    type CheckDepsFinding,
+    type CheckDepsOptions,
+    checkDependencyDrift,
+    checkDeps,
+    type DependencyDrift,
+    findStaleLinks,
+    inScope,
+    lockKeyInScope,
+    lockKeyPackageName,
+    readLockedDependencies,
+    type StaleLink,
+} from './check-deps';
 export {
     type BuildArtifact,
     type BuildDiagnostics,
@@ -65,4 +85,6 @@ export {
     type TarRunner,
     verifyPack,
     verifyPackExtract,
+    verifySpurPack,
+    verifySpurPackExtract,
 } from './verify-pack';

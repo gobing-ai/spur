@@ -5,6 +5,7 @@ import {
     registerBuilderBuildBinariesCommand,
     registerBuilderBuildCliCommand,
     registerBuilderBuildServerCommand,
+    registerBuilderCheckDepsCommand,
 } from './build';
 import { registerBuilderBumpVerCommand } from './bump-ver';
 import { registerBuilderDropTagsCommand } from './drop-tags';
@@ -19,8 +20,8 @@ import { registerBuilderShowBranchesCommand } from './show-branches';
  * by task 1219 for the four flat `pr-<verb>` verbs that replace the `pr <op>` layer).
  * Verbs: `build-cli`, `build-server`, `build-binaries`, `bump-ver`, `drop-tags`, `publish`,
  * `show-branches`, `pr-status`, `pr-check`, `pr-open`, `pr-review` (+ the hidden, deprecated `pr`
- * alias). The three `build-*` verbs are the compiled-artifact surface absorbed from the repository
- * scripts in A93 1354.
+ * alias), the artifact verbs absorbed from the repository scripts in A93 1354 and A94 1410
+ * (`bundle-*`, `emit-*`, `verify-pack`), and `check-deps` (A94 1411: stale linked dist + drift).
  */
 export function registerBuilderCommand(program: Command, context: CliContext): void {
     const noun = program
@@ -30,6 +31,7 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
     registerBuilderArtifactCommands(noun, context);
     registerBuilderBuildServerCommand(noun, context);
     registerBuilderBuildBinariesCommand(noun, context);
+    registerBuilderCheckDepsCommand(noun, context);
     registerBuilderBumpVerCommand(noun, context);
     registerBuilderDropTagsCommand(noun, context);
     registerBuilderPublishCommand(noun, context);

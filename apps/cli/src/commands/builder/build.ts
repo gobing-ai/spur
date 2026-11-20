@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    BINARY_TARGETS,
     BuildError,
     type BuildResult,
     buildBinaries,
@@ -10,6 +11,7 @@ import {
     bundleLayaWorker,
     bundlePlugins,
     bundleWeb,
+    checkDeps,
     emitBoardDeclarations,
     emitKitDeclarations,
     emitMigrationSql,
@@ -155,9 +157,10 @@ export function registerBuilderArtifactCommands(noun: Command, context: CliConte
         });
 
     bootFree(noun.command('verify-pack'))
-        .summary('inspect a packed tarball (member safety, archive-owned versions, pruned content)')
+        .summary('inspect a packed tarball (member safety, archive-owned version, required members)')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
+        .option('--require <member>', 'member that must ship at package/<member> (repeatable)', collect, [])
         .argument('<tgz>', 'tarball to inspect, relative to the invocation cwd')
         .action(async (tgz, options) => {
             await runVerb(
@@ -165,7 +168,7 @@ export function registerBuilderArtifactCommands(noun: Command, context: CliConte
                 options,
                 async (cwd) => {
                     const tarball = resolve(cwd, tgz);
-                    const result = await verifyPack(tarball);
+                    const result = await verifyPack(tarball, { requires: options.require });
                     return {
                         ok: true as const,
                         // `verify-pack` inspects an artifact, not a checkout: no source-root validation.
@@ -180,15 +183,108 @@ export function registerBuilderArtifactCommands(noun: Command, context: CliConte
         });
 }
 
-/** Register `spur builder build-binaries`. */
+/**
+ * Register `spur builder build-binaries`.
+ *
+ * Two contracts in one verb, because the artifact is the same:
+ *  - the release build (no `--entry`): the checkout's six `spur` assets into `dist/cli` plus
+ *    `SHA256SUMS`, unchanged from the route A93 shipped;
+ *  - the generic build (`--entry`): one entry compiled for the requested targets into `--out`,
+ *    with no Spur source-root validation (A94 1411).
+ */
 export function registerBuilderBuildBinariesCommand(noun: Command, context: CliContext): void {
-    registerBuildVerb(
-        noun,
-        context,
-        'build-binaries',
-        'cross-compile the six release binaries and write SHA256SUMS',
-        buildBinaries,
-    );
+    bootFree(noun.command('build-binaries'))
+        .summary('cross-compile release binaries and write SHA256SUMS (or one entry for chosen targets)')
+        .option('--source-root <dir>', 'Spur source checkout to build (default: the current directory)')
+        .option('--entry <file>', 'compile this entry instead of the Spur release build')
+        .option('--name <bin>', 'asset base name (default: the entry basename without its extension)')
+        .option('--targets <csv>', `comma-separated targets (default: all of ${BINARY_TARGETS.join(',')})`)
+        .option('--out <dir>', 'output directory in --entry mode (default: dist/bin)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            const targets =
+                options.targets === undefined
+                    ? undefined
+                    : options.targets
+                          .split(',')
+                          .map((target) => target.trim())
+                          .filter(Boolean);
+            await runVerb(
+                context,
+                options,
+                async (sourceRoot) =>
+                    buildBinaries({
+                        sourceRoot,
+                        cwd: context.cwd,
+                        ...(options.entry !== undefined ? { entry: options.entry } : {}),
+                        ...(options.name !== undefined ? { name: options.name } : {}),
+                        ...(targets !== undefined ? { targets } : {}),
+                        ...(options.out !== undefined ? { out: options.out } : {}),
+                    }),
+                'build-binaries',
+                // `--entry` compiles an arbitrary project, so it must not require a Spur checkout.
+                options.entry === undefined,
+            );
+        });
+}
+
+/**
+ * Register `spur builder check-deps` (A94 1411): stale linked dist + lockfile drift, scoped by
+ * `builder.dependencyScope` or `--scope`, exiting 0 clean / 1 findings / 2 usage-or-input error.
+ */
+export function registerBuilderCheckDepsCommand(noun: Command, context: CliContext): void {
+    bootFree(noun.command('check-deps'))
+        .summary('report stale bun-linked dist and lockfile drift for the configured package scope')
+        .option('--scope <glob>', 'package glob to check (repeatable; replaces builder.dependencyScope)', collect, [])
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            // `builder` verbs are boot-free routes, so the composition root did not load the project
+            // config; this verb is the one that needs `builder.dependencyScope`, so it loads it once
+            // here rather than forcing a full (DB-initializing) boot for a read-only check.
+            const config = context.spurConfig ?? (await context.loadAgentConfig(context.cwd));
+            const configured = config?.builder?.dependencyScope ?? [];
+            const scope: readonly string[] = options.scope.length > 0 ? options.scope : configured;
+            const emit = (payload: unknown): void => {
+                context.output.write(toEnvelopeJson(payload, { enveloped: options.jsonEnvelope === true }));
+            };
+            if (scope.length === 0) {
+                if (options.json === true) {
+                    emit({ ok: true, findings: [], skipped: 'no dependencyScope configured' });
+                } else {
+                    context.output.write('check-deps: no dependencyScope configured — skipped');
+                }
+                return;
+            }
+            try {
+                const findings = checkDeps({ cwd: context.cwd, scope });
+                if (options.json === true) {
+                    emit({ ok: findings.length === 0, findings });
+                } else if (findings.length === 0) {
+                    context.output.write(`check-deps OK — ${scope.join(',')} in step with source and lockfile.`);
+                } else {
+                    for (const finding of findings) {
+                        context.output.error(`${finding.kind}\t${finding.package}\t${finding.detail}`);
+                    }
+                }
+                if (findings.length > 0) context.setExitCode(1);
+            } catch (error) {
+                const raw = error instanceof Error ? error.message : String(error);
+                const message = raw.startsWith('check-deps') ? raw : `check-deps: ${raw}`;
+                if (options.json === true) {
+                    emit({ ok: false, findings: [], error: message });
+                } else {
+                    context.output.error(message);
+                }
+                context.setExitCode(2);
+            }
+        });
+}
+
+/** Accumulate a repeatable option into an array. */
+function collect(value: string, previous: string[]): string[] {
+    return [...previous, value];
 }
 
 /** Shared body for the artifact verbs: render/exit contract identical to the compile verbs. */

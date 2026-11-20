@@ -294,7 +294,8 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         //          declares `--json-envelope` for its own refusal path).
         // 85 → 89 (A94 1410: `builder bundle-plugins`, `bundle-laya-worker`, `emit-board-types` and
         //          `emit-migration-sql` declare it on the shared `runVerb` body).
-        expect(advertising.length).toBe(89);
+        // 89 → 90 (A94 1411: `builder check-deps` declares and emits it).
+        expect(advertising.length).toBe(91);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

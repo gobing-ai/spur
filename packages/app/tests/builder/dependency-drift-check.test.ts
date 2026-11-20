@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkDependencyDrift, dependencyDriftCheck, lockKeyPackageName } from './dependency-drift-check';
+import { checkDependencyDrift, lockKeyPackageName } from '../../src/builder/check-deps';
+
+/** The scope these cases exercise (A94 1411: the check is scope-driven, not hardcoded). */
+const SCOPE = ['@gobing-ai/ts-*'];
 
 describe('dependency-drift-check (0738 R3/R17)', () => {
     test('returns 0 when all installed packages match locked versions', async () => {
@@ -29,10 +32,10 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
             JSON.stringify({ version: '0.4.55' }),
         );
 
-        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE });
         expect(drifts).toHaveLength(0);
 
-        const code = await dependencyDriftCheck({ lockfilePath: lockPath, nodeModulesDir, quiet: true });
+        const code = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE }).length > 0 ? 1 : 0;
         expect(code).toBe(0);
 
         await rm(dir, { recursive: true });
@@ -59,7 +62,7 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         );
         // ts-db is completely missing
 
-        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE });
         expect(drifts).toHaveLength(2);
 
         const importerDrift = drifts.find((d) => d.name === '@gobing-ai/ts-llm-jsonl-importer');
@@ -70,7 +73,7 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         expect(dbDrift?.installed).toBeNull();
         expect(dbDrift?.locked).toBe('0.4.55');
 
-        const code = await dependencyDriftCheck({ lockfilePath: lockPath, nodeModulesDir, quiet: true });
+        const code = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE }).length > 0 ? 1 : 0;
         expect(code).toBe(1);
 
         await rm(dir, { recursive: true });
@@ -102,7 +105,7 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         await mkdir(nestedDir, { recursive: true });
         await writeFile(join(nestedDir, 'package.json'), JSON.stringify({ version: '0.4.65' }));
 
-        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE });
         expect(drifts).toHaveLength(0);
 
         await rm(dir, { recursive: true });
@@ -140,7 +143,7 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         await mkdir(nestedDir, { recursive: true });
         await writeFile(join(nestedDir, 'package.json'), JSON.stringify({ version: '0.4.60' }));
 
-        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE });
         expect(drifts).toHaveLength(1);
         expect(drifts[0]?.name).toBe('@gobing-ai/ts-db');
         expect(drifts[0]?.installed).toBe('0.4.60');
@@ -185,14 +188,14 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         }
 
         // Matching store entries resolve: no drift.
-        expect(checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir })).toHaveLength(0);
+        expect(checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE })).toHaveLength(0);
 
         // Store pinned to the wrong version: store fallback misses, drift reports.
         await writeFile(
             lockPath,
             JSON.stringify({ packages: { '@gobing-ai/ts-decision-fm': ['@gobing-ai/ts-decision-fm@0.5.17'] } }),
         );
-        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE });
         expect(drifts).toHaveLength(1);
         expect(drifts[0]?.name).toBe('@gobing-ai/ts-decision-fm');
         expect(drifts[0]?.installed).toBeNull();
@@ -219,11 +222,11 @@ describe('dependency-drift-check (0738 R3/R17)', () => {
         await mkdir(storePkg, { recursive: true });
         await writeFile(join(storePkg, 'package.json'), JSON.stringify({ version: '4.6.7' }));
 
-        expect(checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir })).toHaveLength(0);
+        expect(checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE })).toHaveLength(0);
 
         // Store lacks the locked nested resolution: drift still reports, as missing.
         await writeFile(lockPath, JSON.stringify({ packages: { '@gobing-ai/ts-db/zod': ['zod@4.7.0'] } }));
-        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir });
+        const drifts = checkDependencyDrift({ lockfilePath: lockPath, nodeModulesDir, scope: SCOPE });
         expect(drifts).toHaveLength(1);
         expect(drifts[0]?.name).toBe('zod');
         expect(drifts[0]?.installed).toBeNull();

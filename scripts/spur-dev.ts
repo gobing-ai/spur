@@ -9,13 +9,12 @@
  * Commands (the layer is recorded here, never in the path — A92 R5):
  *
  *   L1 build / package
- *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
- *   build-binaries                              forward to `spur builder build-binaries`
  *   plugin-install-smoke                       prove the plugin surface is standalone and installs clean
  *
- *   Retired into the CLI by A94 1410 (each name now prints its replacement and exits 2):
+ *   Retired into the CLI by A94 1410/1411 (each name now prints its replacement and exits 2):
  *   build-cli, build-server, bundle-config, bundle-web, bundle-plugins, bundle-laya-worker,
- *   emit-board-types, emit-migration-sql — all `spur builder <verb>`.
+ *   emit-board-types, emit-migration-sql, verify-pack, build-binaries — all `spur builder <verb>`;
+ *   link-check and dependency-drift-check — both `spur builder check-deps`.
  *
  *   L2 test runner / coverage
  *   run-tests <bun test args>                  run the suite with the repo's hermetic env; owns coverage certification
@@ -56,13 +55,10 @@ import { join } from 'node:path';
 import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
-import { buildReleaseBinaries } from './commands/build-binaries';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { devAll } from './commands/dev-all';
 import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
-import { linkCheck } from './commands/link-check';
-import { verifyPackTarball } from './commands/verify-pack';
 import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 /**
@@ -75,7 +71,6 @@ const DELEGATED: Record<string, string> = {
     'plugin-install-smoke': 'plugin-install-smoke.ts',
     'script-contract-check': 'script-contract-check.ts',
     'transition-shim-check': 'transition-shim-check.ts',
-    'dependency-drift-check': 'dependency-drift-check.ts',
     'validate-commands': 'validate-commands.ts',
     'flag-contract-check': 'validate-flag-contracts.ts',
     'surface-drift-inventory': 'surface-drift-inventory.ts',
@@ -88,8 +83,6 @@ const DELEGATED: Record<string, string> = {
  * registration cannot drift out of the usage list (task 1409 R3).
  */
 const COMMANDS = [
-    'verify-pack',
-    'build-binaries',
     'dev-all',
     'eval-pipeline',
     'fleet-e2e',
@@ -97,7 +90,6 @@ const COMMANDS = [
     'a2a-member-e2e',
     'a2a-two-install-e2e',
     'delegate-workflow-e2e',
-    'link-check',
     'promotion',
 ];
 
@@ -115,6 +107,10 @@ export const RETIRED: Record<string, string> = {
     'bundle-laya-worker': 'spur builder bundle-laya-worker',
     'emit-board-types': 'spur builder emit-board-types',
     'emit-migration-sql': 'spur builder emit-migration-sql',
+    'verify-pack': 'spur builder verify-pack',
+    'build-binaries': 'spur builder build-binaries',
+    'link-check': 'spur builder check-deps',
+    'dependency-drift-check': 'spur builder check-deps',
 };
 
 function usage(message?: string): never {
@@ -143,15 +139,6 @@ if (replacement !== undefined) {
 
 try {
     switch (command) {
-        case 'verify-pack': {
-            const tarball = args[0];
-            if (!tarball) throw new Error('Usage: spur-dev verify-pack <path-to-.tgz>');
-            process.exit(await verifyPackTarball(tarball));
-            break;
-        }
-        case 'build-binaries':
-            await buildReleaseBinaries();
-            break;
         case 'dev-all':
             devAll();
             break;
@@ -172,9 +159,6 @@ try {
             break;
         case 'delegate-workflow-e2e':
             process.exit(await runDelegateWorkflowE2e(args));
-            break;
-        case 'link-check':
-            process.exit(await linkCheck());
             break;
         case 'promotion':
             process.exit(await runWorkflowPromotion(args));

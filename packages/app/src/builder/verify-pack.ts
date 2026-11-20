@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -103,10 +104,16 @@ async function listFiles(dir: string): Promise<string[]> {
 }
 
 /**
- * Assert packaging invariants against an extracted archive root. The expected version is read from
- * the archive's own `package/package.json`; a missing manifest is a failure.
+ * Generic extract assertions (A94 1411): the archive's own `package/package.json` carries a version,
+ * and every `--require` member is present at `package/<member>`.
+ *
+ * @param extractRoot - directory the archive was extracted into
+ * @param requires - repo-relative members that must ship (default: none)
  */
-export async function verifyPackExtract(extractRoot: string): Promise<{ version: string; files: number }> {
+export async function verifyPackExtract(
+    extractRoot: string,
+    requires: readonly string[] = [],
+): Promise<{ version: string; files: number }> {
     const pkg = join(extractRoot, 'package');
     const manifest = parseJson<{ version?: string }>(
         await readFile(join(pkg, 'package.json'), 'utf-8'),
@@ -115,7 +122,25 @@ export async function verifyPackExtract(extractRoot: string): Promise<{ version:
     if (typeof manifest.version !== 'string' || manifest.version === '') {
         throw new Error('verify-pack: package/package.json carries no version');
     }
-    const version = manifest.version;
+    for (const member of requires) {
+        const target = join(pkg, member);
+        if (!existsSync(target)) {
+            throw new Error(`required member missing: ${member}`);
+        }
+    }
+    return { version: manifest.version, files: (await listFiles(pkg)).length };
+}
+
+/**
+ * Assert the version equality and prune invariants of Spur's own package, and report the packed
+ * plugin file count.
+ *
+ * A94 1411 moved these out of the generic verb: plugin/marketplace version equality and the
+ * tests/evals prune are Spur-package facts, so only Spur's packed-tarball E2E calls this.
+ */
+export async function verifySpurPackExtract(extractRoot: string): Promise<{ version: string; files: number }> {
+    const { version } = await verifyPackExtract(extractRoot);
+    const pkg = join(extractRoot, 'package');
 
     const pluginJson = join(pkg, 'plugins/sp/plugin.json');
     const marketplaceJson = join(pkg, '.claude-plugin/marketplace.json');
@@ -174,8 +199,39 @@ export type TarRunner = (
 /**
  * Inspect a tarball: list → validate members → extract into a private temp dir → assert.
  * The temp dir is always removed, including on every failure path.
+ *
+ * Generic form (A94 1411): member safety, the archive's own version, and every `--require` member.
+ * Spur's plugin/marketplace invariants live in {@link verifySpurPack}.
  */
 export async function verifyPack(
+    tarball: string,
+    options: { run?: TarRunner; requires?: readonly string[] } = {},
+): Promise<{ version: string; files: number }> {
+    const run = options.run ?? runTar;
+    const verbose = await run(['-tvzf', tarball]);
+    if (verbose.exitCode !== 0) {
+        throw new Error(`verify-pack: cannot inspect archive: ${verbose.stderr.trim()}`);
+    }
+    const names = await run(['-tzf', tarball]);
+    if (names.exitCode !== 0) {
+        throw new Error(`verify-pack: cannot list archive members: ${names.stderr.trim()}`);
+    }
+    assertSafeMembers(parseArchiveListing(verbose.stdout, names.stdout));
+
+    const extractRoot = await mkdtemp(join(tmpdir(), 'spur-verify-'));
+    try {
+        const extract = await run(['-xzf', tarball, '-C', extractRoot]);
+        if (extract.exitCode !== 0) {
+            throw new Error(`verify-pack: extraction failed: ${extract.stderr.trim()}`);
+        }
+        return await verifyPackExtract(extractRoot, options.requires ?? []);
+    } finally {
+        await rm(extractRoot, { recursive: true, force: true });
+    }
+}
+
+/** Spur's own package: the generic assertions plus plugin/marketplace equality and prune. */
+export async function verifySpurPack(
     tarball: string,
     options: { run?: TarRunner } = {},
 ): Promise<{ version: string; files: number }> {
@@ -196,7 +252,7 @@ export async function verifyPack(
         if (extract.exitCode !== 0) {
             throw new Error(`verify-pack: extraction failed: ${extract.stderr.trim()}`);
         }
-        return await verifyPackExtract(extractRoot);
+        return await verifySpurPackExtract(extractRoot);
     } finally {
         await rm(extractRoot, { recursive: true, force: true });
     }

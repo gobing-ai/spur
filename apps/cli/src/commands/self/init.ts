@@ -287,7 +287,8 @@ export function renderBuilderBlock(files: BuilderFiles): string[] {
     const { bindings, sourceByAction, diagnostics } = detectBuilderBindings(files);
     const bound = SDLC_ACTIONS.filter((action) => bindings[action] !== undefined);
     const unbound = SDLC_ACTIONS.filter(
-        (action) => resolveAction({ preset: 'none', actions: bindings }, action).kind === 'unbound',
+        (action) =>
+            resolveAction({ preset: 'none', actions: bindings, dependencyScope: [] }, action).kind === 'unbound',
     );
     return [
         'builder:',

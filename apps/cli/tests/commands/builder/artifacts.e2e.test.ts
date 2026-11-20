@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { verifySpurPack } from '@gobing-ai/spur-app/builder';
 import { resolveBundledConfigRoot } from '@gobing-ai/spur-config/bundled-config';
 import { BOARD_FACADE_SPECIFIERS } from '@gobing-ai/spur-contracts';
 import { runCli } from '../../helpers';
@@ -227,17 +228,35 @@ describe('spur builder verify-pack', () => {
         }
     });
 
-    test('a plugin version that disagrees with the archive manifest fails', async () => {
+    test('the generic verb accepts it while verifySpurPack refuses the version disagreement', async () => {
+        // A94 1411 split the checks: plugin/marketplace equality is a Spur-package invariant, so the
+        // shared verb passes and Spur's own E2E path (`verifySpurPack`) is what refuses it.
         const fx = await fixture();
         try {
             const tarball = await archive(fx.root, {
                 ...entries('2.0.0'),
                 'plugins/sp/plugin.json': JSON.stringify({ version: '1.0.0' }),
             });
-            const result = await runCli(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
-            expect(result.code).toBe(1);
-            expect((result.json as { error: { message: string } }).error.message).toContain(
-                'plugin.json version 1.0.0 != archive package 2.0.0',
+            const generic = await runCli(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
+            expect(generic.code, generic.stderr).toBe(0);
+            await expect(verifySpurPack(tarball)).rejects.toThrow('plugin.json version 1.0.0 != archive package 2.0.0');
+        } finally {
+            await fx.cleanup();
+        }
+    });
+
+    test('--require names the member the package must ship', async () => {
+        const fx = await fixture();
+        try {
+            const tarball = await archive(fx.root, entries('1.0.0'));
+            const missing = await runCli(
+                ['builder', 'verify-pack', tarball, '--require', 'worker/laya_worker.py', '--json'],
+                fx.cwd,
+                fx.env,
+            );
+            expect(missing.code).toBe(1);
+            expect((missing.json as { error: { message: string } }).error.message).toBe(
+                'required member missing: worker/laya_worker.py',
             );
         } finally {
             await fx.cleanup();

@@ -19,8 +19,9 @@ monorepo.
 This noun is **frozen at exactly fourteen verbs** (`bump-ver`, `drop-tags`, `publish` from the 2026-10-15
 script-absorption entries; `show-branches` and the four flat PR verbs `pr-status`, `pr-check`,
 `pr-open`, `pr-review` from the 2026-10-16 feature-L1 entries; `build-cli`, `build-server`,
-`build-binaries`, `bundle-config`, `bundle-web`, `verify-pack` from the A93 2026-11-16 entry; plus,
-since A94 1410, `bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`) by operator consent
+`build-binaries`, `bundle-config`, `bundle-web`, `verify-pack` from the A93 2026-11-16 entry; plus, since A94 1410, `bundle-plugins`,
+`bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`; and since A94 1411, `check-deps`,
+which absorbed `link-check` and `dependency-drift-check`) by operator consent
 (`docs/design/harness-surface-governance.md` §3 and the A93 row in §4) — do not invent additional
 `builder` subcommands.
 The former `pr <op>` pass-through was removed by task 1290 (two-level `spur <noun> <verb>` rule).
@@ -31,14 +32,15 @@ The former `pr <op>` pass-through was removed by task 1290 (two-level `spur <nou
 | ---- | ------- | --------- |
 | `build-cli` | Compile `<source-root>/dist/cli/spur` | `--source-root` `--json` |
 | `build-server` | Compile `<source-root>/dist/server/spur-server` | `--source-root` `--json` |
-| `build-binaries` | Six release assets + `SHA256SUMS` | `--source-root` `--json` |
+| `build-binaries` | Six release assets + `SHA256SUMS`, or `--entry` to compile one project entry for `--targets` into `--out` | `--source-root` `--entry` `--name` `--targets` `--out` `--json` |
 | `bundle-config` | Stage `config/` with `$schema` injection | `--source-root` `--json` |
 | `bundle-web` | Stage built Board assets into the CLI package | `--source-root` `--json` |
 | `bundle-plugins` | Stage `plugins/` + `.claude-plugin/` into the CLI package (tests/evals pruned) | `--source-root` `--json` |
 | `bundle-laya-worker` | Stage the installed laya-local Python worker beside the bundled config | `--source-root` `--json` |
 | `emit-board-types` | Emit the board declaration and the module-kit declaration mirror | `--source-root` `--json` |
 | `emit-migration-sql` | Emit the embedded migration SQL module from its released `.sql` | `--source-root` `--json` |
-| `verify-pack` | Inspect a packed tarball | `--json` |
+| `verify-pack` | Inspect a packed tarball (member safety, archive version, required members) | `--require` `--json` |
+| `check-deps` | Stale `bun link` dist + lockfile drift for `builder.dependencyScope` (or `--scope`) | `--scope` `--json` |
 | `bump-ver [package-id] [version]` | Bump one package (manifest + in-source `binaryVersion` + consumer `workspace:` pins), commit, tag, optionally push; `--check [package-id]` only verifies marketplace/plugin versions (exit 1 on drift) | `--all` `--push` `--check` `--json` |
 | `drop-tags [package-id] <version>` | Delete a package's release tag (local only by default) | `--all` `--remote` `--json` |
 | `publish <dir>` | CI npm publish: resolve `workspace:`/`catalog:` ranges, `build:bundle`, `npm publish --access public`, restore the manifest | `--otp` |
@@ -73,7 +75,8 @@ must be a Spur checkout and is validated before any lock or patch. Both compile 
 on every exit path, a second patch-acquisition failure still restores the first, and the single
 `.spur-compile.lock` refuses a concurrent build. Failures exit nonzero and never publish.
 
-A94 1410 retires the matching `scripts/spur-dev.ts` routes: `bun scripts/spur-dev.ts bundle-plugins`
+A94 1410/1411 retire the matching `scripts/spur-dev.ts` routes (`link-check` and
+`dependency-drift-check` both point at `spur builder check-deps`). Specifically: `bun scripts/spur-dev.ts bundle-plugins`
 (and `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`) now prints the replacement and
 exits 2, and the package build chains call `spur builder <verb>` instead.
 

@@ -399,6 +399,8 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
         'builder.ts:bundle-laya-worker': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
         'builder.ts:emit-board-types': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
         'builder.ts:emit-migration-sql': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:verify-pack': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:build-binaries': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
     };
 
     const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;
