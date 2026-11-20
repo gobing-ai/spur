@@ -9,13 +9,13 @@ import { getEnvVars } from '@gobing-ai/spur-config';
  * `promotion evaluate|check|resolve` through the REAL dispatcher (A93 1356 R4).
  *
  * The extraction moved the measurement/verdict into `@gobing-ai/spur-app`, so these cases drive
- * `bun scripts/spur-dev.ts promotion <op>` end to end against disposable fixtures: a candidate
- * catalogue, a `config/workflows` tree and an isolated SQLite history plane. Failure modes first —
+ * the `workflow promote-*` verbs end to end against disposable fixtures: a candidate
+ * catalogue, a workflow definitions tree and an isolated SQLite history plane. Failure modes first —
  * unmeasured promotion, a graph that does not reduce actions, a pinned-baseline regression, a
  * missing candidate and a contradicting resolve.
  */
 
-const REPO_ROOT = join(import.meta.dir, '..', '..');
+const REPO_ROOT = join(import.meta.dir, '../../../../..');
 let root = '';
 let configPath = '';
 let dbPath = '';
@@ -93,8 +93,13 @@ function seedHistory(realRuns: number): void {
     db.close();
 }
 
+const CLI = join(REPO_ROOT, 'apps/cli/src/index.ts');
+
 function promotion(args: string[]): { code: number; stdout: string; stderr: string } {
-    const result = Bun.spawnSync(['bun', 'scripts/spur-dev.ts', 'promotion', ...args], {
+    // `promotion <op>` retired into three leaf verbs (A94 1413).
+    const [op, ...rest] = args;
+    const verb = op === 'check' ? 'promote-check' : op === 'evaluate' ? 'promote-evaluate' : 'promote-resolve';
+    const result = Bun.spawnSync([process.execPath, CLI, 'workflow', verb, ...rest], {
         cwd: REPO_ROOT,
         env: { ...getEnvVars() },
     });
@@ -114,7 +119,7 @@ const evaluateArgs = (id: string): string[] => [
     id,
     '--db',
     dbPath,
-    '--config',
+    '--candidates',
     configPath,
     '--workflows-dir',
     workflowsDir,
@@ -207,7 +212,7 @@ describe('promotion resolve through the dispatcher', () => {
             'c1',
             '--decision',
             'promote',
-            '--config',
+            '--candidates',
             configPath,
             '--workflows-dir',
             workflowsDir,
@@ -225,7 +230,7 @@ describe('promotion resolve through the dispatcher', () => {
             'c1',
             '--decision',
             'delete',
-            '--config',
+            '--candidates',
             configPath,
             '--workflows-dir',
             workflowsDir,
@@ -243,7 +248,7 @@ describe('promotion check through the dispatcher', () => {
         // history (the guard only runs when the named DB exists).
         const result = promotion([
             'check',
-            '--config',
+            '--candidates',
             configPath,
             '--workflows-dir',
             workflowsDir,
@@ -262,7 +267,7 @@ describe('promotion check through the dispatcher', () => {
         // history (the guard only runs when the named DB exists).
         const result = promotion([
             'check',
-            '--config',
+            '--candidates',
             configPath,
             '--workflows-dir',
             workflowsDir,

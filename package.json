@@ -97,7 +97,7 @@
         "eval": "bun scripts/spur-dev.ts skill-eval",
         "transition-shim-check": "bun run apps/cli/src/index.ts rule check-shims",
         "script-contract-check": "bun scripts/spur-dev.ts script-contract-check",
-        "workflow-promotion-check": "bun scripts/spur-dev.ts promotion check",
+        "workflow-promotion-check": "bun run apps/cli/src/index.ts workflow promote-check",
         "validate-commands": "bun scripts/spur-dev.ts validate-commands",
         "fleet-e2e": "bun scripts/spur-dev.ts fleet-e2e",
         "a2a-serve-e2e": "bun scripts/spur-dev.ts a2a-serve-e2e",

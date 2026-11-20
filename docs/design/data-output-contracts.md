@@ -187,6 +187,10 @@ Row-level deltas from the default rule:
 | task | scaffold-tests | 1368 | flat-object | unwrapped |
 | workflow (14) | validate | 273 | flat-object | unwrapped |
 | workflow | run | 406, 431, 440, 621 | flat-object (sync/async-fallback result, `{status:'failed', reason, hint}` failure, `{runId, status:'started', …}` handle, sync result) | unwrapped; failure is status-discriminated, not `{ok:false, error}` |
+| workflow | eval | `apps/cli/src/commands/workflow/eval.ts` (A94 1413) | `{ok, report:{records,runCount,variance}, reportPath, keptWorktrees}` | adopted — `--dry-run` returns the resolved plan instead |
+| workflow | promote-check | delegated: `render` in `apps/cli/src/commands/workflow/promote.ts` (A94 1413) | `{ok, status, findings:[{kind,id,detail}]}` | adopted |
+| workflow | promote-evaluate | same `render` body | same | adopted |
+| workflow | promote-resolve | same `render` body | same | adopted |
 | workflow | continue | 698 | flat-object | unwrapped |
 | workflow | clean | 744 | flat-object (`logsOnly ? logResult : {…result, logs}`) | unwrapped |
 | workflow | cancel | 788 | flat-object (status union incl. `not_found`) | not-found is a status value, not an error envelope |

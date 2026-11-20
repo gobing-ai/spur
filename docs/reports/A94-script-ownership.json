@@ -1,7 +1,7 @@
 {
     "schemaVersion": 2,
-    "generatedAt": "2026-11-20T16:18:54Z",
-    "sourceCommit": "792ee51460c233e12894480e7c51b6e27d49c805",
+    "generatedAt": "2026-11-20T17:33:38Z",
+    "sourceCommit": "32383c03771642944e900e71cfa84d4f0ec3f543",
     "consentStatus": {
         "state": "granted",
         "at": "2026-11-19",
@@ -120,33 +120,6 @@
             "disposition": "pending",
             "surface": "builder.actions (parallel form) + self exec dev",
             "waveWbs": "1414"
-        },
-        {
-            "path": "scripts/commands/eval-pipeline.test.ts",
-            "responsibility": "Companion tests for the fixture task pipeline evaluation lane",
-            "tests": [],
-            "callers": [],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "workflow eval",
-            "waveWbs": "1413",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/eval-pipeline.ts"
-        },
-        {
-            "path": "scripts/commands/eval-pipeline.ts",
-            "responsibility": "Run fixture tasks through a pipeline in disposable worktrees and record cost/outcome",
-            "tests": ["scripts/commands/eval-pipeline.test.ts"],
-            "callers": [
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 33
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "workflow eval",
-            "waveWbs": "1413"
         },
         {
             "path": "scripts/commands/executor-selection-contract.test.ts",
@@ -515,55 +488,12 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 71
+                    "line": 69
                 }
             ],
             "downstream": "retain",
             "disposition": "retained",
             "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
-        },
-        {
-            "path": "scripts/commands/workflow-promotion.e2e.test.ts",
-            "responsibility": "Dispatcher-driven promotion evaluate/check/resolve E2E against isolated catalogue, workflow and SQLite fixtures",
-            "tests": [],
-            "callers": [],
-            "downstream": "move",
-            "disposition": "pending",
-            "surface": "workflow promote-check | promote-evaluate | promote-resolve",
-            "waveWbs": "1413",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/workflow-promotion.ts"
-        },
-        {
-            "path": "scripts/commands/workflow-promotion.test.ts",
-            "responsibility": "Companion tests for candidate promotion verdicts against recorded run history",
-            "tests": [],
-            "callers": [],
-            "downstream": "move",
-            "disposition": "pending",
-            "surface": "workflow promote-check | promote-evaluate | promote-resolve",
-            "waveWbs": "1413",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/workflow-promotion.ts"
-        },
-        {
-            "path": "scripts/commands/workflow-promotion.ts",
-            "responsibility": "Promotion gate evaluating candidate workflow graphs against recorded real-run inputs",
-            "tests": ["scripts/commands/workflow-promotion.test.ts", "scripts/commands/workflow-promotion.e2e.test.ts"],
-            "callers": [
-                {
-                    "path": "package.json",
-                    "line": 93
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 60
-                }
-            ],
-            "downstream": "move",
-            "disposition": "pending",
-            "surface": "workflow promote-check | promote-evaluate | promote-resolve",
-            "waveWbs": "1413"
         },
         {
             "path": "scripts/install.sh",

@@ -401,6 +401,10 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
         'builder.ts:emit-migration-sql': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
         'builder.ts:verify-pack': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
         'builder.ts:build-binaries': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        // A94 1413: the three promotion verbs share one `render()` body in the same module.
+        'workflow.ts:promote-check': { helper: 'render', file: 'apps/cli/src/commands/workflow/promote.ts' },
+        'workflow.ts:promote-evaluate': { helper: 'render', file: 'apps/cli/src/commands/workflow/promote.ts' },
+        'workflow.ts:promote-resolve': { helper: 'render', file: 'apps/cli/src/commands/workflow/promote.ts' },
     };
 
     const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;

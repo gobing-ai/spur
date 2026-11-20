@@ -19,7 +19,7 @@
 
 | Verb \ Noun | agent | builder | decision | feature | history | message | projects | rule | self | task | workflow |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| **Verb count** | **10** | **19** | **5** | **11** | **15** | **6** | **6** | **7** | **10** | **24** | **17** |
+| **Verb count** | **10** | **19** | **5** | **11** | **15** | **6** | **6** | **7** | **10** | **24** | **21** |
 | **add** |   |   |   |   |   |   | ✅ |   |   |   |   |
 | **advance** |   |   |   | ✅ |   |   |   |   |   |   |   |
 | **analyze** |   |   |   |   | ✅ |   |   |   |   |   |   |
@@ -64,6 +64,7 @@
 | **drop-tags** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **emit-board-types** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **emit-migration-sql** |   | ✅ |   |   |   |   |   |   |   |   |   |
+| **eval** |   |   |   |   |   |   |   |   |   |   | ✅ |
 | **exec** |   |   |   |   |   |   |   |   | ✅ |   |   |
 | **gate** |   |   |   |   |   |   |   |   |   | ✅ |   |
 | **handoff** |   |   |   | ✅ |   |   |   |   |   |   |   |
@@ -87,6 +88,9 @@
 | **pr-status** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **preflight** |   |   |   |   |   |   |   |   |   | ✅ |   |
 | **profile** |   |   |   |   |   |   |   |   |   |   | ✅ |
+| **promote-check** |   |   |   |   |   |   |   |   |   |   | ✅ |
+| **promote-evaluate** |   |   |   |   |   |   |   |   |   |   | ✅ |
+| **promote-resolve** |   |   |   |   |   |   |   |   |   |   | ✅ |
 | **progress** |   |   |   |   |   |   |   |   |   |   | ✅ |
 | **publish** |   | ✅ |   |   |   |   |   |   |   |   |   |
 | **read** |   |   |   |   |   | ✅ |   |   |   |   |   |
@@ -126,7 +130,7 @@
 | **wait** |   |   |   |   |   |   |   |   |   |   |   |
 | **watch** |   |   |   |   |   | ✅ |   |   |   |   |   |
 | **wrapup** |   |   |   |   |   |   |   |   |   | ✅ |   |
-| **Verb count** | **10** | **19** | **5** | **11** | **15** | **6** | **6** | **7** | **9** | **24** | **17** |
+| **Verb count** | **10** | **19** | **5** | **11** | **15** | **6** | **6** | **7** | **9** | **24** | **21** |
 
 ## Legacy nouns — removed (task 1388)
 
@@ -141,8 +145,8 @@ aliases of `spur self <verb>` and are **gone**: `init`, `maintain`, `migrate`, `
 | Total nouns | **16** |
 | Compound nouns (with verbs) | **11** |
 | Hidden legacy aliases | **5** |
-| Unique verbs | **102** |
-| Total noun×verb cells | **129** |
+| Unique verbs | **106** |
+| Total noun×verb cells | **133** |
 
 > [!NOTE]
-> `task` has the richest surface at 24 verbs, followed by `workflow` (17, including the flat `commit-guard-start`/`commit-guard-stage`/`commit-guard-check` transport, the flat WT-4 `persist-out`/`persist-check` landing verbs, the `summary`/`profile` measurements and `cost`), `history` (15, including the flat `anatomy-<op>` verbs), `agent` (10, including `dogfood-gate`/`dogfood-validate-report`; the four fleet plumbing verbs `join`/`leave`/`wait`/`report` are hidden from help per ADR-148) and `feature` (11). Their nested spellings (`workflow commit-guard <op>`, `agent dogfood <op>`, `history anatomy <op>`, `task batch-plan task-children`) were removed in task 1290. `builder` (19 verbs) hosts the release plumbing promoted from `spur-dev`, the flat PR-review verbs and — from A93 — the six artifact verbs `build-cli`, `build-server`, `build-binaries` (`--source-root <dir>`) plus `bundle-config`, `bundle-web` and `verify-pack`, which absorbed the repository build/staging scripts behind the shipped surface; A94 added `bundle-plugins`, `bundle-laya-worker`, `emit-board-types` and `emit-migration-sql` (`--source-root <dir>`), plus `check-deps` (which absorbed the repository `link-check` and `dependency-drift-check` scripts). `decision` (5 verbs: `list`, `outcome`, `run`, `show`, `status`) is the decision-catalog transport (task 1093; `outcome` by task 1263). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (10 verbs) hosts every self-management operation, including the `exec` action runner, the `search` hybrid rg/zg query verb, the `install` machine-setup verb (A93, which also installs the gateway LaunchAgent with `--daemon`), the `uninstall` remover and the `status` readiness aggregate that reports the LaunchAgent's state (K4).
+> `task` has the richest surface at 24 verbs, followed by `workflow` (21; the four A94 1413 leaves `eval`/`promote-check`/`promote-evaluate`/`promote-resolve` joined it, including the flat `commit-guard-start`/`commit-guard-stage`/`commit-guard-check` transport, the flat WT-4 `persist-out`/`persist-check` landing verbs, the `summary`/`profile` measurements and `cost`), `history` (15, including the flat `anatomy-<op>` verbs), `agent` (10, including `dogfood-gate`/`dogfood-validate-report`; the four fleet plumbing verbs `join`/`leave`/`wait`/`report` are hidden from help per ADR-148) and `feature` (11). Their nested spellings (`workflow commit-guard <op>`, `agent dogfood <op>`, `history anatomy <op>`, `task batch-plan task-children`) were removed in task 1290. `builder` (19 verbs) hosts the release plumbing promoted from `spur-dev`, the flat PR-review verbs and — from A93 — the six artifact verbs `build-cli`, `build-server`, `build-binaries` (`--source-root <dir>`) plus `bundle-config`, `bundle-web` and `verify-pack`, which absorbed the repository build/staging scripts behind the shipped surface; A94 added `bundle-plugins`, `bundle-laya-worker`, `emit-board-types` and `emit-migration-sql` (`--source-root <dir>`), plus `check-deps` (which absorbed the repository `link-check` and `dependency-drift-check` scripts). `decision` (5 verbs: `list`, `outcome`, `run`, `show`, `status`) is the decision-catalog transport (task 1093; `outcome` by task 1263). Several verbs are shared across nouns — e.g., `list` (7 nouns), `run`/`show` (4 nouns each), `check`/`clean`/`create`/`migrate`/`refresh`/`start`/`stop`/`trace`/`update`/`validate` (2 nouns each). `self` (10 verbs) hosts every self-management operation, including the `exec` action runner, the `search` hybrid rg/zg query verb, the `install` machine-setup verb (A93, which also installs the gateway LaunchAgent with `--daemon`), the `uninstall` remover and the `status` readiness aggregate that reports the LaunchAgent's state (K4).

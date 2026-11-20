@@ -55,9 +55,7 @@ import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { devAll } from './commands/dev-all';
-import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
-import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 /**
  * L2–L4 modules that own their own argv parsing and exit code (A92 R5). They run as a child
@@ -80,13 +78,11 @@ const DELEGATED: Record<string, string> = {
  */
 const COMMANDS = [
     'dev-all',
-    'eval-pipeline',
     'fleet-e2e',
     'a2a-serve-e2e',
     'a2a-member-e2e',
     'a2a-two-install-e2e',
     'delegate-workflow-e2e',
-    'promotion',
 ];
 
 /**
@@ -109,6 +105,8 @@ export const RETIRED: Record<string, string> = {
     'dependency-drift-check': 'spur builder check-deps',
     'transition-shim-check': 'spur rule check-shims',
     'coverage-provenance-check': 'spur rule check-coverage-cert',
+    'eval-pipeline': 'spur workflow eval',
+    promotion: 'spur workflow promote-check',
 };
 
 function usage(message?: string): never {
@@ -140,9 +138,6 @@ try {
         case 'dev-all':
             devAll();
             break;
-        case 'eval-pipeline':
-            process.exit(await evalPipeline(args));
-            break;
         case 'fleet-e2e':
             process.exit(await runFleetE2e(args));
             break;
@@ -157,9 +152,6 @@ try {
             break;
         case 'delegate-workflow-e2e':
             process.exit(await runDelegateWorkflowE2e(args));
-            break;
-        case 'promotion':
-            process.exit(await runWorkflowPromotion(args));
             break;
         default: {
             const module = command === undefined ? undefined : DELEGATED[command];

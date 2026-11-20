@@ -86,6 +86,8 @@ rules:
             - "packages/app/src/builder/check-deps.ts" # A94 1411: lstat/realpath symlink identity, recursive mtime scans and bun.lock byte reads; the FileSystem seam has no symlink or mtime primitive
             - "packages/app/src/rules/coverage-certification.ts" # A94 1412: atomic pending-marker publish (tmp+rename under an exclusive lock file) and byte-exact LCOV hashing; the async FileSystem seam has no exclusive-create lock or rename
             - "packages/app/src/rules/transition-shims.ts" # A94 1412: recursive marker scan over six source roots (readdirSync + mtime-free reads) moved verbatim from the retired script; the seam would change traversal order
+            - "packages/app/src/workflow/pipeline-eval.ts" # A94 1413: the eval harness snapshots directory mtimes (stat/readdir recursion) and seeds a detached worktree it must clean up byte-exactly; the seam has no mtime or recursive remove
+            - "packages/app/src/workflow/promotion-commands.ts" # A94 1413: candidate-record read/compare/write and a git-history name scan moved verbatim from the retired script; the seam is async and has no readdir-free git probe
             - "packages/app/src/builder/verify-pack.ts" # A93 1355: recursive listing of the EXTRACTED tree for pruned-content assertions, after member validation; no writes outside the private temp dir
             # Script-absorption PR-6: synchronous op modules whose file bytes are pinned by the
             # PR-6 golden (apps/cli/tests/script-absorption-pr6). They keep the retired scripts'

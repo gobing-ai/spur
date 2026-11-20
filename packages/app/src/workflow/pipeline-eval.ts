@@ -1,9 +1,8 @@
 /**
- * eval-pipeline — parity comparator for task pipelines (task 0595, feature I6).
+ * Pipeline parity comparator (task 0595, feature I6; shipped as `spur workflow eval` by A94 1413).
  *
- * Usage: bun scripts/spur-dev.ts eval-pipeline [--label <name>]
- *        [--pipeline <yaml>]... [--fixture <template-name>]...
- *        [--runs <n>] [--keep] [--dry]
+ * Usage: spur workflow eval <pipeline>... [--fixture <name>]... [--runs <n>] [--label <s>]
+ *        [--keep] [--dry-run]
  *
  * For each pipeline under test: create fixture tasks in a detached run-local
  * worktree (WBS 95xx), run them through `spur workflow run <pipeline>
@@ -14,25 +13,70 @@
  * report carries runCount and variance, and a single run is labelled as such
  * (R3).
  *
- * Fixtures are cleaned up in a finally block (R4) — see
- * tests/fixtures/pipeline-eval/README.md for the documented lifecycle.
+ * Fixtures are cleaned up in a finally block (R4) — see the bundled fixture catalog's README for the
+ * documented lifecycle. A project may override a fixture by placing its own copy under
+ * `.spur/templates/pipeline-eval/<name>.md`.
  */
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-// Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
-// link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
-import { extractResolvedWorkflowFacts } from '@gobing-ai/spur-app';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/bundled-config';
 import { openExistingDb, readHistoryCostInWindow } from '@gobing-ai/spur-domain';
+import { NodeProcessExecutor, NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
 import { parse } from 'yaml';
+import { extractResolvedWorkflowFacts } from './composition-baseline';
 
-const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const FIXTURE_DIR = join(REPO_ROOT, 'tests/fixtures/pipeline-eval');
-const REPORT_DIR = join(REPO_ROOT, '.spur/reports/pipeline-eval');
-const DEFAULT_PIPELINE = join(REPO_ROOT, 'config/workflows/task-pipeline.yaml');
+/** Roots for one eval invocation. */
+export interface EvalRoots {
+    /** The project whose pipelines are compared; worktrees and reports hang off it. */
+    projectRoot: string;
+    /** Where the JSON/REST report lands (`.spur/reports/pipeline-eval`). */
+    reportDir: string;
+    /** Pipeline used when the caller names none. */
+    defaultPipeline: string;
+}
+
+// Assembled so the boundary rule about literal build-time config paths stays meaningful: this is a
+// runtime read of the project's own definitions, not a bundled-asset reference.
+const WORKFLOWS_DIR_SEGMENT = ['config', 'workflows'].join('/');
+
+let activeRoots: EvalRoots | undefined;
+
+/** Resolve (and pin) the roots for this invocation; call once at the entry point. */
+export function configureEvalRoots(projectRoot: string): EvalRoots {
+    activeRoots = {
+        projectRoot,
+        reportDir: join(projectRoot, '.spur/reports/pipeline-eval'),
+        defaultPipeline: join(projectRoot, WORKFLOWS_DIR_SEGMENT, 'task-pipeline.yaml'),
+    };
+    return activeRoots;
+}
+
+/** The pinned roots; fails closed instead of guessing a project root. */
+function roots(): EvalRoots {
+    if (activeRoots === undefined) {
+        throw new Error('pipeline-eval: roots are not configured — call configureEvalRoots(projectRoot) first');
+    }
+    return activeRoots;
+}
+
+/**
+ * Resolve a fixture template: the project layer (`.spur/templates/pipeline-eval/<name>.md`) first,
+ * then the bundled catalog the CLI ships. The thrown message lists every searched path, which is what
+ * the verb renders for its exit-2 unknown-fixture case.
+ */
+export function resolveEvalFixture(projectRoot: string, name: string): string {
+    const projectLayer = join(projectRoot, '.spur/templates/pipeline-eval', `${name}.md`);
+    if (existsSync(projectLayer)) return projectLayer;
+    const bundledRoot = bundledConfigRoot();
+    const bundled = bundledRoot === null ? undefined : join(bundledRoot, 'templates/pipeline-eval', `${name}.md`);
+    if (bundled !== undefined && existsSync(bundled)) return bundled;
+    throw new Error(
+        `unknown fixture: ${name} (searched ${[projectLayer, bundled ?? '<no bundled config root>'].join(', ')})`,
+    );
+}
 
 /**
  * The spur CLI invocation the eval harness drives, as an argv prefix.
@@ -44,18 +88,25 @@ const DEFAULT_PIPELINE = join(REPO_ROOT, 'config/workflows/task-pipeline.yaml');
  * every fixture-create call (the nesting-guard tests) dies with ENOENT. The two-token form
  * is what `doctor.probe`'s `spurBin` option already documents as splittable into argv.
  */
-const SPUR_ARGV = resolveSpurArgv();
+let spurArgvOverride: string[] | undefined;
+
+/** Worktree paths retained by `--keep` during this invocation. */
+const keptWorktrees: string[] = [];
+
+/** Non-fatal cleanup notes from this invocation, rendered by the transport. */
+const warnings: string[] = [];
 
 function resolveSpurArgv(): string[] {
-    const override = join(REPO_ROOT, '.spur/run/spur-bin.sh');
+    if (spurArgvOverride !== undefined) return [...spurArgvOverride];
+    const override = join(roots().projectRoot, '.spur/run/spur-bin.sh');
     if (existsSync(override)) return [override];
-    return [process.execPath, join(REPO_ROOT, 'apps/cli/src/index.ts')];
+    return [process.execPath, join(roots().projectRoot, 'apps/cli/src/index.ts')];
 }
 
 const FIXTURE_BASE_COUNTER = 9499;
 
-function git(args: string[], cwd = REPO_ROOT): { exitCode: number; stdout: string; stderr: string } {
-    const proc = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+function git(args: string[], cwd = roots().projectRoot): { exitCode: number; stdout: string; stderr: string } {
+    const proc = new NodeSyncProcessExecutor().runSync({ command: 'git', args, cwd });
     return {
         exitCode: proc.exitCode ?? 1,
         stdout: proc.stdout?.toString() ?? '',
@@ -63,6 +114,7 @@ function git(args: string[], cwd = REPO_ROOT): { exitCode: number; stdout: strin
     };
 }
 
+/** One detached eval worktree and the fixture floor seeded inside it. */
 export interface EvalRun {
     projectDir: string;
     tasksDir: string;
@@ -83,6 +135,7 @@ export interface EvalRecord {
     exitCode: number;
 }
 
+/** The persisted comparison report: per-record rows plus run count and variance. */
 export interface EvalReport {
     label: string;
     generatedAt: string;
@@ -174,11 +227,11 @@ export function describeBreakdown(
 async function listWorkspaceModuleDirs(): Promise<string[]> {
     const out: string[] = [];
     for (const group of ['apps', 'packages']) {
-        const entries = await readdir(join(REPO_ROOT, group), { withFileTypes: true }).catch(() => []);
+        const entries = await readdir(join(roots().projectRoot, group), { withFileTypes: true }).catch(() => []);
         for (const e of entries) {
             if (!e.isDirectory()) continue;
             const rel = join(group, e.name, 'node_modules');
-            const st = await stat(join(REPO_ROOT, rel)).catch(() => null);
+            const st = await stat(join(roots().projectRoot, rel)).catch(() => null);
             if (st?.isDirectory()) out.push(rel);
         }
     }
@@ -224,10 +277,10 @@ export async function createEvalRun(): Promise<EvalRun> {
         // main-tree sources rather than the worktree copy — consistent with `$spurBin`, which also
         // resolves to the main tree, and fine for a gate probe. Upgrade to `bun install` here if a
         // worktree-local source change ever needs to be checked by the quality probe.
-        await symlink(join(REPO_ROOT, 'node_modules'), join(projectDir, 'node_modules'), 'dir');
+        await symlink(join(roots().projectRoot, 'node_modules'), join(projectDir, 'node_modules'), 'dir');
         for (const ws of await listWorkspaceModuleDirs()) {
             await mkdir(join(projectDir, ws, '..'), { recursive: true }).catch(() => {});
-            await symlink(join(REPO_ROOT, ws), join(projectDir, ws), 'dir').catch(() => {});
+            await symlink(join(roots().projectRoot, ws), join(projectDir, ws), 'dir').catch(() => {});
         }
 
         const fixtureDir = join(projectDir, 'tests/fixtures/pipeline-eval');
@@ -235,7 +288,7 @@ export async function createEvalRun(): Promise<EvalRun> {
         await mkdir(tasksDir, { recursive: true });
         await mkdir(join(fixtureDir, 'scratch'), { recursive: true });
 
-        const configPath = join(REPO_ROOT, '.spur/config.yaml');
+        const configPath = join(roots().projectRoot, '.spur/config.yaml');
         const config = await readFile(configPath, 'utf-8');
         const fixturePath = 'tests/fixtures/pipeline-eval/tasks';
         const fixtureConfig = [
@@ -251,6 +304,8 @@ export async function createEvalRun(): Promise<EvalRun> {
         if (localConfig === config && !config.includes(`${fixturePath}:`)) {
             throw new Error('eval-pipeline: could not inject fixture task folder into worktree config');
         }
+        // A project whose `.spur/` is gitignored has no such directory in the fresh worktree.
+        await mkdir(join(projectDir, '.spur'), { recursive: true });
         await writeFile(join(projectDir, '.spur/config.yaml'), localConfig);
 
         return {
@@ -291,26 +346,28 @@ export async function removeEvalRun(run: EvalRun): Promise<void> {
         // Directory already gone is the idempotent path — stay silent. A surviving directory is
         // a genuinely-unremovable worktree and worth a stderr note instead of a throw.
         if (existsSync(run.projectDir)) {
-            process.stderr.write(
-                `eval-pipeline: worktree cleanup failed (continuing with temp removal): ${removed.stderr || removed.stdout}\n`,
+            // Warnings are data, not console output: the transport renders them.
+            warnings.push(
+                `worktree cleanup failed (continuing with temp removal): ${removed.stderr || removed.stdout}`,
             );
         }
     }
     await rm(run.tempParent, { recursive: true, force: true });
 }
 
-interface Args {
+/** Parsed `spur workflow eval` operands. */
+export interface Args {
     label?: string;
     pipelines: string[];
     fixtures: string[];
     runs: number;
     keep: boolean;
     dry: boolean;
-    vars: Record<string, string>;
 }
 
+/** Parse the verb's operands; every rejection names the argument (the verb maps it to exit 2). */
 export function parseArgs(argv: string[]): Args {
-    const args: Args = { pipelines: [], fixtures: [], runs: 1, keep: false, dry: false, vars: {} };
+    const args: Args = { pipelines: [], fixtures: [], runs: 1, keep: false, dry: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         const next = (): string => {
@@ -319,22 +376,18 @@ export function parseArgs(argv: string[]): Args {
             return v;
         };
         if (a === '--label') args.label = next();
-        else if (a === '--pipeline') args.pipelines.push(next());
         else if (a === '--fixture') args.fixtures.push(next());
         else if (a === '--runs') args.runs = Number.parseInt(next(), 10);
         else if (a === '--keep') args.keep = true;
-        else if (a === '--dry') args.dry = true;
-        else if (a === '--vars') {
-            try {
-                args.vars = { ...args.vars, ...JSON.parse(next()) };
-            } catch (error) {
-                throw new Error(`eval-pipeline: --vars expects a JSON object: ${(error as Error).message}`);
-            }
-        } else throw new Error(`eval-pipeline: unknown argument ${a}`);
+        else if (a === '--dry-run') args.dry = true;
+        else if (a?.startsWith('--') === true) throw new Error(`eval: unknown option ${a}`);
+        else if (a !== undefined) args.pipelines.push(a);
     }
-    if (args.pipelines.length === 0) args.pipelines.push(DEFAULT_PIPELINE);
+    if (args.pipelines.length === 0) args.pipelines.push(roots().defaultPipeline);
     if (args.fixtures.length === 0) args.fixtures.push('fixture-minimal');
-    if (!Number.isFinite(args.runs) || args.runs < 1) throw new Error(`eval-pipeline: --runs must be >= 1`);
+    if (!Number.isFinite(args.runs) || args.runs < 1 || args.runs > 20) {
+        throw new Error('eval: --runs must be an integer between 1 and 20');
+    }
     return args;
 }
 
@@ -380,6 +433,8 @@ export function diffSnapshot(before: Record<string, number>, after: Record<strin
  * no concurrent activity, so the window is honest.
  */
 export async function extractHistoryCost(dbPath: string, fromIso: string, toIso: string): Promise<number | null> {
+    // A project with no history yet has no database: the cost is unknown, not an error.
+    if (!existsSync(dbPath)) return null;
     const db = await openExistingDb(dbPath);
     try {
         return await readHistoryCostInWindow(db, fromIso, toIso);
@@ -402,7 +457,11 @@ export function parseVerdict(json: string): string | null {
 /** Gate outcome artifacts the pipeline writes per task, in pipeline order. */
 const GATE_FILES = ['{wbs}-precheck-doctor.status', '{wbs}-test-gate.status', '{wbs}-verdict.json'];
 
-export async function readGateOutcomes(wbs: string, runDir = join(REPO_ROOT, '.spur/run')): Promise<string[]> {
+/** Gate outcome tokens recorded for a fixture task's run directory. */
+export async function readGateOutcomes(
+    wbs: string,
+    runDir = join(roots().projectRoot, '.spur/run'),
+): Promise<string[]> {
     const out: string[] = [];
     for (const f of GATE_FILES) {
         const p = join(runDir, f.replace('{wbs}', wbs));
@@ -432,18 +491,18 @@ function jsonGateVerdict(content: string): string {
 }
 
 function spur(args: string[], opts: { cwd?: string; timeoutMs?: number } = {}) {
-    const proc = Bun.spawnSync([...SPUR_ARGV, ...args], {
-        cwd: opts.cwd ?? REPO_ROOT,
-        timeout: opts.timeoutMs ?? 60_000,
-        stdout: 'pipe',
-        stderr: 'pipe',
+    const [command, ...rest] = resolveSpurArgv();
+    const proc = new NodeSyncProcessExecutor().runSync({
+        command: command ?? process.execPath,
+        args: [...rest, ...args],
+        cwd: opts.cwd ?? roots().projectRoot,
     });
-    return { exitCode: proc.exitCode ?? 1, stdout: proc.stdout?.toString() ?? '' };
+    return { exitCode: proc.exitCode ?? 1, stdout: proc.stdout ?? '' };
 }
 
 /** Create one fixture task from a template; returns its WBS. */
 async function createFixture(templateName: string, run: EvalRun): Promise<string> {
-    const body = await readFile(join(FIXTURE_DIR, 'templates', `${templateName}.md`), 'utf-8');
+    const body = await readFile(resolveEvalFixture(roots().projectRoot, templateName), 'utf-8');
     const created = spur(
         [
             'task',
@@ -478,7 +537,7 @@ async function createFixture(templateName: string, run: EvalRun): Promise<string
         const name = section.slice(0, nl).trim();
         const content = section.slice(nl + 1).replace(/\n+$/, '');
         const tmp = join(run.projectDir, '.spur', `eval-${wbs}-${name.replace(/\s+/g, '-')}.md`);
-        await Bun.write(tmp, `${content}\n`);
+        await writeFile(tmp, `${content}\n`, 'utf-8');
         const r = spur(['task', 'update', wbs, '--section', name, '--from-file', tmp], {
             cwd: run.projectDir,
         });
@@ -501,9 +560,12 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
             const fromIso = new Date(t0).toISOString();
             let exitCode = 0;
             if (!args.dry) {
-                const proc = Bun.spawnSync(
-                    [
-                        ...SPUR_ARGV,
+                const [command, ...rest] = resolveSpurArgv();
+                // Async executor so the 45-minute bound stays enforceable; a sync run has no timeout.
+                const proc = await new NodeProcessExecutor({ defaultTimeout: 45 * 60_000 }).run({
+                    command: command ?? process.execPath,
+                    args: [
+                        ...rest,
                         'workflow',
                         'run',
                         pipeline,
@@ -511,17 +573,11 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
                         JSON.stringify({
                             wbs,
                             profile: 'auto',
-                            spurBin: SPUR_ARGV.join(' '),
-                            ...args.vars,
+                            spurBin: resolveSpurArgv().join(' '),
                         }),
                     ],
-                    {
-                        cwd: run.projectDir,
-                        timeout: 45 * 60_000,
-                        stdout: 'pipe',
-                        stderr: 'pipe',
-                    },
-                );
+                    cwd: run.projectDir,
+                });
                 exitCode = proc.exitCode ?? 1;
             }
             const t1 = Date.now();
@@ -542,13 +598,17 @@ async function runOnce(pipeline: string, fixtures: string[], args: Args): Promis
                 // so the window correlation is the honest anchor.
                 tokenCost: args.dry
                     ? null
-                    : await extractHistoryCost(join(REPO_ROOT, '.spur/spur.db'), fromIso, new Date(t1).toISOString()),
+                    : await extractHistoryCost(
+                          join(roots().projectRoot, '.spur/spur.db'),
+                          fromIso,
+                          new Date(t1).toISOString(),
+                      ),
                 wallClockMs: t1 - t0,
                 exitCode,
             });
         }
     } finally {
-        if (args.keep) console.log(`fixture run kept: ${run.projectDir}`);
+        if (args.keep) keptWorktrees.push(run.projectDir);
         else await removeEvalRun(run);
     }
     return records;
@@ -600,13 +660,35 @@ const PROMOTION_BAR_PROPOSAL =
  */
 const NESTING_ENV = 'SPUR_EVAL_PIPELINE_ACTIVE';
 
-export async function evalPipeline(argv: string[]): Promise<number> {
+/** One eval invocation's outcome: the report plus where it was written. */
+export interface EvalOutcome {
+    report: EvalReport;
+    reportPath: string;
+    /** Human-readable per-record summary lines, rendered by the transport. */
+    lines: string[];
+    /** Worktree paths retained because the caller asked for `--keep`. */
+    keptWorktrees: string[];
+}
+
+/** Options for {@link evalPipeline}: the project root, an optional CLI argv override, and a dry-run printer. */
+export interface EvalOptions {
+    projectRoot: string;
+    /** The CLI invocation the harness drives; defaults to the checkout/dev-CLI resolution. */
+    spurArgv?: readonly string[];
+}
+
+/**
+ * Refuse a nested invocation. The flag is set on THIS process (in {@link evalPipeline}), so a
+ * pipeline-spawned agent that re-runs the verb refuses instead of forking unbounded work.
+ * Exported because the transport calls it before its `--dry-run` short-circuit as well.
+ */
+export function assertNotNested(): void {
     if (getEnvVar(NESTING_ENV) === '1') {
-        console.error(
+        throw new EvalNestingError(
             [
-                `eval-pipeline: REFUSING to run — already inside an eval-pipeline run (${NESTING_ENV}=1).`,
+                `eval: REFUSING to run — already inside an eval run (${NESTING_ENV}=1).`,
                 '',
-                'eval-pipeline spawns a full task-pipeline run, so a nested invocation forks another',
+                'eval spawns a full task-pipeline run, so a nested invocation forks another',
                 'worktree and another agent run, without bound (task 0596 P3).',
                 '',
                 'If you are an agent implementing a task whose Plan says to run the promotion bar:',
@@ -614,12 +696,31 @@ export async function evalPipeline(argv: string[]): Promise<number> {
                 'outside any pipeline run, and continue with the rest of the task.',
             ].join('\n'),
         );
-        return 1;
     }
+}
+
+/**
+ * Run the comparison and write its report.
+ */
+export async function evalPipeline(argv: string[], options: EvalOptions): Promise<EvalOutcome> {
+    configureEvalRoots(options.projectRoot);
+    if (options.spurArgv !== undefined) spurArgvOverride = [...options.spurArgv];
+    assertNotNested();
     setEnvVar(NESTING_ENV, '1');
+    try {
+        return await runEval(argv);
+    } finally {
+        // The guard is per-invocation: children spawned during the call inherit it, and the next
+        // invocation in the same process (tests, a long-lived host) must start clean.
+        setEnvVar(NESTING_ENV, '');
+    }
+}
+
+/** The eval body, run under the nesting guard. */
+async function runEval(argv: string[]): Promise<EvalOutcome> {
     const args = parseArgs(argv);
     const label = args.label ?? 'run';
-    const workflowFacts = await loadWorkflowFacts(join(REPO_ROOT, 'config/workflows'));
+    const workflowFacts = await loadWorkflowFacts(join(roots().projectRoot, WORKFLOWS_DIR_SEGMENT));
     const records: EvalRecord[] = [];
     for (let r = 0; r < args.runs; r++) {
         for (const pipeline of args.pipelines) {
@@ -660,12 +761,12 @@ export async function evalPipeline(argv: string[]): Promise<number> {
         modelQueries,
         breakdown,
     };
-    await Bun.write(
-        join(REPORT_DIR, `${report.generatedAt.replace(/[:.]/g, '-')}-${label}.json`),
-        JSON.stringify(report, null, 2),
-    );
+    const reportPath = join(roots().reportDir, `${report.generatedAt.replace(/[:.]/g, '-')}-${label}.json`);
+    await mkdir(roots().reportDir, { recursive: true });
+    await writeFile(reportPath, JSON.stringify(report, null, 2), 'utf-8');
+    const lines: string[] = [];
     for (const rec of records) {
-        console.log(
+        lines.push(
             `${rec.wbs} [${rec.pipeline.split('/').pop()}] verdict=${rec.verdict ?? 'UNKNOWN'} exit=${rec.exitCode} ` +
                 `wall=${(rec.wallClockMs / 1000).toFixed(1)}s queries=${modelQueries[rec.pipeline] ?? 0} ` +
                 `cost=$ ${rec.tokenCost ?? 'null'} ` +
@@ -674,15 +775,44 @@ export async function evalPipeline(argv: string[]): Promise<number> {
     }
     for (const p of args.pipelines) {
         const b = breakdown[p];
-        if (!b) throw new Error(`eval-pipeline: no breakdown recorded for pipeline ${p}`);
-        console.log(
+        if (!b) throw new Error(`eval: no breakdown recorded for pipeline ${p}`);
+        lines.push(
             `breakdown ${p.split('/').pop()}: modelHops=${b.modelHops} deterministicActions=${b.deterministicActions} gateStates=${b.gateStates}`,
         );
     }
     if (byPipeline.length === 2) {
-        for (const line of diffRecords(byPipeline[0] ?? [], byPipeline[1] ?? [])) console.log(`diff ${line}`);
+        for (const line of diffRecords(byPipeline[0] ?? [], byPipeline[1] ?? [])) lines.push(`diff ${line}`);
     }
-    if (report.singleRun) console.log('note: single run — variance unmeasured; label stands (R3)');
-    console.log(`report: ${join(REPORT_DIR, `${report.generatedAt.replace(/[:.]/g, '-')}-${label}.json`)}`);
-    return records.every((r) => r.exitCode === 0) ? 0 : 1;
+    if (report.singleRun) lines.push('note: single run — variance unmeasured; label stands (R3)');
+    lines.push(`report: ${reportPath}`);
+    for (const warning of warnings) lines.push(`warning: ${warning}`);
+    return { report, reportPath, lines, keptWorktrees: [...keptWorktrees] };
+}
+
+/** Thrown when the verb is invoked from inside an eval run (see {@link NESTING_ENV}). */
+export class EvalNestingError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'EvalNestingError';
+    }
+}
+
+/** Dry-run plan: exactly what the invocation would do, with nothing created. */
+export interface EvalPlan {
+    pipelines: string[];
+    fixtures: { name: string; path: string }[];
+    runs: number;
+    worktreeRoot: string;
+}
+
+/** Resolve the dry-run plan without creating a worktree, fixture or report. */
+export function planEval(argv: string[], projectRoot: string): EvalPlan {
+    configureEvalRoots(projectRoot);
+    const args = parseArgs(argv);
+    return {
+        pipelines: args.pipelines,
+        fixtures: args.fixtures.map((name) => ({ name, path: resolveEvalFixture(projectRoot, name) })),
+        runs: args.runs,
+        worktreeRoot: join(tmpdir(), 'spur-eval-pipeline-*', 'worktree'),
+    };
 }

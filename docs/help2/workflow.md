@@ -36,6 +36,62 @@ Schema plus semantic validation. Use it as the gate after editing any workflow Y
 spur workflow validate .spur/workflows/basic.yaml --json
 ```
 
+## spur workflow eval
+
+```bash
+spur workflow eval [pipelines...] [--fixture <name>] [--runs <n>] [--label <name>] [--keep] [--dry-run] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--fixture <name>` | Fixture template to run (repeatable; default `fixture-minimal`) |
+| `--runs <n>` | Runs per pipeline for variance (1-20, default 1) |
+| `--label <name>` | Label recorded on the report (default: `run`) |
+| `--keep` | Retain the run worktree and report its path |
+| `--dry-run` | Print the resolved plan and create nothing |
+| `--json` | Machine-readable report |
+
+## spur workflow promote-check
+
+```bash
+spur workflow promote-check [--candidates <path>] [--workflows-dir <dir>] [--db <path>] [--now <iso>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--candidates <path>` | Candidate record (default: `config/workflow-candidates.json`) |
+| `--workflows-dir <dir>` | Workflow definitions (default: `config/workflows`) |
+| `--db <path>` | Project database (default: `.spur/spur.db`) |
+| `--now <iso>` | Clock override for deadline evaluation |
+| `--json` | Machine-readable report |
+
+## spur workflow promote-evaluate
+
+```bash
+spur workflow promote-evaluate <id> [--candidates <path>] [--workflows-dir <dir>] [--db <path>] [--now <iso>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--candidates <path>` | Candidate record (default: `config/workflow-candidates.json`) |
+| `--workflows-dir <dir>` | Workflow definitions (default: `config/workflows`) |
+| `--db <path>` | Project database (default: `.spur/spur.db`) |
+| `--now <iso>` | Clock override for the measurement window |
+| `--json` | Machine-readable report |
+
+## spur workflow promote-resolve
+
+```bash
+spur workflow promote-resolve <id> --decision <promote|retire|hold> [--candidates <path>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--decision <decision>` | `promote`, `retire` or `hold` (required) |
+| `--candidates <path>` | Candidate record (default: `config/workflow-candidates.json`) |
+| `--workflows-dir <dir>` | Workflow definitions (default: `config/workflows`) |
+| `--json` | Machine-readable report |
+
 ## spur workflow run
 
 ```bash

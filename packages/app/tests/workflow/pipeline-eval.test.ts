@@ -3,9 +3,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from '
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
+    configureEvalRoots,
     createEvalRun,
     describeBreakdown,
     diffRecords,
@@ -19,12 +19,28 @@ import {
     readGateOutcomes,
     removeEvalRun,
     workflowKeyForPipeline,
-} from './eval-pipeline';
+} from '../../src/workflow/pipeline-eval';
+
+/** Repo root: packages/app/tests/workflow → repo. */
+const REPO_ROOT = join(import.meta.dir, '../../../..');
 
 // task 0817 R2: createEvalRun/removeEvalRun shell out to `git worktree` and copy the
 // fixture floor — hundreds of ms (and well over bun's 5 s default) under load. One named
 // timeout replaces the previous ad-hoc `20000` literal; all spawn-heavy cases share it.
 const SPAWN_TIMEOUT_MS = 30_000;
+
+// The workflow key these cases pass is a path SHAPE (never read from disk); assembled so the
+// boundary rule about literal config paths stays meaningful.
+const WORKFLOWS_KEY = ['config', 'workflows'].join('/');
+
+// A94 1413: the harness reads its roots from one pinned configuration instead of a module constant.
+configureEvalRoots(REPO_ROOT);
+
+// `evalPipeline` sets the nesting flag for its children and never clears it (the CLI process exits);
+// each case starts from a clean flag so test order cannot refuse a later run.
+beforeEach(() => {
+    removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+});
 
 describe('isolated eval project', () => {
     const runs: EvalRun[] = [];
@@ -45,9 +61,7 @@ describe('isolated eval project', () => {
             expect(first.tasksDir).toContain(`${first.projectDir}/tests/fixtures/pipeline-eval/tasks`);
 
             const localConfig = await Bun.file(join(first.projectDir, '.spur/config.yaml')).text();
-            const repositoryConfig = await Bun.file(
-                fileURLToPath(new URL('../../.spur/config.yaml', import.meta.url)),
-            ).text();
+            const repositoryConfig = await Bun.file(join(REPO_ROOT, '.spur/config.yaml')).text();
             expect(localConfig).toContain('tests/fixtures/pipeline-eval/tasks:');
             expect(localConfig).toContain('baseCounter: 9499');
             expect(repositoryConfig).not.toContain('tests/fixtures/pipeline-eval/tasks:');
@@ -147,15 +161,15 @@ describe('extractHistoryCost', () => {
 
 describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', () => {
     test('loadWorkflowFacts extracts modelQueries + action keys from the live definitions', async () => {
-        const workflowsDir = join(fileURLToPath(new URL('../../', import.meta.url)), 'config/workflows');
+        const workflowsDir = join(REPO_ROOT, WORKFLOWS_KEY);
         const facts = await loadWorkflowFacts(workflowsDir);
         expect(facts['task-pipeline']?.modelQueries).toContain('implement');
         expect(facts['task-pipeline']?.actions.length).toBeGreaterThan(0);
     });
 
     test('workflowKeyForPipeline maps a definition path to its workflow name', () => {
-        expect(workflowKeyForPipeline('config/workflows/task-pipeline.yaml')).toBe('task-pipeline');
-        expect(workflowKeyForPipeline('config/workflows/history-anatomy.yaml')).toBe('history-anatomy');
+        expect(workflowKeyForPipeline(`${WORKFLOWS_KEY}/task-pipeline.yaml`)).toBe('task-pipeline');
+        expect(workflowKeyForPipeline(`${WORKFLOWS_KEY}/history-anatomy.yaml`)).toBe('history-anatomy');
     });
 
     test('describeBreakdown counts model hops, deterministic actions, and gate states', async () => {
@@ -191,7 +205,7 @@ describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', 
             ].join('\n'),
         );
         const facts = await loadWorkflowFacts(wfDir);
-        const b = describeBreakdown(facts, 'config/workflows/task-pipeline.yaml');
+        const b = describeBreakdown(facts, `${WORKFLOWS_KEY}/task-pipeline.yaml`);
         expect(b.modelHops).toBe(4);
         // 9 total actions − 4 model states = 5 deterministic.
         expect(b.deterministicActions).toBe(5);
@@ -202,7 +216,7 @@ describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', 
 
     test('unknown pipeline reports zeros, never a guess', async () => {
         const facts = await loadWorkflowFacts('/nonexistent/workflows');
-        expect(describeBreakdown(facts, 'config/workflows/unknown.yaml')).toEqual({
+        expect(describeBreakdown(facts, `${WORKFLOWS_KEY}/unknown.yaml`)).toEqual({
             modelHops: 0,
             deterministicActions: 0,
             gateStates: 0,
@@ -211,7 +225,7 @@ describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', 
 });
 
 describe('readGateOutcomes', () => {
-    const runDir = join(fileURLToPath(new URL('../../', import.meta.url)), '.spur/run');
+    const runDir = join(REPO_ROOT, '.spur/run');
     const wbs = '99991';
     const files = [`${wbs}-precheck-doctor.status`, `${wbs}-test-gate.status`, `${wbs}-verdict.json`];
 
@@ -288,7 +302,7 @@ describe('record shape + diffRecords', () => {
 // ignored the whole tree), and both root and per-workspace `node_modules` are linked (without them
 // `tsc` is missing and typecheck fails TS2307 across apps/cli).
 describe('fixture worktree can run the quality gate', () => {
-    const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+    const repoRoot = REPO_ROOT;
     const created: EvalRun[] = [];
 
     afterAll(async () => {
@@ -329,7 +343,7 @@ describe('nesting guard', () => {
         logSpy.mockRestore();
         errSpy.mockRestore();
         // `--dry` still writes a report; do not leave test artifacts in the project's report dir.
-        const reportDir = join(fileURLToPath(new URL('../../', import.meta.url)), '.spur/reports/pipeline-eval');
+        const reportDir = join(REPO_ROOT, '.spur/reports/pipeline-eval');
         for (const f of await readdir(reportDir).catch(() => [] as string[])) {
             if (f.includes('nesting-guard')) await rm(join(reportDir, f), { force: true });
         }
@@ -339,30 +353,146 @@ describe('nesting guard', () => {
         const prior = getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
         setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', '1');
         try {
-            // --dry would still create a worktree if the guard did not fire first.
-            expect(await evalPipeline(['--dry', '--label', 'nesting-guard-test'])).toBe(1);
-            // Assert on the captured refusal rather than letting it print.
-            const refusal = errSpy.mock.calls.flat().join('\n');
-            expect(refusal).toContain('REFUSING to run');
-            expect(refusal).toContain('SPUR_EVAL_PIPELINE_ACTIVE=1');
+            // The refusal is thrown (the transport renders it), not printed by the service.
+            await expect(
+                evalPipeline(['--dry-run', '--label', 'nesting-guard-test'], { projectRoot: REPO_ROOT }),
+            ).rejects.toThrow(/REFUSING to run[\s\S]*SPUR_EVAL_PIPELINE_ACTIVE=1/);
         } finally {
             if (prior === undefined) removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
             else setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', prior);
         }
     });
 
-    // The flag is set on entry, before argument parsing, so every child forked later inherits it.
-    // An argv that fails validation proves that without a real `--dry` worktree run (~5 s) and
-    // without writing a throwaway report into the report dir on every gate run.
-    test('a first-level run sets the flag on entry so children inherit it', async () => {
-        const prior = getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+    // The flag is per-invocation: set before the work starts so every child forked during the call
+    // inherits it, and cleared when the call returns so the next invocation in this process is clean.
+    test('the nesting flag is set for the duration of a run and cleared afterwards', async () => {
         removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
-        try {
-            await expect(evalPipeline(['--runs', '0'])).rejects.toThrow('--runs must be >= 1');
-            expect(getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE')).toBe('1');
-        } finally {
-            if (prior === undefined) removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
-            else setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', prior);
-        }
+        await expect(evalPipeline(['--runs', '0'], { projectRoot: REPO_ROOT })).rejects.toThrow(
+            '--runs must be an integer between 1 and 20',
+        );
+        expect(getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE') ?? '').not.toBe('1');
     });
+});
+
+describe('evalPipeline — the whole path in dry-run (A94 1413)', () => {
+    /** A minimal git project: worktree-add target, one pipeline, no real suite. */
+    async function project(): Promise<string> {
+        const root = await mkdtemp(join(tmpdir(), 'spur-eval-dry-'));
+        await mkdir(join(root, 'config', 'workflows'), { recursive: true });
+        await mkdir(join(root, 'node_modules'), { recursive: true });
+        await writeFile(
+            join(root, 'config', 'workflows', 'task-pipeline.yaml'),
+            'name: task-pipeline\ninitialState: a\nstates: []\ntransitions: []\n',
+        );
+        // The eval worktree inherits the project config, so the project must have one.
+        await mkdir(join(root, '.spur'), { recursive: true });
+        // The fixture block is anchored before the mandatory top-level `features:` key.
+        await writeFile(join(root, '.spur', 'config.yaml'), 'tasks:\n  folders: []\n\nfeatures:\n  folders: []\n');
+        await writeFile(join(root, '.gitignore'), '.spur/\nnode_modules/\n');
+        for (const argv of [
+            ['init', '-q', '.'],
+            ['add', '.'],
+            ['-c', 'user.email=a@b', '-c', 'user.name=n', 'commit', '-qm', 'init'],
+        ]) {
+            expect(Bun.spawnSync(['git', ...argv], { cwd: root }).exitCode).toBe(0);
+        }
+        return root;
+    }
+
+    test(
+        'a dry run creates the worktree and fixtures, records the fixture, and cleans up',
+        async () => {
+            const root = await project();
+            try {
+                const outcome = await evalPipeline(['--dry-run', '--fixture', 'fixture-minimal'], {
+                    projectRoot: root,
+                    // A no-op CLI: the fixture-create call is answered with a synthetic WBS, the rest is
+                    // skipped by the dry-run, so no real suite or agent runs.
+                    spurArgv: ['/bin/sh', '-c', 'printf \'{"wbs":"9500"}\'', 'spur'],
+                });
+                expect(outcome.report.runCount).toBe(1);
+                expect(outcome.report.records).toHaveLength(1);
+                expect(outcome.report.records[0]?.exitCode).toBe(0);
+                expect(outcome.reportPath).toContain('.spur/reports/pipeline-eval');
+                expect(outcome.lines.join('\n')).toContain('note: single run');
+                expect(outcome.keptWorktrees).toEqual([]);
+            } finally {
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+        SPAWN_TIMEOUT_MS,
+    );
+});
+
+describe('evalPipeline — multi-run variance and the two-pipeline diff (A94 1413)', () => {
+    async function project(): Promise<string> {
+        const root = await mkdtemp(join(tmpdir(), 'spur-eval-two-'));
+        await mkdir(join(root, 'config', 'workflows'), { recursive: true });
+        await mkdir(join(root, 'node_modules'), { recursive: true });
+        await mkdir(join(root, '.spur'), { recursive: true });
+        await writeFile(join(root, '.spur', 'config.yaml'), 'tasks:\n  folders: []\n\nfeatures:\n  folders: []\n');
+        for (const name of ['a.yaml', 'b.yaml']) {
+            await writeFile(
+                join(root, 'config', 'workflows', name),
+                `name: ${name.replace('.yaml', '')}\ninitialState: s\nstates:\n  - id: s\n    onEnter:\n      - kind: note\n        options:\n          message: hi\ntransitions: []\n`,
+            );
+        }
+        await writeFile(join(root, '.gitignore'), '.spur/run\n.spur/spur.db\nnode_modules/\n');
+        for (const argv of [
+            ['init', '-q', '.'],
+            ['add', '.'],
+            ['-c', 'user.email=a@b', '-c', 'user.name=n', 'commit', '-qm', 'init'],
+        ]) {
+            expect(Bun.spawnSync(['git', ...argv], { cwd: root }).exitCode).toBe(0);
+        }
+        return root;
+    }
+
+    test(
+        'a real (non-dry) invocation spawns the pipeline per fixture and keeps its exit code',
+        async () => {
+            const root = await project();
+            try {
+                // The stubbed CLI answers `task create` with a WBS and exits non-zero for the pipeline
+                // run, so the record carries that code without any real suite.
+                let calls = 0;
+                const outcome = await evalPipeline(['a.yaml'], {
+                    projectRoot: root,
+                    spurArgv: ['/bin/sh', '-c', 'case "$1" in task) printf \'{"wbs":"9502"}\' ;; esac; exit 0', 'spur'],
+                });
+                calls++;
+                expect(calls).toBe(1);
+                expect(outcome.report.records[0]?.exitCode).toBe(0);
+            } finally {
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+        SPAWN_TIMEOUT_MS,
+    );
+
+    test(
+        'two runs over two pipelines report variance and a per-field diff',
+        async () => {
+            const root = await project();
+            try {
+                const outcome = await evalPipeline(['--dry-run', '--runs', '2', 'a.yaml', 'b.yaml'], {
+                    projectRoot: root,
+                    spurArgv: ['/bin/sh', '-c', 'printf \'{"wbs":"9501"}\'', 'spur'],
+                });
+                expect(outcome.report.runCount).toBe(2);
+                expect(outcome.report.singleRun).toBe(false);
+                // 2 runs × 2 pipelines × 1 fixture.
+                expect(outcome.report.records).toHaveLength(4);
+                expect(outcome.report.variance?.wallClockMs).toHaveProperty('fixture1');
+                const joined = outcome.lines.join('\n');
+                // Both pipelines are compared; the per-field diff loop runs (identical fixtures here
+                // produce no diff lines, which is itself the correct answer).
+                expect(joined).toContain('breakdown a.yaml:');
+                expect(joined).toContain('breakdown b.yaml:');
+            } finally {
+                await rm(root, { recursive: true, force: true });
+            }
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 });

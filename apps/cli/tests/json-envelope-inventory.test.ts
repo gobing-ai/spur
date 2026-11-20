@@ -297,7 +297,8 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // 89 → 90 (A94 1411: `builder check-deps` declares and emits it).
         // 90 → 94 (A94 1412: `rule check-shims`, `check-coverage-cert` and `certify-coverage`; the
         //          count had already drifted to 91 with `self uninstall`'s second flag pair).
-        expect(advertising.length).toBe(94);
+        // 94 → 98 (A94 1413: `workflow eval`, `promote-check`, `promote-evaluate`, `promote-resolve`).
+        expect(advertising.length).toBe(98);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

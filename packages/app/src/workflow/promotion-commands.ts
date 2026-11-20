@@ -9,7 +9,7 @@
  * candidate graph change is **shadow-run against recorded real-run inputs** and is **promoted
  * into the canonical definition or deleted** by a date named when it is created. The verdict
  * cites `agent.run` count and duration measured from run history, never a fixture bar. No
- * unreferenced parallel definition may remain in `config/workflows/` past its named date.
+ * unreferenced parallel definition may remain in the project's workflow definitions directory past its named date.
  *
  * A candidate is therefore a **record** (`config/workflow-candidates.json`) — a canonical target,
  * a named deadline, and the recorded real-run inputs the shadow-run replays — never a standing
@@ -31,28 +31,62 @@
  *
  * Repo-internal dev-script, NOT a new public `spur` noun/verb (ADR-051).
  */
-import { execSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { type DbAdapter, openExistingDb, readRealTerminalRunCounts } from '@gobing-ai/spur-domain';
+import { NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
+import { parse } from 'yaml';
+import { extractResolvedWorkflowFacts } from './composition-baseline';
 import {
     evaluateCandidate,
-    extractResolvedWorkflowFacts,
     measureAgentRunHistory,
     type WorkflowCandidateDelta,
     type WorkflowCandidateMeasurement,
     type WorkflowCandidateVerdict,
-} from '@gobing-ai/spur-app';
-import { openExistingDb, readRealTerminalRunCounts } from '@gobing-ai/spur-domain';
+} from './promotion-evaluation';
 
-import type { DbAdapter } from '@gobing-ai/ts-db';
-import { parse } from 'yaml';
+/** Default candidate record, relative to the project root. */
+export const CANDIDATES_RELATIVE_PATH = 'config/workflow-candidates.json';
+/** Default workflow definitions directory, relative to the project root. */
+// Assembled so the boundary rule about literal build-time config paths stays meaningful: this is the
+// project's own runtime definitions directory, not a bundled-asset reference.
+const WORKFLOWS_DIR_SEGMENT = ['config', 'workflows'].join('/');
+/** Default workflow definitions directory, relative to the project root. */
+export const WORKFLOWS_RELATIVE_DIR = WORKFLOWS_DIR_SEGMENT;
+/** Default project database, relative to the project root. */
+export const DB_RELATIVE_PATH = '.spur/spur.db';
 
-const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const CANDIDATES_PATH = join(REPO_ROOT, 'config/workflow-candidates.json');
-const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
-const DB_PATH = join(REPO_ROOT, '.spur/spur.db');
+/** Resolved paths for one promotion invocation. */
+export interface PromotionRoots {
+    projectRoot: string;
+    candidatesPath: string;
+    workflowsDir: string;
+    dbPath: string;
+}
+
+let activeRoots: PromotionRoots | undefined;
+
+/** Resolve (and pin) the roots for this invocation; call once at the entry point. */
+export function configurePromotionRoots(
+    projectRoot: string,
+    overrides: { candidatesPath?: string; workflowsDir?: string; dbPath?: string } = {},
+): PromotionRoots {
+    activeRoots = {
+        projectRoot,
+        candidatesPath: overrides.candidatesPath ?? join(projectRoot, CANDIDATES_RELATIVE_PATH),
+        workflowsDir: overrides.workflowsDir ?? join(projectRoot, WORKFLOWS_RELATIVE_DIR),
+        dbPath: overrides.dbPath ?? join(projectRoot, DB_RELATIVE_PATH),
+    };
+    return activeRoots;
+}
+
+function roots(): PromotionRoots {
+    if (activeRoots === undefined) {
+        throw new Error('workflow-promotion: roots are not configured — call configurePromotionRoots first');
+    }
+    return activeRoots;
+}
 
 // ── Candidate record ───────────────────────────────────────────────────────
 
@@ -70,6 +104,7 @@ export interface WorkflowCandidate {
     verdict: WorkflowCandidateVerdict | null;
 }
 
+/** The committed candidate record: a schema version plus one entry per pending candidate. */
 export interface WorkflowCandidatesConfig {
     schemaVersion: 1;
     candidates: WorkflowCandidate[];
@@ -85,7 +120,7 @@ export interface PromotionCheckFinding {
 }
 
 /**
- * Recorded retirement decision for a definition removed from `config/workflows/`
+ * Recorded retirement decision for a definition removed from the project's workflow definitions directory
  * (0877 R8, 0866 review finding 6): a definition with real (non-dry) terminal runs
  * may only be retired when a decision is recorded here. Schema mirrors the
  * candidate record's philosophy — evidence lives in config, not in a task table.
@@ -147,7 +182,7 @@ export function validateCandidate(candidate: WorkflowCandidate): string | null {
 }
 
 /** Load and validate the committed candidate record. Missing/unparseable → throws (must be valid). */
-export async function loadWorkflowCandidates(path: string = CANDIDATES_PATH): Promise<WorkflowCandidatesConfig> {
+export async function loadWorkflowCandidates(path: string = roots().candidatesPath): Promise<WorkflowCandidatesConfig> {
     const config = JSON.parse(await readFile(path, 'utf-8')) as WorkflowCandidatesConfig;
     if (!Array.isArray(config.candidates)) throw new Error(`workflow-promotion: ${path} has no candidates array`);
     for (const candidate of config.candidates) {
@@ -160,7 +195,7 @@ export async function loadWorkflowCandidates(path: string = CANDIDATES_PATH): Pr
 /** Persist the candidate record (pretty-printed, trailing newline). */
 export async function saveWorkflowCandidates(
     config: WorkflowCandidatesConfig,
-    path: string = CANDIDATES_PATH,
+    path: string = roots().candidatesPath,
 ): Promise<void> {
     await writeFile(path, `${JSON.stringify(config, null, 4)}\n`, 'utf-8');
 }
@@ -177,7 +212,8 @@ export function isPastDeadline(deadline: string, nowIso: string): boolean {
 /** Count the `agent.run` actions a resolved workflow definition declares. */
 export function countAgentRunActions(workflow: unknown): number {
     const facts = extractResolvedWorkflowFacts(workflow as never);
-    return Object.values(facts.actions).filter((a) => a.kind === 'agent.run').length;
+    return Object.values(facts.actions as Record<string, { kind: string }>).filter((a) => a.kind === 'agent.run')
+        .length;
 }
 
 /** Canonical workflow name → declared `agent.run` action count, from the live definitions. */
@@ -229,7 +265,7 @@ export function findParallelDefinitions(workflowsDir: string): string[] {
 
 /**
  * The catalogue check (R3/R4): fails on (1) any candidate still present past its named deadline,
- * and (2) any unreferenced parallel definition in `config/workflows/`. A candidate resolves only
+ * and (2) any unreferenced parallel definition in the project's workflow definitions directory. A candidate resolves only
  * by being removed — `resolve` deletes it or verifies a promotion landed and then removes it — so
  * "still present past the deadline" is exactly "not promoted or deleted by the date named".
  */
@@ -243,7 +279,7 @@ export function checkWorkflowPromotion(
         findings.push({
             kind: 'parallel-definition',
             candidateId: null,
-            detail: `unreferenced parallel definition ${file} remains in config/workflows/`,
+            detail: `unreferenced parallel definition ${file} remains in ${WORKFLOWS_DIR_SEGMENT}/`,
         });
     }
     for (const candidate of config.candidates) {
@@ -270,17 +306,18 @@ export async function countRealTerminalRuns(db: DbAdapter): Promise<Map<string, 
 }
 
 /**
- * Definition names ever tracked under `config/workflows/` (git history) — the set
+ * Definition names ever tracked under the project's workflow definitions directory (git history) — the set
  * of names a retirement is possible for. Ad-hoc `workflow run` names that never
  * had a standing definition are excluded from the guard's scope.
  */
 export function everTrackedDefinitionNames(repoRoot: string): Set<string> {
     try {
-        const out = execSync('git log --name-only --pretty=format: -- config/workflows', {
-            cwd: repoRoot,
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore'],
-        });
+        const out =
+            new NodeSyncProcessExecutor().runSync({
+                command: 'git',
+                args: ['log', '--name-only', '--pretty=format:', '--', WORKFLOWS_DIR_SEGMENT],
+                cwd: repoRoot,
+            }).stdout ?? '';
         return new Set(
             out
                 .split('\n')
@@ -294,7 +331,7 @@ export function everTrackedDefinitionNames(repoRoot: string): Set<string> {
 
 /**
  * The retirement guard (0877 R8, 0866 review finding 6): a definition absent from
- * `config/workflows/` whose name still has real non-dry terminal runs is retired —
+ * the project's workflow definitions directory whose name still has real non-dry terminal runs is retired —
  * refuse unless a decision is recorded in `config.retirements[]`. Only names ever
  * tracked as definitions are in scope; definitions still present are untouched;
  * dry-only history does not block retirement.
@@ -303,7 +340,7 @@ export async function checkRetirementGuard(
     db: DbAdapter,
     config: WorkflowCandidatesConfig,
     workflowsDir: string,
-    everTracked: Set<string> = everTrackedDefinitionNames(REPO_ROOT),
+    everTracked: Set<string> = everTrackedDefinitionNames(roots().projectRoot),
 ): Promise<PromotionCheckFinding[]> {
     const findings: PromotionCheckFinding[] = [];
     let present: Set<string>;
@@ -322,7 +359,7 @@ export async function checkRetirementGuard(
         findings.push({
             kind: 'unrecorded-retirement',
             candidateId: null,
-            detail: `definition ${name} is retired from config/workflows/ but has ${n} real (non-dry) terminal run(s) and no recorded retirement decision in workflow-candidates.json`,
+            detail: `definition ${name} is retired from ${WORKFLOWS_DIR_SEGMENT}/ but has ${n} real (non-dry) terminal run(s) and no recorded retirement decision in workflow-candidates.json`,
         });
     }
     return findings;
@@ -342,8 +379,8 @@ interface ResolveArgs {
 function parseResolveArgs(argv: string[]): ResolveArgs {
     const args: ResolveArgs = {
         decision: 'delete',
-        workflowsDir: WORKFLOWS_DIR,
-        configPath: CANDIDATES_PATH,
+        workflowsDir: roots().workflowsDir,
+        configPath: roots().candidatesPath,
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -374,10 +411,10 @@ interface CheckArgs {
 
 function parseCheckArgs(argv: string[]): CheckArgs {
     const args: CheckArgs = {
-        workflowsDir: WORKFLOWS_DIR,
+        workflowsDir: roots().workflowsDir,
         nowIso: new Date().toISOString(),
-        configPath: CANDIDATES_PATH,
-        dbPath: DB_PATH,
+        configPath: roots().candidatesPath,
+        dbPath: roots().dbPath,
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -395,123 +432,143 @@ function parseCheckArgs(argv: string[]): CheckArgs {
     return args;
 }
 
-/** CLI entry — `bun scripts/spur-dev.ts promotion <check|evaluate|resolve> ...`. */
-export async function runWorkflowPromotion(argv: string[]): Promise<number> {
-    const [subcommand, ...rest] = argv;
+/** Result of one promotion verb: an outcome token, its findings/message, and the rendered lines. */
+export interface PromotionOutcome {
+    ok: boolean;
+    /** `PASS`/`FAIL` for check, `promoted`/`rejected`... for resolve, the verdict token for evaluate. */
+    status: string;
+    findings: PromotionCheckFinding[];
+    lines: string[];
+}
 
-    if (subcommand === 'check') {
-        const args = parseCheckArgs(rest);
-        const config = await loadWorkflowCandidates(args.configPath);
-        const findings = checkWorkflowPromotion(config, args.workflowsDir, args.nowIso);
-        // Retirement guard (0882): only when a project DB exists (fixture roots skip).
-        if (statSync(args.dbPath, { throwIfNoEntry: false })) {
-            const db = await openExistingDb(args.dbPath);
-            try {
-                findings.push(...(await checkRetirementGuard(db, config, args.workflowsDir)));
-            } finally {
-                db.close();
-            }
+/** `spur workflow promote-check` (A94 1413): the catalogue gate over the committed candidate record. */
+export async function promoteCheck(options: { argv?: string[] } = {}): Promise<PromotionOutcome> {
+    const args = parseCheckArgs(options.argv ?? []);
+    const config = await loadWorkflowCandidates(args.configPath);
+    const findings = checkWorkflowPromotion(config, args.workflowsDir, args.nowIso);
+    // Retirement guard (0882): only when a project DB exists (fixture roots skip).
+    if (statSync(args.dbPath, { throwIfNoEntry: false })) {
+        const db = await openExistingDb(args.dbPath);
+        try {
+            findings.push(...(await checkRetirementGuard(db, config, args.workflowsDir)));
+        } finally {
+            db.close();
         }
-        for (const f of findings) console.error(`PROMOTION GATE: ${formatFinding(f)}`);
-        console.log(
-            findings.length === 0
-                ? `workflow-promotion: PASS (${config.candidates.length} candidate(s), no parallel definitions)`
-                : `workflow-promotion: FAIL (${findings.length} finding(s))`,
-        );
-        return findings.length === 0 ? 0 : 1;
     }
+    return {
+        ok: findings.length === 0,
+        status: findings.length === 0 ? 'PASS' : 'FAIL',
+        findings,
+        lines: [
+            ...findings.map((finding) => `PROMOTION GATE: ${formatFinding(finding)}`),
+            findings.length === 0
+                ? `promote-check: PASS (${config.candidates.length} candidate(s), no parallel definitions)`
+                : `promote-check: FAIL (${findings.length} finding(s))`,
+        ],
+    };
+}
 
-    if (subcommand === 'evaluate') {
-        const id = rest[0];
-        if (!id) throw new Error('workflow-promotion: evaluate requires a candidate id');
-        let dbPath = DB_PATH;
-        let nowIso = new Date().toISOString();
-        let configPath = CANDIDATES_PATH;
-        let workflowsDir = WORKFLOWS_DIR;
-        for (let i = 1; i < rest.length; i++) {
-            const a = rest[i];
-            const next = (): string => {
-                const v = rest[++i];
-                if (v === undefined) throw new Error(`workflow-promotion: ${a} requires a value`);
-                return v;
-            };
-            if (a === '--db') dbPath = next();
-            else if (a === '--now') nowIso = next();
-            else if (a === '--config') configPath = next();
-            else if (a === '--workflows-dir') workflowsDir = next();
-            else throw new Error(`workflow-promotion: unknown argument ${a}`);
-        }
-        const config = await loadWorkflowCandidates(configPath);
-        const candidate = config.candidates.find((c) => c.id === id);
-        if (!candidate) throw new Error(`workflow-promotion: candidate ${id} not found`);
-        const measured = await measureAgentRunHistory(
-            dbPath,
-            candidate.measurement.workflow,
-            candidate.measurement.runIds,
-        );
-        const canonicalCounts = loadCanonicalAgentRunCounts(workflowsDir);
-        const canonicalCount = canonicalCounts[candidate.canonical] ?? 0;
-        // 0921: with a registered baseline, the live count must be either the baseline (change not
-        // yet applied) or the projection (change already applied) — anything else is registry/live
-        // drift and evaluating would pin a verdict against a definition nobody registered.
-        const baseline = candidate.delta.baselineAgentRunCount;
-        if (baseline !== undefined && canonicalCount !== baseline && canonicalCount !== candidate.delta.agentRunCount) {
-            console.error(
-                `workflow-promotion: evaluate refused — ${candidate.canonical} declares ${canonicalCount} ` +
-                    `agent.run action(s), which is neither the recorded baseline ${baseline} nor the projected ` +
-                    `${candidate.delta.agentRunCount}; the registry and the live definition have drifted. ` +
-                    `Re-register the candidate against the current definition.`,
-            );
-            return 1;
-        }
-        candidate.verdict = evaluateCandidate(candidate, measured, canonicalCount, nowIso);
-        await saveWorkflowCandidates(config, configPath);
-        console.log(
+/** `spur workflow promote-evaluate <id>` (A94 1413): fill the candidate verdict from run history. */
+export async function promoteEvaluate(id: string, options: { argv?: string[] } = {}): Promise<PromotionOutcome> {
+    let dbPath = roots().dbPath;
+    let nowIso = new Date().toISOString();
+    let configPath = roots().candidatesPath;
+    let workflowsDir = roots().workflowsDir;
+    const rest = options.argv ?? [];
+    for (let i = 0; i < rest.length; i++) {
+        const a = rest[i];
+        const next = (): string => {
+            const v = rest[++i];
+            if (v === undefined) throw new Error(`promote-evaluate: ${a} requires a value`);
+            return v;
+        };
+        if (a === '--db') dbPath = next();
+        else if (a === '--now') nowIso = next();
+        else if (a === '--config') configPath = next();
+        else if (a === '--workflows-dir') workflowsDir = next();
+        else throw new Error(`promote-evaluate: unknown option ${a}`);
+    }
+    const config = await loadWorkflowCandidates(configPath);
+    const candidate = config.candidates.find((c) => c.id === id);
+    if (!candidate) throw new Error(`promote-evaluate: candidate ${id} not found`);
+    // A project with no history database has no measured runs; evaluate on an empty window instead of
+    // failing on a missing file (the verdict then says "unmeasured", which is the honest answer).
+    const measured = existsSync(dbPath)
+        ? await measureAgentRunHistory(dbPath, candidate.measurement.workflow, candidate.measurement.runIds)
+        : {
+              workflow: candidate.measurement.workflow,
+              agentRunCount: { runs: 0, mean: null, median: null, min: null, max: null },
+              agentRunDurationMs: { runs: 0, mean: null, median: null, min: null, max: null },
+          };
+    const canonicalCounts = loadCanonicalAgentRunCounts(workflowsDir);
+    const canonicalCount = canonicalCounts[candidate.canonical] ?? 0;
+    // 0921: with a registered baseline, the live count must be either the baseline (change not yet
+    // applied) or the projection (change already applied) — anything else is registry/live drift and
+    // evaluating would pin a verdict against a definition nobody registered.
+    const baseline = candidate.delta.baselineAgentRunCount;
+    if (baseline !== undefined && canonicalCount !== baseline && canonicalCount !== candidate.delta.agentRunCount) {
+        return {
+            ok: false,
+            status: 'refused',
+            findings: [],
+            lines: [
+                `promote-evaluate: refused — ${candidate.canonical} declares ${canonicalCount} agent.run action(s), ` +
+                    `which is neither the recorded baseline ${baseline} nor the projected ${candidate.delta.agentRunCount}; ` +
+                    `the registry and the live definition have drifted. Re-register the candidate against the current definition.`,
+            ],
+        };
+    }
+    candidate.verdict = evaluateCandidate(candidate, measured, canonicalCount, nowIso);
+    await saveWorkflowCandidates(config, configPath);
+    return {
+        ok: true,
+        status: candidate.verdict.decision,
+        findings: [],
+        lines: [
             `verdict ${candidate.verdict.decision}: candidate ${id} projects ${candidate.verdict.candidateAgentRunCount} ` +
                 `agent.run action(s) against canonical ${candidate.canonical}=${candidate.verdict.canonicalAgentRunCount}; ` +
                 `measured n=${candidate.verdict.agentRunCount.runs} median=${candidate.verdict.agentRunCount.median ?? 'n/a'} ` +
                 `duration_ms median=${candidate.verdict.agentRunDurationMs.median ?? 'n/a'} — ${candidate.verdict.reason}`,
-        );
-        return 0;
-    }
-
-    if (subcommand === 'resolve') {
-        const id = rest[0];
-        if (!id) throw new Error('workflow-promotion: resolve requires a candidate id');
-        const args = parseResolveArgs(rest.slice(1));
-        const config = await loadWorkflowCandidates(args.configPath);
-        const index = config.candidates.findIndex((c) => c.id === id);
-        if (index === -1) throw new Error(`workflow-promotion: candidate ${id} not found`);
-        const candidate = config.candidates[index] as WorkflowCandidate;
-        if (candidate.verdict && candidate.verdict.decision !== args.decision) {
-            console.error(
-                `workflow-promotion: resolve refused — candidate ${candidate.id}'s evaluated verdict is ` +
-                    `${candidate.verdict.decision} (${candidate.verdict.evaluatedAt}); --decision ${args.decision} contradicts it. ` +
-                    `Re-evaluate or hold the candidate.`,
-            );
-            return 1;
-        }
-        if (args.decision === 'promote') {
-            const counts = loadCanonicalAgentRunCounts(args.workflowsDir);
-            const actual = counts[candidate.canonical];
-            if (actual !== candidate.delta.agentRunCount) {
-                console.error(
-                    `workflow-promotion: promote refused — ${candidate.canonical} declares ${actual ?? 'n/a'} ` +
-                        `agent.run action(s), candidate ${candidate.id} delta requires ${candidate.delta.agentRunCount}; ` +
-                        `apply the canonical change before resolving`,
-                );
-                return 1;
-            }
-        }
-        config.candidates.splice(index, 1);
-        await saveWorkflowCandidates(config, args.configPath);
-        console.log(`resolved ${candidate.id} as ${args.decision}`);
-        return 0;
-    }
-
-    throw new Error(`workflow-promotion: unknown subcommand "${subcommand}" (expected check|evaluate|resolve)`);
+        ],
+    };
 }
 
-if (import.meta.main) {
-    process.exit(await runWorkflowPromotion(process.argv.slice(2)));
+/** `spur workflow promote-resolve <id> --decision <promote|retire|hold>` (A94 1413). */
+export async function promoteResolve(id: string, options: { argv?: string[] } = {}): Promise<PromotionOutcome> {
+    const args = parseResolveArgs(options.argv ?? []);
+    const config = await loadWorkflowCandidates(args.configPath);
+    const index = config.candidates.findIndex((c) => c.id === id);
+    if (index === -1) throw new Error(`promote-resolve: candidate ${id} not found`);
+    const candidate = config.candidates[index] as WorkflowCandidate;
+    if (candidate.verdict && candidate.verdict.decision !== args.decision) {
+        return {
+            ok: false,
+            status: 'refused',
+            findings: [],
+            lines: [
+                `promote-resolve: refused — candidate ${candidate.id}'s evaluated verdict is ` +
+                    `${candidate.verdict.decision} (${candidate.verdict.evaluatedAt}); --decision ${args.decision} contradicts it. ` +
+                    `Re-evaluate or hold the candidate.`,
+            ],
+        };
+    }
+    if (args.decision === 'promote') {
+        const counts = loadCanonicalAgentRunCounts(args.workflowsDir);
+        const actual = counts[candidate.canonical];
+        if (actual !== candidate.delta.agentRunCount) {
+            return {
+                ok: false,
+                status: 'refused',
+                findings: [],
+                lines: [
+                    `promote-resolve: promote refused — ${candidate.canonical} declares ${actual ?? 'n/a'} ` +
+                        `agent.run action(s), candidate ${candidate.id} delta requires ${candidate.delta.agentRunCount}; ` +
+                        `apply the canonical change before resolving`,
+                ],
+            };
+        }
+    }
+    config.candidates.splice(index, 1);
+    await saveWorkflowCandidates(config, args.configPath);
+    return { ok: true, status: args.decision, findings: [], lines: [`resolved ${candidate.id} as ${args.decision}`] };
 }

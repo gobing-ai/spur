@@ -109,6 +109,7 @@ The skill's logic divides by **whether the LLM adds value**:
 | Operation | Backed by | Input | Output (done-when) |
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
+| `show` | `spur workflow show` (CLI) | `<file> [--format <mermaid\|todo>] [--json]` | Rendered definition: the FSM diagram or the declared-step checklist |
 | `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
 | `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes] [--answer <yes\|no\|cancel>] [--answer-text <text>] [--async] [--no-log]` | Resume a paused or interrupted run (omit id -> most recent resumable); `--answer` injects a confirm/select gate answer and `--answer-text` answers an input gate with free text (H1 R27), both before guard re-evaluation; one of them is required headless (0901 R3) and each is validated against the pending gate kind; `--async` detaches the resume (0901 R4) |
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
@@ -265,6 +266,10 @@ the operator accepts it, and never hot-edit a running workflow's shell in place.
 ## Command surface
 
 ```
+spur workflow eval            [pipelines...] [--fixture <name>]... [--runs <n>] [--label <s>] [--keep] [--dry-run] [--json]
+spur workflow promote-check   [--candidates <path>] [--workflows-dir <dir>] [--db <path>] [--now <iso>] [--json]
+spur workflow promote-evaluate <id> [--candidates <path>] [--workflows-dir <dir>] [--db <path>] [--now <iso>] [--json]
+spur workflow promote-resolve <id> --decision <promote|retire|hold> [--candidates <path>] [--json]
 spur workflow validate <file> [--no-schema] [--json]
 spur workflow show      <file> [--format <mermaid|todo>] [--json]
 spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer] [--json]
@@ -284,73 +289,13 @@ spur workflow commit-guard-stage --run <id> [--base <sha>] [-- <paths>...]
 spur workflow commit-guard-check --run <id> [--base <sha>]
 ```
 
-### `cost` — real-run measurements and budgets
-
-`spur workflow cost` reads `.spur/spur.db`; its default cohort is the project definitions in
-`.spur/workflows/`, excluding bookkeeping. Use repeatable `--workflow <name>` filters to select
-workflows explicitly; bookkeeping names still require `--include-bookkeeping`. Report mode
-considers terminal, non-dry runs; `--since YYYY-MM-DD` filters
-creation time in UTC. Missing measurements remain unknown (`null`), never fabricated zeros.
-
-`--json` emits the stable workflow/state report; `--by-state` selects human state rows when JSON
-is not requested. `--budget <file>` instead emits the budget result (including `ok`, errors and
-exitCode with `--json`) and exits 1 for over-budget, missing-budget or silent-raise failures.
-`--measured-file <json>` is valid only with `--budget`. Budget mode uses its own cohort inputs;
-report-only `--since`, `--by-state` and `--include-bookkeeping` do not change the budget pass.
-Repository promotion policy keeps its selected-run domain query; aggregate cost JSON does not
-replace that distribution.
-
-### CLI launch strings
-
-Workflow `spurBin` defaults to the current absolute CLI invocation: a compiled executable, or
-`<runtime> <entry-module>` for source/JavaScript installs. Shell actions expand this multi-part
-string as `$spurBin`, not `"$spurBin"`; quoting the whole value makes it one executable name.
-The current string transport requires launch paths without spaces. Native `splitLaunchCommand`
-consumers also reject shell metacharacters and shell-quoted command strings; shell expansion itself
-does not validate those strings. Native callers with explicit launch argv preserve argument boundaries.
-
-### `show` - project a definition
-
-`spur workflow show <file>` renders the declared graph as Mermaid. `--format todo` instead emits a
-declared-step checklist; `--json` serializes the selected projection. This verb intentionally does
-not advertise `--json-envelope` because its JSON projection is a kept-raw document surface.
-Task 1104: for annotated definitions the todo `--json` payload also carries `plan` — the two-layer
-A-Z/1-9 phased plan derived from each state's `display` (`phase`/`phaseTitle`/`title`/`show`);
-`null` when no state declares `display`. `workflow validate` enforces the phase table on annotated
-definitions (every non-terminal state phased, terminals bare, ≤25 phases, ≤9 states per phase,
-consistent `phaseTitle`).
-
-| Flag (on `run`) | Effect |
-| --------------- | ------ |
-| `--vars <json>` | Per-run variable overrides (JSON object). Merged over the workflow's `vars`. Values must be strings. User vars win over injected defaults (`spurBin`). |
-| `--dry-run` | Validate and walk transitions **without** executing actions. |
-| `--async` | Start in the background and exit with `runId`; monitor via `spur workflow trace <run-id>`. |
-| `--no-plan` | Suppress the human run-start plan preview (sync human runs only; ignored under `--json`/`--async`). |
-| `--quiet` | Suppress plan and per-step progress; keep the final summary. |
-| `--silent` | Suppress all routine output; errors still set a non-zero exit status. |
-| `--verbose` | Include transitions and correlation diagnostics in human progress (implies `--detail full`). |
-| `--detail <level>` | Human detail level: `minimal`, `invocation` (default), or `full`. |
-| `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/workflow/`. |
-| `--no-log` | Opt out of writing the two-file run record `.spur/memory/runs/<RUNID>.md` + `.state.json` (retained by default; propagates to `--async` workers). |
-| `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only; incompatible with `--json`/`--async`). |
-
-`validate` and `run` exit non-zero on failure (`run` exits non-zero when the final status is not
-`done`). `list` prints **workflow definition files** available on disk. For run history use `trace`:
-
-```bash
-spur workflow list --json
-spur workflow trace --last 10 --json
-spur workflow trace <run-id> --json
-```
-
-Follow a live run to terminal (human streaming mode):
-
-```bash
-spur workflow trace <run-id> --follow            # stream until terminal (default 1000ms poll)
-spur workflow trace <run-id> --follow --poll 500 # poll every 500ms
-spur workflow trace <run-id> --follow --output   # stream .spur/memory/runs/<RUNID>.md instead of the DB timeline
-spur workflow trace <run-id> --follow --timeout 600000 # bound the watch; timeout → one checkpoint, run continues, exit 1
-```
+`eval` compares pipelines over fixture tasks in a detached run-local worktree and emits one record per
+fixture (`verdict`, `gateOutcomes`, `artifactsWritten`, `tokenCost`, `wallClockMs`, `exitCode`) plus
+`runCount`/variance; fixtures resolve from `.spur/templates/pipeline-eval/<name>.md` first, then the
+fixture catalog the CLI ships (A94 1413). The three `promote-*` verbs read the project's own
+`workflow-candidates.json` record: `check` fails an overdue candidate, a parallel
+definition or an unrecorded retirement, `evaluate` fills the verdict from run history, and `resolve`
+refuses a decision that contradicts the recorded verdict.
 
 - **`--follow`** replays a run timeline and polls persisted state until it becomes terminal. It
   requires a `run-id` (exit `2` without one) and cannot combine with `--json` (exit `2` - it is a

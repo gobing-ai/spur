@@ -1335,6 +1335,18 @@ export {
     type WorkflowRunStartedEvent,
     type WorkflowTransitionEvent,
 } from './workflow/observability';
+export {
+    assertNotNested,
+    configureEvalRoots,
+    EvalNestingError,
+    type EvalOptions,
+    type EvalOutcome,
+    type EvalPlan,
+    type EvalRoots,
+    evalPipeline,
+    planEval,
+    resolveEvalFixture,
+} from './workflow/pipeline-eval';
 // Phased plan projection — def→two-layer A-Z/1-9 plan from `display` annotations (1104)
 export {
     type BatchTask,
@@ -1366,6 +1378,34 @@ export {
     type WorkflowStateProgress,
     type WorkflowTransitionProgress,
 } from './workflow/progress-projection';
+export type {
+    PromotionCheckFinding,
+    PromotionOutcome,
+    PromotionRoots,
+    WorkflowCandidatesConfig,
+    WorkflowRetirementRecord,
+} from './workflow/promotion-commands';
+export {
+    CANDIDATES_RELATIVE_PATH,
+    checkRetirementGuard,
+    checkWorkflowPromotion,
+    configurePromotionRoots,
+    countAgentRunActions,
+    countRealTerminalRuns,
+    DB_RELATIVE_PATH,
+    everTrackedDefinitionNames,
+    findParallelDefinitions,
+    formatFinding,
+    isPastDeadline,
+    loadCanonicalAgentRunCounts,
+    loadWorkflowCandidates,
+    promoteCheck,
+    promoteEvaluate,
+    promoteResolve,
+    saveWorkflowCandidates,
+    validateCandidate,
+    WORKFLOWS_RELATIVE_DIR,
+} from './workflow/promotion-commands';
 export {
     type AgentRunMeasurement,
     type AgentRunStat,

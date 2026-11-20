@@ -3,25 +3,30 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-    type AgentRunMeasurement,
-    evaluateCandidate,
-    measureAgentRunHistory,
-    type WorkflowCandidate,
-    type WorkflowCandidateVerdict,
-} from '@gobing-ai/spur-app';
-import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import type { DbAdapter } from '@gobing-ai/spur-domain';
+import { createDbAdapter } from '@gobing-ai/ts-db';
 import {
     checkRetirementGuard,
     checkWorkflowPromotion,
+    configurePromotionRoots,
     countAgentRunActions,
     findParallelDefinitions,
     isPastDeadline,
     loadCanonicalAgentRunCounts,
-    runWorkflowPromotion,
+    type PromotionOutcome,
+    promoteCheck,
+    promoteEvaluate,
+    promoteResolve,
     validateCandidate,
+    type WorkflowCandidate,
     type WorkflowCandidatesConfig,
-} from './workflow-promotion';
+} from '../../src/workflow/promotion-commands';
+import {
+    type AgentRunMeasurement,
+    evaluateCandidate,
+    measureAgentRunHistory,
+    type WorkflowCandidateVerdict,
+} from '../../src/workflow/promotion-evaluation';
 
 /** A minimal valid candidate record. */
 function candidate(over: Partial<WorkflowCandidate> = {}): WorkflowCandidate {
@@ -610,3 +615,32 @@ describe('checkRetirementGuard (0882 R8, 0866 review finding 6)', () => {
         }
     });
 });
+
+/**
+ * Adapter: the retired `scripts/spur-dev.ts promotion <op>` signature onto the three verb services.
+ * The services return their lines instead of printing, so this re-emits them to the console the rest
+ * of this suite captures — the assertions below stay byte-comparable with the retired dispatcher.
+ */
+async function runWorkflowPromotion(argv: string[]): Promise<number> {
+    configurePromotionRoots(process.cwd());
+    const [subcommand, ...rest] = argv;
+    let outcome: PromotionOutcome;
+    if (subcommand === 'check') {
+        outcome = await promoteCheck({ argv: rest });
+    } else if (subcommand === 'evaluate') {
+        const id = rest[0];
+        if (id === undefined) throw new Error('workflow-promotion: evaluate requires a candidate id');
+        outcome = await promoteEvaluate(id, { argv: rest.slice(1) });
+    } else if (subcommand === 'resolve') {
+        const id = rest[0];
+        if (id === undefined) throw new Error('workflow-promotion: resolve requires a candidate id');
+        outcome = await promoteResolve(id, { argv: rest.slice(1) });
+    } else {
+        throw new Error(`workflow-promotion: unknown subcommand "${subcommand}" (expected check|evaluate|resolve)`);
+    }
+    for (const line of outcome.lines) {
+        if (outcome.ok) console.log(line);
+        else console.error(line);
+    }
+    return outcome.ok ? 0 : 1;
+}
