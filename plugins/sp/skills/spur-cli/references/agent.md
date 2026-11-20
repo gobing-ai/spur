@@ -34,6 +34,7 @@ user dispatching work does not. They are registered and documented unchanged; `s
 | `join` | *Plumbing (hidden).* Join the fleet as a guest occupant — a live session that pulls its own work (G73 R2, task 1081); `--member` binds a declared member instead (G75 R3, task 1281) | `--role <name>` `--id <id>` `--member <id>` `--session-id <sid>` `--pid <n>` `--executor <name>` `--json` |
 | `leave` | *Plumbing (hidden).* Leave the fleet: release the guest lease, retire the occupant, return claimed messages to `queued` | `[id]` `--session-id <sid>` `--json` |
 | `status` | Agent specs with live process status and member session (requires `spur self serve`) | `--server <url>` `--json` |
+| `doctor-hosts` | Probe each installed host's wake channel + version; writes `docs/reports/fleet-host-capabilities.json` | `--agents` `--out` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `dogfood-gate` | `sp:dogfood-testing` gate: pipeline-driving refusal (exit 2) | `--testee` `--max-retry-present` `--steps` `--json` |
 | `dogfood-validate-report` | `sp:dogfood-testing` report-contract validation (exit 2) | `--file` `--json` |

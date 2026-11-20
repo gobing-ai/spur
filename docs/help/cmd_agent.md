@@ -15,6 +15,7 @@
 | `usage` | Run-once provider usage capture that refreshes quota-owned executor availability |
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
 | `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
+| `doctor-hosts` | Probe each installed host's wake channel and version, and write the capability report |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
 | `dogfood-gate` / `dogfood-validate-report` | Dogfood-testing gates: pipeline-driving refusal and report validation |
 | `trace <runId>` | Run lineage (workflow → agent runs), optionally followed to completion |
@@ -451,3 +452,16 @@ Guests (`join`/`leave`) are live sessions that occupy a role without being super
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §5.2 Implementing
 - [spur message](./cmd_message.md) — `--drain` folds pending messages into the prompt
 - `docs/04_DESIGN.md` — §1.1 `spur agent` family (canonical surface)
+
+## spur agent doctor-hosts
+
+```
+spur agent doctor-hosts [options]
+```
+
+| Option | Description |
+|---|---|
+| `--agents <csv>` | Agents to probe (repeatable; default `codex,claude,pi`) |
+| `--out <file>` | Report path relative to the project (default `docs/reports/fleet-host-capabilities.json`) |
+| `--json` | Machine-readable report |
+

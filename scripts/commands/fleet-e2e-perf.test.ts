@@ -24,17 +24,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { redactProbeOutput } from '@gobing-ai/spur-app';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { getAgentShim, type TurnSessionDriver } from '@gobing-ai/ts-ai-runner';
-import {
-    modeGainVerdict,
-    parsePerfArgs,
-    perfModesOf,
-    probeWarm,
-    redactProbeOutput,
-    scaffoldPerfProject,
-    warmRow,
-} from './fleet-e2e';
+import { modeGainVerdict, parsePerfArgs, perfModesOf, probeWarm, scaffoldPerfProject, warmRow } from './fleet-e2e';
 
 /** A driver that refuses every binary — the shape `TURN_SESSION_DRIVERS` has for 1277/1278. */
 function refusingDriver(reason: string): TurnSessionDriver {

@@ -12,6 +12,7 @@ model call in Spur (skills, workflow `agent.run` actions, team-mode runs) routes
 | `list` | List detected coding agents (agent specs with `--specs`) |
 | `report` | Report a fleet member lifecycle state (`working`/`idle`/`blocked`) from a host hook |
 | `join` / `leave` | Join or leave the fleet as a guest occupant (a live session that pulls its own work) |
+| `doctor-hosts` | Probe each installed host's wake channel and version |
 | `doctor [agent]` | Check agent readiness |
 | `dogfood-gate` / `dogfood-validate-report` | Dogfood-testing gates (pipeline-driving refusal, report validation) |
 | `status` | Show agent specs with live process status and member session (requires `spur self serve`) |
@@ -207,3 +208,16 @@ References: live spur CLI --help output (authoritative; snapshots: agent.txt + v
 docs/help carry-over (accuracy) > DeepWiki TOC (structure signal only).
 Verified: every command, verb, and flag above matches the live snapshots.
 -->
+
+## spur agent doctor-hosts
+
+```
+spur agent doctor-hosts [options]
+```
+
+| Option | Description |
+|---|---|
+| `--agents <csv>` | Agents to probe (repeatable; default `codex,claude,pi`) |
+| `--out <file>` | Report path relative to the project (default `docs/reports/fleet-host-capabilities.json`) |
+| `--json` | Machine-readable report |
+

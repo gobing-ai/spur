@@ -35,6 +35,9 @@ rules:
             # shutdown can reap descendants that outlive their root; the ts-runtime streaming executor
             # exposes no detached option.
             - "packages/app/src/services/parallel-supervisor.ts"
+            # A94 1414: the host probe writes the capability report byte-exactly and runs each host
+            # binary's `--help` under a bounded sync budget (`NodeSyncProcessExecutor`).
+            - "packages/app/src/agent/host-probe.ts"
             # Low-level system primitives:
             # `spur builder pr-*` spine (script-absorption PR-7, moved from plugins/sp/scripts/pr-reviewing.ts):
             # every git/gh call goes through ONE synchronous, test-injectable CommandRunner seam
@@ -76,6 +79,9 @@ rules:
           exclude:
             - "**/tests/**"
             - "**/*.test.ts"
+
+            # A94 1414: the host probe writes the capability report byte-exactly (tmp-free, one write).
+            - "packages/app/src/agent/host-probe.ts"
 
             # Low-level system primitives (O_EXCL locks, FD byte-tailing, FS watcher, atomic registry, Vite glob fallback):
             - "packages/domain/src/planning/locks.ts" # POSIX atomic O_EXCL file locks

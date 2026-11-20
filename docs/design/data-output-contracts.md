@@ -187,6 +187,7 @@ Row-level deltas from the default rule:
 | task | scaffold-tests | 1368 | flat-object | unwrapped |
 | workflow (14) | validate | 273 | flat-object | unwrapped |
 | workflow | run | 406, 431, 440, 621 | flat-object (sync/async-fallback result, `{status:'failed', reason, hint}` failure, `{runId, status:'started', …}` handle, sync result) | unwrapped; failure is status-discriminated, not `{ok:false, error}` |
+| agent | doctor-hosts | `apps/cli/src/commands/agent/doctor-hosts.ts` (A94 1414) | `{ok, reportPath, hosts:[…], findings:[…]}` | adopted — exit 0/1, 2 for an unknown `--agents` |
 | workflow | eval | `apps/cli/src/commands/workflow/eval.ts` (A94 1413) | `{ok, report:{records,runCount,variance}, reportPath, keptWorktrees}` | adopted — `--dry-run` returns the resolved plan instead |
 | workflow | promote-check | delegated: `render` in `apps/cli/src/commands/workflow/promote.ts` (A94 1413) | `{ok, status, findings:[{kind,id,detail}]}` | adopted |
 | workflow | promote-evaluate | same `render` body | same | adopted |

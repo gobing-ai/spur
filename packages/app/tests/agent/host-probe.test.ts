@@ -7,11 +7,12 @@
  *   - headless mode claims a host callback channel it cannot have
  *   - a secret or the operator's home path lands in the tracked report
  *   - the report loses a host×mode row, or duplicates one
- * The probe body in `fleet-e2e.ts` only collects observations; every word of the report's contract
- * is decided by the functions this file pins.
+ * The probe service (`packages/app/src/agent/host-probe.ts`) only collects observations; every word
+ * of the report's contract is decided by the functions this file pins.
  */
-import { describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     buildHostRow,
@@ -19,10 +20,11 @@ import {
     HOST_PROBE_AGENTS,
     HOST_PROBE_MODES,
     type HostCapabilityReport,
+    hostProbeReportPath,
     hostReportViolations,
     redactProbeOutput,
     runHostProbe,
-} from './fleet-e2e';
+} from '../../src/agent/host-probe';
 
 const claudeHelp = 'Usage: claude [options]\n  --hooks            run the configured Stop hooks\n';
 
@@ -161,32 +163,33 @@ describe('redactProbeOutput (1280 R1 — recorded verbatim, redacted)', () => {
     });
 });
 
-describe('runHostProbe (1280 AC3 — real hosts are opt-in)', () => {
+describe('runHostProbe', () => {
     test('an unknown --agents entry is refused before any host work', async () => {
-        const error = spyOn(console, 'error').mockImplementation(() => {});
+        const outcome = await runHostProbe({ cwd: process.cwd(), agents: ['wizard'] });
+        expect(outcome.usage).toBe(true);
+        expect(outcome.report).toBeNull();
+        expect(outcome.lines.join('\n')).toContain('unknown agents: wizard (known: codex, claude, pi)');
+    });
+
+    test('probes every agent and writes the report without launching a host', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-host-probe-'));
         try {
-            expect(await runHostProbe({ agents: ['wizard'] })).toBe(2);
-            expect(error.mock.calls.map((call) => String(call[0]))).toEqual([
-                'fleet-e2e: unknown --agents entries: wizard (known: codex, claude, pi)',
-            ]);
+            const outcome = await runHostProbe({ cwd: root, out: 'report.json' });
+            expect(outcome.ok).toBe(true);
+            expect(outcome.report?.hosts).toHaveLength(HOST_PROBE_AGENTS.length * HOST_PROBE_MODES.length);
+            expect(outcome.reportPath).toBe(join(root, 'report.json'));
+            for (const row of outcome.report?.hosts ?? []) {
+                expect(row.e2e).toBeUndefined();
+                if (row.binary === 'absent') expect(row.wake).toBe('pull-only');
+            }
+            expect(JSON.parse(readFileSync(outcome.reportPath, 'utf8')).schemaVersion).toBe(1);
         } finally {
-            error.mockRestore();
+            rmSync(root, { recursive: true, force: true });
         }
     });
-});
 
-describe('the fixture host drives the portable loop with hooks absent (1280 AC2)', () => {
-    test('the fixture runs join → wait --inbox → message reply → leave, in that order', () => {
-        const source = readFileSync(join(import.meta.dir, 'fixtures/fleet-host-fixture.ts'), 'utf8');
-        // The argv literals alone: the file's prose mentions the same verbs earlier, so a bare
-        // word search would pass even if the calls were reordered.
-        const order = ["['agent', 'join'", "['agent', 'wait'", "['message', 'reply'", "['agent', 'leave'"].map(
-            (needle) => source.indexOf(needle),
-        );
-        expect(source).toContain('SPUR_E2E_HOST_AGENT');
-        for (let index = 1; index < order.length; index++) {
-            expect(order[index] ?? -1).toBeGreaterThan(order[index - 1] ?? Number.MAX_SAFE_INTEGER);
-        }
-        expect(source).not.toContain('hooks.json');
+    test('the report path honours --out and the default', () => {
+        expect(hostProbeReportPath('/p')).toBe('/p/docs/reports/fleet-host-capabilities.json');
+        expect(hostProbeReportPath('/p', 'r/out.json')).toBe('/p/r/out.json');
     });
 });

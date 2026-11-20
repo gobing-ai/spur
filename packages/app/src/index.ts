@@ -10,6 +10,24 @@ export {
 // Task 1113 R4: the CLI re-throws caller input mistakes as DecisionInputError so
 // errorKind `input` survives without depending on ts-ai-decision directly.
 export { DecisionInputError } from '@gobing-ai/ts-ai-decision';
+export {
+    buildHostRow,
+    classifyHostWake,
+    HOST_PROBE_AGENTS,
+    HOST_PROBE_MODES,
+    HOST_PROBE_REPORT_RELATIVE_PATH,
+    type HostCapabilityReport,
+    type HostCapabilityRow,
+    type HostMode,
+    type HostProbeOptions,
+    type HostProbeOutcome,
+    type HostWake,
+    hostProbeReportPath,
+    hostReportViolations,
+    redactProbeOutput,
+    runHostProbe,
+    wakeEvidenceLine,
+} from './agent/host-probe';
 export type { PlanningFolders } from './config/planning-folders';
 export { resolvePlanningFolders } from './config/planning-folders';
 // Read-only Projects Database browse service (G631 / task 1183): the server module's only way
