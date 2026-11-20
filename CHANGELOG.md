@@ -8,6 +8,109 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: scripts/commands/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.39] - 2026-11-19
+
+### Added
+- namespace the harness MCP tools behind the project prefix and expose opted-in workflows as tools (6fd0a41de)
+  <!-- src: apps/server/src/modules/mcp/protocol.ts:59 · confidence: HIGH -->
+- extract one shared bearer guard for the MCP and A2A surfaces (6751ec767)
+  <!-- src: apps/server/src/middleware/bearer-guard.ts:58 · confidence: HIGH -->
+- emit `mcp.tool.called`, resource and `auth.denied` protocol events from the embedded server (8f96e99fd)
+  <!-- src: apps/server/src/modules/mcp/index.ts:290 · confidence: HIGH -->
+- emit A2A message intake and cancellation events (336424ee8)
+  <!-- src: apps/server/src/modules/a2a/index.ts:249 · confidence: HIGH -->
+- add protocol tool usage to the history-anatomy report (11eed7047)
+  <!-- src: packages/domain/src/analytics/protocol-usage.ts:136 · confidence: HIGH -->
+- flag failing and unused surfaces for spur-doctor (04f528e9a)
+  <!-- src: packages/domain/src/analytics/surface-usage.ts:59 · confidence: HIGH -->
+- cluster repeated `(tool, errorCode)` failures as rule-scan candidates (34b197503)
+  <!-- src: packages/domain/src/analytics/protocol-usage.ts:215 · confidence: HIGH -->
+- log gateway events as capped JSONL and count them in `spur self status` (b42293027)
+  <!-- src: packages/app/src/services/gateway-event-log.ts:20 · confidence: HIGH -->
+- address A2A members by project, refresh coordination receipts, and ship the delegation workflows (b77a9e546)
+  <!-- src: apps/cli/src/commands/agent/shared.ts:557 · confidence: HIGH -->
+- add `--all-projects` to the daily history view so one call reports every registered project (f75cf06a8)
+  <!-- src: apps/cli/src/commands/history/summary.ts:26 · confidence: HIGH -->
+- relay foreign-process ledger rows onto the server bus (cc9b160bb)
+  <!-- src: apps/server/src/context.ts:308 · confidence: HIGH -->
+- host an MCP endpoint at the gateway root, guarded by its own bearer token (a92332d74)
+  <!-- src: apps/server/src/gateway.ts:68 · confidence: HIGH -->
+- aggregate MCP tools across registered projects and route calls by project prefix (dc24d4f71)
+  <!-- src: apps/server/src/gateway.ts:102 · confidence: HIGH -->
+- add guarded corpus write tools to the MCP server (43cd1738e)
+  <!-- src: apps/server/src/modules/mcp/index.ts:205 · confidence: HIGH -->
+- point every agent's gateway MCP entry at the served URL at install time (1d573718f)
+  <!-- src: apps/cli/src/commands/mcp.ts:103 · confidence: HIGH -->
+- reuse a feature's verification PASS on an unchanged tree instead of re-running the repo-wide pass (f24538574)
+  <!-- src: packages/app/src/workflow/feature-verification-receipt.ts:564 · confidence: HIGH -->
+- register the gemini and openai hosted decision makers (3c39f9a2e)
+  <!-- src: docs/design/decision-catalog.md:263 · confidence: HIGH -->
+- fold the `*all` batch commands into `--all` and the `dev-find-*` lenses into `dev-find` (c97616bef)
+  <!-- src: docs/design/dev-command-argument-contract.md:115 · confidence: HIGH -->
+
+### Fixed
+- keep protocol events and `auth.denied` refusals working after the tool rename (bedff0916)
+  <!-- src: apps/server/src/modules/mcp/index.ts:664 · confidence: HIGH -->
+- spell the batch schedule `--schedule` on every live surface (a4230c256)
+  <!-- src: plugins/sp/commands/dev-run.md:21 · confidence: HIGH -->
+- return the created task path from `sp_task_create` and stop the MCP e2e leaking corpus files (5214733ac)
+  <!-- src: apps/server/src/modules/mcp/index.ts:376 · confidence: HIGH -->
+- resolve every tasks folder so one directory has one spelling (ce64f1154)
+  <!-- src: packages/app/src/services/task-locator.ts:72 · confidence: HIGH -->
+- anchor served planning folders to the project root so a foreign working directory cannot redirect corpus writes (158fa8203)
+  <!-- src: apps/server/src/context.ts:439 · confidence: HIGH -->
+
+### Changed
+- resolve boot-free CLI dispatch from registered routes instead of a hand-maintained list (e6358d6c9)
+  <!-- src: apps/cli/src/boot-free-route.ts:3 · confidence: HIGH -->
+- share gateway and project workflow discovery instead of duplicating it (e5514fd20)
+  <!-- src: apps/cli/src/commands/self/serve.ts:64 · confidence: HIGH -->
+- aggregate daily project event counts in the ledger query rather than in the caller (3c27a2e86)
+  <!-- src: apps/server/src/modules/events/index.ts:405 · confidence: HIGH -->
+- prove test deadlines by their own report and by cross-process ordering instead of wall-clock budgets (c3a3d9127)
+  <!-- src: apps/cli/tests/commands/self/status.test.ts:342 · confidence: HIGH -->
+- move the batch perf measurement into the heavy lane (77857a25c)
+  <!-- src: scripts/commands/fleet-e2e-batch-perf.heavy.test.ts:4 · confidence: HIGH -->
+- keep the MCP e2e's guarded corpus writes inside its scratch root (670f01f83)
+  <!-- src: apps/server/tests/mcp-e2e.test.ts:45 · confidence: HIGH -->
+- stop the MCP e2e from writing into the repository corpus and drop its leaked fixtures (cc96eee15)
+  <!-- src: apps/server/tests/mcp-e2e.test.ts:44 · confidence: HIGH -->
+- drop the unused context handle from the MCP e2e (69dd1a80f)
+  <!-- src: apps/server/tests/mcp-e2e.test.ts:640 · confidence: HIGH -->
+- prove protocol events render in the Board's system-events view (a06403089)
+  <!-- src: apps/server/tests/modules/events/history.test.ts:469 · confidence: HIGH -->
+- bump the `@gobing-ai/ts-*` catalog to 0.8.0 (fc8401af4)
+  <!-- src: package.json:39 · confidence: HIGH -->
+- document the MCP command name (7e74fbce1)
+- make agent guidance MCP-first with a CLI fallback (0f28e7ca9)
+- add the per-agent MCP adoption matrix (d67a2dea8)
+
+### Removed
+- remove the deprecated `spur self daemon` alias (0bea11fe6)
+  <!-- src: README.md:177 · confidence: HIGH -->
+- remove the hidden legacy top-level nouns and migrate every caller to `spur self <verb>` (97b8832ef)
+  <!-- src: apps/cli/README.md:101 · confidence: HIGH -->
+- retire the fleet legacy member-id fallback guard, leaving one id derivation (667808d0e)
+  <!-- src: packages/config/src/index.ts:481 · confidence: HIGH -->
+
+### Other
+- plan the protocol-surfaces roadmap features and tasks (1375-1404) (094cc529c)
+- file the usage-driven surface reduction report (1403) (4a5c6a7b1)
+- record that no surface cut is approved to apply (1404) (505d8a04d)
+- record the delegation workflow e2e script's ownership (1397) (e73b5a938)
+- mark the adoption matrix AC docs-only (1393) (b5f1421d1)
+- mark H85 active and close task 1403 (eb21129e3)
+- refresh evidence paths in the MCP and protocol task records (8001601af)
+- normalize evidence citations to repo-root-relative paths (a34d7d45f)
+- update the task records after refinement (45241188e)
+- update the task records after refinement (fbbabe6bb)
+- sync shipped gateway, daemon and fleet feature statuses (0b6df7d97)
+- mark features done once all their tasks closed (27022cf93)
+- mark J94 done once all its tasks closed (64a75f7d3)
+- clean up the current project registry entries (4623f7fc0)
+- repoint changelog anchors to the moved self commands (1388) (39913313d)
+- add the 0.4.38 release notes (3d83bb3a6)
+
 ## [0.4.38] - 2026-11-17
 
 ### Added
