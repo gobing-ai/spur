@@ -1,0 +1,156 @@
+---
+schema_version: 1
+name: "A94 wave 6: agent doctor --hosts and parallel builder actions"
+status: todo
+template: feature-impl
+created_at: 2026-11-20T07:58:05.085Z
+updated_at: "2026-11-20T08:38:08.317Z"
+feature_id: A94
+priority: P1
+tags:
+  - A94
+  - tooling
+
+dependencies: ["1410"]
+estimate_hours: 6
+---
+
+## 1414. A94 wave 6: agent doctor --hosts and parallel builder actions
+
+### Background
+
+Implements: R11 — Fleet host probe is an agent verb; R12 — Dev supervisor runs configured processes downstream.
+
+Shipped fleet-join depends on the repo-only host probe (C9); dev-all hardcodes Spur's server+web topology (C10).
+
+Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10 granted 2026-11-19).
+
+Note (2026-11-20): the task title still says "agent doctor --hosts" because the CLI has no title-rename verb. The surface is `spur agent doctor-hosts`, and Requirements are authoritative.
+
+**Refine corrections (2026-11-20)**
+
+- "doctor-hosts replaces `fleet-e2e --host-probe`" → the probe is `runHostProbe` (`scripts/commands/fleet-e2e.ts:1870-1964`) with `HOST_PROBE_AGENTS = ['codex','claude','pi']` (`:1497`) and the arg arm at `:820`. It spawns the CLI through `cliOk` → `CLI_ENTRY = REPO_ROOT/apps/cli/src/index.ts` (`:82`, `:304`) inside a scratch project (`self init`), which is a repo-only path. → The service takes an injected self-invocation `[process.execPath, ...(process.argv[1] ? [argv1] : [])]`, so a source, packed or compiled CLI probes with itself. The default `--out` is `docs/reports/fleet-host-capabilities.json` relative to the cwd. The rest of fleet-e2e (matrix, perf, guest-join) stays retained as repo E2E.
+- R2 "forwards SIGINT/SIGTERM" → `dev-all.ts` also forwards **SIGHUP**. → Parity keeps SIGHUP, so the satellite §4 signal list is incomplete. Parallel entries are shell commands, not action names. Nesting a parallel or composite inside a parallel is rejected at load.
+- Schema → `BuilderActionValueSchema = z.union([z.string(), z.array(z.string())])` (`packages/config/src/index.ts:1075`), resolved by `resolveAction`/`listActions` (`packages/app/src/services/sdlc-actions.ts:66,84`). The `self exec --list --json` row shape (`docs/design/sdlc-actions.md:155`) gains `parallel` and `graceMs`.
+- No package script invokes `dev-all` (rg 2026-11-20). It is reached only via `bun scripts/spur-dev.ts dev-all`. Citations to update: `plugins/sp/skills/fleet-join/SKILL.md:109` and `plugins/sp/skills/spur-cli/references/agent.md:247`. The `CHANGELOG.md:553` history entry is left as-is.
+
+- Exit and signal semantics (re-read `scripts/commands/dev-all.ts:23-48`) → dev-all does **not** exit with "the first non-zero code", and it does not forward the received signal. Any of SIGINT/SIGTERM/SIGHUP, or the first child exit or spawn error, calls `stopAll`:
+  - SIGTERM to every owned process group;
+  - after 3000 ms, SIGKILL to the groups (descendants can outlive a root), then exit.
+
+  The exit code is the **first-exiting** child's code (`128+signo` if it was signal-killed), or `128+signo` for a received signal, or 1 for a spawn error. → R2 and Design are rewritten to this parity contract. Satellite §4 and the C10 wording ("forwards SIGINT/SIGTERM", "first non-zero code") are corrected in the satellite. This is a semantics clarification of the consented config form, not a new surface.
+
+### Requirements
+
+- [ ] R1. `spur agent doctor-hosts [--real-hosts] [--agents <csv>] [--out <file>] [--json]`:
+  - runs the host-capability probe over `HOST_PROBE_AGENTS` (or the `--agents` subset; an unknown agent → exit 2);
+  - writes the same report shape to `--out` (default `docs/reports/fleet-host-capabilities.json` under the cwd);
+  - exits 0 when every probed row completes, 1 otherwise.
+
+  Without `--real-hosts` it uses the fixture hosts, as today. `agent doctor [agent]` is unchanged.
+- [ ] R2. `builder.actions.<name>` accepts `{parallel: string[] (≥2 shell commands), graceMs?: int > 0 (default 3000)}`. `spur self exec <name>`:
+  - starts each entry in its own process group (detached; on win32 the pid);
+  - triggers shutdown on SIGINT, SIGTERM or SIGHUP received, on the first child exit, or on a child spawn error;
+  - shutdown sends SIGTERM to every owned group, waits `graceMs` unconditionally (descendants can outlive roots), sends SIGKILL to the groups, then exits;
+  - exit code is the first-exiting child's code (`128+signo` if it was signal-killed), else `128+signo` for a received signal, else 1 for a spawn error.
+
+  This is `dev-all.ts:23-48` parity. A nested action name or a fewer-than-2 array fails at config load and names `builder.actions.<name>`.
+  - starts each entry in its own process group (detached);
+  - forwards SIGINT, SIGTERM and SIGHUP to every group;
+  - on the first child exit, SIGTERMs the rest, then SIGKILLs after `graceMs`;
+  - exits with the first non-zero child code (0 if all exited 0).
+
+  A nested action name or an empty array fails at config load and names `builder.actions.<name>`.
+- [ ] R3. `.spur/config.yaml` defines:
+
+  ```yaml
+  actions.dev:
+    parallel:
+      - bun run --filter @gobing-ai/spur-server dev
+      - bun run --filter @gobing-ai/spur-web dev
+  ```
+
+  `spur self exec dev` replaces `dev-all`. `scripts/commands/dev-all.ts`, its heavy test (migrated) and the `--host-probe` arm with `runHostProbe` are removed from `scripts/commands`. RETIRED entries cover `dev-all`; the `fleet-e2e --host-probe` arm prints a pointer to `spur agent doctor-hosts`. The A94 inventory is updated.
+- [ ] R4. `docs/design/sdlc-actions.md` documents the parallel form (schema, signals, exit, `--list` row). `fleet-join/SKILL.md:109` and `spur-cli/references/agent.md:247` cite `spur agent doctor-hosts`.
+
+**Out of scope:** the fleet matrix/perf lanes, restart policies, log multiplexing beyond inherited stdio, a `dev` noun.
+
+### Acceptance Criteria
+
+- [ ] AC1 — Fleet host probe is an agent verb (req: R1, R3, R4)
+- [ ] AC2 — Dev supervisor runs configured processes downstream (req: R2, R3, R4)
+
+### Q&A
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-11-20T08:37:04.430Z
+
+- **Q:** Keep SIGHUP forwarding, which the consent text omits? **A (closed):** yes. It is parity with `dev-all`, not a new surface.
+- **Q:** Can parallel entries name actions? **A (closed):** no. They are shell commands only, and nesting is rejected at load.
+- **Q:** How does the probe spawn the CLI outside the repo? **A (closed):** it re-invokes the running CLI (`process.execPath` + entry), never a repo path.
+
+#### Q&A entry — 2026-11-20T08:37:44.810Z
+
+- **Q:** Handle SIGHUP and use first-exiting-child exit codes, which the consent text words differently? **A (closed):** yes. This is exact `dev-all.ts:23-48` parity, a semantics clarification of C10, recorded in satellite §4.
+- **Q:** Can parallel entries name actions? **A (closed):** no. They are shell commands only, and nesting is rejected at load.
+- **Q:** How does the probe spawn the CLI outside the repo? **A (closed):** it re-invokes the running CLI (`process.execPath` + entry), never a repo path.
+
+### Design
+
+**WHAT/WHY.** The host probe and the dev supervisor are useful in any Spur-managed project. One becomes an agent verb; the other becomes a config form consumed by the existing `self exec`, not a new noun.
+
+**WHERE (frozen).**
+- `packages/app/src/agent/host-probe.ts`: new. Move `runHostProbe`, `HOST_PROBE_AGENTS` and the row types from `fleet-e2e.ts`. Signature: `runHostProbe({cwd, agents, realHosts, out, selfArgv})`. Export through the `@gobing-ai/spur-app` agent entry.
+- `apps/cli/src/commands/agent/doctor-hosts.ts`: new. Register in `agent/index.ts` beside `doctor.ts`.
+- `packages/config/src/index.ts:1075`: `BuilderActionValueSchema = z.union([z.string(), z.array(z.string()), ParallelActionSchema])`, where `ParallelActionSchema = z.object({parallel: z.array(z.string().min(1)).min(2), graceMs: z.number().int().positive().optional()}).strict()`. Extend the load-time validator: parallel entries are not resolved as action names.
+- `packages/app/src/services/sdlc-actions.ts`: `ResolvedAction` gains `kind: 'command'|'composite'|'parallel'`.
+- `packages/app/src/services/parallel-supervisor.ts`: new. The logic is moved from `dev-all.ts` and `self exec` calls it for `kind: 'parallel'`.
+- Tests:
+  - `scripts/commands/dev-all.heavy.test.ts` → `apps/cli/tests/commands/self/exec-parallel.heavy.test.ts`;
+  - `fleet-e2e-host-probe.test.ts` → `apps/cli/tests/commands/agent/doctor-hosts.e2e.test.ts`.
+
+**Signals (parity with `dev-all.ts:23-48`).** One `stopAll(code)` guarded by a `shuttingDown` flag. It runs on a received signal (`128+signo`), on the first child `exit` (its code, or `128+signo`) or on a spawn `error` (1). It sends SIGTERM to `-pid` for each child, then after `graceMs` sends SIGKILL to `-pid` and calls `process.exit(code)`. There is no second-signal escalation.
+
+**Handoff.** 1415 includes `doctor-hosts` in the surface-shape test and scans the updated plugin references.
+
+**Anti-patterns.**
+- No `agent doctor --hosts` mode flag.
+- No `dev` noun.
+- No `self exec <script>` pass-through.
+- Parallel entries never recurse into actions.
+- No change to `agent doctor`.
+
+### Plan
+
+- [ ] 1. Write failing tests:
+  - `doctor-hosts.e2e.test.ts`: fixture hosts write a report with one row per host×mode; `--agents bogus` → 2; a custom `--out` path is honored.
+  - `exec-parallel.heavy.test.ts`: two sleepers; the first exit SIGTERMs the other and exits with the first child's code after `graceMs`; a received SIGINT/SIGTERM/SIGHUP → exit `128+signo`; a nested action rejected at load.
+
+  (R1, R2)
+- [ ] 2. Move the host probe into `packages/app` and register `doctor-hosts`. Reduce the fleet-e2e arm to a pointer. (R1, R3)
+- [ ] 3. Add the parallel schema, the resolver kind and the supervisor service. Wire `self exec`. Add `actions.dev` to `.spur/config.yaml`. (R2, R3)
+- [ ] 4. Delete `dev-all.ts`, add RETIRED entries, update A94, sdlc-actions.md, fleet-join SKILL.md and agent.md. (R3, R4)
+- [ ] 5. Receipt `.spur/run/1414-receipt.md`: `spur agent doctor-hosts --json` (fixture) from the source, packed and standalone CLIs; `spur self exec dev` starts both servers and Ctrl-C stops them; `bun run spur-check`. (all)
+
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+
+- Satellite §4 (parallel form), §5 C9/C10 plus the shape amendment.
+- Code: `scripts/commands/fleet-e2e.ts:82,304,820,1497,1870`, `scripts/commands/dev-all.ts`, `packages/config/src/index.ts:1075`, `packages/app/src/services/sdlc-actions.ts:66,84`, `docs/design/sdlc-actions.md:155`.
+- Upstream: 1410. Downstream: 1415.
+
+### History

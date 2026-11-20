@@ -27,6 +27,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | --- | --- |
 | CLI grammar, initialization, agents, teams and rules | [cli-contracts](design/cli-contracts.md) |
 | Proposed self install/status and staged builder tooling absorption (A93) | [concrete-spur-self](design/concrete-spur-self.md) |
+| Proposed downstream-usable absorption of remaining repository scripts (A94) | [downstream-tooling-absorption](design/downstream-tooling-absorption.md) |
 | History CLI and refresh contracts | [history-cli-contracts](design/history-cli-contracts.md) |
 | Feature sync and agent command contracts | [planning-command-contracts](design/planning-command-contracts.md) |
 | Configuration and asset contracts | [configuration-contracts](design/configuration-contracts.md) |
