@@ -13,7 +13,7 @@
 # - `import type` / `export type` from any package is fine — erased before bundling
 #   (a type-only import from @gobing-ai/app is safe).
 # - This rule is the author-time tripwire over DIRECT imports; the transitive closure
-#   and the real `superskill install` path are checked by `bun run plugin-smoke`, and
+#   and the real `superskill install` path are checked by the repository plugin smoke gate, and
 #   script-contract-check Rule 5 (manifest-aware) fails the spur-check gate.
 #
 # Scope: plugins/sp bundled surfaces only. apps/packages follow the normal workspace

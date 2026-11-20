@@ -1,6 +1,6 @@
 {
     "schemaVersion": 1,
-    "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `bun scripts/spur-dev.ts promotion evaluate <id>`; `promotion check` (spur-check-feature) fails any candidate still present past its deadline, any unreferenced parallel definition in config/workflows/, and (0877 R8) any retired definition with real (non-dry) terminal runs lacking a recorded decision in `retirements[]`.",
+    "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `spur workflow promote-evaluate <id>`; `spur workflow promote-check` (spur-check-feature) fails any candidate still present past its deadline, any unreferenced parallel definition in config/workflows/, and (0877 R8) any retired definition with real (non-dry) terminal runs lacking a recorded decision in `retirements[]`.",
     "candidates": [
         {
             "id": "task-pipeline-triage-lanes",

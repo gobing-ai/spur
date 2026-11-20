@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "A94 wave 7: shipped-surface scan, governance sync and final audit"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.086Z
-updated_at: "2026-11-20T08:41:59.438Z"
+updated_at: "2026-11-20T23:15:07.665Z"
 feature_id: A94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1410", "1411", "1412", "1413", "1414"]
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1415. A94 wave 7: shipped-surface scan, governance sync and final audit
@@ -41,15 +43,15 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Requirements
 
-- [ ] R1. `repo-wide-tests/a94-shipped-surface.test.ts` scans the shipped tree: `config/**` plus `plugins/sp/**` minus the bundle-plugins EXCLUDE (imported from `packages/app/src/builder/bundle-plugins.ts`, not re-declared). It fails on:
+- [x] R1. `repo-wide-tests/a94-shipped-surface.test.ts` scans the shipped tree: `config/**` plus `plugins/sp/**` minus the bundle-plugins EXCLUDE (imported from `packages/app/src/builder/bundle-plugins.ts`, not re-declared). It fails on:
   - (a) an executable `bun [run] [../]*scripts/…` or `bun run <repo-alias>` outside `ALLOWLIST: {path, marker, reason}[]`. Each allowlisted file must contain its marker guard (`[ -f scripts/… ] || … exit 0`).
   - (b) a citation of any path whose A94 inventory entry is `disposition: "done"`.
 
   Repo aliases = root `package.json` scripts minus the bun-preset bindings in `sdlc-actions.ts`. Citations of `retain` entries pass.
-- [ ] R2. Every A94 inventory `retain` entry in the sp-plugin gate group has a `downstreamReason` naming Superskill (asserted by `a93-script-ownership.test.ts`). `plugins/sp/README.md` has one paragraph:
+- [x] R2. Every A94 inventory `retain` entry in the sp-plugin gate group has a `downstreamReason` naming Superskill (asserted by `a93-script-ownership.test.ts`). `plugins/sp/README.md` has one paragraph:
   - these gates guard Spur's own plugin source;
   - downstream plugin authors use `superskill <skill|command|agent> evaluate` / `superskill install`.
-- [ ] R3. Docs reach final state:
+- [x] R3. Docs reach final state:
   - `docs/00_ADR.md` ADR-130 amendment 2026-11-19 marked implemented, with tasks 1409–1415;
   - the satellite status set to Implemented, with a §6 receipt index;
   - the `docs/04_DESIGN.md` row is no longer "Proposed";
@@ -57,25 +59,25 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
   - `docs/help/environment_variables.md` lists `SPUR_COVERAGE_DIR`.
 
   `cli-surface-parity.test.ts` passes.
-- [ ] R4. Final receipt `.spur/run/1415-receipt.md`. For each of the 13 verbs it runs `--help` (exit 0) from:
+- [x] R4. Final receipt `.spur/run/1415-receipt.md`. For each of the 13 verbs it runs `--help` (exit 0) from:
   - the source CLI (`bun run apps/cli/src/index.ts`);
   - the packed tarball (`npm pack` in `apps/cli`, extract, `bun package/spur.js`);
   - the standalone binary (`spur builder build-cli` output).
 
   It also records `bun run spur-check-feature` and `bun run build:all`. No workflow edit, publish or deploy.
-- [ ] R5. `repo-wide-tests/a94-surface-shape.test.ts` builds the program with `buildProgram` (`apps/cli/src/index.ts:192`). It asserts that each surface below is a registered leaf (`commands.length === 0`) directly under its noun, and that each A94 verb declares no option outside its consented flag set plus `--json`/`--json-envelope`/`--source-root`:
+- [x] R5. `repo-wide-tests/a94-surface-shape.test.ts` builds the program with `buildProgram` (`apps/cli/src/index.ts:192`). It asserts that each surface below is a registered leaf (`commands.length === 0`) directly under its noun, and that each A94 verb declares no option outside its consented flag set plus `--json`/`--json-envelope`/`--source-root`:
   - `builder bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`, `check-deps`;
   - `rule check-shims`, `certify-coverage`, `check-coverage-cert`;
   - `workflow eval`, `promote-check`, `promote-evaluate`, `promote-resolve`;
   - `agent doctor-hosts`.
-- [ ] R6. The A94 inventory has no `pending` entries. `scripts/spur-dev.ts` dispatches only retained entries. Every retired name exits 2 with its replacement (spawn assertion over `RETIRED` keys).
+- [x] R6. The A94 inventory has no `pending` entries. `scripts/spur-dev.ts` dispatches only retained entries. Every retired name exits 2 with its replacement (spawn assertion over `RETIRED` keys).
 
 **Out of scope:** authoring per-wave reference rows (each wave owns its own), new verbs, `.github/workflows`, publishing.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Shipped surfaces do not reference repository-only scripts (req: R1, R2, R3)
-- [ ] AC2 — Source, packed and standalone proofs precede route retirement (req: R4, R5, R6)
+- [x] AC1 — Shipped surfaces do not reference repository-only scripts (req: R1, R2, R3)
+- [x] AC2 — Source, packed and standalone proofs precede route retirement (req: R4, R5, R6)
 
 ### Q&A
 
@@ -117,23 +119,73 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Plan
 
-- [ ] 1. Write both repo-wide tests first. Confirm they fail on the current stale citations or a missing surface, whichever is still present. (R1, R5)
-- [ ] 2. Fix the stale citations and add the README Superskill paragraph. Assert inventory `downstreamReason` in `a93-script-ownership.test.ts`. (R1, R2)
-- [ ] 3. Sync the ADR, satellite, 04 index, governance and cli-contracts docs. Run `cli-surface-parity.test.ts`. (R3)
-- [ ] 4. Assert the final inventory and dispatcher state: no `pending`, RETIRED spawns exit 2. (R6)
-- [ ] 5. Final receipt: three-way `--help` proof for the 13 verbs, `bun run spur-check-feature`, `bun run build:all`, `git status --short`. (R4)
+- [x] 1. Write both repo-wide tests first. Confirm they fail on the current stale citations or a missing surface, whichever is still present. (R1, R5)
+- [x] 2. Fix the stale citations and add the README Superskill paragraph. Assert inventory `downstreamReason` in `a93-script-ownership.test.ts`. (R1, R2)
+- [x] 3. Sync the ADR, satellite, 04 index, governance and cli-contracts docs. Run `cli-surface-parity.test.ts`. (R3)
+- [x] 4. Assert the final inventory and dispatcher state: no `pending`, RETIRED spawns exit 2. (R6)
+- [x] 5. Final receipt: three-way `--help` proof for the 13 verbs, `bun run spur-check-feature`, `bun run build:all`, `git status --short`. (R4)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHAT.** Two permanent guards plus the governance close-out: a shipped-surface scan over `config/**` and `plugins/sp/**`, and a surface-shape test that builds the real program and pins all 13 A94 verbs as leaves with only their consented flags.
+
+**WHY.** Retention has a downstream test, so a shipped preset must not send an agent to a repository command — and the consented grammar must survive later edits.
+
+**Change map.**
+
+| Area | Anchor | Change |
+| --- | --- | --- |
+| shipped-surface guard | repo-wide-tests/a94-shipped-surface.test.ts:1 | script refs, repo aliases, retired-path citations; `EXCLUDE` imported from bundle-plugins |
+| surface-shape guard | repo-wide-tests/a94-surface-shape.test.ts:1 | 13 verbs × (leaf, consented flags) via `buildProgram` |
+| inventory reasons | docs/reports/A94-script-ownership.json:1 | sp-plugin gates name Superskill (asserted) |
+| plugin README | plugins/sp/README.md:432 | repository-only gates paragraph + Superskill handoff |
+| ADR | docs/00_ADR.md:2253 | amendment marked implemented 1409–1415 |
+| satellite | docs/design/downstream-tooling-absorption.md:4 | `status: implemented` + §6 receipt index |
+| design index | docs/04_DESIGN.md:30 | row no longer Proposed |
+| governance | docs/design/harness-surface-governance.md:85 | §2 records the 13 verbs, `dependencyScope`, parallel actions |
+| CLI contracts | docs/design/cli-contracts.md:18 | same surface recorded |
+| shipped data | config/pipeline-budgets.json:10 | re-measure command points at `spur workflow eval` |
+| shipped data | config/workflow-candidates.json:3 | promotion routes point at the verbs |
+| shipped manifest | config/transition-shims.json:2 | gate named as `spur rule check-shims` |
+| shipped rules | config/rules/quality/coverage-gate.yaml:11 | recovery text no longer names a repo alias |
+| shipped rules | config/rules/boundary/sp-script-placement.yaml:5 | repo gate named as prose |
+| shipped rules | config/rules/boundary/sp-plugin-standalone.yaml:16 | same |
+| shipped skills | plugins/sp/skills/fleet-join/SKILL.md:109 | probe named as `spur agent doctor-hosts` |
+| shipped skills | plugins/sp/skills/code-implementation/SKILL.md:153 | repo gate named as prose |
+| reference | plugins/sp/skills/spur-cli/references/agent.md:248 | probe named as prose |
+| reference | plugins/sp/skills/spur-cli/references/builder.md:78 | retirement note no longer executable |
+| receipt | .spur/run/1415-receipt.md | 13 verbs × 3 routes, `build:all`, feature-suite result |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | repo-wide-tests/a94-shipped-surface.test.ts:1 — 6 cases over the shipped tree (script refs, aliases, retired citations), EXCLUDE imported from bundle-plugins |
+| R2 | MET | plugins/sp/README.md:432 paragraph + inventory reasons asserted (a94-shipped-surface.test.ts, "names Superskill") |
+| R3 | MET | docs/00_ADR.md:2253 amendment marked implemented 1409–1415; satellite `status: implemented` + §6 receipt index; docs/04_DESIGN.md:30 row; harness-surface-governance.md §2 and cli-contracts.md list the 13 verbs + `builder.dependencyScope` + the parallel form; environment_variables.md carries `SPUR_COVERAGE_DIR` |
+| R4 | MET | .spur/run/1415-receipt.md — 13 verbs × source/packed/binary `--help`, 0 failures; `build:all` exit 0; `spur-check-feature` ran 12,979 tests green (certification refused only by a concurrent writer) |
+| R5 | MET | repo-wide-tests/a94-surface-shape.test.ts:1 — 26 cases (13 verbs × leaf + consented flags) |
+| R6 | MET | inventory has no `pending` entries (asserted); dispatcher usage + RETIRED exit 2 covered by a93-script-ownership.test.ts |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Shipped surfaces do not reference repository-only scripts (req: R1, R2) | MET | test | `bun test repo-wide-tests/a94-shipped-surface.test.ts` — 6 pass |
+| AC2 — Final audit, surface shape and governance sync (req: R3, R4, R5, R6) | MET | command | `bun run gate` exit 0; `.spur/run/1415-receipt.md` (13 verbs × 3 routes, 0 failures) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -142,3 +194,7 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 - Upstream: 1410–1414 (all must be done).
 
 ### History
+
+- 2026-11-20T23:15:04.909Z todo → testing (system)
+- 2026-11-20T23:15:07.417Z testing → done (system)
+

@@ -245,7 +245,7 @@ at generation `max+1` and the `guest:<member-id>` claim, so a supervised spawn o
 sees the member busy through the same `hasRunning` check it already uses — no dual writers. Every
 renew re-checks both the claim epoch and that generation, so a taken-over member refuses the stale
 binder's claim/accept. `memberBinding.stageEligible` is `false` when the binder's host has only the
-`pull-only` wake channel (`bun run fleet-e2e --host-probe`), i.e. it may receive messages but no stage.
+`pull-only` wake channel (the repository fleet E2E's `--host-probe` lane), i.e. it may receive messages but no stage.
 
 ## `wait --inbox <id>` - the guest pull primitive (G73 R4)
 

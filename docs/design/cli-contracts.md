@@ -20,6 +20,14 @@ Original section numbers remain stable; unqualified section references resolve t
 All commands accept `--json` for machine-readable output and return a meaningful exit code. The
 binary is `spur` (`apps/cli/src/index.ts`, run under Bun).
 
+**A94 (2026-11-20) command additions.** Thirteen leaf verbs joined existing nouns, each exactly
+`spur <noun> <verb>`: `builder bundle-plugins|bundle-laya-worker|emit-board-types|emit-migration-sql|check-deps`,
+`rule check-shims|certify-coverage|check-coverage-cert`, `workflow eval|promote-check|promote-evaluate|promote-resolve`,
+`agent doctor-hosts`. Their flags are the wave-consented set plus the shared `--json`, `--json-envelope`
+and `--source-root`; `repo-wide-tests/a94-surface-shape.test.ts` pins both the leaf shape and the flag
+set. Two config surfaces carry the absorbed behavior: `builder.dependencyScope` (package globs for
+`builder check-deps`) and `builder.actions.<name>.parallel` (2+ shell commands supervised as one unit).
+
 **Startup banner policy (A31/0719):** the interactive entry `runCli()` prints the ASCII logo
 exactly once unless the raw argv carries an exact `--no-logo`, `--json`, `--quiet`, or `--silent`
 token. The policy is owned by the `shouldRenderBanner()` seam at the composition root

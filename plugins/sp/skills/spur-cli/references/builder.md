@@ -76,7 +76,7 @@ on every exit path, a second patch-acquisition failure still restores the first,
 `.spur-compile.lock` refuses a concurrent build. Failures exit nonzero and never publish.
 
 A94 1410/1411 retire the matching `scripts/spur-dev.ts` routes (`link-check` and
-`dependency-drift-check` both point at `spur builder check-deps`). Specifically: `bun scripts/spur-dev.ts bundle-plugins`
+`dependency-drift-check` both point at `spur builder check-deps`). Specifically: the retired `bundle-plugins` dispatcher route
 (and `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`) now prints the replacement and
 exits 2, and the package build chains call `spur builder <verb>` instead.
 

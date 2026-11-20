@@ -106,7 +106,7 @@ lost, it returns to `queued`.
 
 ## Host capabilities (probed, not assumed)
 
-`bun run fleet-e2e --host-probe` writes `docs/reports/fleet-host-capabilities.json`: one row per
+`spur agent doctor-hosts` writes `docs/reports/fleet-host-capabilities.json`: one row per
 host×mode with the installed binary path/version, the wake channel and the exact `--help` line that
 proves it. Anything unproven is `pull-only` with a reason.
 

@@ -429,9 +429,17 @@ installed `spur` CLI directly.
 **Thin-wrapper contract** is enforced by `scripts/commands/validate-commands.ts`:
 
 ```bash
-bun run validate-commands            # validate all command wrappers
+# Spur repository only: the `validate-commands` gate over the command wrappers
+bun run validate-commands
 bun run validate-commands --json     # machine-readable output
 ```
+
+> **Repository-only gates (A94 1415).** The `validate-commands`, `validate-flag-contracts`,
+> `surface-drift-inventory`, `skill-eval`, `plugin-install-smoke` and `script-contract-check` gates
+> guard **Spur's own plugin source** — they read this monorepo's layout, so they ship as repository
+> fixtures, not as `spur` verbs. Downstream plugin authors get the generic form from Superskill:
+> `superskill skill evaluate`, `superskill command evaluate`, `superskill agent evaluate`, and
+> `superskill install <plugin>` for installation.
 
 The validator checks five gates. For **non-`dev-*`** commands: (a) heading whitelist — only
 `## Usage` + `## Implementation` beyond the H1 title; (b) frontmatter schema — `description`,

@@ -150,7 +150,7 @@ changed no public surface, report the single line
 
 - `spur rule run` with the configured pre-check preset (catches a direct `process.env` read, the
   `env-var-hygiene` rule, and its siblings);
-- `bun run script-contract-check` when a plugin script was touched (a stale generated `.mjs` twin);
+- the repository script-contract gate when a plugin script was touched (a stale generated `.mjs` twin);
 - the paired-script parity test when `package.json` changed (a half-updated `spur-check` /
   `spur-check:full` chain).
 

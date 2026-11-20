@@ -82,8 +82,26 @@ judges them from step profiles ([workflow composition](workflow-composition-cont
 
 ## 2. Script placement (ADR-051 R4 amendment, ADR-130)
 
-ADR-130 (amended 2026-11-16) governs. The earlier script-absorption migration completed in tasks
-1211–1213: no skill scripts, generated app bundles, `.mjs` twins or migration exceptions remain.
+ADR-130 (amended 2026-11-16, and 2026-11-19 for downstream use) governs. The earlier script-absorption
+migration completed in tasks 1211–1213: no skill scripts, generated app bundles, `.mjs` twins or
+migration exceptions remain.
+
+**A94 (2026-11-20) — the downstream-use test.** Retention is decided by whether a downstream Spur
+project would use the behavior, not by whether a coherent shipped contract exists. Twelve script
+routes moved behind existing nouns and one new config form appeared:
+
+| Noun | Verbs |
+| --- | --- |
+| `builder` | `bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`, `check-deps` (scoped by the new `builder.dependencyScope` key), plus the generalized `build-binaries --entry` / `verify-pack --require` |
+| `rule` | `check-shims`, `certify-coverage`, `check-coverage-cert` |
+| `workflow` | `eval`, `promote-check`, `promote-evaluate`, `promote-resolve` |
+| `agent` | `doctor-hosts` |
+
+Two config shapes carry behavior that used to be code: `builder.dependencyScope: string[]` (globs;
+empty skips the dependency checks) and the `builder.actions.<name>` parallel form
+`{parallel: string[], graceMs?}`, which `spur self exec <name>` supervises (per-child process groups,
+bounded SIGTERM→SIGKILL). The sp-plugin contract gates stay repository fixtures; their generic form
+is Superskill's.
 
 | Surface | Hosts | Selection condition |
 | --- | --- | --- |

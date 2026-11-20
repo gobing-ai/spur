@@ -1,7 +1,7 @@
 ---
 kind: design
 title: Downstream-usable tooling absorption
-status: proposed
+status: implemented
 created_at: 2026-11-19
 updated_at: 2026-11-20
 related: [A94, A93, A92, docs/00_ADR.md, docs/design/concrete-spur-self.md, docs/design/sdlc-actions.md, docs/design/harness-surface-governance.md]
@@ -115,3 +115,18 @@ For every wave: write the failing E2E first, then implement the shared owner, th
 ## 7. Tradeoffs
 
 The shipped runtime gains 13 verbs, 2 flag sets, 1 config key and 1 config form. The sp-plugin gates and test fixtures stay out of it. Check verbs reach presets through `exit-code`, which costs a process spawn per rule but avoids a cross-repo engine release. Spur-package verbs in `builder` are honest about being Spur-only (they fail fast elsewhere) rather than pretending to be generic. Taking them back out of the shipped CLI was rejected as A93 churn.
+
+## 6. Receipt index
+
+Feature A94 shipped in seven waves; every receipt is a per-task artifact under `.spur/run/`.
+
+| Wave | Task | Shipped surface | Receipt |
+| --- | --- | --- | --- |
+| 1 | 1409 | A94 downstream-use inventory + dispatcher hygiene | `.spur/run/1409-receipt.md` |
+| 2 | 1410 | `builder bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`; package scripts route through the CLI | `.spur/run/1410-receipt.md` |
+| 3 | 1411 | `builder build-binaries --entry`, `verify-pack --require`, `check-deps` | `.spur/run/1411-receipt.md` |
+| 4 | 1412 | `rule check-shims`, `check-coverage-cert`, `certify-coverage` + two shipped presets | `.spur/run/1412-receipt.md` |
+| 5 | 1413 | `workflow eval`, `promote-check`, `promote-evaluate`, `promote-resolve` | `.spur/run/1413-receipt.md` |
+| 6a | 1416 | parallel `builder.actions` + `spur self exec dev` | `.spur/run/1416-receipt.md` |
+| 6b | 1414 | `agent doctor-hosts` (report half; guest-join E2E stays a repository fixture) | `.spur/run/1414-receipt.md` |
+| 7 | 1415 | shipped-surface scan, surface-shape guard, governance sync | `.spur/run/1415-receipt.md` |
