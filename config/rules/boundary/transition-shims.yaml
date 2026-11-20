@@ -1,0 +1,26 @@
+# [boundary] Transition-shim ledger (A94 1412 R4).
+#
+# Two-sided: a `@transition-shim(<id>)` marker with no manifest entry fails, and a manifest entry
+# whose marker no longer appears in source fails — without the second half the ledger rots into a
+# permanent suppression list. A project without a manifest passes (nothing declared, nothing to
+# track), so this preset is safe to enable downstream.
+#
+# Reached through `spur rule check-shims`; the marker-guarded command keeps the repository checkout
+# on its own source CLI.
+rules:
+  - id: transition-shims
+    description: "config/transition-shims.json and the @transition-shim(<id>) markers must agree in both directions; unregistered markers, stale entries and incomplete entries fail, a missing manifest passes."
+    severity: error
+    evaluator:
+      type: exit-code
+      config:
+        command: sh
+        args:
+          - -c
+          - >-
+            [ -f config/transition-shims.json ] || { echo "SKIP: no transition-shim ledger in this project"; exit 0; };
+            if [ -f scripts/spur-dev.ts ]; then
+            bun run apps/cli/src/index.ts rule check-shims;
+            else
+            spur rule check-shims;
+            fi

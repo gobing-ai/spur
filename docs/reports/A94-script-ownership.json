@@ -1,7 +1,7 @@
 {
     "schemaVersion": 2,
-    "generatedAt": "2026-11-20T10:30:45Z",
-    "sourceCommit": "50ef01cb1428b3fceb22512b2f395274e89b184b",
+    "generatedAt": "2026-11-20T16:18:54Z",
+    "sourceCommit": "792ee51460c233e12894480e7c51b6e27d49c805",
     "consentStatus": {
         "state": "granted",
         "at": "2026-11-19",
@@ -22,7 +22,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 38
+                    "line": 36
                 }
             ],
             "downstream": "retain",
@@ -40,7 +40,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 37
+                    "line": 35
                 }
             ],
             "downstream": "retain",
@@ -58,7 +58,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 39
+                    "line": 37
                 }
             ],
             "downstream": "retain",
@@ -77,67 +77,17 @@
             "subject": "plugins/sp/commands"
         },
         {
-            "path": "scripts/commands/coverage-certification.test.ts",
-            "responsibility": "Companion tests for root LCOV certification and its recovery decision",
-            "tests": [],
-            "callers": [],
-            "downstream": "move",
-            "disposition": "pending",
-            "surface": "rule certify-coverage",
-            "waveWbs": "1412",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/coverage-certification.ts"
-        },
-        {
-            "path": "scripts/commands/coverage-certification.ts",
-            "responsibility": "Certify a canonical coverage run so post-check judges current root LCOV data",
-            "tests": ["scripts/commands/coverage-certification.test.ts"],
-            "callers": [
-                {
-                    "path": "scripts/commands/run-tests.ts",
-                    "line": 39
-                },
-                {
-                    "path": "scripts/commands/coverage-provenance-check.ts",
-                    "line": 21
-                }
-            ],
-            "downstream": "move",
-            "disposition": "pending",
-            "surface": "rule certify-coverage",
-            "waveWbs": "1412"
-        },
-        {
-            "path": "scripts/commands/coverage-provenance-check.ts",
-            "responsibility": "Refuse a post-check run whose LCOV tracefile is not certified for the current tree",
-            "tests": [],
-            "callers": [
-                {
-                    "path": "package.json",
-                    "line": 81
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 21
-                }
-            ],
-            "downstream": "move",
-            "disposition": "pending",
-            "surface": "rule check-coverage-cert",
-            "waveWbs": "1412"
-        },
-        {
             "path": "scripts/commands/delegate-workflow-e2e.ts",
             "responsibility": "Two-install delegation workflow E2E proof (1397): install A's workflow delegates through install B's A2A surface and links the created task, writing its receipt",
             "tests": [],
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 40
+                    "line": 38
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 40
+                    "line": 38
                 }
             ],
             "downstream": "retain",
@@ -163,7 +113,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 34
+                    "line": 32
                 }
             ],
             "downstream": "generalize",
@@ -190,7 +140,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 35
+                    "line": 33
                 }
             ],
             "downstream": "generalize",
@@ -355,7 +305,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 36
+                    "line": 34
                 }
             ],
             "downstream": "retain",
@@ -454,7 +404,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 25
+                    "line": 24
                 }
             ],
             "downstream": "retain",
@@ -483,7 +433,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 43
+                    "line": 41
                 }
             ],
             "downstream": "retain",
@@ -508,7 +458,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 30
+                    "line": 28
                 }
             ],
             "downstream": "retain",
@@ -541,41 +491,6 @@
             "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite"
         },
         {
-            "path": "scripts/commands/transition-shim-check.test.ts",
-            "responsibility": "Companion two-sided tests for transition-shim manifest and source markers",
-            "tests": [],
-            "callers": [],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "rule check-shims",
-            "waveWbs": "1412",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/transition-shim-check.ts"
-        },
-        {
-            "path": "scripts/commands/transition-shim-check.ts",
-            "responsibility": "Keep the transition-shim manifest and its `@transition-shim` source markers in step",
-            "tests": ["scripts/commands/transition-shim-check.test.ts"],
-            "callers": [
-                {
-                    "path": "package.json",
-                    "line": 93
-                },
-                {
-                    "path": "config/transition-shims.json",
-                    "line": 2
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 26
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "rule check-shims",
-            "waveWbs": "1412"
-        },
-        {
             "path": "scripts/commands/validate-commands.ts",
             "responsibility": "Validate the authored `sp` command files against the thin-wrapper contract",
             "tests": [],
@@ -586,7 +501,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 28
+                    "line": 26
                 }
             ],
             "downstream": "retain",
@@ -600,7 +515,7 @@
             "callers": [
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 75
+                    "line": 71
                 }
             ],
             "downstream": "retain",
@@ -642,7 +557,7 @@
                 },
                 {
                     "path": "scripts/spur-dev.ts",
-                    "line": 62
+                    "line": 60
                 }
             ],
             "downstream": "move",
@@ -675,7 +590,7 @@
             "callers": [
                 {
                     "path": "package.json",
-                    "line": 81
+                    "line": 85
                 },
                 {
                     "path": "apps/cli/package.json",

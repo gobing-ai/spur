@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "A94 wave 4: rule check-shims and certify-coverage"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.084Z
-updated_at: "2026-11-20T08:40:31.269Z"
+updated_at: "2026-11-20T16:47:14.508Z"
 feature_id: A94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1410"]
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1412. A94 wave 4: rule check-shims and certify-coverage
@@ -46,8 +48,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Requirements
 
-- [ ] R1. `spur rule check-shims [--manifest <path>]` (default `config/transition-shims.json`) validates the two-sided shim ledger with today's `transition-shim-check` semantics. A missing manifest passes. Exit 0/1/2, with the `--json` findings envelope.
-- [ ] R2. `spur rule certify-coverage [--lcov <path>] -- <command…>`, consented (satellite §5 amendment 2):
+- [x] R1. `spur rule check-shims [--manifest <path>]` (default `config/transition-shims.json`) validates the two-sided shim ledger with today's `transition-shim-check` semantics. A missing manifest passes. Exit 0/1/2, with the `--json` findings envelope.
+- [x] R2. `spur rule certify-coverage [--lcov <path>] -- <command…>`, consented (satellite §5 amendment 2):
   1. Run `startCanonicalRun(cwd)` (pre-run fingerprint plus pending marker).
   2. Spawn `<command…>` as argv with no shell and stdio inherited. Set env `SPUR_COVERAGE_DIR=<run dir>`, replace every argv token `{coverageDir}` with the run dir, and forward SIGINT/SIGTERM to the child.
   3. On child exit 0, run `certifyCanonicalRun`, then publish the LCOV to `--lcov` (default `.coverage/lcov.info`) and the marker to `.coverage/coverage-certification.json`.
@@ -57,24 +59,24 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
   - 1 when certify is refused (`coverage-certification: refused (<reason>) — <message>`);
   - 0 when certified;
   - 2 when `--` or the command is missing.
-- [ ] R3. `spur rule check-coverage-cert [--lcov <path>]` runs `validateCoverageCertification` and exits:
+- [x] R3. `spur rule check-coverage-cert [--lcov <path>]` runs `validateCoverageCertification` and exits:
   - 0 certified;
   - 1 stale, byte-mismatched or missing (when an `.coverage/` certification is expected);
   - 2 usage.
 
   `--json` emits findings `{kind: "coverage-artifact", detail}`. Root `package.json:81` `test-post-check` calls it in place of `coverage-provenance-check`.
-- [ ] R4. Shipped rules:
+- [x] R4. Shipped rules:
   - `config/rules/quality/coverage-cert.yaml` and `config/rules/boundary/transition-shims.yaml` use the `exit-code` evaluator with the marker-guarded command above;
   - `check-coverage-cert` downstream SKIPs (exit 0) when no certification file exists;
   - `ts-rule-engine` is unchanged.
-- [ ] R5. `scripts/commands/run-tests.ts` keeps the hermetic env scrub and suite termination and imports start/certify from `@gobing-ai/spur-app`. `coverage-certification.ts`, `coverage-provenance-check.ts` and `transition-shim-check.ts` are deleted from `scripts/commands`, RETIRED entries are added, and A94 is updated.
+- [x] R5. `scripts/commands/run-tests.ts` keeps the hermetic env scrub and suite termination and imports start/certify from `@gobing-ai/spur-app`. `coverage-certification.ts`, `coverage-provenance-check.ts` and `transition-shim-check.ts` are deleted from `scripts/commands`, RETIRED entries are added, and A94 is updated.
 
 **Out of scope:** native evaluator types, the coverage threshold policy, CI edits.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Transition shim ledger is a downstream rule (req: R1, R4, R5)
-- [ ] AC2 — Coverage provenance is enforceable downstream (req: R2, R3, R4, R5)
+- [x] AC1 — Transition shim ledger is a downstream rule (req: R1, R4, R5)
+- [x] AC2 — Coverage provenance is enforceable downstream (req: R2, R3, R4, R5)
 
 ### Q&A
 
@@ -132,28 +134,86 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Plan
 
-- [ ] 0. Consent closed (option 1, amendment 2 in satellite §5). No gate remains.
-- [ ] 1. Write a failing E2E `apps/cli/tests/commands/rule/a94-rule-checks.e2e.test.ts`:
+- [x] 0. Consent closed (option 1, amendment 2 in satellite §5). No gate remains.
+- [x] 1. Write a failing E2E `apps/cli/tests/commands/rule/a94-rule-checks.e2e.test.ts`:
   - check-shims: no manifest → 0; a broken ledger → 1 with `--json`;
   - check-coverage-cert: certified → 0; mutated lcov → 1; absent downstream → SKIP 0;
   - certify-coverage: `-- bun test … --coverage-dir={coverageDir}` on a mini fixture → certified 0; child exits 3 → 3 with the marker pending; a tree edited mid-run → 1 with a `stale-tree` refusal; missing `--` → 2; a custom `--lcov` publishes there and `check-coverage-cert --lcov` accepts it.
 
   (R1–R4)
-- [ ] 2. Move the services and tests into `packages/app/src/rules`, register the three verbs. (R1–R3)
-- [ ] 3. Add the two rule YAMLs, rewire `package.json:81`, reduce run-tests to import from spur-app. (R3–R5)
-- [ ] 4. Delete the scripts, add RETIRED entries, update A94. Receipt `.spur/run/1412-receipt.md`: a canonical `bun run test` certifies, `test-post-check` passes, and packed and standalone proofs pass. (all)
+- [x] 2. Move the services and tests into `packages/app/src/rules`, register the three verbs. (R1–R3)
+- [x] 3. Add the two rule YAMLs, rewire `package.json:81`, reduce run-tests to import from spur-app. (R3–R5)
+- [x] 4. Delete the scripts, add RETIRED entries, update A94. Receipt `.spur/run/1412-receipt.md`: a canonical `bun run test` certifies, `test-post-check` passes, and packed and standalone proofs pass. (all)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHAT.** The two repository-only checks became shipped rule verbs: `spur rule check-shims` (two-sided ledger), `spur rule check-cert` family — `check-coverage-cert` (verify) and `certify-coverage -- <command>` (produce, two-phase in one call) — with the shim and certification services moved into `packages/app/src/rules/`. The repository launcher and post-check now call the verbs.
+
+**WHY.** A shipped preset could not trust LCOV downstream and could not run the shim ledger at all: both lived in `scripts/commands/`, so a downstream project had no way to enforce provenance and the ledger could rot unnoticed.
+
+**Change map** (one anchored row per file):
+
+| Area | Anchor | Change |
+| --- | --- | --- |
+| certification service | packages/app/src/rules/coverage-certification.ts:33 | moved from `scripts/commands/`, `cwd` parameterized, TSDoc added, executor-based sync git read |
+| two-phase verb body | packages/app/src/rules/coverage-certification.ts:392 | `certifyCommand({cwd, argv, lcov, run})`: fingerprint → child in the isolated dir → certify/publish |
+| certified publish target | packages/app/src/rules/coverage-certification.ts:247 | `--lcov` publishes to the caller's path (parent created), default unchanged |
+| child contract | packages/app/src/rules/coverage-certification.ts:352 | `SPUR_COVERAGE_DIR` + `{coverageDir}` token |
+| ledger service | packages/app/src/rules/transition-shims.ts:196 | `checkShims({cwd, manifest, roots})` returns findings + a one-line summary; no console/exit in the app layer |
+| app barrel | packages/app/src/index.ts:180 | exports both rule services and their types |
+| rule noun | apps/cli/src/commands/rule/index.ts:19 | `rule.ts` became the `rule/` noun directory; registers the three verbs |
+| shim verb | apps/cli/src/commands/rule/check-shims.ts:25 | exit 0/1/2 + findings envelope |
+| verify verb | apps/cli/src/commands/rule/check-coverage-cert.ts:34 | `coverage-artifact:` diagnostic + recovery, envelope |
+| produce verb | apps/cli/src/commands/rule/certify-coverage.ts:42 | `--` operand passthrough, child code/t 1 refusal/0 certified |
+| boundary preset rule | config/rules/boundary/transition-shims.yaml:9 | `exit-code` evaluator, marker-guarded command, SKIP without a manifest |
+| quality preset rule | config/rules/quality/coverage-cert.yaml:9 | same shape, SKIP without a certification |
+| launcher | scripts/commands/run-tests.ts:37 | imports start/certify from `@gobing-ai/spur-app` (no subprocess hop) |
+| post-check | package.json:81 | `test-post-check` runs `rule check-coverage-cert` |
+| shim script | package.json:99 | `transition-shim-check` runs `rule check-shims` |
+| dispatcher | scripts/spur-dev.ts:110 | two more RETIRED names; cases/imports/usage removed |
+| inventory | docs/reports/A94-script-ownership.json:1 | 45 → 40 entries, caller anchors re-resolved |
+| boundary rule | config/rules/strict/runtime-boundaries.yaml:88 | two fs-io exemptions (atomic marker publish/lock; recursive marker scan) |
+| help page | docs/help/cmd_rule.md:17 | three verb sections with their flags |
+| plugin help page | docs/help2/rule.md:17 | same three sections |
+| prompt reference | plugins/sp/skills/spur-cli/references/rules.md:27 | command surface + the downstream `certify-coverage` example |
+| env doc | docs/help/environment_variables.md:52 | `SPUR_COVERAGE_DIR` (per-run child contract) |
+| surface matrix | docs/help/spur-cli-matrix.md:22 | `rule` 4 → 7 verbs, unique verbs 99 → 102, cells 126 → 129 |
+| baseline fixtures | apps/cli/tests/fixtures/raw-json-baseline/rule-run.json:1 | recaptured (the boundary category gained a rule) |
+| service tests | packages/app/tests/rules/coverage-certification.test.ts:1 | moved with the service; `certifyCommand`, `treeFingerprint` and the verb wiring covered |
+| ledger tests | packages/app/tests/rules/transition-shims.test.ts:1 | moved with the service, now calling `checkShims` directly |
+| transport tests | apps/cli/tests/commands/rule/check-shims.test.ts:1 | exit contracts, text/JSON/envelope renderings |
+| transport tests | apps/cli/tests/commands/rule/check-coverage-cert.test.ts:1 | uncertified, certified and envelope branches |
+| transport tests | apps/cli/tests/commands/rule/certify-coverage.test.ts:1 | certified, refused, child-failure and usage branches |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/rules/transition-shims.ts:196 `checkShims`; `bun apps/cli/src/index.ts rule check-shims` reports `1 marker(s) observed, 1 manifest entry baselined … PASS`; transport cases at apps/cli/tests/commands/rule/check-shims.test.ts |
+| R2 | MET | packages/app/src/rules/coverage-certification.ts:392 `certifyCommand` (two-phase, `{coverageDir}` + `SPUR_COVERAGE_DIR`, `--lcov`); receipts cover certified / refused / child-exit-3 / missing-command |
+| R3 | MET | apps/cli/src/commands/rule/check-coverage-cert.ts:34 exits 1 with `coverage-artifact:` + recovery and 0 when certified; package.json:81 routes `test-post-check` through it |
+| R4 | MET | config/rules/boundary/transition-shims.yaml:9 and config/rules/quality/coverage-cert.yaml:9 use the `exit-code` evaluator with the marker-guarded command and SKIP downstream; `rule list` reports 81 rules (79 → 81); ts-rule-engine unchanged |
+| R5 | MET | three scripts deleted (services + tests moved to packages/app); scripts/commands/run-tests.ts:37 imports from `@gobing-ai/spur-app`; RETIRED carries both retired names; inventory 45 → 40 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Transition shim ledger is a downstream rule (req: R1) | MET | test | packages/app/tests/rules/transition-shims.test.ts (both directions, id shape, missing manifest) + apps/cli/tests/commands/rule/check-shims.test.ts (exit contract) |
+| AC2 — Coverage provenance is enforceable downstream (req: R2, R3, R4) | MET | command | `rule certify-coverage -- sh -c 'exit 3'` → exit 3 and nothing certified; `rule check-coverage-cert` on a certified fixture → exit 0, on none → exit 1 with `coverage-artifact: missing` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -162,3 +222,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 - Upstream: 1410. Downstream: 1415.
 
 ### History
+
+- 2026-11-20T16:25:03.583Z todo → wip (system)
+- 2026-11-20T16:47:13.327Z wip → testing (system)
+- 2026-11-20T16:47:14.504Z testing → done (system)
+

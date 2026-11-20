@@ -1,40 +1,24 @@
-#!/usr/bin/env bun
 /**
- * transition-shim-check — two-sided gate over `config/transition-shims.json`
- * (task 0541, feature B2).
+ * Transition-shim ledger check (task 0541, feature B2; absorbed as `spur rule check-shims` by A94 1412).
  *
- * A transition shim is a compatibility path that must survive the agent-role
- * transition. Every shim carries a source marker comment `@transition-shim(<id>)`
- * so it is a grep target and a review signal, and a manifest entry in
- * `config/transition-shims.json` records who owns it and when it can be removed.
+ * A transition shim is a compatibility path that must survive the agent-role transition. Every shim
+ * carries a source marker comment `@transition-shim(<id>)` so it is a grep target and a review
+ * signal, and a manifest entry in `config/transition-shims.json` records who owns it and when it can
+ * be removed.
  *
- * The gate is deliberately two-sided: a marker with no manifest entry
- * FAILS, and a manifest entry whose marker no longer appears in source
- * FAILS. Without the second half the manifest would rot into a permanent
- * suppression list — the exact invisible-debt pattern this gate exists to
- * end.
+ * The gate is deliberately two-sided: a marker with no manifest entry FAILS, and a manifest entry
+ * whose marker no longer appears in source FAILS. Without the second half the manifest would rot
+ * into a permanent suppression list — the exact invisible-debt pattern this gate exists to end.
  *
  * Marker convention (docs/04_DESIGN.md §2.5):
  *   // @transition-shim(<id>) — <one line on what this keeps working>
  *   <id> matches ^[a-z0-9][a-z0-9-]*$ (lowercase kebab).
- * Markers live in production source roots (apps, packages, plugins, config,
- * scripts, tooling). Docs and test fixtures are not scanned — prose examples
- * and gate-fixture marker text must not trip the gate.
+ * Markers live in production source roots (apps, packages, plugins, config, scripts, tooling). Docs
+ * and test fixtures are not scanned — prose examples and gate-fixture marker text must not trip the
+ * gate.
  *
- * The manifest is the removal worklist: emptying it is the definition of the
- * transition being complete (R4).
- *
- * Ships with the plugin to arbitrary projects, so it stays node-builtin-only —
- * no workspace imports.
- *
- * Usage:
- *   bun scripts/spur-dev.ts transition-shim-check
- *     [--manifest <path>]           default: config/transition-shims.json
- *     [--roots <a,b,c>]             default: apps,packages,plugins,config,scripts,tooling
- *
- * Exit code: 0 when every manifest entry is present in source and every source
- * marker is registered; 1 on any violation (unregistered marker, stale entry,
- * or incomplete entry). Violations are printed to stderr; a summary to stdout.
+ * The service returns findings; the `spur rule check-shims` transport renders them and owns the exit
+ * code (0 pass, 1 findings, 2 usage).
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -81,15 +65,8 @@ interface Violation {
     message: string;
 }
 
-function parseArgs(argv: string[]): { manifest: string; roots: string[]; cwd: string } {
-    let manifest = 'config/transition-shims.json';
-    let roots = DEFAULT_ROOTS;
-    for (let i = 0; i < argv.length; i++) {
-        if (argv[i] === '--manifest') manifest = argv[++i] ?? manifest;
-        else if (argv[i] === '--roots') roots = (argv[++i] ?? '').split(',').filter(Boolean);
-    }
-    return { manifest, roots, cwd: process.cwd() };
-}
+/** Default manifest, relative to the checked project root. */
+export const DEFAULT_SHIM_MANIFEST = 'config/transition-shims.json';
 
 /** Walk a root and return marker id -> repo-relative files. */
 function scanMarkers(cwd: string, roots: string[]): Map<string, Set<string>> {
@@ -176,19 +153,47 @@ function validateEntry(e: ManifestEntry, violations: Violation[]): void {
     }
 }
 
-function run(): number {
-    const { manifest, roots, cwd } = parseArgs(process.argv.slice(2));
+/** One shim-ledger violation, shaped for the `--json` findings envelope and the text renderer. */
+export type ShimViolation = Violation;
+
+/** Options for {@link checkShims}. */
+export interface CheckShimsOptions {
+    /** Project root; every path below resolves against it. */
+    cwd: string;
+    /** Manifest path relative to `cwd` (default `config/transition-shims.json`). */
+    manifest?: string;
+    /** Roots scanned for markers, relative to `cwd` (default the six production roots). */
+    roots?: readonly string[];
+}
+
+/** Result of the two-sided check. */
+export interface CheckShimsResult {
+    ok: boolean;
+    violations: ShimViolation[];
+    /** One-line ledger summary, always produced (pass or fail). */
+    summary: string;
+}
+
+/**
+ * Validate the shim ledger in both directions. A missing manifest passes (a project that declares no
+ * shims has nothing to track); an unparsable one refuses.
+ */
+export function checkShims(options: CheckShimsOptions): CheckShimsResult {
+    const { cwd } = options;
+    const manifest = options.manifest ?? DEFAULT_SHIM_MANIFEST;
+    const roots = [...(options.roots ?? DEFAULT_ROOTS)];
     const manifestPath = resolve(cwd, manifest);
     const { entries, raw } = loadManifest(manifestPath);
-    const violations: Violation[] = [];
+    const violations: ShimViolation[] = [];
     const incomplete = new Set<string>();
 
     if (raw !== null) {
         violations.push({ kind: 'incomplete', id: '<manifest>', message: raw });
-        // A manifest that cannot be parsed has no valid entries to compare against.
-        for (const v of violations) console.error(`transition-shim-check: FAIL - ${v.message}`);
-        console.error('transition-shim-check: FAIL - manifest unreadable; refusing to pass');
-        return 1;
+        return {
+            ok: false,
+            violations,
+            summary: 'transition-shims: manifest unreadable — refusing to pass',
+        };
     }
 
     for (const e of entries) {
@@ -223,19 +228,13 @@ function run(): number {
     const unregistered = violations.filter((v) => v.kind === 'unregistered');
     const stale = violations.filter((v) => v.kind === 'stale');
     const incompleteCount = violations.filter((v) => v.kind === 'incomplete').length;
-    const ok = violations.length === 0;
-
     const noun = entries.length === 1 ? 'entry' : 'entries';
-    console.log(
-        `transition-shim-check: ${markers.size} marker(s) observed, ${entries.length} manifest ${noun} baselined, ` +
+    const ok = violations.length === 0;
+    return {
+        ok,
+        violations,
+        summary:
+            `transition-shims: ${markers.size} marker(s) observed, ${entries.length} manifest ${noun} baselined, ` +
             `${unregistered.length} new, ${stale.length} stale, ${incompleteCount} incomplete — ${ok ? 'PASS' : 'FAIL'}`,
-    );
-    if (ok) return 0;
-
-    for (const v of violations) {
-        console.error(`transition-shim-check: ${v.kind === 'incomplete' ? 'FAIL' : `FAIL (${v.kind})`} - ${v.message}`);
-    }
-    return 1;
+    };
 }
-
-process.exit(run());

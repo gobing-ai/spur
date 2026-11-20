@@ -14,7 +14,6 @@
  * share a short exclusive lock; only the owning run can publish its own bytes.
  * The tree digest includes tracked and nonignored new files, excluding coverage output.
  */
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
     closeSync,
@@ -26,10 +25,14 @@ import {
     unlinkSync,
     writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { computeProofInputFingerprintDetailed, DEFAULT_EXCLUDE_GLOBS } from '@gobing-ai/spur-app';
+import { dirname, join, resolve } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
+import { NodeProcessExecutor, NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
+import { computeProofInputFingerprintDetailed, DEFAULT_EXCLUDE_GLOBS } from '../workflow/proof-input-fingerprint';
 
+/** Project-relative path of the certification marker the post-check reads. */
 export const CERT_RELATIVE_PATH = join('.coverage', 'coverage-certification.json');
+/** Project-relative path of the canonical tracefile a certification binds. */
 export const LCOV_RELATIVE_PATH = join('.coverage', 'lcov.info');
 
 /** Recovery hint every refusal carries (AC5: the documented canonical route). */
@@ -38,8 +41,10 @@ export const CANONICAL_RECOVERY =
 
 const SCHEMA_VERSION = 1;
 
+/** Marker lifecycle: `pending` while a run owns the window, `certified` once it published. */
 export type CertificationStatus = 'pending' | 'certified';
 
+/** On-disk evidence: the run token, its tree fingerprint and the published tracefile digest. */
 export interface CertificationMarker {
     schemaVersion: number;
     status: CertificationStatus;
@@ -57,6 +62,7 @@ export interface CertificationMarker {
     lcovDigest?: string;
 }
 
+/** Identity of one canonical run: the token that owns the pending publication window. */
 export interface CanonicalRunStart {
     runId: string;
     treeDigest: string;
@@ -65,6 +71,7 @@ export interface CanonicalRunStart {
     coverageDir: string;
 }
 
+/** Why a certification attempt was refused; each reason maps to one operator-facing message. */
 export type CertificationRefusalReason =
     | 'superseded'
     | 'stale-tree'
@@ -72,6 +79,7 @@ export type CertificationRefusalReason =
     | 'malformed-lcov'
     | 'publication-locked';
 
+/** Post-check verdict: certified evidence, or the reason it is refused. */
 export type ValidationResult =
     | { ok: true; marker: CertificationMarker }
     | {
@@ -120,6 +128,7 @@ function withPublicationLock<T>(cwd: string, visit: () => T): T {
     }
 }
 
+/** The tree digest a certification binds, for callers that only need the fingerprint. */
 export async function treeFingerprint(cwd: string): Promise<string> {
     return (await treeCapture(cwd)).digest;
 }
@@ -149,8 +158,9 @@ async function treeCapture(cwd: string): Promise<{ digest: string; gitTree: stri
 function changedPathsBetween(cwd: string, beforeTree: string | undefined, afterTree: string): string {
     if (beforeTree === undefined || beforeTree === afterTree) return '';
     try {
-        const out = execFileSync('git', ['diff', '--name-only', beforeTree, afterTree], { cwd, encoding: 'utf8' });
-        const paths = out.split('\n').filter(Boolean);
+        const executor = new NodeSyncProcessExecutor();
+        const run = executor.runSync({ command: 'git', args: ['diff', '--name-only', beforeTree, afterTree], cwd });
+        const paths = (run.stdout ?? '').split('\n').filter(Boolean);
         if (paths.length === 0) return '';
         const shown = paths.slice(0, 12).join(', ');
         return ` — changed paths: ${shown}${paths.length > 12 ? `, … (+${paths.length - 12} more)` : ''}`;
@@ -205,6 +215,7 @@ function readMarker(cwd: string): CertificationMarker | undefined {
 export async function certifyCanonicalRun(
     cwd: string,
     start: CanonicalRunStart,
+    options: { lcov?: string } = {},
 ): Promise<{ ok: true } | { ok: false; reason: CertificationRefusalReason; message: string }> {
     const current = readMarker(cwd);
     if (current === undefined || current.status !== 'pending' || current.runId !== start.runId) {
@@ -243,7 +254,10 @@ export async function certifyCanonicalRun(
             if (owner?.status !== 'pending' || owner.runId !== start.runId) {
                 return { ok: false, reason: 'superseded', message: 'a later run owns the publication window' } as const;
             }
-            renameSync(producedPath, lcovPath(cwd));
+            const publishTo = options.lcov !== undefined ? resolve(cwd, options.lcov) : lcovPath(cwd);
+            // A caller-named target may live in a directory the project has not created yet.
+            mkdirSync(dirname(publishTo), { recursive: true });
+            renameSync(producedPath, publishTo);
             writeMarkerAtomic(cwd, {
                 ...owner,
                 status: 'certified',
@@ -343,4 +357,69 @@ export async function validateCoverageCertification(cwd: string): Promise<Valida
         };
     }
     return { ok: true, marker };
+}
+
+/** Environment variable carrying this run's isolated coverage directory to the child. */
+export const COVERAGE_DIR_ENV = 'SPUR_COVERAGE_DIR';
+
+/** Argv placeholder replaced with the run's coverage directory. */
+export const COVERAGE_DIR_TOKEN = '{coverageDir}';
+
+/** Runs the certified command; injected so tests never spawn a real suite. */
+export type CertifyRunner = (argv: readonly string[], env: Record<string, string>) => Promise<number>;
+
+/** Terminal outcome of {@link certifyCommand}. */
+export type CertifyOutcome =
+    | { kind: 'certified' }
+    | { kind: 'child-failed'; code: number }
+    | { kind: 'refused'; reason: CertificationRefusalReason; message: string };
+
+/**
+ * Default runner: the suite keeps the terminal (ts-runtime's `stream` policy inherits it and pipes
+ * the same chunks) and runs in this process group, so an operator's SIGINT/SIGTERM reaches it
+ * directly. No timeout here — a suite is bounded by the caller, not by the certification window.
+ */
+const defaultCertifyRunner: CertifyRunner = async (argv, env) => {
+    const executor = new NodeProcessExecutor({ defaultTimeout: null, output: { mode: 'stream' } });
+    const [command, ...args] = argv;
+    if (command === undefined) return 1;
+    const result = await executor.run({
+        command,
+        args: [...args],
+        cwd: process.cwd(),
+        env: Object.fromEntries(
+            Object.entries({ ...getEnvVars(), ...env }).filter(
+                (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
+        ),
+    });
+    return result.exitCode ?? 1;
+};
+
+/**
+ * `spur rule certify-coverage -- <command…>` (A94 1412 R2): open the pending window, run the
+ * command against an isolated coverage directory, then certify and publish only when the command
+ * exited 0 AND the tested tree is unchanged.
+ *
+ * A non-zero child exit leaves the marker `pending` and publishes nothing — a failed suite can never
+ * certify, and the refusal names the canonical recovery.
+ */
+export async function certifyCommand(options: {
+    cwd: string;
+    argv: readonly string[];
+    lcov?: string;
+    run?: CertifyRunner;
+}): Promise<CertifyOutcome> {
+    const run = options.run ?? defaultCertifyRunner;
+    const start = await startCanonicalRun(options.cwd);
+    const argv = options.argv.map((token) => token.split(COVERAGE_DIR_TOKEN).join(start.coverageDir));
+    const code = await run(argv, { [COVERAGE_DIR_ENV]: start.coverageDir });
+    if (code !== 0) return { kind: 'child-failed', code };
+    const certified = await certifyCanonicalRun(
+        options.cwd,
+        start,
+        options.lcov !== undefined ? { lcov: options.lcov } : {},
+    );
+    if (!certified.ok) return { kind: 'refused', reason: certified.reason, message: certified.message };
+    return { kind: 'certified' };
 }

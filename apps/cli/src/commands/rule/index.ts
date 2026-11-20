@@ -9,14 +9,22 @@ import {
     type RuleTraceDetail,
     type RuleTraceRun,
 } from '@gobing-ai/spur-app';
-import { makeColorize, shouldColor } from '../colors';
-import type { CliContext } from '../context';
-import { toEnvelopeJson, writeJsonError } from '../output';
-import { SHARED_OPTIONS } from './shared-options';
+import { makeColorize, shouldColor } from '../../colors';
+import type { CliContext } from '../../context';
+import { toEnvelopeJson, writeJsonError } from '../../output';
+import { SHARED_OPTIONS } from '../shared-options';
+import { registerRuleCertifyCoverageCommand } from './certify-coverage';
+import { registerRuleCheckCoverageCertCommand } from './check-coverage-cert';
+import { registerRuleCheckShimsCommand } from './check-shims';
 
 /** Register the `spur rule` command and its subcommands on the CLI program. */
 export function registerRuleCommand(program: Command, context: CliContext): void {
     const rule = program.command('rule').summary('manage constraint rules and presets');
+
+    // A94 1412: the repository-only ledger/coverage checks became rule verbs a downstream preset can run.
+    registerRuleCheckShimsCommand(rule, context);
+    registerRuleCheckCoverageCertCommand(rule, context);
+    registerRuleCertifyCoverageCommand(rule, context);
 
     rule.command('run')
         .summary('Evaluate constraint rules over the working tree.')

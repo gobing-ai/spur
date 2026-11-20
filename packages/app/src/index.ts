@@ -150,6 +150,32 @@ export {
     writeJsonError,
 } from './output/envelope';
 export {
+    CANONICAL_RECOVERY,
+    type CanonicalRunStart,
+    CERT_RELATIVE_PATH,
+    type CertificationMarker,
+    type CertificationRefusalReason,
+    type CertificationStatus,
+    type CertifyOutcome,
+    type CertifyRunner,
+    COVERAGE_DIR_ENV,
+    COVERAGE_DIR_TOKEN,
+    certifyCanonicalRun,
+    certifyCommand,
+    LCOV_RELATIVE_PATH,
+    startCanonicalRun,
+    treeFingerprint,
+    type ValidationResult,
+    validateCoverageCertification,
+} from './rules/coverage-certification';
+export {
+    type CheckShimsOptions,
+    type CheckShimsResult,
+    checkShims,
+    DEFAULT_SHIM_MANIFEST,
+    type ShimViolation,
+} from './rules/transition-shims';
+export {
     createProjectCardRefResolver,
     envProjectCardRefResolver,
     type ProjectCardTarget,

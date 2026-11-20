@@ -59,6 +59,9 @@ The skill's logic divides by **whether the LLM adds value**:
 | `run` | `spur rule run` (CLI) | `[--preset <name>] [--rule <id>] [--file <path>] [--fail-on <sev>] [--stop-on-first [<sev>]] [--fix-mode none\|suggest\|auto] [--dry-run] [--verbose]` | Gate to exit 0; findings interpreted, code fixed, re-run clean (the harness loop below) |
 | `validate` | `spur rule validate` (CLI) | `[file-or-preset] [--file <path>] [--preset <name>] [--kind file\|preset] [--no-schema]` | Schema + Zod verdict |
 | `list` | `spur rule list` (CLI) | `[--preset <name>]` | Discovered files + source layer, or resolved rules for a preset |
+| `check-shims` | `spur rule check-shims` (CLI) | `[--manifest <path>]` | Two-sided shim ledger verified: unregistered markers, stale entries and incomplete entries all fail; a missing manifest passes (A94 1412) |
+| `check-coverage-cert` | `spur rule check-coverage-cert` (CLI) | `[--lcov <path>]` | Coverage evidence certified against the current tracefile bytes and tree, or a `coverage-artifact:` refusal naming the recovery (A94 1412) |
+| `certify-coverage` | `spur rule certify-coverage` (CLI) | `-- <command…>` `[--lcov <path>]` | The command ran against `{coverageDir}` and its LCOV was certified + published; a non-zero child exits with its own code and certifies nothing (A94 1412) |
 | `trace` | `spur rule trace` (CLI) | `[run-id] [--preset <name>] [--status done\|failed] [--since <iso>] [--last <n>]` | Persisted rule-run history / per-run detail |
 | `scan` | agent procedure | `[<path-or-glob>]` | **Propose-only** discovery: surveys code for recurring anti-patterns, clusters them, filters against the catalog, and reports ranked rule candidates (`add` new / `refine`-extend / already-covered). Authors nothing → [scan](rules/operations.md#scan) |
 | `add` | agent procedure | `"<nl-description>" [--file <path>] [--preset <target>]` | **First reconciles against the existing catalog** (extend/refine an existing rule rather than duplicate, on confirmation); only a genuinely new concern is authored, then **validated AND smoke-tested both directions** (fires on bad, quiet on good); optionally wired into a preset → [add](rules/operations.md#add) |
@@ -134,7 +137,25 @@ spur rule run      [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <s
 spur rule validate [file-or-preset] [--file <path>] [--preset <name>] [--kind file|preset] [--no-schema] [--json]
 spur rule list     [--preset <name>] [--json]
 spur rule trace    [run-id] [--preset <name>] [--status done|failed] [--since <iso-date>] [--last <n>] [--json]
+spur rule check-shims          [--manifest <path>] [--json]
+spur rule check-coverage-cert  [--lcov <path>] [--json]
+spur rule certify-coverage     [--lcov <path>] [--json] -- <command...>
 ```
+
+The last three are the checks that used to live only in this repository (A94 1412), so a shipped
+preset can run them: `check-shims` verifies the two-sided transition-shim ledger (`config/transition-shims.json`
+↔ `@transition-shim(<id>)` markers; a missing manifest passes), `check-coverage-cert` refuses coverage
+evidence that does not bind the current tracefile bytes and tree (a project with no certification
+SKIPs), and `certify-coverage` runs a command against an isolated coverage directory — exposed to the
+child as `SPUR_COVERAGE_DIR` and as the `{coverageDir}` argv token — then certifies and publishes only
+when the child exited 0 on an unchanged tree:
+
+```bash
+spur rule certify-coverage -- bun test --coverage --coverage-reporter=lcov --coverage-dir={coverageDir}
+```
+
+A `bunfig.toml` `coverageDir` overrides that flag, so point both at `{coverageDir}` or rely on the
+environment variable.
 
 Default preset is `recommended-pre-check`. `--fail-on`/`--stop-on-first` take `error|warning|info`.
 List what is actually enforced before assuming — presets are layered (project shadows bundled):

@@ -1,9 +1,15 @@
+/**
+ * Transition-shim ledger cases (task 0541 B2; absorbed as `spur rule check-shims` by A94 1412).
+ *
+ * The service returns findings and the verb renders them, so these cases assert the ledger contract
+ * (both directions, field completeness, id shape) against `checkShims` directly and let the CLI
+ * transport test own exit codes and rendering.
+ */
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-const SCRIPT = join(import.meta.dir, 'transition-shim-check.ts');
+import { checkShims } from '../../src/rules/transition-shims';
 
 /** A manifest entry with every field present — R1 requires all five. */
 function entry(overrides: Record<string, string> = {}): Record<string, string> {
@@ -23,25 +29,18 @@ interface RunResult {
     stderr: string;
 }
 
-function run(dir: string, extra: string[] = []): RunResult {
-    const r = Bun.spawnSync({
-        cmd: [
-            'bun',
-            SCRIPT,
-            '--manifest',
-            join(dir, 'config', 'transition-shims.json'),
-            '--roots',
-            join(dir, 'src'),
-            ...extra,
-        ],
+function run(dir: string): RunResult {
+    const result = checkShims({
         cwd: dir,
-        stdout: 'pipe',
-        stderr: 'pipe',
+        manifest: join(dir, 'config', 'transition-shims.json'),
+        roots: [join(dir, 'src')],
     });
     return {
-        code: r.exitCode ?? -1,
-        stdout: new TextDecoder().decode(r.stdout),
-        stderr: new TextDecoder().decode(r.stderr),
+        code: result.ok ? 0 : 1,
+        stdout: result.summary,
+        stderr: result.violations
+            .map((violation) => `${violation.kind} ${violation.id} ${violation.message}`)
+            .join('\n'),
     };
 }
 
@@ -102,7 +101,7 @@ test('R2 — a manifest entry whose marker no longer appears fails as a stale en
     try {
         const { code, stderr, stdout } = run(dir);
         expect(code).toBe(1);
-        expect(stderr).toContain('stale manifest entry gone');
+        expect(stderr).toContain('manifest entry gone');
         expect(stderr).toContain('0537');
         expect(stdout).toContain('1 stale');
         // The stale entry must not be misreported as a new unregistered marker.

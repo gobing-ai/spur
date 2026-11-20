@@ -11,6 +11,42 @@ quality invariants before code ships.
 | `validate [file-or-preset]` | Validate a rule file or preset without evaluating it |
 | `list` | List discovered rule files, or resolved rules for a preset |
 | `trace [run-id]` | Show persisted rule run history |
+| `check-shims [flags]` | Validate the two-sided transition-shim ledger (markers ↔ manifest) |
+| `check-coverage-cert [flags]` | Refuse uncertified, stale or byte-mismatched coverage evidence |
+| `certify-coverage -- <command>` | Run a command against an isolated coverage dir, then certify and publish |
+
+## spur rule check-shims
+
+```bash
+spur rule check-shims [--manifest <path>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--manifest <path>` | Ledger manifest, relative to the project root (default: `config/transition-shims.json`) |
+| `--json` | Machine-readable report |
+
+## spur rule check-coverage-cert
+
+```bash
+spur rule check-coverage-cert [--lcov <path>] [--json]
+```
+
+| Flag | Description |
+| --- | --- |
+| `--lcov <path>` | Tracefile the certification must bind (default: `.coverage/lcov.info`) |
+| `--json` | Machine-readable report |
+
+## spur rule certify-coverage
+
+```bash
+spur rule certify-coverage [--lcov <path>] -- <command...>
+```
+
+| Flag | Description |
+| --- | --- |
+| `--lcov <path>` | Publish the certified tracefile here (default: `.coverage/lcov.info`) |
+| `--json` | Machine-readable report |
 
 ## spur rule run
 

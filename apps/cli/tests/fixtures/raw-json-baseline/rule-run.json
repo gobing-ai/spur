@@ -1,6 +1,6 @@
 {
   "preset": "recommended-pre-check",
-  "ruleCount": 50,
+  "ruleCount": 51,
   "findings": [],
   "fixes": []
 }

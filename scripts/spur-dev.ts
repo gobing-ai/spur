@@ -18,12 +18,10 @@
  *
  *   L2 test runner / coverage
  *   run-tests <bun test args>                  run the suite with the repo's hermetic env; owns coverage certification
- *   coverage-provenance-check                  refuse a post-check whose LCOV is not certified
  *
  *   L3 repo contract checks
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  *   script-contract-check [--placement-only]    ADR-130 script/hook placement contract
- *   transition-shim-check                      transition-shim manifest ↔ source markers, two-sided
  *   dependency-drift-check                     lockfile @gobing-ai versions must match installed
  *   validate-commands                          sp command files against the thin-wrapper contract
  *   flag-contract-check                        cross-surface flag parity gate for the sp contract surfaces
@@ -67,10 +65,8 @@ import { runWorkflowPromotion } from './commands/workflow-promotion';
  */
 const DELEGATED: Record<string, string> = {
     'run-tests': 'run-tests.ts',
-    'coverage-provenance-check': 'coverage-provenance-check.ts',
     'plugin-install-smoke': 'plugin-install-smoke.ts',
     'script-contract-check': 'script-contract-check.ts',
-    'transition-shim-check': 'transition-shim-check.ts',
     'validate-commands': 'validate-commands.ts',
     'flag-contract-check': 'validate-flag-contracts.ts',
     'surface-drift-inventory': 'surface-drift-inventory.ts',
@@ -111,6 +107,8 @@ export const RETIRED: Record<string, string> = {
     'build-binaries': 'spur builder build-binaries',
     'link-check': 'spur builder check-deps',
     'dependency-drift-check': 'spur builder check-deps',
+    'transition-shim-check': 'spur rule check-shims',
+    'coverage-provenance-check': 'spur rule check-coverage-cert',
 };
 
 function usage(message?: string): never {

@@ -2,7 +2,7 @@
   "valid": true,
   "kind": "preset",
   "source": "recommended-pre-check",
-  "ruleCount": 50,
+  "ruleCount": 51,
   "rules": [
     "cli-json-output",
     "cli-register-pattern",
@@ -52,6 +52,7 @@
     "spur-config-loader-only-at-composition-roots",
     "structured-config-loader-only-in-config",
     "tables-via-defineTable",
+    "transition-shims",
     "ts-db-only-in-domain",
     "ui-import-seam-only"
   ]

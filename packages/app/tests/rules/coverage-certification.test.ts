@@ -20,15 +20,20 @@ import {
     CANONICAL_RECOVERY,
     type CanonicalRunStart,
     CERT_RELATIVE_PATH,
+    COVERAGE_DIR_ENV,
     certifyCanonicalRun,
+    certifyCommand,
     LCOV_RELATIVE_PATH,
     startCanonicalRun,
+    treeFingerprint,
     type ValidationResult,
     validateCoverageCertification,
-} from './coverage-certification';
+} from '../../src/rules/coverage-certification';
 
-const PRODUCER = join(import.meta.dir, 'run-tests.ts');
-const PRECONDITION = join(import.meta.dir, 'coverage-provenance-check.ts');
+/** Repo root: packages/app/tests/rules → repo. The launcher and the CLI still live in the repository. */
+const REPO_ROOT = join(import.meta.dir, '../../../..');
+const PRODUCER = join(REPO_ROOT, 'scripts', 'commands', 'run-tests.ts');
+const CLI_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 
 const fixtures: string[] = [];
 function newFixture(): string {
@@ -340,7 +345,7 @@ describe('canonical certification producer (task 1203)', () => {
         const certified = await certifyCanonicalRun(fixture, second);
         expect(certified.ok).toBe(true);
         expect(readMarker(fixture).status).toBe('certified');
-        expect(await validateCoverageCertification(fixture).then((r) => r.ok)).toBe(true);
+        expect(await validateCoverageCertification(fixture).then((result) => result.ok)).toBe(true);
     }, 30000);
 
     test('a canonical run whose artifact is missing fails closed with exit 1 and a pending window (AC1/R4)', async () => {
@@ -455,9 +460,13 @@ describe('post-check provenance refusals are distinct (task 1203 R2)', () => {
         expect(await refuseReason(fixture)).toBe('tree-unavailable');
     });
 
-    test('the precondition CLI exits nonzero with a coverage-artifact diagnostic and recovery hint (AC5)', async () => {
+    test('the check-coverage-cert verb exits nonzero with a coverage-artifact diagnostic and recovery hint (AC5)', async () => {
         const fixture = newFixture();
-        const proc = Bun.spawnSync([process.execPath, PRECONDITION], { cwd: fixture, stdout: 'pipe', stderr: 'pipe' });
+        const proc = Bun.spawnSync([process.execPath, CLI_ENTRY, 'rule', 'check-coverage-cert'], {
+            cwd: fixture,
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
         expect(proc.exitCode).toBe(1);
         expect(proc.stderr.toString()).toContain('coverage-artifact:');
         expect(proc.stderr.toString()).toContain(CANONICAL_RECOVERY);
@@ -505,7 +514,7 @@ describe('certified evidence still reaches the real evaluator unchanged (task 12
 });
 
 test('entrypoint wiring pins the canonical route and post-check provenance first (AC5)', () => {
-    const pkg = JSON.parse(readFileSync(join(import.meta.dir, '..', '..', 'package.json'), 'utf8'));
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
     for (const canonical of ['test', 'test:coverage', 'test:full']) {
         expect(pkg.scripts[canonical]).toContain('--publish-coverage');
     }
@@ -513,7 +522,7 @@ test('entrypoint wiring pins the canonical route and post-check provenance first
         expect(pkg.scripts[nonCanonical]).not.toContain('--publish-coverage');
     }
     const postCheck = pkg.scripts['test-post-check'];
-    expect(postCheck.startsWith('bun scripts/spur-dev.ts coverage-provenance-check &&')).toBe(true);
+    expect(postCheck.startsWith('bun run apps/cli/src/index.ts rule check-coverage-cert &&')).toBe(true);
     expect(postCheck).toContain('rule run');
 });
 
@@ -611,4 +620,89 @@ setInterval(() => {}, 1000);
             rmSync(dir, { recursive: true, force: true });
         }
     }, 20_000);
+});
+
+describe('certifyCommand — one call, two phases (A94 1412 R2)', () => {
+    const LCOV = 'SF:src/ok.ts\nDA:1,1\nLF:100\nLH:90\nend_of_record\n';
+
+    test('a zero-exit child certifies its isolated coverage dir and publishes the tracefile', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        const seen: { argv: readonly string[]; env: Record<string, string> }[] = [];
+        try {
+            const outcome = await certifyCommand({
+                cwd: fixture,
+                argv: ['fake-suite', '--coverage-dir={coverageDir}'],
+                run: async (argv, env) => {
+                    seen.push({ argv, env });
+                    writeFileSync(join(env[COVERAGE_DIR_ENV] as string, 'lcov.info'), LCOV);
+                    return 0;
+                },
+            });
+            expect(outcome).toEqual({ kind: 'certified' });
+            // `{coverageDir}` is expanded, and the child learns the dir through the documented env var.
+            expect(seen[0]?.argv[1]).toContain('.coverage/run-');
+            expect(seen[0]?.env[COVERAGE_DIR_ENV]).toContain('.coverage/run-');
+            expect(existsSync(join(fixture, LCOV_RELATIVE_PATH))).toBe(true);
+            expect((await validateCoverageCertification(fixture)).ok).toBe(true);
+        } finally {
+            rmSync(fixture, { recursive: true, force: true });
+        }
+    }, 30000);
+
+    test('a non-zero child leaves the window pending and certifies nothing', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        try {
+            const outcome = await certifyCommand({ cwd: fixture, argv: ['fake-suite'], run: async () => 7 });
+            expect(outcome).toEqual({ kind: 'child-failed', code: 7 });
+            expect(existsSync(join(fixture, LCOV_RELATIVE_PATH))).toBe(false);
+            const marker = JSON.parse(readFileSync(join(fixture, CERT_RELATIVE_PATH), 'utf8')) as { status: string };
+            expect(marker.status).toBe('pending');
+        } finally {
+            rmSync(fixture, { recursive: true, force: true });
+        }
+    }, 30000);
+
+    test('a child that produced no tracefile is a named refusal, not a certification', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        try {
+            const outcome = await certifyCommand({ cwd: fixture, argv: ['fake-suite'], run: async () => 0 });
+            expect(outcome.kind).toBe('refused');
+            if (outcome.kind === 'refused') expect(outcome.reason).toBe('missing-lcov');
+        } finally {
+            rmSync(fixture, { recursive: true, force: true });
+        }
+    }, 30000);
+
+    test('an explicit --lcov target publishes there instead of the canonical path', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        try {
+            const outcome = await certifyCommand({
+                cwd: fixture,
+                argv: ['fake-suite'],
+                lcov: 'reports/coverage.info',
+                run: async (_argv, env) => {
+                    writeFileSync(join(env[COVERAGE_DIR_ENV] as string, 'lcov.info'), LCOV);
+                    return 0;
+                },
+            });
+            expect(outcome).toEqual({ kind: 'certified' });
+            expect(existsSync(join(fixture, 'reports/coverage.info'))).toBe(true);
+        } finally {
+            rmSync(fixture, { recursive: true, force: true });
+        }
+    }, 30000);
+});
+
+describe('treeFingerprint (A94 1412 surface)', () => {
+    test('reports the same digest the certification binds, and changes when the tree changes', async () => {
+        const fixture = initFixtureRepo(PASSING);
+        try {
+            const before = await treeFingerprint(fixture);
+            expect(before).toMatch(/^sha256:[0-9a-f]{64}$/);
+            writeFileSync(join(fixture, 'case', 'extra.ts'), 'export const extra = 2;\n');
+            expect(await treeFingerprint(fixture)).not.toBe(before);
+        } finally {
+            rmSync(fixture, { recursive: true, force: true });
+        }
+    }, 30000);
 });
