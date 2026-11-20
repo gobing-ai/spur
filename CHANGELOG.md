@@ -6,7 +6,7 @@
 - share the Board module UI kit with native contributions as `@gobing-ai/spur/board/ui`, with type-only declarations in the installed package (ADR-150)
   <!-- src: apps/web/src/modules/runtime/manifest.ts:10 · confidence: HIGH -->
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
-  <!-- src: scripts/commands/emit-board-types.ts:76 · confidence: HIGH -->
+  <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
 ## [0.4.39] - 2026-11-19
 
@@ -413,7 +413,7 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 
 ### Added
 - embed the 0037 migration SQL as a generated mirror — the released `.sql` file is now the single authoring source for one pilot mirror, emitted into `packages/domain/src/migration-sql.generated.ts` by `build:bundle` instead of a handwritten twin (1312) (0fe3800b7)
-  <!-- src: scripts/commands/emit-migration-sql.ts:23, apps/cli/package.json:53 · confidence: HIGH -->
+  <!-- src: packages/app/src/builder/emit-migration-sql.ts:23, apps/cli/package.json:53 · confidence: HIGH -->
 - reap an async workflow run whose worker died, and keep an unattended batch running — a `running`/`pending` row with a dead `runs.pid` settles on read (`interrupted`, or `failed` when the engine cannot interrupt it), and under `--auto` a failed task no longer stops the batch while `--agent auto` resolves one executor per batch (1317, 1318) (9d5baaa39)
   <!-- src: packages/app/src/services/workflow-clean-ops.ts:106, plugins/sp/skills/spur-dev/references/execution-batch.md:152 · confidence: HIGH -->
 
@@ -431,7 +431,7 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 
 ### Other
 - evaluate the migration-SQL probe in place instead of importing a temp module, so the coverage table no longer carries a throwaway `var/folders` row (8241ac99c)
-  <!-- src: scripts/commands/emit-migration-sql.test.ts:55 · confidence: HIGH -->
+  <!-- src: packages/app/tests/builder/emit-migration-sql.test.ts:55 · confidence: HIGH -->
 - drop the duplicate console diagnostic from the markdown-safety proof, which already throws the same child-output tail (7cdb435e4)
   <!-- src: apps/web/tests/modules/task-kanban/markdown-safety.test.ts:76 · confidence: HIGH -->
 - document the caller-owned-identifier guard on the shared selector time-range builder (ed4a97228)
@@ -550,7 +550,7 @@ BREAKING CHANGE: `spur task migrate-anchors` and `spur task residual` are remove
 
 ### Other
 - assert the fleet-e2e unknown-agent stderr line instead of letting it leak into test output (8744be548)
-  <!-- src: scripts/commands/fleet-e2e-host-probe.test.ts:166 · confidence: HIGH -->
+  <!-- src: packages/app/tests/agent/host-probe.test.ts:166 · confidence: HIGH -->
 
 ## [0.4.23] - 2026-11-04
 
@@ -587,7 +587,7 @@ BREAKING CHANGE: the nested `spur workflow commit-guard <start|stage|check>`, `s
 
 ### Other
 - move the remaining callers off the removed nested verbs in the workflow-transport and dogfood pipeline-detect tests (316e96480)
-  <!-- src: apps/cli/tests/workflow-transport.test.ts:37, packages/app/tests/services/dogfood/pipeline-detect.test.ts:256 · confidence: HIGH -->
+  <!-- src: apps/cli/tests/workflow-transport.test.ts:16, packages/app/tests/services/dogfood/pipeline-detect.test.ts:1 · confidence: MEDIUM -->
 
 ## [0.4.22] - 2026-11-03
 
@@ -610,7 +610,7 @@ filings) and assert no code, API or version fact._
 - report the search readiness line and JSON field on converged re-runs by probing before the init early return (c9c8e837e)
   <!-- src: apps/cli/src/commands/self/init.ts:254, apps/cli/tests/commands/init-search.test.ts:120 · confidence: HIGH -->
 - resolve nested bun.lock keys through the `.bun` store instead of the hoisted copy, so isolated-linker packages are not blamed against the root workspace pin (0bc503c38)
-  <!-- src: scripts/commands/dependency-drift-check.ts:81, scripts/commands/dependency-drift-check.ts:88, scripts/commands/dependency-drift-check.test.ts:204 · confidence: HIGH -->
+  <!-- src: packages/app/src/builder/check-deps.ts:81, packages/app/src/builder/check-deps.ts:88, packages/app/tests/builder/dependency-drift-check.test.ts:204 · confidence: HIGH -->
 - re-check remote board entries the server reports stopped from the browser so they reopen instead of dead-ending (a8946da4f)
   <!-- src: apps/web/src/components/ProjectSwitcher.tsx:46 · confidence: HIGH -->
 
@@ -853,7 +853,7 @@ status moves, filings) and assert no code, API or version fact._
 - add `spur decision outcome <invocation-id>` to record what actually happened after a served decision, with `--review-severity <wbs>` / `--gate-status <run-id>` derivations, first-write-wins and exit 2 on a malformed outcome; `spur decision status --reliability` scores accuracy against `decisions.outcomeMap`, and a shipped `executor-failure-class` catalog (off by default) rescues a dispatch failure no `FAILURE_RULES` entry matched (f04edd1bc)
   <!-- src: apps/cli/src/commands/decision.ts:251, config/config.global.yaml:176, config/decisions/executor.yaml:1 · confidence: MEDIUM -->
 - name the drifted paths in a coverage stale-tree refusal, so "what changed during the canonical run?" is answerable from the marker's raw git-tree SHA instead of a bare fingerprint mismatch (51040cab4)
-  <!-- src: scripts/commands/coverage-certification.ts:140 · confidence: HIGH -->
+  <!-- src: packages/app/src/rules/coverage-certification.ts:140 · confidence: HIGH -->
 
 ### Fixed
 - resolve a catalog `maker` that is an ordered fallback chain to its first registered entry, so the widened `MakerRef` no longer breaks `effectiveMaker` (ccb5fe785)

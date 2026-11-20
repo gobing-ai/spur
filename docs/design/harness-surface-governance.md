@@ -82,7 +82,7 @@ judges them from step profiles ([workflow composition](workflow-composition-cont
 
 ## 2. Script placement (ADR-051 R4 amendment, ADR-130)
 
-ADR-130 (amended 2026-11-16, and 2026-11-19 for downstream use) governs. The earlier script-absorption
+ADR-130 (amended 2026-11-16) governs, with the 2026-11-19 downstream-use amendment. The earlier script-absorption
 migration completed in tasks 1211–1213: no skill scripts, generated app bundles, `.mjs` twins or
 migration exceptions remain.
 
