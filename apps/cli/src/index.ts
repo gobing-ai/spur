@@ -19,30 +19,27 @@ import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import figlet from 'figlet';
 import standard from 'figlet/fonts/Standard';
+import { bootFreeMode } from './boot-free-route';
 import { registerAgentCommand } from './commands/agent';
 import { registerBuilderCommand } from './commands/builder';
 import { registerDecisionCommand } from './commands/decision';
 import { registerFeatureCommand } from './commands/feature';
 import { registerHistoryCommand } from './commands/history';
-import { registerMcpCommand } from './commands/mcp';
+import { MCP_COMMAND_NAME, registerMcpCommand } from './commands/mcp';
 import { registerMessageCommand } from './commands/message';
 import { registerProjectsCommand } from './commands/projects';
 import { registerRuleCommand } from './commands/rule';
 import { registerSelfCommand } from './commands/self';
-import { registerInstallCommand } from './commands/self/install';
-import { registerMigrateCommand } from './commands/self/migrate';
 
-import { registerServeCommand } from './commands/self/serve';
-import { registerStatusCommand } from './commands/self/status';
+import type { RegisterServeOptions } from './commands/self/serve';
 import { registerTaskCommand } from './commands/task';
-import { registerTaskGateCommand } from './commands/task/gate';
 import { registerWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
 import { createCliContext, createMigratedDbAdapter } from './context';
 import { errorMessage } from './errors';
 import { type CommandOutput, consoleOutput, toJson } from './output';
-import { isWorkflowTransportInvocation, registerWorkflowTransportCommands } from './workflow-transport';
+import { isWorkflowTransportInvocation } from './workflow-transport-argv';
 /** Options for programmatic CLI execution in tests. */
 export interface MainOptions {
     cwd?: string;
@@ -62,122 +59,27 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
 
     const cwd = options.cwd ?? process.cwd();
     const env = options.env ?? getEnvVars();
-    // Serve owns its sole runtime and database. Dispatch before the CLI's adapter
-    // and configuration runtime boot, including the canonical `self serve` form.
-    const commandTokens = argv.filter((token) => !['--no-logo', '--cli-verbose', '-v'].includes(token));
-    if (commandTokens[0] === 'self' && commandTokens[1] === 'serve') {
-        const program = new Command().name('spur').exitOverride();
-        program.option('--no-logo').option('-v, --cli-verbose');
-        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
-        const context = {
-            cwd,
-            output,
-            env,
-            setExitCode: (code: number) => {
-                exitCode = code;
-            },
-        };
-        registerServeCommand(program.command('self'), context, {
-            startServer: options.startServer,
-            loadProjectConfig: (root) =>
-                loadSpurConfig(root, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }).catch(() => null),
-        });
-        try {
-            await program.parseAsync(argv, { from: 'user' });
-            return exitCode;
-        } catch (error) {
-            const code = (error as { exitCode?: number }).exitCode;
-            if (code !== undefined) return code;
-            output.error(errorMessage(error));
-            return 1;
-        }
-    }
-
-    const migrationCheck = commandTokens[0] === 'self' && commandTokens[1] === 'migrate' && argv.includes('--check');
-    const taskGate = commandTokens[0] === 'task' && commandTokens[1] === 'gate';
-    // `self status` reports readiness (A93 1352): booting the adapter would create the very
-    // database and schema the aggregate inspects, so it joins the boot-free dispatch set.
-    const statusReport = commandTokens[0] === 'self' && commandTokens[1] === 'status';
-    // `self install` is machine setup: it must not require a project config or create a project DB.
-    const selfInstall = commandTokens[0] === 'self' && commandTokens[1] === 'install';
-    const builderArtifact =
-        commandTokens[0] === 'builder' &&
-        ['build-cli', 'build-server', 'build-binaries', 'bundle-config', 'bundle-web', 'verify-pack'].includes(
-            commandTokens[1] ?? '',
-        );
-    // `spur mcp` is a stdio transport shim (feature B9, task 1373): boot-free like the other
-    // transports — it never touches the project DB and reads the target project's config
-    // through the strict per-project loader (ADR-082 composition-root wiring below).
-    const mcpBridge = commandTokens[0] === 'mcp';
-    // `workflow commit-guard-*|persist-*` are boot-free transports (script-absorption PR-4): like the
-    // plugin scripts they replace, they never create a database in the cwd. Migration checks must also
-    // bypass boot, which would create or repair the database being checked.
-    if (
-        isWorkflowTransportInvocation(argv) ||
-        migrationCheck ||
-        taskGate ||
-        statusReport ||
-        selfInstall ||
-        builderArtifact ||
-        mcpBridge
-    ) {
-        const program = new Command().name('spur').exitOverride();
-        program.option('--no-logo').option('-v, --cli-verbose');
-        program.configureOutput({ writeOut: (str) => output.write(str), writeErr: (str) => output.error(str) });
-        const context = {
-            cwd,
-            output,
-            env,
-            setExitCode: (code: number) => {
-                exitCode = code;
-            },
-        };
-        try {
-            if (taskGate) {
-                // Gate receipts and checks use files and Git; booting the project DB adds unrelated latency.
-                const spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-                registerTaskGateCommand(program.command('task'), createCliContext({ ...context, spurConfig }));
-            } else if (migrationCheck) {
-                const migrationContext = createCliContext(context);
-                registerMigrateCommand(program.command('self'), migrationContext);
-            } else if (builderArtifact) {
-                registerBuilderCommand(program, createCliContext(context));
-            } else if (selfInstall) {
-                // Only the install verb is registered on this boot-free path; the other self verbs keep
-                // their full-boot registrations (serve and migrate-check already dispatch even earlier).
-                registerInstallCommand(program.command('self'), createCliContext(context));
-            } else if (statusReport) {
-                // A broken project layer is reported (exit 1, no project contents echoed) rather than
-                // being turned into a crash or a silent "no config" — the same contract as full boot.
-                let spurConfig: SpurConfig;
-                try {
-                    spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
-                } catch (err) {
-                    const message = errorMessage(err);
-                    if (argv.includes('--json')) {
-                        output.write(toJson({ error: { code: 'config', message } }));
-                    } else {
-                        output.error(message);
-                    }
-                    return 1;
+    const bootContext = createCliContext({ cwd, env, output });
+    const bootProgram = buildProgram(bootContext, output, {
+        startServer: options.startServer,
+        loadProjectConfig: (root) => loadSpurConfig(root, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }).catch(() => null),
+    });
+    const mode = bootFreeMode(bootProgram, argv);
+    if (mode !== undefined) {
+        if (mode === 'config' || mode === 'status') {
+            try {
+                bootContext.spurConfig = await loadSpurConfig(options.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+            } catch (error) {
+                const message = errorMessage(error);
+                if (mode === 'status' && argv.includes('--json')) {
+                    output.write(toJson({ error: { code: 'config', message } }));
+                } else {
+                    output.error(message);
                 }
-                const statusContext = createCliContext({ ...context, spurConfig });
-                registerStatusCommand(program.command('self'), statusContext);
-            } else if (mcpBridge) {
-                // Server settings come from the app-layer env config (like `spur self serve`), so the
-                // bridge needs no project-config loader wiring.
-                registerMcpCommand(program, createCliContext(context));
-            } else {
-                registerWorkflowTransportCommands(program.command('workflow'), context);
+                return 1;
             }
-            await program.parseAsync(argv, { from: 'user' });
-            return exitCode;
-        } catch (error) {
-            const code = (error as { exitCode?: number }).exitCode;
-            if (code !== undefined) return code;
-            output.error(errorMessage(error));
-            return 1;
         }
+        return runCommandDispatch(argv, bootContext, output, bootProgram);
     }
 
     // Task 0817 R1: forward `options.cwd` verbatim — which may be undefined — so the
@@ -287,7 +189,11 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
  * Exported so the docs/help flag-set parity test (task 0800 R3) walks the same
  * tree the dispatcher runs — a separately-built tree would drift.
  */
-export function buildProgram(context: ReturnType<typeof createCliContext>, output: CommandOutput): Command {
+export function buildProgram(
+    context: ReturnType<typeof createCliContext>,
+    output: CommandOutput,
+    serve?: RegisterServeOptions,
+): Command {
     const program = new Command();
     program.name('spur').version(CLI_CONFIG.binaryVersion).exitOverride();
     program.configureOutput({
@@ -306,6 +212,7 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     registerDecisionCommand(program, context);
     registerFeatureCommand(program, context);
     registerHistoryCommand(program, context);
+    registerMcpCommand(program, context);
     registerMessageCommand(program, context);
     registerProjectsCommand(program, context);
     registerRuleCommand(program, context);
@@ -313,7 +220,7 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     // Task 1388: `self` is the only home for init/maintain/migrate/serve/status — the hidden
     // top-level aliases are gone, so one spelling per action.
     const selfCommand = program.command('self').summary('inspect and manage the Spur installation itself');
-    registerSelfCommand(selfCommand, context);
+    registerSelfCommand(selfCommand, context, serve);
 
     registerTaskCommand(program, context);
     registerWorkflowCommand(program, context);
@@ -326,12 +233,12 @@ async function runCommandDispatch(
     argv: string[],
     context: ReturnType<typeof createCliContext>,
     output: CommandOutput,
+    program = buildProgram(context, output),
 ): Promise<number> {
     let exitCode = 0;
     context.setExitCode = (code: number) => {
         exitCode = code;
     };
-    const program = buildProgram(context, output);
 
     try {
         await program.parseAsync(argv, { from: 'user' });
@@ -363,7 +270,7 @@ export function shouldRenderBanner(argv: readonly string[]): boolean {
     if (argv[0] === 'history' && argv[1] === 'timeline') return false;
     // `spur mcp` (feature B9, task 1373): stdout is the NDJSON JSON-RPC channel — a banner
     // would corrupt the stream the client parses.
-    if (argv[0] === 'mcp') return false;
+    if (argv[0] === MCP_COMMAND_NAME) return false;
     // 1218: `builder show-branches --format json` is the same JSON-only surface as `--json`.
     if (argv[0] === 'builder' && argv[1] === 'show-branches' && requestsJsonFormat(argv)) return false;
     return !argv.some((arg) => arg === '--no-logo' || arg === '--json' || arg === '--quiet' || arg === '--silent');

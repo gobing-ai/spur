@@ -8,6 +8,7 @@ import {
     openExistingDb,
     repairImporterSchemaVersion,
 } from '@gobing-ai/spur-domain';
+import { bootFree } from '../../boot-free-route';
 import { type CliContext, resolveDatabaseUrl } from '../../context';
 import { toEnvelopeJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
@@ -63,8 +64,7 @@ export function registerMigrateCommand(
     context: CliContext,
     options: { hidden?: boolean } = {},
 ): void {
-    program
-        .command('migrate', { hidden: options.hidden === true })
+    bootFree(program.command('migrate', { hidden: options.hidden === true }), 'migration-check')
         .summary('apply CLI-owned schema migrations (or --check the importer schema)')
         .description(
             [

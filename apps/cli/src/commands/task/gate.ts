@@ -1,10 +1,11 @@
 import type { Command } from '@commander-js/extra-typings';
 import { acceptArtifactId } from '../../artifact-id';
+import { bootFree } from '../../boot-free-route';
 import type { CliContext } from '../../context';
 
 /** Register `spur task gate` — the task-pipeline quality gate (script-absorption PR-3). */
 export function registerTaskGateCommand(task: Command, context: CliContext): void {
-    task.command('gate')
+    bootFree(task.command('gate'), 'config')
         .summary('Run the task-pipeline quality gate for a task.')
         .description(
             'Run one quality-gate mode for <wbs>, writing .spur/run/<wbs>-test-gate.{log,findings,status,attempt}:\n' +

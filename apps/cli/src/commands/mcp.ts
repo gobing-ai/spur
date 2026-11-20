@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import type { Command } from '@commander-js/extra-typings';
 import { isGatewayAnswering, normalizeProjectPath, ProjectRegistry } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, isLocalHost, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import { bootFree } from '../boot-free-route';
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
 import type { CommandOutput } from '../output';
@@ -148,10 +149,11 @@ function bearerToken(authEnv: string | undefined, env: Record<string, string | u
     return value;
 }
 
+export const MCP_COMMAND_NAME = 'mcp';
+
 /** Register `spur mcp [--cwd <path>] [--url <mcpUrl>]` (frozen names, task 1373 Design). */
 export function registerMcpCommand(program: Command, context: McpBridgeContext): void {
-    program
-        .command('mcp')
+    bootFree(program.command(MCP_COMMAND_NAME, { hidden: true }))
         .summary('bridge stdio MCP clients to the project MCP endpoint (stdio-to-HTTP transport shim)')
         .option(...SHARED_OPTIONS.cwdServe, context.cwd)
         .option('--url <mcpUrl>', 'MCP endpoint URL (default: gateway prefix when routed, else the direct server port)')

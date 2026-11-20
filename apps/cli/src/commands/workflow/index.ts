@@ -30,10 +30,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     // Run measurement read-outs absorbed from the plugin scripts (script-absorption PR-6).
     registerWorkflowSummaryCommand(workflow, context);
     registerWorkflowProfileCommand(workflow, context);
-    // The run-scoped staging guard. Real invocations take the boot-free early dispatch in
-    // `index.ts`; mounting it here keeps it in `spur workflow --help` and the full tree.
     registerWorkflowCommitGuardCommand(workflow, context);
-    // WT-4 worktree landing (flat verbs; task 1242).
     registerWorkflowPersistCommand(workflow, context);
     registerWorkflowCostCommand(workflow, context);
 }

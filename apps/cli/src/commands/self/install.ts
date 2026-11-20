@@ -1,5 +1,6 @@
 import type { Command } from '@commander-js/extra-typings';
 import { type GatewayDaemonDeps, INSTALL_TOOLS, type InstallTool, installSelf } from '@gobing-ai/spur-app';
+import { bootFree } from '../../boot-free-route';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson, toJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
@@ -22,7 +23,7 @@ export function registerInstallCommand(
     /** Test seam for the `--daemon` hop: override the resolved host facts. */
     daemonOverrides: Partial<GatewayDaemonDeps> = {},
 ): void {
-    self.command('install')
+    bootFree(self.command('install'))
         .summary('converge machine-wide Spur setup (global rules/config, optional tools)')
         .description(
             'Copy the shipped global rules and config into the machine config root (never overwriting existing files) and report optional tool readiness. Repeat --with to also install an optional tool: zg, a2a, or the sp plugin adapters (delegated to superskill).',

@@ -6,6 +6,7 @@ import { createJsonlEventSink, ProjectRegistry, startRegisteredProject } from '@
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
 import { type StartGatewayOptions, startGateway, startServer } from '@gobing-ai/spur-server';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { bootFree } from '../../boot-free-route';
 import type { CliContext } from '../../context';
 import { CommandError, errorMessage } from '../../errors';
 import { toEnvelopeJson, writeJsonError } from '../../output';
@@ -71,8 +72,7 @@ export function registerServeCommand(
 ): void {
     const launch = registration.startServer ?? startServer;
     const launchGateway = registration.startGateway ?? startGateway;
-    program
-        .command('serve')
+    bootFree(program.command('serve'))
         .summary('start the Spur web server (local fallback)')
         .option(...SHARED_OPTIONS.portServe, parseInt)
         .option('--host <addr>', 'Bind address (env: HOST, default: localhost)')

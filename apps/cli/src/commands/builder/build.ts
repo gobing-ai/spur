@@ -11,6 +11,7 @@ import {
     resolveSourceRoot,
     verifyPack,
 } from '@gobing-ai/spur-app/builder';
+import { bootFree } from '../../boot-free-route';
 import type { CliContext } from '../../context';
 import { toEnvelopeJson, toJson } from '../../output';
 import { SHARED_OPTIONS } from '../shared-options';
@@ -33,7 +34,7 @@ export function registerBuilderBuildServerCommand(noun: Command, context: CliCon
 
 /** Register the three artifact verbs: `bundle-config`, `bundle-web`, `verify-pack`. */
 export function registerBuilderArtifactCommands(noun: Command, context: CliContext): void {
-    noun.command('bundle-config')
+    bootFree(noun.command('bundle-config'))
         .summary('stage the checkout config/ tree (with $schema injection) into an output directory')
         .option('--source-root <dir>', 'Spur source checkout (default: the current directory)')
         .option(...SHARED_OPTIONS.json)
@@ -59,7 +60,7 @@ export function registerBuilderArtifactCommands(noun: Command, context: CliConte
             );
         });
 
-    noun.command('bundle-web')
+    bootFree(noun.command('bundle-web'))
         .summary('stage a checkout’s built Board assets into its CLI package tree')
         .option('--source-root <dir>', 'Spur source checkout (default: the current directory)')
         .option(...SHARED_OPTIONS.json)
@@ -88,7 +89,7 @@ export function registerBuilderArtifactCommands(noun: Command, context: CliConte
             );
         });
 
-    noun.command('verify-pack')
+    bootFree(noun.command('verify-pack'))
         .summary('inspect a packed tarball (member safety, archive-owned versions, pruned content)')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -170,7 +171,7 @@ function registerBuildVerb(
     summary: string,
     build: (options: { sourceRoot: string; cwd: string }) => Promise<BuildResult>,
 ): void {
-    noun.command(verb)
+    bootFree(noun.command(verb))
         .summary(summary)
         .option('--source-root <dir>', 'Spur source checkout to build (default: the current directory)')
         .option(...SHARED_OPTIONS.json)

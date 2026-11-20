@@ -11,7 +11,9 @@
 import type { Command } from '@commander-js/extra-typings';
 import { runPersistOut } from '@gobing-ai/spur-app';
 import { runPersistCheck } from '@gobing-ai/spur-app/persist-check';
+import { bootFree } from '../../boot-free-route';
 import { errorMessage } from '../../errors';
+import { WORKFLOW_TRANSPORT } from '../../workflow-transport-argv';
 
 /** The subset of the CLI context these verbs need: their own output channel and exit code. */
 interface PersistContext {
@@ -29,8 +31,7 @@ export function registerWorkflowPersistCommand(workflow: Command, context: Persi
         context.setExitCode(2);
     };
 
-    const persistOut = workflow
-        .command('persist-out')
+    const persistOut = bootFree(workflow.command(WORKFLOW_TRANSPORT.persistOut))
         .summary("copy a worktree's run provenance and owned evidence into this tree (fail closed)")
         .description(
             'Before worktree teardown: transfer run rows and copy the two-file run records plus cited/owned evidence into the invoking tree.',
@@ -57,8 +58,7 @@ export function registerWorkflowPersistCommand(workflow: Command, context: Persi
             }
         });
 
-    workflow
-        .command('persist-check')
+    bootFree(workflow.command(WORKFLOW_TRANSPORT.persistCheck))
         .summary('assert a worktree owns no unpersisted durable evidence before removal (WT-4)')
         .option('--from <worktree>', 'Worktree about to be removed')
         .option('--task-file <path>', 'Task file whose <wbs>- evidence the worktree owns (repeatable)', collect, [])

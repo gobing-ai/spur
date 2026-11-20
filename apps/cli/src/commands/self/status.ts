@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { collectSelfStatus, type SelfStatusSection } from '@gobing-ai/spur-app';
+import { bootFree } from '../../boot-free-route';
 import { CLI_CONFIG } from '../../config';
 import type { CliContext } from '../../context';
 import { CommandError } from '../../errors';
@@ -18,8 +19,7 @@ import { SHARED_OPTIONS } from '../shared-options';
  * reports on.
  */
 export function registerStatusCommand(program: Command, context: CliContext, options: { hidden?: boolean } = {}): void {
-    program
-        .command('status', { hidden: options.hidden === true })
+    bootFree(program.command('status', { hidden: options.hidden === true }), 'status')
         .summary('show project, Git, machine readiness and optional path status')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)

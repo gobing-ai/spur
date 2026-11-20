@@ -16,7 +16,9 @@ import {
     commitGuardUsage,
 } from '@gobing-ai/spur-app/commit-guard';
 import { acceptArtifactId } from '../../artifact-id';
+import { bootFree } from '../../boot-free-route';
 import type { CliContext } from '../../context';
+import { WORKFLOW_TRANSPORT } from '../../workflow-transport-argv';
 
 type GuardContext = Pick<CliContext, 'cwd' | 'output' | 'setExitCode'>;
 
@@ -40,8 +42,7 @@ export function registerWorkflowCommitGuardCommand(workflow: Command, context: G
         emit(guarded(run));
     };
 
-    workflow
-        .command('commit-guard-start')
+    bootFree(workflow.command(WORKFLOW_TRANSPORT.guardStart))
         .description('Fingerprint HEAD and the dirty working files into .spur/run/<run>-tree-start.json')
         .option('--run <id>', 'Run id the snapshot belongs to')
         .allowExcessArguments(false)
@@ -49,8 +50,7 @@ export function registerWorkflowCommitGuardCommand(workflow: Command, context: G
             withRun(options.run, (run) => commitGuardStart(run, { cwd: context.cwd }));
         });
 
-    workflow
-        .command('commit-guard-stage')
+    bootFree(workflow.command(WORKFLOW_TRANSPORT.guardStage))
         .description('Stage only the listed paths this run wrote; print {staged, foreign}')
         .argument('[paths...]', 'Candidate paths (after `--`)')
         .option('--run <id>', 'Run id whose tree-start snapshot partitions the paths')
@@ -64,8 +64,7 @@ export function registerWorkflowCommitGuardCommand(workflow: Command, context: G
             );
         });
 
-    workflow
-        .command('commit-guard-check')
+    bootFree(workflow.command(WORKFLOW_TRANSPORT.guardCheck))
         .description('Report working-tree changes this run did not write; stage nothing')
         .option('--run <id>', 'Run id whose tree-start snapshot defines "written by this run"')
         .option('--base <sha>', 'Diff base (default: the snapshot HEAD)')

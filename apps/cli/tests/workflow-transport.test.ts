@@ -1,42 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { Command } from '@commander-js/extra-typings';
 import { createCliContext } from '../src/context';
 import { buildProgram } from '../src/index';
-import { registerWorkflowTransportCommands } from '../src/workflow-transport';
 
-/**
- * The boot-free composition root for `spur workflow commit-guard-*` (script-absorption PR-4; flattened in task 1290): it
- * mounts the guard, and the full tree mounts the same command so `spur workflow --help` lists it.
- */
 describe('workflow transport composition root', () => {
-    test('mounts the commit-guard-* verbs and no nested commit-guard group under workflow', () => {
-        const program = new Command();
-        const workflow = program.command('workflow');
-        registerWorkflowTransportCommands(workflow, {
-            cwd: process.cwd(),
-            env: {},
-            output: { write: () => {}, error: () => {} },
-            setExitCode: () => {},
-        });
-        const sub = (name: string) => workflow.commands.find((c) => c.name() === name);
-        for (const op of ['start', 'stage', 'check']) expect(sub(`commit-guard-${op}`)).toBeDefined();
-        // 1290: the nested `commit-guard <op>` group was removed, not kept as a shim.
-        expect(sub('commit-guard')).toBeUndefined();
-        // WT-4 landing keeps its capability as flat verbs (task 1242), not as an `inline` sub-verb.
-        expect(sub('persist-out')).toBeDefined();
-        expect(sub('persist-check')).toBeDefined();
-        // D65 1242: the inline driver's transports are gone, not just unregistered.
-        expect(sub('inline')).toBeUndefined();
-    });
-
-    test('the full tree lists commit-guard under spur workflow and no inline driver', async () => {
+    test('the registered tree lists the flat transports with no retired routes', () => {
         const output = { write: () => {}, error: () => {} };
-        const program = await buildProgram(createCliContext({ output }), output);
+        const program = buildProgram(createCliContext({ output }), output);
         const workflow = program.commands.find((c) => c.name() === 'workflow');
         const names = workflow?.commands.map((c) => c.name()) ?? [];
-        expect(names).toContain('commit-guard-start');
+        for (const op of ['start', 'stage', 'check']) expect(names).toContain(`commit-guard-${op}`);
         expect(names).toContain('persist-out');
         expect(names).toContain('persist-check');
+        expect(names).not.toContain('commit-guard');
         expect(names).not.toContain('inline');
+        expect(workflow?.helpInformation()).toContain('commit-guard-start');
     });
 });
