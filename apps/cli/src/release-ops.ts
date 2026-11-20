@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { bundlePlugins } from '@gobing-ai/spur-app/builder';
 import type { BuilderBumpVerConfig, SpurConfig } from '@gobing-ai/spur-config';
 import { resolveBuilderBumpVerConfig } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -148,10 +149,11 @@ async function verifyLockfile(ctx: ReleaseContext, output: CommandOutput): Promi
  * when the gate script itself is absent (e.g. the throwaway bump-ver test repos).
  */
 /**
- * Re-stage the plugin copy a publishable package ships, by running the retained generator.
+ * Re-stage the plugin copy a publishable package ships.
  *
- * `scripts/commands/bundle-plugins.ts` owns the source/package layout knowledge; this only wires the
- * roots. Absent generator ⇒ visible skip (release fixtures), non-zero exit ⇒ hard failure.
+ * `bundlePlugins` owns the source/package layout knowledge and runs in-process (A94 1410 moved it
+ * from `scripts/commands/` into the app layer, so there is no generator script to spawn). A repo
+ * without a canonical `plugins/` tree — the throwaway bump-ver fixtures — is a visible skip.
  */
 async function stagePluginCopy(
     ctx: ReleaseContext,
@@ -159,24 +161,22 @@ async function stagePluginCopy(
     packageDir: string,
     output: CommandOutput,
 ): Promise<void> {
-    const generator = join(ctx.repoRoot, 'scripts', 'commands', 'bundle-plugins.ts');
-    if (!existsSync(generator)) {
-        output.write(`  ↳ bundle-plugins: generator not present in this repo — ${packageDir} left as staged`);
+    const pluginSource = join(ctx.repoRoot, 'plugins');
+    if (!existsSync(pluginSource)) {
+        output.write(`  ↳ bundle-plugins: no plugins/ tree in this repo — ${packageDir} left as staged`);
         return;
     }
-    const result = await run(ctx.repoRoot, [
-        'bun',
-        generator,
-        join(pkgDir, 'plugins'),
-        join(pkgDir, '.claude-plugin'),
-        join(ctx.repoRoot, 'plugins'),
-        join(ctx.repoRoot, '.claude-plugin'),
-    ]);
-    if (!result.ok) {
-        if (result.stdout) output.write(result.stdout);
-        if (result.stderr) output.write(result.stderr);
+    try {
+        await bundlePlugins({
+            sourceRoot: ctx.repoRoot,
+            pluginTarget: join(pkgDir, 'plugins'),
+            marketplaceTarget: join(pkgDir, '.claude-plugin'),
+            pluginSource,
+            marketplaceSource: join(ctx.repoRoot, '.claude-plugin'),
+        });
+    } catch (error) {
         throw new Error(
-            `bundle-plugins failed while refreshing ${packageDir}; refusing to release a stale plugin copy.`,
+            `bundle-plugins failed while refreshing ${packageDir}; refusing to release a stale plugin copy: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
     output.write(`Refreshed staged plugin copy in ${packageDir}`);

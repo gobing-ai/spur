@@ -8,6 +8,8 @@
 
 export { binaryAssetName, buildBinaries, releaseAssetNames, writeSha256Sums } from './binaries';
 export { bundleConfig } from './bundle-config';
+export { type BundleLayaWorkerOptions, bundleLayaWorker } from './bundle-laya-worker';
+export { type BundlePluginsOptions, bundlePlugins } from './bundle-plugins';
 export {
     BOARD_RUNTIME_MANIFEST_FILE,
     BOARD_RUNTIME_MANIFEST_VERSION,
@@ -32,6 +34,30 @@ export {
     resolveSourceRoot,
     UNUSED_LAYA_PEER,
 } from './compile';
+export {
+    BOARD_DECLARATION_REQUIRED_LINES,
+    boardAuthoringSource,
+    boardDeclarationTarget,
+    type EmitBoardTypesOptions,
+    type EmitKitTypesOptions,
+    emitBoardDeclarations,
+    emitKitDeclarations,
+    KIT_COMPONENT_DECLARATIONS,
+    KIT_DECLARATION_REQUIRED_LINES,
+    kitAuthoringSource,
+    kitDeclarationEntry,
+    kitDeclarationRoot,
+    kitSourceRoot,
+    renderBoardDeclaration,
+    renderKitDeclarations,
+} from './emit-board-types';
+export {
+    type EmitMigrationSqlOptions,
+    emitMigrationSql,
+    migrationSqlSource,
+    migrationSqlTarget,
+    renderMigrationSqlModule,
+} from './emit-migration-sql';
 export {
     type ArchiveMember,
     assertSafeMembers,

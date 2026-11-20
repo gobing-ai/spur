@@ -227,6 +227,10 @@ Row-level deltas from the default rule:
 | builder | build-binaries | same `registerBuildVerb` body | same | adopted |
 | builder | bundle-config | delegated: `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact'\|'build', message}}` | adopted — the shared body emits for both branches |
 | builder | bundle-web | delegated: `runVerb` in the same module (A93) | same | adopted |
+| builder | bundle-plugins | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: `plugins`, `marketplace`) | adopted — the shared body emits for both branches |
+| builder | bundle-laya-worker | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: `worker`, `source`) | adopted |
+| builder | emit-board-types | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: board declaration + kit mirror) | adopted |
+| builder | emit-migration-sql | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: migration-sql module) | adopted |
 | builder | verify-pack | `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact', message}}` | adopted — inspects an artifact, so `sourceRoot` is the invocation cwd |
 | rule (3) | run | service-side (`packages/app/src/services/rule-service.ts` `RuleService.evaluate`, JSON branch) | flat-object `{preset, ruleCount, …engine result}` | unwrapped; adopted 0697 — honors flag/env via threaded `enveloped` |
 | rule | validate | service-side (`RuleService.validate`, both JSON branches) | flat-object `{valid, kind, source, …}` (`valid: false` carries `errors`) | unwrapped; adopted 0697 — `valid` stays a payload field; envelope `ok` is command success |

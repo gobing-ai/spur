@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('spur builder command wiring', () => {
-    test('registers the noun with exactly its fourteen verbs (six artifact verbs added by A93)', () => {
+    test('registers the noun with exactly its eighteen verbs (A93 artifacts + A94 staging/generators)', () => {
         const program = new Command();
         const { context } = makeContext(process.cwd());
         registerBuilderCommand(program, context);
@@ -43,6 +43,10 @@ describe('spur builder command wiring', () => {
             'build-cli',
             'bundle-config',
             'bundle-web',
+            'bundle-plugins',
+            'bundle-laya-worker',
+            'emit-board-types',
+            'emit-migration-sql',
             'verify-pack',
             'build-server',
             'build-binaries',

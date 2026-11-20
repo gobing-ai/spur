@@ -292,7 +292,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         //          `builder bundle-config`/`bundle-web` declare it too and emit it through the seam).
         // 84 → 85 (2026-11-17: `self uninstall` removed `self daemon`'s positional action and
         //          declares `--json-envelope` for its own refusal path).
-        expect(advertising.length).toBe(85);
+        // 85 → 89 (A94 1410: `builder bundle-plugins`, `bundle-laya-worker`, `emit-board-types` and
+        //          `emit-migration-sql` declare it on the shared `runVerb` body).
+        expect(advertising.length).toBe(89);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

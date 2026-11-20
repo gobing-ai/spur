@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "A94 wave 2: source-CLI bootstrap and Spur-package builder verbs"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.083Z
-updated_at: "2026-11-20T08:38:07.437Z"
+updated_at: "2026-11-20T10:25:27.359Z"
 feature_id: A94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1409"]
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1410. A94 wave 2: source-CLI bootstrap and Spur-package builder verbs
@@ -40,15 +42,15 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Requirements
 
-- [ ] R1. Source boot needs no generated config. A test asserts that `resolveBundledConfigRoot(<repo>/packages/config/src, process.execPath)` returns `<repo>/config`, and a receipt step runs `bun run apps/cli/src/index.ts builder --help` with `apps/cli/config` absent. `scripts/commands/build-cli.ts` is deleted and no cold-boot forwarder remains.
-- [ ] R2. Four new leaf verbs, all with `--source-root <dir>`, `--json` and `--json-envelope`:
+- [x] R1. Source boot needs no generated config. A test asserts that `resolveBundledConfigRoot(<repo>/packages/config/src, process.execPath)` returns `<repo>/config`, and a receipt step runs `bun run apps/cli/src/index.ts builder --help` with `apps/cli/config` absent. `scripts/commands/build-cli.ts` is deleted and no cold-boot forwarder remains.
+- [x] R2. Four new leaf verbs, all with `--source-root <dir>`, `--json` and `--json-envelope`:
   - `spur builder bundle-plugins`
   - `spur builder bundle-laya-worker [out-dir]` (default `apps/cli/worker`)
   - `spur builder emit-board-types`
   - `spur builder emit-migration-sql`
 
   Outside a Spur checkout they fail through `resolveSourceRoot`: exit 1, `not a Spur source checkout: …`.
-- [ ] R3. Package scripts call the source CLI, never `scripts/spur-dev.ts`:
+- [x] R3. Package scripts call the source CLI, never `scripts/spur-dev.ts`:
   - `apps/cli/package.json:54-56`: `build`, `build:binaries`, `build:bundle`.
   - `apps/server/package.json:9`: `build`.
   - root `package.json:76`: `bundle:config`.
@@ -56,7 +58,7 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
   All outputs are byte-identical to the pre-migration route:
   - emitters: `git diff --exit-code` on the emitted files;
   - staged trees (`apps/cli/{config,web,worker,plugins,.claude-plugin}`): a sorted sha256 manifest compared before and after.
-- [ ] R4. These files are deleted:
+- [x] R4. These files are deleted:
   - forwarders: `scripts/commands/{build-cli,bundle-config,bundle-web,build-server}.ts`;
   - moved modules: `scripts/commands/{bundle-plugins,bundle-laya-worker,emit-board-types,emit-migration-sql}.ts`.
 
@@ -66,8 +68,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Package builds route through the CLI (req: R1, R3, R4)
-- [ ] AC2 — Spur package staging and generators are builder verbs (req: R2)
+- [x] AC1 — Package builds route through the CLI (req: R1, R3, R4)
+- [x] AC2 — Spur package staging and generators are builder verbs (req: R2)
 
 ### Q&A
 
@@ -115,29 +117,81 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Plan
 
-- [ ] 0. Precondition: run `bun install` (lockfile current), then `bun run build:all` on the old route. Record the sha256 manifest of `apps/cli/{config,web,worker,plugins,.claude-plugin}` and the emitted files in `.spur/run/1410-baseline.txt`.
-- [ ] 1. Write a failing E2E in `apps/cli/tests/commands/builder/artifacts.e2e.test.ts` covering the four verbs:
+- [x] 0. Precondition: run `bun install` (lockfile current), then `bun run build:all` on the old route. Record the sha256 manifest of `apps/cli/{config,web,worker,plugins,.claude-plugin}` and the emitted files in `.spur/run/1410-baseline.txt`.
+- [x] 1. Write a failing E2E in `apps/cli/tests/commands/builder/artifacts.e2e.test.ts` covering the four verbs:
   - each produces its artifacts and the `--json` envelope;
   - a non-checkout `--source-root` exits 1 with `not a Spur source checkout`;
   - the `resolveBundledConfigRoot` source-boot assertion.
 
   (R1, R2)
-- [ ] 2. Move the four modules and their tests into `packages/app/src/builder` and `packages/app/tests/builder`, then parameterize `sourceRoot`. (R2)
-- [ ] 3. Register the verbs in `build.ts` and export them from the builder index. (R2)
-- [ ] 4. Rewire `apps/cli/package.json:54-56`, `apps/server/package.json:9` and root `package.json:76`. Delete the forwarders and moved scripts, add `RETIRED` entries, update the A94 inventory. (R3, R4)
-- [ ] 5. Rerun `bun run build:all` and compare against the step-0 manifest. Run `git diff --exit-code` on the emitted files. Prove the packed tarball (`npm pack` in `apps/cli` + `spur builder verify-pack`) and standalone binary (`builder build-cli`, then `<bin> builder --help`). Run `bun run spur-check`. Receipt: `.spur/run/1410-receipt.md`. (R1, R3)
+- [x] 2. Move the four modules and their tests into `packages/app/src/builder` and `packages/app/tests/builder`, then parameterize `sourceRoot`. (R2)
+- [x] 3. Register the verbs in `build.ts` and export them from the builder index. (R2)
+- [x] 4. Rewire `apps/cli/package.json:54-56`, `apps/server/package.json:9` and root `package.json:76`. Delete the forwarders and moved scripts, add `RETIRED` entries, update the A94 inventory. (R3, R4)
+- [x] 5. Rerun `bun run build:all` and compare against the step-0 manifest. Run `git diff --exit-code` on the emitted files. Prove the packed tarball (`npm pack` in `apps/cli` + `spur builder verify-pack`) and standalone binary (`builder build-cli`, then `<bin> builder --help`). Run `bun run spur-check`. Receipt: `.spur/run/1410-receipt.md`. (R1, R3)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHAT changed.** The four Spur-package staging/generator modules left `scripts/commands/` for the app layer and became `spur builder <verb>`; the four repository forwarders are gone, so every package script drives the CLI instead of the repository dispatcher.
+
+**WHY.** A93 shipped builder verbs that only work on Spur's own checkout while the staging steps still lived in `scripts/`, so `build`/`build:bundle` needed the dispatcher and no downstream package could stage its own plugin/worker/generated artifacts. The modules now take an explicit `sourceRoot` and return the shared `BuildResult`, which is the shape `runVerb` already renders.
+
+**Change map** (repo-root-relative, one anchor per row):
+
+| Area | Anchor | Change |
+| --- | --- | --- |
+| staging service | packages/app/src/builder/bundle-plugins.ts:30 | moved from `scripts/commands/`, every root an option under `sourceRoot`, returns `BuildResult` |
+| worker staging | packages/app/src/builder/bundle-laya-worker.ts:56 | same move; walks the installed package from the checkout, `tryReaddir`/`tryStat` keep the failure branches testable |
+| board generator | packages/app/src/builder/emit-board-types.ts:63 | authoring sources and targets derived from `sourceRoot`; the generated banner stays byte-identical |
+| migration generator | packages/app/src/builder/emit-migration-sql.ts:31 | same move; `migrationSqlSource`/`migrationSqlTarget` replace the module-level constant |
+| builder barrel | packages/app/src/builder/index.ts:11 | exports the four services plus their option types |
+| CLI transport | apps/cli/src/commands/builder/build.ts:97 | `bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql` registered on the shared `runVerb` body |
+| release path | apps/cli/src/release-ops.ts:154 | re-stages the plugin copy in-process instead of spawning the deleted generator |
+| CLI scripts | apps/cli/package.json:56 | `build`, `build:binaries`, `build:bundle` call `spur builder <verb> --source-root ../..` |
+| server script | apps/server/package.json:9 | `builder build-server --source-root ../..` |
+| root script | package.json:76 | `bundle:config` calls `builder bundle-config apps/cli/config` |
+| dispatcher | scripts/spur-dev.ts:117 | `RETIRED` maps the eight removed names to `spur builder <verb>` (exit 2); usage list shrinks |
+| inventory | docs/reports/A94-script-ownership.json:1 | twelve entries removed with their files (63 -> 51) |
+| config export | packages/config/package.json:10 | `./bundled-config` subpath so the source-boot assertion is testable |
+| boundary rule | config/rules/strict/runtime-boundaries.yaml:82 | four fs-io exemptions, one recorded reason each (mirrors bundle-config/bundle-web) |
+| help page | docs/help/cmd_builder.md:79 | four verb sections with `--source-root`/`--json` |
+| plugin help page | docs/help2/builder.md:11 | same four rows and sections |
+| prompt reference | plugins/sp/skills/spur-cli/references/builder.md:34 | verb map rows + the retirement note |
+| surface matrix | docs/help/spur-cli-matrix.md:22 | `builder` 14 -> 18 verbs, unique verbs 94 -> 98, cells 121 -> 125 |
+| JSON inventory | docs/design/data-output-contracts.md:229 | four delegated-emitter rows |
+| ownership test | packages/domain/tests/dao/migration-ownership.test.ts:946 | expectation now carries `dependencyClean`; editing `apps/cli/package.json` legitimately reads `no-go` |
+| transport tests | apps/cli/tests/commands/builder/artifacts-transport.test.ts:1 | in-process coverage of the four verbs (help, non-checkout, envelope, text rendering, success) |
+| E2E proofs | apps/cli/tests/commands/builder/artifacts.e2e.test.ts:262 | subprocess proofs for the four verbs + the source-boot assertion |
+| moved tests | packages/app/tests/builder/bundle-plugins.test.ts:22 | companions follow their modules, now passing an explicit `sourceRoot` |
+| failure paths | packages/app/tests/builder/emit-board-types.failures.test.ts:1 | every generator refusal branch + writer idempotence, to hold the 90% per-file gate |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | receipt `.spur/run/1410-receipt.md` §R1: `builder --help` exit 0 and 79 rules with `apps/cli/config` moved aside; `apps/cli/tests/commands/builder/artifacts.e2e.test.ts:381` asserts `resolveBundledConfigRoot` reaches the tracked `config/`; `scripts/commands/build-cli.ts` deleted |
+| R2 | MET | `apps/cli/src/commands/builder/build.ts:97` registers the four verbs on `runVerb`; `apps/cli/tests/commands/builder/artifacts-transport.test.ts:57` asserts flags and the exit-1 non-checkout contract per verb |
+| R3 | MET | receipt §R3: 424-file sha256 manifest identical before/after (`.spur/run/1410-baseline.txt` vs `1410-after.txt`); scripts rewired at `apps/cli/package.json:56`, `apps/server/package.json:9`, `package.json:76` |
+| R4 | MET | eight scripts and four companion tests deleted; `scripts/spur-dev.ts:117` RETIRED map; `docs/reports/A94-script-ownership.json` 63 -> 51 entries; `repo-wide-tests/a93-script-ownership.test.ts` 18/18 pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Package builds route through the CLI (req: R1, R3, R4) | MET | command | `bun run --filter @gobing-ai/spur build:bundle` + `build` + `spur-server build` all exit 0 through `spur builder`; manifests byte-identical (`.spur/run/1410-after.txt`) |
+| AC2 — Spur package staging and generators are builder verbs (req: R2) | MET | test | `apps/cli/tests/commands/builder/artifacts-transport.test.ts` and `artifacts.e2e.test.ts` (15 + 9 cases) drive all four verbs through the CLI grammar and the non-checkout refusal |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -146,3 +200,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 - Upstream: 1409 (RETIRED map, A94 inventory). Downstream: 1411, 1415.
 
 ### History
+
+- 2026-11-20T09:34:01.028Z todo → wip (system)
+- 2026-11-20T10:25:15.740Z wip → testing (system)
+- 2026-11-20T10:25:27.353Z testing → done (system)
+

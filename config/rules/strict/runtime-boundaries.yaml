@@ -79,6 +79,10 @@ rules:
             - "packages/app/src/builder/binaries.ts" # A93 1354 release assets: SHA256SUMS hashes BINARY bytes, which the text-oriented FileSystem seam cannot read faithfully
             - "packages/app/src/builder/bundle-config.ts" # A93 1355: recursive cp with a per-entry prune filter plus in-place $schema rewriting; the FileSystem seam exposes no filter/recursive copy and would change overwrite semantics
             - "packages/app/src/builder/bundle-web.ts" # A93 1355: recursive asset copy + realpath-based overlap guard; the seam has no realpath/cp filter
+            - "packages/app/src/builder/bundle-plugins.ts" # A94 1410: recursive cp with a per-entry prune filter plus two destructive target wipes; the async FileSystem seam exposes no filter/recursive copy (mirrors bundle-config.ts)
+            - "packages/app/src/builder/bundle-laya-worker.ts" # A94 1410: resolves the installed worker package by walking package.json manifests and stats the worker file before copying (mirrors compile.ts's dependency resolution)
+            - "packages/app/src/builder/emit-board-types.ts" # A94 1410: writes compiler-emitted declaration trees byte-exactly (read-compare-write across a mirror root); the seam would re-order the emit
+            - "packages/app/src/builder/emit-migration-sql.ts" # A94 1410: byte-stable generated-module read/compare/write; the escaping must stay byte-identical to the released .sql
             - "packages/app/src/builder/verify-pack.ts" # A93 1355: recursive listing of the EXTRACTED tree for pruned-content assertions, after member validation; no writes outside the private temp dir
             # Script-absorption PR-6: synchronous op modules whose file bytes are pinned by the
             # PR-6 golden (apps/cli/tests/script-absorption-pr6). They keep the retired scripts'

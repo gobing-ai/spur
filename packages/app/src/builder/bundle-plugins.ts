@@ -11,16 +11,13 @@
  * `bundle-config` / `bundle-web`, with a prune filter for non-distribution
  * content. The copied destinations are gitignored build artifacts — never
  * hand-edit `apps/cli/{plugins,.claude-plugin}`.
+ *
+ * A94 1410: every root is an explicit option resolved from a source root, never from this module's
+ * location, so the same service serves a downstream checkout through `spur builder bundle-plugins`.
  */
 import { cp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
-const PLUGIN_SOURCE = join(REPO_ROOT, 'plugins');
-const PLUGIN_TARGET = join(REPO_ROOT, 'apps/cli/plugins');
-const MARKETPLACE_SOURCE = join(REPO_ROOT, '.claude-plugin');
-const MARKETPLACE_TARGET = join(REPO_ROOT, 'apps/cli/.claude-plugin');
+import type { BuildArtifact, BuildResult } from './compile';
 
 /**
  * Prune anything that is not distribution content. `cp`'s filter runs per
@@ -37,19 +34,30 @@ const MARKETPLACE_TARGET = join(REPO_ROOT, 'apps/cli/.claude-plugin');
  */
 export const EXCLUDE = /(^|\/)(\.DS_Store|tests|evals)($|\/)|\.test\.ts$/;
 
+/** Plugin staging options; every root defaults under `sourceRoot`. */
+export interface BundlePluginsOptions {
+    sourceRoot: string;
+    /** destination for `plugins/` (default `<sourceRoot>/apps/cli/plugins`) */
+    pluginTarget?: string;
+    /** destination for `.claude-plugin/` (default `<sourceRoot>/apps/cli/.claude-plugin`) */
+    marketplaceTarget?: string;
+    /** canonical plugin tree (default `<sourceRoot>/plugins`) */
+    pluginSource?: string;
+    /** canonical marketplace tree (default `<sourceRoot>/.claude-plugin`) */
+    marketplaceSource?: string;
+}
+
 /**
- * Copy the repo-root `plugins/` and `.claude-plugin/` trees into `apps/cli/`,
- * pruning non-distribution content from the staged copies.
- *
- * @param pluginTarget  - destination for `plugins/` (default `apps/cli/plugins`)
- * @param marketplaceTarget - destination for `.claude-plugin/` (default `apps/cli/.claude-plugin`)
+ * Copy the source root's `plugins/` and `.claude-plugin/` trees into the CLI package tree, pruning
+ * non-distribution content from the staged copies.
  */
-export async function bundlePlugins(
-    pluginTarget: string = PLUGIN_TARGET,
-    marketplaceTarget: string = MARKETPLACE_TARGET,
-    pluginSource: string = PLUGIN_SOURCE,
-    marketplaceSource: string = MARKETPLACE_SOURCE,
-): Promise<{ pluginTarget: string; marketplaceTarget: string }> {
+export async function bundlePlugins(options: BundlePluginsOptions): Promise<BuildResult> {
+    const { sourceRoot } = options;
+    const pluginSource = options.pluginSource ?? join(sourceRoot, 'plugins');
+    const marketplaceSource = options.marketplaceSource ?? join(sourceRoot, '.claude-plugin');
+    const pluginTarget = options.pluginTarget ?? join(sourceRoot, 'apps', 'cli', 'plugins');
+    const marketplaceTarget = options.marketplaceTarget ?? join(sourceRoot, 'apps', 'cli', '.claude-plugin');
+
     await rm(pluginTarget, { recursive: true, force: true });
     await rm(marketplaceTarget, { recursive: true, force: true });
 
@@ -59,20 +67,9 @@ export async function bundlePlugins(
     });
     await cp(marketplaceSource, marketplaceTarget, { recursive: true });
 
-    return { pluginTarget, marketplaceTarget };
-}
-
-// A93 1355: CLI entry so the release path (`spur builder bump-ver`) can DRIVE this retained
-// generator as a subprocess instead of value-importing repository tooling into the app.
-//   bun scripts/commands/bundle-plugins.ts [pluginTarget] [marketplaceTarget] [pluginSource] [marketplaceSource]
-// The dispatcher imports this module (`bundle-plugins` case), where `import.meta.main` is false.
-if (import.meta.main) {
-    const [pluginTarget, marketplaceTarget, pluginSource, marketplaceSource] = process.argv.slice(2);
-    const result = await bundlePlugins(
-        pluginTarget ?? PLUGIN_TARGET,
-        marketplaceTarget ?? MARKETPLACE_TARGET,
-        pluginSource ?? PLUGIN_SOURCE,
-        marketplaceSource ?? MARKETPLACE_SOURCE,
-    );
-    console.log(`bundle-plugins: ${result.pluginTarget} + ${result.marketplaceTarget}`);
+    const artifacts: BuildArtifact[] = [
+        { path: pluginTarget, kind: 'plugins' },
+        { path: marketplaceTarget, kind: 'marketplace' },
+    ];
+    return { ok: true, sourceRoot, artifacts, diagnostics: [] };
 }

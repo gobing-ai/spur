@@ -6,7 +6,8 @@
     "exports": {
         ".": "./src/index.ts",
         "./loader": "./src/loader.ts",
-        "./agent-quota-events": "./src/agent-quota-events.ts"
+        "./agent-quota-events": "./src/agent-quota-events.ts",
+        "./bundled-config": "./src/bundled-config.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

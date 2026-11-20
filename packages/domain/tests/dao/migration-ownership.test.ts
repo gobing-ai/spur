@@ -939,8 +939,11 @@ describe('1311 migration ownership evidence', () => {
         // The proof is run-scoped (it needs the bundled CLI); its shape is asserted below.
         expect(typeof offlineProof.pass).toBe('boolean');
         // `go` is only reachable where the offline proof could run; a clean checkout fails closed.
+        // The decision reads BOTH cleanliness inputs: a dirty released-SQL path OR a dirty upstream
+        // package manifest (`apps/cli/package.json`, `package.json`, the lockfile) is `no-go`, so the
+        // expectation has to carry both, not just the SQL paths (A94 1410 edits a manifest).
         expect(report.status, `${JSON.stringify(offlineProof)}\n${sourceFreeStderr}`).toBe(
-            releasedClean ? (offlineProof.pass ? 'go' : 'inconclusive') : 'no-go',
+            releasedClean && dependencyClean ? (offlineProof.pass ? 'go' : 'inconclusive') : 'no-go',
         );
     }, 120_000);
 });

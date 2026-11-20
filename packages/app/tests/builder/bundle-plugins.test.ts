@@ -1,5 +1,5 @@
 /**
- * Regression guard for the packaging prune filter (task 0500 R4).
+ * Regression guard for the packaging prune filter (task 0500 R4; moved to the app layer by A94 1410).
  *
  * The published `@gobing-ai/spur` tarball must ship the `sp` plugin content but
  * NOT test/eval/OS-junk files. Two failure modes are caught here:
@@ -16,7 +16,10 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bundlePlugins, EXCLUDE } from './bundle-plugins';
+import { bundlePlugins, EXCLUDE } from '../../src/builder/bundle-plugins';
+
+/** Repo root: packages/app/tests/builder → repo. */
+const SOURCE_ROOT = join(import.meta.dir, '../../../..');
 
 async function listFiles(dir: string): Promise<string[]> {
     const out: string[] = [];
@@ -39,7 +42,7 @@ describe('bundlePlugins', () => {
         target = await mkdtemp(join(tmpdir(), 'spur-stage-'));
         const pluginTarget = join(target, 'plugins');
         const marketplaceTarget = join(target, '.claude-plugin');
-        await bundlePlugins(pluginTarget, marketplaceTarget);
+        await bundlePlugins({ sourceRoot: SOURCE_ROOT, pluginTarget, marketplaceTarget });
 
         const files = await listFiles(pluginTarget);
         const rel = files.map((f) => f.slice(pluginTarget.length + 1));
@@ -65,12 +68,29 @@ describe('bundlePlugins', () => {
     test('staged plugin root retains a distribution entry superskill requires', async () => {
         target = await mkdtemp(join(tmpdir(), 'spur-stage-'));
         const pluginTarget = join(target, 'plugins');
-        await bundlePlugins(pluginTarget, join(target, '.claude-plugin'));
+        await bundlePlugins({
+            sourceRoot: SOURCE_ROOT,
+            pluginTarget,
+            marketplaceTarget: join(target, '.claude-plugin'),
+        });
 
         const top = await readdir(join(pluginTarget, 'sp'), { withFileTypes: true });
         const names = top.filter((e) => e.isDirectory()).map((e) => e.name);
         // superskill rejects a plugin root without one of these (marketplace.ts:180).
         expect(names.some((n) => ['skills', 'commands', 'agents', 'hooks'].includes(n))).toBe(true);
+    });
+
+    test('reports both staged trees as artifacts for the verb envelope', async () => {
+        target = await mkdtemp(join(tmpdir(), 'spur-stage-'));
+        const pluginTarget = join(target, 'plugins');
+        const marketplaceTarget = join(target, '.claude-plugin');
+        const result = await bundlePlugins({ sourceRoot: SOURCE_ROOT, pluginTarget, marketplaceTarget });
+        expect(result.ok).toBe(true);
+        expect(result.sourceRoot).toBe(SOURCE_ROOT);
+        expect(result.artifacts).toEqual([
+            { path: pluginTarget, kind: 'plugins' },
+            { path: marketplaceTarget, kind: 'marketplace' },
+        ]);
     });
 });
 

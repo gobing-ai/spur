@@ -8,6 +8,10 @@ Release plumbing: compiled artifacts, version bumps, release tags, npm publish, 
 | --- | --- |
 | `bundle-config <out-dir> [flags]` | Stage the checkout's `config/` tree with `$schema` injection |
 | `bundle-web [out-dir] [flags]` | Stage the built Board assets into the CLI package tree |
+| `bundle-plugins [flags]` | Stage `plugins/` + `.claude-plugin/` into the CLI package tree (tests/evals pruned) |
+| `bundle-laya-worker [out-dir] [flags]` | Stage the installed laya-local Python worker beside the bundled config |
+| `emit-board-types [flags]` | Emit the board declaration and the module-kit declaration mirror |
+| `emit-migration-sql [flags]` | Emit the embedded migration SQL module from its released `.sql` |
 | `verify-pack <tgz> [flags]` | Inspect a packed tarball (member safety, archive-owned versions) |
 | `build-binaries [flags]` | Cross-compile the six release binaries plus `SHA256SUMS` |
 | `build-cli [flags]` | Compile the checkout's `spur` binary |
@@ -69,6 +73,50 @@ spur builder bundle-config [options] <out-dir>
 
 ```
 spur builder bundle-web [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-plugins
+
+```
+spur builder bundle-plugins [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-laya-worker
+
+```
+spur builder bundle-laya-worker [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-board-types
+
+```
+spur builder emit-board-types [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-migration-sql
+
+```
+spur builder emit-migration-sql [options]
 ```
 
 | Option | Description |

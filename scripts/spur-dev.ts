@@ -9,17 +9,13 @@
  * Commands (the layer is recorded here, never in the path — A92 R5):
  *
  *   L1 build / package
- *   bundle-config <out-dir>                     copy config/ into a tarball dir
- *   bundle-laya-worker [out-dir]                copy the laya-local Python worker next to the bundle
- *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
- *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
- *   emit-board-types                            emit apps/cli/board/index.d.ts and the module-kit declarations from their authoring sources
- *   emit-migration-sql                          emit the 0037 migration SQL module from its released .sql
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
  *   build-binaries                              forward to `spur builder build-binaries`
- *   build-cli                                   forward to `spur builder build-cli`
- *   build-server                                forward to `spur builder build-server`
  *   plugin-install-smoke                       prove the plugin surface is standalone and installs clean
+ *
+ *   Retired into the CLI by A94 1410 (each name now prints its replacement and exits 2):
+ *   build-cli, build-server, bundle-config, bundle-web, bundle-plugins, bundle-laya-worker,
+ *   emit-board-types, emit-migration-sql — all `spur builder <verb>`.
  *
  *   L2 test runner / coverage
  *   run-tests <bun test args>                  run the suite with the repo's hermetic env; owns coverage certification
@@ -61,16 +57,8 @@ import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
 import { buildReleaseBinaries } from './commands/build-binaries';
-import { buildCliBinary } from './commands/build-cli';
-import { buildServerBinary } from './commands/build-server';
-import { bundleConfigOutput } from './commands/bundle-config';
-import { bundleLayaWorker } from './commands/bundle-laya-worker';
-import { bundlePlugins } from './commands/bundle-plugins';
-import { bundleWebOutput } from './commands/bundle-web';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { devAll } from './commands/dev-all';
-import { emitBoardDeclarations, emitKitDeclarations } from './commands/emit-board-types';
-import { emitMigrationSql } from './commands/emit-migration-sql';
 import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
 import { linkCheck } from './commands/link-check';
@@ -100,15 +88,7 @@ const DELEGATED: Record<string, string> = {
  * registration cannot drift out of the usage list (task 1409 R3).
  */
 const COMMANDS = [
-    'bundle-config',
-    'bundle-laya-worker',
-    'bundle-web',
-    'bundle-plugins',
-    'emit-migration-sql',
-    'emit-board-types',
     'verify-pack',
-    'build-cli',
-    'build-server',
     'build-binaries',
     'dev-all',
     'eval-pipeline',
@@ -126,7 +106,16 @@ const COMMANDS = [
  * they delete routes). A retired name prints a pointer and exits 2 — never the generic unknown-command
  * failure that leaves a caller guessing (task 1409 R4).
  */
-export const RETIRED: Record<string, string> = {};
+export const RETIRED: Record<string, string> = {
+    'build-cli': 'spur builder build-cli',
+    'build-server': 'spur builder build-server',
+    'bundle-config': 'spur builder bundle-config',
+    'bundle-web': 'spur builder bundle-web',
+    'bundle-plugins': 'spur builder bundle-plugins',
+    'bundle-laya-worker': 'spur builder bundle-laya-worker',
+    'emit-board-types': 'spur builder emit-board-types',
+    'emit-migration-sql': 'spur builder emit-migration-sql',
+};
 
 function usage(message?: string): never {
     console.error(`Commands: ${[...COMMANDS, ...Object.keys(DELEGATED)].join(', ')}`);
@@ -154,54 +143,12 @@ if (replacement !== undefined) {
 
 try {
     switch (command) {
-        case 'bundle-config': {
-            const result = await bundleConfigOutput(args[0]);
-            console.log(
-                `Bundled config -> ${result.target} (fixtures/OS junk excluded, ${result.injected} $schema directives injected)`,
-            );
-            break;
-        }
-        case 'bundle-laya-worker': {
-            const result = await bundleLayaWorker(args[0]);
-            console.log(`Bundled laya worker ${result.source} -> ${result.target} (${result.bytes} bytes)`);
-            break;
-        }
-        case 'bundle-web': {
-            const result = await bundleWebOutput(args[0]);
-            console.log(`Bundled board assets ${result.source} -> ${result.target}`);
-            break;
-        }
-        case 'bundle-plugins': {
-            const result = await bundlePlugins();
-            console.log(`Staged plugins ${result.pluginTarget} + marketplace ${result.marketplaceTarget} for npm`);
-            break;
-        }
-        case 'emit-migration-sql': {
-            const result = await emitMigrationSql();
-            console.log(`${result.changed ? 'Wrote' : 'Unchanged'} migration SQL module ${result.target}`);
-            break;
-        }
-        case 'emit-board-types': {
-            const result = await emitBoardDeclarations();
-            console.log(`${result.changed ? 'Wrote' : 'Unchanged'} board declaration ${result.target}`);
-            const kit = await emitKitDeclarations();
-            console.log(
-                `${kit.changed ? 'Wrote' : 'Unchanged'} module-kit declarations (${kit.files} files) ${kit.entry}`,
-            );
-            break;
-        }
         case 'verify-pack': {
             const tarball = args[0];
             if (!tarball) throw new Error('Usage: spur-dev verify-pack <path-to-.tgz>');
             process.exit(await verifyPackTarball(tarball));
             break;
         }
-        case 'build-cli':
-            await buildCliBinary();
-            break;
-        case 'build-server':
-            await buildServerBinary();
-            break;
         case 'build-binaries':
             await buildReleaseBinaries();
             break;

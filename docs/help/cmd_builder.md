@@ -86,6 +86,50 @@ spur builder bundle-web [options] [out-dir]
 | `--source-root <dir>` | Spur source checkout (default: the current directory) |
 | `--json` | Machine-readable report |
 
+## spur builder bundle-plugins
+
+```
+spur builder bundle-plugins [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-laya-worker
+
+```
+spur builder bundle-laya-worker [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-board-types
+
+```
+spur builder emit-board-types [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-migration-sql
+
+```
+spur builder emit-migration-sql [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
 ## spur builder verify-pack
 
 ```

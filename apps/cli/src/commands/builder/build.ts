@@ -7,7 +7,12 @@ import {
     buildCli,
     buildServer,
     bundleConfig,
+    bundleLayaWorker,
+    bundlePlugins,
     bundleWeb,
+    emitBoardDeclarations,
+    emitKitDeclarations,
+    emitMigrationSql,
     resolveSourceRoot,
     verifyPack,
 } from '@gobing-ai/spur-app/builder';
@@ -32,7 +37,7 @@ export function registerBuilderBuildServerCommand(noun: Command, context: CliCon
     registerBuildVerb(noun, context, 'build-server', 'compile the checkout’s standalone server', buildServer);
 }
 
-/** Register the three artifact verbs: `bundle-config`, `bundle-web`, `verify-pack`. */
+/** Register the artifact verbs: `bundle-config`, `bundle-web`, `bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`, `verify-pack`. */
 export function registerBuilderArtifactCommands(noun: Command, context: CliContext): void {
     bootFree(noun.command('bundle-config'))
         .summary('stage the checkout config/ tree (with $schema injection) into an output directory')
@@ -86,6 +91,66 @@ export function registerBuilderArtifactCommands(noun: Command, context: CliConte
                     };
                 },
                 outDir ?? 'bundle-web',
+            );
+        });
+
+    bootFree(noun.command('bundle-plugins'))
+        .summary('stage the checkout’s plugins/ and .claude-plugin/ trees into its CLI package tree')
+        .option('--source-root <dir>', 'Spur source checkout (default: the current directory)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            await runVerb(context, options, async (sourceRoot) => bundlePlugins({ sourceRoot }), 'bundle-plugins');
+        });
+
+    bootFree(noun.command('bundle-laya-worker'))
+        .summary('stage the installed laya-local Python worker beside the bundled config root')
+        .option('--source-root <dir>', 'Spur source checkout (default: the current directory)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .argument('[out-dir]', 'destination directory (default: <source-root>/apps/cli/worker)')
+        .action(async (outDir, options) => {
+            await runVerb(
+                context,
+                options,
+                async (sourceRoot) =>
+                    bundleLayaWorker({
+                        sourceRoot,
+                        ...(outDir !== undefined ? { target: resolve(context.cwd, outDir) } : {}),
+                    }),
+                outDir ?? 'bundle-laya-worker',
+            );
+        });
+
+    bootFree(noun.command('emit-board-types'))
+        .summary('emit the board declaration and the module-kit declaration mirror for the CLI package')
+        .option('--source-root <dir>', 'Spur source checkout (default: the current directory)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            await runVerb(
+                context,
+                options,
+                async (sourceRoot) => {
+                    const board = await emitBoardDeclarations({ sourceRoot });
+                    const kit = await emitKitDeclarations({ sourceRoot });
+                    return { ...board, artifacts: [...board.artifacts, ...kit.artifacts] };
+                },
+                'emit-board-types',
+            );
+        });
+
+    bootFree(noun.command('emit-migration-sql'))
+        .summary('emit the embedded migration SQL module from its released .sql authoring source')
+        .option('--source-root <dir>', 'Spur source checkout (default: the current directory)')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            await runVerb(
+                context,
+                options,
+                async (sourceRoot) => emitMigrationSql({ sourceRoot }),
+                'emit-migration-sql',
             );
         });
 

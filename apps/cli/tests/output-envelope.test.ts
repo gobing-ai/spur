@@ -394,6 +394,11 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
         // outside each verb's chunk.
         'builder.ts:bundle-config': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
         'builder.ts:bundle-web': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        // A94 1410: the four staging/generator verbs moved out of scripts/commands onto the same body.
+        'builder.ts:bundle-plugins': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:bundle-laya-worker': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:emit-board-types': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:emit-migration-sql': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
     };
 
     const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;
