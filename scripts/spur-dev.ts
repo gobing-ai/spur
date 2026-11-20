@@ -94,10 +94,42 @@ const DELEGATED: Record<string, string> = {
     'skill-eval': 'skill-eval.ts',
 };
 
+/**
+ * Every name the switch below answers. `usage()` prints it and
+ * `repo-wide-tests/a93-script-ownership.test.ts` pins it to the switch's own `case` labels, so a
+ * registration cannot drift out of the usage list (task 1409 R3).
+ */
+const COMMANDS = [
+    'bundle-config',
+    'bundle-laya-worker',
+    'bundle-web',
+    'bundle-plugins',
+    'emit-migration-sql',
+    'emit-board-types',
+    'verify-pack',
+    'build-cli',
+    'build-server',
+    'build-binaries',
+    'dev-all',
+    'eval-pipeline',
+    'fleet-e2e',
+    'a2a-serve-e2e',
+    'a2a-member-e2e',
+    'a2a-two-install-e2e',
+    'delegate-workflow-e2e',
+    'link-check',
+    'promotion',
+];
+
+/**
+ * Retired dispatcher names mapped to the spur command that replaced them (A94 waves add entries as
+ * they delete routes). A retired name prints a pointer and exits 2 — never the generic unknown-command
+ * failure that leaves a caller guessing (task 1409 R4).
+ */
+export const RETIRED: Record<string, string> = {};
+
 function usage(message?: string): never {
-    console.error(
-        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, emit-migration-sql, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, a2a-serve-e2e, a2a-member-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
-    );
+    console.error(`Commands: ${[...COMMANDS, ...Object.keys(DELEGATED)].join(', ')}`);
     process.exit(message ? 1 : 0);
 }
 
@@ -113,6 +145,12 @@ function delegate(module: string, args: string[]): never {
 }
 
 const [command, ...args] = process.argv.slice(2);
+
+const replacement = command === undefined ? undefined : RETIRED[command];
+if (replacement !== undefined) {
+    console.error(`spur-dev: '${command}' moved to '${replacement}'`);
+    process.exit(2);
+}
 
 try {
     switch (command) {

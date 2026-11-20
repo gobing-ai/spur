@@ -1,35 +1,41 @@
 /**
- * A93 script ownership inventory (task 1351 R1/R4).
+ * A94 script downstream-use inventory (task 1409 R1–R5; retargeted from A93).
  *
- * Failure modes first — each one would make the migration inventory lie:
+ * Failure modes first — each one would make the downstream-use inventory lie:
  *   - a tracked script has no entry (silently unmigrated), or two entries claim one file
- *   - an entry names no destination/action, or migrates a file through a wave that does not exist
- *   - a retained file has no responsibility-based reason (the ADR-130 exemption A93 removes)
+ *   - an entry claims no downstream use, or migrates through a wave that does not exist
+ *   - a retained or forwarder file has no reason naming why a downstream project would not use it
+ *   - a moving entry names no target surface, so its destination is unverifiable
+ *   - a file reads `done` while it is still tracked (a wave that claimed a move it did not make)
  *   - a caller anchor does not resolve, or a file with no caller hides that fact
+ *   - the recorded consent vanished, or a surface is accepted before that consent is granted
+ *   - the dispatcher's usage list drifts from its live cases, or a retired name exits silently
  *   - an app/packages service value-imports repository tooling (the boundary ADR-130 draws)
- *   - the architectural direction is deleted from the ADR or its projections (AC1)
- *   - the proposed public contracts or the deferred consent owner vanish from the design (R3)
+ *   - the architectural direction is deleted from the ADR or its projections (A93 AC1)
+ *   - the closed A93 report is edited instead of frozen (A94 keeps it as history)
  *
  * The candidate set is regenerated from git on every run; the report is the artifact under test.
  */
 import { describe, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 /** Repo root: repo-wide-tests → repo. */
 const REPO_ROOT = join(import.meta.dir, '..');
-const REPORT_REL = 'docs/reports/A93-script-ownership.json';
-const DESIGN_REL = 'docs/design/concrete-spur-self.md';
+const REPORT_REL = 'docs/reports/A94-script-ownership.json';
+const A93_REPORT_REL = 'docs/reports/A93-script-ownership.json';
+const DISPATCHER_REL = 'scripts/spur-dev.ts';
 const ADR_REL = 'docs/00_ADR.md';
 const GOVERNANCE_REL = 'docs/design/harness-surface-governance.md';
 
-const DESTINATIONS = ['builder', 'self', 'app-workflow', 'scripts'] as const;
-const ACTIONS = ['absorb', 'extract', 'retain', 'slim', 'shrink'] as const;
-/** Frozen A93 execution waves; every migrating action must land in exactly one. */
-const WAVES = ['1352', '1353', '1354', '1355', '1356'] as const;
-/** Actions that move behavior out; only `retain` leaves the file where it is. */
-const MOVING_ACTIONS = ['absorb', 'extract', 'slim', 'shrink'] as const;
+/** A94 downstream-use vocabulary (docs/design/downstream-tooling-absorption.md §2). */
+const DOWNSTREAM = ['move', 'generalize', 'forwarder', 'retain'] as const;
+const DISPOSITIONS = ['pending', 'done', 'retained'] as const;
+/** Frozen A94 execution waves; every moving or forwarder entry must land in exactly one. */
+const WAVES = ['1410', '1411', '1412', '1413', '1414', '1415'] as const;
+/** Downstream values that move behavior out; only `retain` leaves the file where it is. */
+const MOVING = ['move', 'generalize'] as const;
 
 interface Caller {
     path: string;
@@ -39,16 +45,15 @@ interface Caller {
 interface Entry {
     path: string;
     responsibility: string;
-    destination: string;
-    action: string;
-    waveWbs: string | null;
     tests: string[];
     callers: Caller[];
-    retainedReason?: string;
+    downstream: string;
+    surface?: string;
+    waveWbs?: string;
+    downstreamReason?: string;
+    disposition?: string;
     noRuntimeCaller?: boolean;
     subject?: string;
-    /** What actually happened after the owning wave ran (1356 final audit). */
-    disposition?: 'moved-forwarder' | 'retained' | 'retained-slimmed' | 'pending';
 }
 
 interface BoundaryEdge {
@@ -63,8 +68,14 @@ interface Report {
     schemaVersion: number;
     generatedAt: string;
     sourceCommit: string;
-    deferredConsent: { owner: string; scope: string[]; blocksPublicImplementation: boolean };
-    consentStatus: { state: 'granted' | 'pending'; at: string; by: string; record: string };
+    consentStatus: {
+        state: 'granted' | 'pending';
+        at: string;
+        by: string;
+        record: string;
+        amendment: string;
+    };
+    waves: string[];
     entries: Entry[];
     boundaryEdges: BoundaryEdge[];
 }
@@ -98,13 +109,19 @@ function trackedCandidates(): string[] {
         .sort();
 }
 
+/** Live dispatcher vocabulary, read from the source rather than restated here. */
+function dispatcherSource(): string {
+    return read(DISPATCHER_REL);
+}
+
 const report = JSON.parse(read(REPORT_REL)) as Report;
 
-describe('A93 script ownership report shape', () => {
+describe('A94 script ownership report shape', () => {
     test('declares its schema, generation time and source commit', () => {
-        expect(report.schemaVersion).toBe(1);
+        expect(report.schemaVersion).toBe(2);
         expect(report.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
         expect(report.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
+        expect(report.waves).toEqual([...WAVES]);
     });
 
     test('covers exactly the tracked candidate set — no missing, duplicate or stray entry', () => {
@@ -116,33 +133,50 @@ describe('A93 script ownership report shape', () => {
         expect(claimed.filter((path) => !candidates.includes(path))).toEqual([]);
     });
 
-    test('every entry classifies one owner, one action and a consistent wave', () => {
+    test('every entry classifies one downstream use, its destination and its wave', () => {
         const problems: string[] = [];
         for (const entry of report.entries) {
             const where = entry.path;
             if (!entry.responsibility || entry.responsibility.trim().length < 12) {
                 problems.push(`${where}: responsibility missing or vacuous`);
             }
-            if (!(DESTINATIONS as readonly string[]).includes(entry.destination)) {
-                problems.push(`${where}: unknown destination ${entry.destination}`);
+            if (!(DOWNSTREAM as readonly string[]).includes(entry.downstream)) {
+                problems.push(`${where}: unknown downstream value ${entry.downstream}`);
             }
-            if (!(ACTIONS as readonly string[]).includes(entry.action)) {
-                problems.push(`${where}: unknown action ${entry.action}`);
+            if (!entry.disposition || !(DISPOSITIONS as readonly string[]).includes(entry.disposition)) {
+                problems.push(`${where}: unknown disposition ${entry.disposition}`);
             }
-            if (entry.action === 'retain') {
-                if (entry.waveWbs !== null) problems.push(`${where}: retain must not name a wave`);
-                if (!entry.retainedReason) problems.push(`${where}: retain without a reason`);
-                if (entry.destination !== 'scripts') problems.push(`${where}: retain outside scripts/`);
-            } else if ((MOVING_ACTIONS as readonly string[]).includes(entry.action)) {
+            if (entry.downstream === 'retain') {
+                if (entry.waveWbs) problems.push(`${where}: retain must not name a wave`);
+                if (entry.disposition !== 'retained') problems.push(`${where}: retain must read as retained`);
+            } else if ((MOVING as readonly string[]).includes(entry.downstream)) {
+                if (!entry.surface) problems.push(`${where}: ${entry.downstream} without a target surface`);
                 if (!entry.waveWbs || !(WAVES as readonly string[]).includes(entry.waveWbs)) {
-                    problems.push(`${where}: ${entry.action} must name an A93 wave, got ${entry.waveWbs}`);
+                    problems.push(`${where}: ${entry.downstream} must name an A94 wave, got ${entry.waveWbs}`);
                 }
-                if (entry.destination === 'scripts' && !entry.retainedReason) {
-                    problems.push(`${where}: ${entry.action} keeps the file in scripts/ without a reason`);
+                if (entry.disposition === 'retained') problems.push(`${where}: moving entry still reads as retained`);
+            }
+            if (entry.downstream === 'forwarder') {
+                if (!entry.surface) problems.push(`${where}: forwarder without the surface it forwards to`);
+                if (!entry.waveWbs || !(WAVES as readonly string[]).includes(entry.waveWbs)) {
+                    problems.push(`${where}: forwarder must name the wave that deletes it`);
                 }
             }
-            if (entry.destination === 'scripts' && !entry.retainedReason) {
-                problems.push(`${where}: destination scripts/ without a responsibility-based reason`);
+            if ((entry.downstream === 'retain' || entry.downstream === 'forwarder') && !entry.downstreamReason) {
+                problems.push(`${where}: ${entry.downstream} without a downstream reason`);
+            }
+            if (entry.downstreamReason && entry.downstreamReason.trim().length < 12) {
+                problems.push(`${where}: downstream reason too thin to review`);
+            }
+        }
+        expect(problems).toEqual([]);
+    });
+
+    test('a moving entry reads done only once its file is gone', () => {
+        const problems: string[] = [];
+        for (const entry of report.entries) {
+            if (entry.disposition === 'done' && tracked(entry.path)) {
+                problems.push(`${entry.path}: claims done while still tracked`);
             }
         }
         expect(problems).toEqual([]);
@@ -216,7 +250,7 @@ function appToScriptImports(): Caller[] {
 }
 
 describe('app/packages services never value-import repository tooling', () => {
-    test('every existing app→script import is a recorded, wave-owned edge', () => {
+    test('every existing app→script import is a recorded boundary edge', () => {
         const hits = appToScriptImports();
         const recorded = report.boundaryEdges.map((edge) => `${edge.importer}:${edge.line}`);
         const untracked = hits.filter((hit) => !recorded.includes(`${hit.path}:${hit.line}`));
@@ -230,38 +264,96 @@ describe('app/packages services never value-import repository tooling', () => {
             if (!edge.imported.startsWith('scripts/')) problems.push(`${edge.importer}: imported path unrecorded`);
             if (!edge.resolution) problems.push(`${edge.importer}: no resolution`);
             if (!edge.waveWbs || !(WAVES as readonly string[]).includes(edge.waveWbs)) {
-                problems.push(`${edge.importer}: edge must be closed by an A93 wave`);
-            }
-        }
-        expect(problems).toEqual([]);
-    });
-});
-
-describe('final audit dispositions (1356 R3)', () => {
-    test('every entry carries a disposition consistent with its destination', () => {
-        const problems: string[] = [];
-        for (const entry of report.entries) {
-            if (!entry.disposition) {
-                problems.push(`${entry.path}: no disposition`);
-                continue;
-            }
-            if (entry.destination === 'scripts' && entry.disposition === 'moved-forwarder') {
-                problems.push(`${entry.path}: scripts/ entry claims a forwarder without a new owner`);
-            }
-            if (entry.destination !== 'scripts' && entry.disposition === 'retained') {
-                problems.push(`${entry.path}: migrating entry still reads as retained`);
+                problems.push(`${edge.importer}: edge must be closed by an A94 wave`);
             }
         }
         expect(problems).toEqual([]);
     });
 
-    test('the app-to-script boundary ledger is empty at the final audit', () => {
-        // A93 closed the one recorded edge (release-ops → bundle-plugins) by driving the generator.
+    test('the app-to-script boundary ledger is empty at the A94 start', () => {
         expect(report.boundaryEdges).toEqual([]);
     });
 });
 
-describe('architectural direction and its projections stay recorded (AC1)', () => {
+describe('consent is recorded before any surface is accepted (R5)', () => {
+    test('the report records the exact grant, its record and the surface-shape amendment', () => {
+        expect(report.consentStatus).toEqual({
+            state: 'granted',
+            at: '2026-11-19',
+            by: 'Robin',
+            record: 'docs/design/downstream-tooling-absorption.md §5',
+            amendment: '2026-11-20 surface-shape',
+        });
+    });
+
+    test('no entry names a surface while the consent is not granted', () => {
+        if (report.consentStatus.state === 'granted') return;
+        expect(report.entries.filter((entry) => entry.surface).map((entry) => entry.path)).toEqual([]);
+    });
+});
+
+/** Live names the dispatcher answers: its `case '<name>':` labels plus every DELEGATED key. */
+function liveDispatcherNames(source: string): string[] {
+    const cases = [...source.matchAll(/case '([a-z0-9-]+)':/g)].map((match) => match[1]);
+    const delegatedBlock = /const DELEGATED: Record<string, string> = \{([\s\S]*?)\n\};/.exec(source)?.[1] ?? '';
+    const delegated = [...delegatedBlock.matchAll(/'([a-z0-9-]+)':/g)].map((match) => match[1]);
+    return [...new Set([...cases, ...delegated])].sort();
+}
+
+/** RETIRED map entries: retired name → replacement command. */
+function retiredNames(source: string): Array<{ name: string; replacement: string }> {
+    const block = /export const RETIRED: Record<string, string> = \{([\s\S]*?)\n\};/.exec(source)?.[1] ?? '';
+    return [...block.matchAll(/'([a-z0-9-]+)':\s*'([^']+)'/g)].map((match) => ({
+        name: match[1],
+        replacement: match[2],
+    }));
+}
+
+describe('dispatcher usage and retired names (R3, R4)', () => {
+    const source = dispatcherSource();
+    const runDispatcher = (args: string[] = []) =>
+        spawnSync(process.execPath, [DISPATCHER_REL, ...args], { cwd: REPO_ROOT, encoding: 'utf-8' });
+
+    test('the no-argument usage list names every live case and DELEGATED key', () => {
+        const live = liveDispatcherNames(source);
+        expect(live.length).toBeGreaterThan(0);
+        const run = runDispatcher();
+        expect(run.status).toBe(0);
+        const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
+        expect(live.filter((name) => !output.includes(name))).toEqual([]);
+    });
+
+    test('RETIRED never shadows a live name and its replacement is a spur command', () => {
+        const live = new Set(liveDispatcherNames(source));
+        const problems: string[] = [];
+        for (const entry of retiredNames(source)) {
+            if (live.has(entry.name)) problems.push(`${entry.name}: retired name is still dispatched`);
+            if (!/^spur [a-z]/.test(entry.replacement)) {
+                problems.push(`${entry.name}: replacement is not a spur command (${entry.replacement})`);
+            }
+        }
+        expect(problems).toEqual([]);
+    });
+
+    test('a retired name exits 2 naming its replacement', () => {
+        for (const entry of retiredNames(source)) {
+            const run = runDispatcher([entry.name]);
+            expect(run.status).toBe(2);
+            expect(run.stderr ?? '').toContain(`spur-dev: '${entry.name}' moved to '${entry.replacement}'`);
+        }
+    });
+
+    test('an unknown name still exits 1', () => {
+        expect(runDispatcher(['definitely-not-a-command']).status).toBe(1);
+    });
+});
+
+describe('architectural direction and its projections stay recorded (A93 AC1)', () => {
+    test('the closed A93 report stays frozen as history', () => {
+        const a93 = JSON.parse(read(A93_REPORT_REL)) as { schemaVersion: number };
+        expect(a93.schemaVersion).toBe(1);
+    });
+
     test('ADR-130 keeps its dated amendment beside the historical decision', () => {
         const adr = read(ADR_REL);
         expect(adr).toContain('Amendment (2026-11-16) — shipped ownership before repository tooling');
@@ -270,43 +362,6 @@ describe('architectural direction and its projections stay recorded (AC1)', () =
 
     test('the governance table and the entry doc carry the same ownership split', () => {
         expect(read(GOVERNANCE_REL)).toContain('ADR-130 (amended 2026-11-16)');
-        const agents = read('AGENTS.md');
-        expect(agents).toContain('ADR-130');
-    });
-});
-
-describe('proposed public contracts and deferred consent stay explicit (R3)', () => {
-    const design = read(DESIGN_REL);
-    const proposedBuilderVerbs = [
-        'builder build-cli',
-        'builder build-server',
-        'builder build-binaries',
-        'builder bundle-config',
-        'builder bundle-web',
-        'builder verify-pack',
-    ];
-
-    test('the six builder surfaces and self install remain the exact proposed scope', () => {
-        for (const verb of proposedBuilderVerbs) expect(design).toContain(verb);
-        expect(design).toContain('spur self install');
-    });
-
-    test('the consent owner and the deferral are named, not inferred', () => {
-        expect(design).toContain('Robin');
-        expect(design).toContain('consent');
-    });
-
-    test('the report records the consent owner, its exact scope and the recorded grant', () => {
-        expect(report.deferredConsent.owner).toBe('Robin');
-        // `blocksPublicImplementation` records the state the 1351 audit was generated in; the
-        // consentStatus block records the grant that followed it.
-        expect(report.consentStatus.state).toBe('granted');
-        expect(report.consentStatus.at).toBe('2026-11-16');
-        expect(report.consentStatus.by).toBe('Robin');
-        for (const verb of proposedBuilderVerbs) {
-            expect(report.deferredConsent.scope).toContain(verb.replace('builder ', ''));
-        }
-        expect(report.deferredConsent.scope).toContain('self install');
-        expect(report.deferredConsent.scope).toContain('self status');
+        expect(read('AGENTS.md')).toContain('ADR-130');
     });
 });
