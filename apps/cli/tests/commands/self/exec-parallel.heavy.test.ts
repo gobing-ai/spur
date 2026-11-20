@@ -38,53 +38,54 @@ record({ label: 'runner', code });
 process.exit(code);
 `;
 
-test.each([
-    'clean',
-    'failure',
-    'child-signal',
-    'parent-signal',
-])('the supervisor owns cleanup and exit status: %s', async (mode) => {
-    const root = await mkdtemp(join(tmpdir(), 'spur-parallel-supervision-'));
-    const events = join(root, 'events.jsonl');
-    const runner = join(root, 'runner');
-    await Bun.write(runner, RUNNER);
-    await chmod(runner, 0o755);
-    const env = { ...getEnvVars(), EVENTS: events, MODE: mode };
-    const proc = Bun.spawn([process.execPath, runner], {
-        cwd: REPO,
-        env,
-        detached: true,
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    try {
-        if (mode === 'parent-signal') {
-            // Let both children start, then interrupt the supervisor itself.
-            await Bun.sleep(1_000);
-            proc.kill('SIGINT');
-        }
-        const deadline = Date.now() + 15_000;
-        while (proc.exitCode === null && Date.now() < deadline) await Bun.sleep(20);
-        expect(proc.exitCode).toBe(mode === 'clean' ? 0 : mode === 'failure' ? 7 : mode === 'child-signal' ? 143 : 130);
-
-        // Every child the supervisor owned is gone (SIGTERM → grace → SIGKILL), including the
-        // long-lived second entry that never exited on its own.
-        const observed = (await Bun.file(events).text())
-            .trim()
-            .split('\n')
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as { label: string; code: number });
-        expect(observed.some((entry) => entry.label === 'runner')).toBe(true);
-        expect(observed.filter((entry) => entry.label === 'runner')).toHaveLength(1);
-    } finally {
+test.each(['clean', 'failure', 'child-signal', 'parent-signal'])(
+    'the supervisor owns cleanup and exit status: %s',
+    async (mode) => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-parallel-supervision-'));
+        const events = join(root, 'events.jsonl');
+        const runner = join(root, 'runner');
+        await Bun.write(runner, RUNNER);
+        await chmod(runner, 0o755);
+        const env = { ...getEnvVars(), EVENTS: events, MODE: mode };
+        const proc = Bun.spawn([process.execPath, runner], {
+            cwd: REPO,
+            env,
+            detached: true,
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
         try {
-            process.kill(-proc.pid, 'SIGKILL');
-        } catch {
-            /* already gone */
+            if (mode === 'parent-signal') {
+                // Let both children start, then interrupt the supervisor itself.
+                await Bun.sleep(1_000);
+                proc.kill('SIGINT');
+            }
+            const deadline = Date.now() + 15_000;
+            while (proc.exitCode === null && Date.now() < deadline) await Bun.sleep(20);
+            expect(proc.exitCode).toBe(
+                mode === 'clean' ? 0 : mode === 'failure' ? 7 : mode === 'child-signal' ? 143 : 130,
+            );
+
+            // Every child the supervisor owned is gone (SIGTERM → grace → SIGKILL), including the
+            // long-lived second entry that never exited on its own.
+            const observed = (await Bun.file(events).text())
+                .trim()
+                .split('\n')
+                .filter(Boolean)
+                .map((line) => JSON.parse(line) as { label: string; code: number });
+            expect(observed.some((entry) => entry.label === 'runner')).toBe(true);
+            expect(observed.filter((entry) => entry.label === 'runner')).toHaveLength(1);
+        } finally {
+            try {
+                process.kill(-proc.pid, 'SIGKILL');
+            } catch {
+                /* already gone */
+            }
+            await rm(root, { recursive: true, force: true });
         }
-        await rm(root, { recursive: true, force: true });
-    }
-}, 30_000);
+    },
+    30_000,
+);
 
 test('a command that cannot run reports the shell exit code, not a hang', async () => {
     const root = await mkdtemp(join(tmpdir(), 'spur-parallel-spawn-error-'));

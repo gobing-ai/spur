@@ -581,16 +581,13 @@ describe('JavaScript action onboarding (1303)', () => {
         expect(text).toContain('#   build: <command>');
     });
 
-    test.each([
-        {},
-        { scripts: null },
-        { scripts: [] },
-        { scripts: 'check' },
-        { scripts: { check: false } },
-    ])('does not infer commands from missing or invalid scripts: %j', async (manifest) => {
-        const { builder } = await scaffold(JSON.stringify(manifest), ['package-lock.json']);
-        expect(builder.actions).toEqual({});
-    });
+    test.each([{}, { scripts: null }, { scripts: [] }, { scripts: 'check' }, { scripts: { check: false } }])(
+        'does not infer commands from missing or invalid scripts: %j',
+        async (manifest) => {
+            const { builder } = await scaffold(JSON.stringify(manifest), ['package-lock.json']);
+            expect(builder.actions).toEqual({});
+        },
+    );
 
     test('Make targets override matching scripts and leave remaining scripts available', async () => {
         const { builder, text } = await scaffold(
