@@ -1,12 +1,12 @@
 {
     "schemaVersion": 2,
-    "generatedAt": "2026-11-20T17:33:38Z",
-    "sourceCommit": "32383c03771642944e900e71cfa84d4f0ec3f543",
+    "generatedAt": "2026-11-20T20:51:14Z",
+    "sourceCommit": "8d286a317f9f8763353c9330f5edd279ac8cba10",
     "consentStatus": {
         "state": "granted",
         "at": "2026-11-19",
         "by": "Robin",
-        "record": "docs/design/downstream-tooling-absorption.md \u00a75",
+        "record": "docs/design/downstream-tooling-absorption.md §5",
         "amendment": "2026-11-20 surface-shape"
     },
     "waves": ["1410", "1411", "1412", "1413", "1414", "1415"],
@@ -95,33 +95,6 @@
             "downstreamReason": "Retained: two-install delegation scenario fixture, not runtime behavior"
         },
         {
-            "path": "scripts/commands/dev-all.heavy.test.ts",
-            "responsibility": "Heavy proof that the source dev supervisor starts and cleans up both processes",
-            "tests": [],
-            "callers": [],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder.actions (parallel form) + self exec dev",
-            "waveWbs": "1414",
-            "noRuntimeCaller": true,
-            "subject": "scripts/commands/dev-all.ts"
-        },
-        {
-            "path": "scripts/commands/dev-all.ts",
-            "responsibility": "Run the source server and web together under one supervisor",
-            "tests": ["scripts/commands/dev-all.heavy.test.ts"],
-            "callers": [
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 32
-                }
-            ],
-            "downstream": "generalize",
-            "disposition": "pending",
-            "surface": "builder.actions (parallel form) + self exec dev",
-            "waveWbs": "1414"
-        },
-        {
             "path": "scripts/commands/executor-selection-contract.test.ts",
             "responsibility": "Cross-reference contract test for executor-selection and value-behavior tables",
             "tests": [],
@@ -162,7 +135,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: pins Spur\u2019s own CLI flag surface, a repository contract",
+            "downstreamReason": "Retained: pins Spur’s own CLI flag surface, a repository contract",
             "subject": "plugins/sp/commands"
         },
         {
@@ -172,7 +145,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -183,7 +156,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -202,7 +175,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches"
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches"
         },
         {
             "path": "scripts/commands/fleet-e2e-host-probe.test.ts",
@@ -349,7 +322,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo\u2019s suite policy"
+            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo’s suite policy"
         },
         {
             "path": "scripts/commands/script-contract-check.test.ts",
@@ -445,7 +418,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite",
+            "downstreamReason": "Retained: child-termination proof for this repo’s suite",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/test-suite-termination.ts"
         },
@@ -461,7 +434,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite"
+            "downstreamReason": "Retained: child-termination proof for this repo’s suite"
         },
         {
             "path": "scripts/commands/validate-commands.ts",

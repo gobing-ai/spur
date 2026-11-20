@@ -196,3 +196,28 @@ describe('renderScoped (task 1222 R3)', () => {
         expect(() => renderScoped('cd {workspace} && bun run typecheck', { workspace: '' })).toThrow('empty');
     });
 });
+
+describe('parallel action form (A94 wave 6a)', () => {
+    test('resolves a {parallel, graceMs} binding to the parallel kind', () => {
+        const builder = {
+            preset: 'bun' as const,
+            dependencyScope: [],
+            actions: { dev: { parallel: ['a', 'b'], graceMs: 100 } },
+        };
+        expect(resolveAction(builder, 'dev')).toEqual({
+            name: 'dev',
+            reserved: true,
+            source: 'config',
+            kind: 'parallel',
+            commands: ['a', 'b'],
+            graceMs: 100,
+        });
+    });
+
+    test('graceMs defaults to 3000 and the binding lists as a parallel group', () => {
+        const builder = { preset: 'bun' as const, dependencyScope: [], actions: { dev: { parallel: ['a', 'b'] } } };
+        const resolved = resolveAction(builder, 'dev');
+        expect(resolved.kind === 'parallel' ? resolved.graceMs : null).toBe(3000);
+        expect(listActions(builder).find((row) => row.name === 'dev')?.kind).toBe('parallel');
+    });
+});

@@ -111,6 +111,12 @@ builder:
   # `spur self exec <name>`.
   preset: bun
   actions:
+    # A94 wave 6a: the dev supervisor as configuration — `spur self exec dev` runs both processes
+    # under one supervisor (per-child process groups, bounded SIGTERM→SIGKILL shutdown).
+    dev:
+      parallel:
+        - bun run --filter @gobing-ai/spur-server dev
+        - bun run --filter @gobing-ai/spur-web dev
     # Incremental gate: the lcov `coverage-gate` rule certifies a FULL-suite run, so the
     # per-task tier runs only the static post rule; its coverage floor is the changed-file
     # check in the gate itself. `bun run test-post-check` (full gate) keeps both.

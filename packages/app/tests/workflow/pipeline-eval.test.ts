@@ -73,9 +73,12 @@ describe('isolated eval project', () => {
                 join(first.projectDir, 'tests/fixtures/pipeline-eval/scratch/9500.md'),
                 'fixture 9500 ok\n',
             );
-            const status = Bun.spawnSync(['git', 'status', '--porcelain'], { cwd: first.projectDir });
+            // `-uall` names every untracked file: without it git collapses the untracked fixture tree
+            // to `tests/fixtures/`, which is all this repo has left there since the catalog moved into
+            // the bundled templates (A94 1413).
+            const status = Bun.spawnSync(['git', 'status', '--porcelain', '-uall'], { cwd: first.projectDir });
             expect(status.exitCode).toBe(0);
-            expect(status.stdout.toString()).toContain('tests/fixtures/pipeline-eval/scratch/');
+            expect(status.stdout.toString()).toContain('tests/fixtures/pipeline-eval/scratch/9500.md');
         },
         SPAWN_TIMEOUT_MS,
     );

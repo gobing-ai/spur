@@ -29,7 +29,6 @@
  *   promotion [args]                            workflow candidate promotion/retirement records
  *
  *   L4 dev / eval
- *   dev-all                                     run server + web under one supervisor
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   a2a-serve-e2e                               prove `spur self serve` speaks A2A through the real `a2a` CLI, write the receipt
@@ -54,7 +53,6 @@ import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
-import { devAll } from './commands/dev-all';
 import { runFleetE2e } from './commands/fleet-e2e';
 
 /**
@@ -76,14 +74,7 @@ const DELEGATED: Record<string, string> = {
  * `repo-wide-tests/a93-script-ownership.test.ts` pins it to the switch's own `case` labels, so a
  * registration cannot drift out of the usage list (task 1409 R3).
  */
-const COMMANDS = [
-    'dev-all',
-    'fleet-e2e',
-    'a2a-serve-e2e',
-    'a2a-member-e2e',
-    'a2a-two-install-e2e',
-    'delegate-workflow-e2e',
-];
+const COMMANDS = ['fleet-e2e', 'a2a-serve-e2e', 'a2a-member-e2e', 'a2a-two-install-e2e', 'delegate-workflow-e2e'];
 
 /**
  * Retired dispatcher names mapped to the spur command that replaced them (A94 waves add entries as
@@ -135,9 +126,6 @@ if (replacement !== undefined) {
 
 try {
     switch (command) {
-        case 'dev-all':
-            devAll();
-            break;
         case 'fleet-e2e':
             process.exit(await runFleetE2e(args));
             break;

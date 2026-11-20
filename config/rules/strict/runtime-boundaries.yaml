@@ -31,6 +31,10 @@ rules:
             - "**/tests/**"
             - "**/*.test.ts"
 
+            # A94 wave 6a: the parallel supervisor needs `detached: true` process-group ownership so
+            # shutdown can reap descendants that outlive their root; the ts-runtime streaming executor
+            # exposes no detached option.
+            - "packages/app/src/services/parallel-supervisor.ts"
             # Low-level system primitives:
             # `spur builder pr-*` spine (script-absorption PR-7, moved from plugins/sp/scripts/pr-reviewing.ts):
             # every git/gh call goes through ONE synchronous, test-injectable CommandRunner seam

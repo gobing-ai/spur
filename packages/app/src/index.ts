@@ -654,6 +654,11 @@ export {
     WaitError,
     waitForOccupant,
 } from './services/occupant-wait';
+export {
+    type ParallelSupervisorHandle,
+    type ParallelSupervisorOptions,
+    superviseParallel,
+} from './services/parallel-supervisor';
 export type {
     EnsurePipelineRunLinkOptions,
     EnsurePipelineRunLinkResult,
