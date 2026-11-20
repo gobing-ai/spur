@@ -149,6 +149,7 @@ function bearerToken(authEnv: string | undefined, env: Record<string, string | u
     return value;
 }
 
+/** Shared command name for registration and stdio banner suppression. */
 export const MCP_COMMAND_NAME = 'mcp';
 
 /** Register `spur mcp [--cwd <path>] [--url <mcpUrl>]` (frozen names, task 1373 Design). */
