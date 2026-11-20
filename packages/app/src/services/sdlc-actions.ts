@@ -54,6 +54,7 @@ export type ActionSource = 'config' | 'preset' | 'default' | 'unbound';
 export type ResolvedAction = { name: string; reserved: boolean; source: ActionSource } & (
     | { kind: 'command'; command: string }
     | { kind: 'composite'; steps: string[] }
+    | { kind: 'parallel'; commands: string[]; graceMs: number }
     | { kind: 'unbound' }
 );
 
@@ -67,9 +68,21 @@ export function resolveAction(builder: BuilderConfig | undefined, name: string):
     const reserved = isReservedAction(name);
     const declared = builder?.actions?.[name];
     if (declared !== undefined) {
-        return Array.isArray(declared)
-            ? { name, reserved, source: 'config', kind: 'composite', steps: [...declared] }
-            : { name, reserved, source: 'config', kind: 'command', command: declared };
+        if (typeof declared === 'string') {
+            return { name, reserved, source: 'config', kind: 'command', command: declared };
+        }
+        if (Array.isArray(declared)) {
+            return { name, reserved, source: 'config', kind: 'composite', steps: [...declared] };
+        }
+        // A parallel group: every entry runs at once under one supervisor.
+        return {
+            name,
+            reserved,
+            source: 'config',
+            kind: 'parallel',
+            commands: [...declared.parallel],
+            graceMs: declared.graceMs ?? 3000,
+        };
     }
     if ((builder?.preset ?? 'bun') === 'bun') {
         if (reserved) return { name, reserved, source: 'preset', kind: 'command', command: BUN_PRESET[name] };

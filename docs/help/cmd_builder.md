@@ -62,6 +62,10 @@ spur builder build-binaries [options]
 | Option | Description |
 |---|---|
 | `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--entry <file>` | Compile this entry instead of the Spur release build |
+| `--name <bin>` | Asset base name (default: the entry basename without its extension) |
+| `--targets <csv>` | Comma-separated targets (default: all six) |
+| `--out <dir>` | Output directory in `--entry` mode (default: `dist/bin`) |
 | `--json` | Machine-readable report |
 
 ## spur builder bundle-config
@@ -86,6 +90,50 @@ spur builder bundle-web [options] [out-dir]
 | `--source-root <dir>` | Spur source checkout (default: the current directory) |
 | `--json` | Machine-readable report |
 
+## spur builder bundle-plugins
+
+```
+spur builder bundle-plugins [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-laya-worker
+
+```
+spur builder bundle-laya-worker [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-board-types
+
+```
+spur builder emit-board-types [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-migration-sql
+
+```
+spur builder emit-migration-sql [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
 ## spur builder verify-pack
 
 ```
@@ -94,6 +142,18 @@ spur builder verify-pack [options] <tgz>
 
 | Option | Description |
 |---|---|
+| `--require <member>` | Member that must ship at `package/<member>` (repeatable) |
+| `--json` | Machine-readable report |
+
+## spur builder check-deps
+
+```
+spur builder check-deps [options]
+```
+
+| Option | Description |
+|---|---|
+| `--scope <glob>` | Package glob to check (repeatable; replaces `builder.dependencyScope`) |
 | `--json` | Machine-readable report |
 
 ## spur builder bump-ver

@@ -187,6 +187,10 @@ Row-level deltas from the default rule:
 | task | scaffold-tests | 1368 | flat-object | unwrapped |
 | workflow (14) | validate | 273 | flat-object | unwrapped |
 | workflow | run | 406, 431, 440, 621 | flat-object (sync/async-fallback result, `{status:'failed', reason, hint}` failure, `{runId, status:'started', …}` handle, sync result) | unwrapped; failure is status-discriminated, not `{ok:false, error}` |
+| workflow | eval | `apps/cli/src/commands/workflow/eval.ts` (A94 1413) | `{ok, report:{records,runCount,variance}, reportPath, keptWorktrees}` | adopted — `--dry-run` returns the resolved plan instead |
+| workflow | promote-check | delegated: `render` in `apps/cli/src/commands/workflow/promote.ts` (A94 1413) | `{ok, status, findings:[{kind,id,detail}]}` | adopted |
+| workflow | promote-evaluate | same `render` body | same | adopted |
+| workflow | promote-resolve | same `render` body | same | adopted |
 | workflow | continue | 698 | flat-object | unwrapped |
 | workflow | clean | 744 | flat-object (`logsOnly ? logResult : {…result, logs}`) | unwrapped |
 | workflow | cancel | 788 | flat-object (status union incl. `not_found`) | not-found is a status value, not an error envelope |
@@ -227,6 +231,11 @@ Row-level deltas from the default rule:
 | builder | build-binaries | same `registerBuildVerb` body | same | adopted |
 | builder | bundle-config | delegated: `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact'\|'build', message}}` | adopted — the shared body emits for both branches |
 | builder | bundle-web | delegated: `runVerb` in the same module (A93) | same | adopted |
+| builder | bundle-plugins | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: `plugins`, `marketplace`) | adopted — the shared body emits for both branches |
+| builder | bundle-laya-worker | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: `worker`, `source`) | adopted |
+| builder | emit-board-types | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: board declaration + kit mirror) | adopted |
+| builder | emit-migration-sql | delegated: `runVerb` in the same module (A94 1410) | same (`artifacts`: migration-sql module) | adopted |
+| builder | check-deps | `apps/cli/src/commands/builder/build.ts` `registerBuilderCheckDepsCommand` (A94 1411) | `{ok, findings:[{kind,package,detail}], skipped?}` / `{ok:false, findings, error}` | adopted — 0 clean / 1 findings / 2 input error |
 | builder | verify-pack | `runVerb` in the same module (A93) | success `{ok:true, sourceRoot, artifacts, diagnostics}` / `{error:{code:'artifact', message}}` | adopted — inspects an artifact, so `sourceRoot` is the invocation cwd |
 | rule (3) | run | service-side (`packages/app/src/services/rule-service.ts` `RuleService.evaluate`, JSON branch) | flat-object `{preset, ruleCount, …engine result}` | unwrapped; adopted 0697 — honors flag/env via threaded `enveloped` |
 | rule | validate | service-side (`RuleService.validate`, both JSON branches) | flat-object `{valid, kind, source, …}` (`valid: false` carries `errors`) | unwrapped; adopted 0697 — `valid` stays a payload field; envelope `ok` is command success |

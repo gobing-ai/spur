@@ -37,6 +37,11 @@ builder:
       - after-step
     ok-step: >-
       exit 0
+    dev:
+      parallel:
+        - sh -c 'exit 0'
+        - sh -c 'exit 0'
+      graceMs: 50
     fail-step: >-
       exit 7
     after-step: >-
@@ -202,6 +207,11 @@ builder:
       printf '%s' "$SPUR_ACTION" > env.txt
     ok-step: >-
       exit 0
+    dev:
+      parallel:
+        - sh -c 'exit 0'
+        - sh -c 'exit 0'
+      graceMs: 50
     fail-step: >-
       exit 7
     ok-mid:
@@ -249,6 +259,22 @@ describe('spur self exec — in-process transport branches', () => {
         });
         return { code, stdout: messages.join('\n'), stderr: errors.join('\n') };
     }
+
+    test('a parallel group runs under one supervisor and rejects arguments', async () => {
+        const ran = await run(['dev', '--json']);
+        expect(ran.code).toBe(0);
+        expect(JSON.parse(ran.stdout || '{}')).toEqual({ action: 'dev', exitCode: 0, parallel: 2 });
+
+        const withArgs = await run(['dev', 'extra']);
+        expect(withArgs.code).toBe(2);
+        expect(withArgs.stderr).toContain('does not accept arguments');
+
+        const listed = await run(['--list', '--json']);
+        const row = (JSON.parse(listed.stdout) as Array<{ name: string; kind?: string; parallel?: string[] }>).find(
+            (entry) => entry.name === 'dev',
+        );
+        expect(row?.parallel).toHaveLength(2);
+    }, 20_000);
 
     test('--list renders the table for command, composite and unbound rows', async () => {
         const { code, stdout } = await run(['--list']);

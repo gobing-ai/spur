@@ -51,9 +51,9 @@
     },
     "scripts": {
         "dev": "bun run src/index.ts",
-        "build": "bun run ../../scripts/spur-dev.ts build-cli",
-        "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
-        "build:bundle": "bun run ../../scripts/spur-dev.ts bundle-web && bun run ../../scripts/spur-dev.ts emit-board-types && bun run ../../scripts/spur-dev.ts emit-migration-sql && bun build src/index.ts --target=bun --outfile spur.js --external @johnhenry/backend-webgpu && bun run ../../scripts/spur-dev.ts bundle-config config && bun run ../../scripts/spur-dev.ts bundle-laya-worker && bun run ../../scripts/spur-dev.ts bundle-plugins",
+        "build": "bun run src/index.ts builder build-cli --source-root ../..",
+        "build:binaries": "bun run src/index.ts builder build-binaries --source-root ../..",
+        "build:bundle": "bun run src/index.ts builder bundle-web --source-root ../.. && bun run src/index.ts builder emit-board-types --source-root ../.. && bun run src/index.ts builder emit-migration-sql --source-root ../.. && bun build src/index.ts --target=bun --outfile spur.js --external @johnhenry/backend-webgpu && bun run src/index.ts builder bundle-config config --source-root ../.. && bun run src/index.ts builder bundle-laya-worker --source-root ../.. && bun run src/index.ts builder bundle-plugins --source-root ../..",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepack": "bun run build:bundle",

@@ -4,7 +4,7 @@ name: "A94 wave 6: agent doctor --hosts and parallel builder actions"
 status: todo
 template: feature-impl
 created_at: 2026-11-20T07:58:05.085Z
-updated_at: "2026-11-20T08:38:08.317Z"
+updated_at: "2026-11-20T21:31:43.594Z"
 feature_id: A94
 priority: P1
 tags:
@@ -42,43 +42,18 @@ Note (2026-11-20): the task title still says "agent doctor --hosts" because the 
 
 ### Requirements
 
-- [ ] R1. `spur agent doctor-hosts [--real-hosts] [--agents <csv>] [--out <file>] [--json]`:
-  - runs the host-capability probe over `HOST_PROBE_AGENTS` (or the `--agents` subset; an unknown agent → exit 2);
-  - writes the same report shape to `--out` (default `docs/reports/fleet-host-capabilities.json` under the cwd);
-  - exits 0 when every probed row completes, 1 otherwise.
+#### Requirements (re-scoped)
 
-  Without `--real-hosts` it uses the fixture hosts, as today. `agent doctor [agent]` is unchanged.
-- [ ] R2. `builder.actions.<name>` accepts `{parallel: string[] (≥2 shell commands), graceMs?: int > 0 (default 3000)}`. `spur self exec <name>`:
-  - starts each entry in its own process group (detached; on win32 the pid);
-  - triggers shutdown on SIGINT, SIGTERM or SIGHUP received, on the first child exit, or on a child spawn error;
-  - shutdown sends SIGTERM to every owned group, waits `graceMs` unconditionally (descendants can outlive roots), sends SIGKILL to the groups, then exits;
-  - exit code is the first-exiting child's code (`128+signo` if it was signal-killed), else `128+signo` for a received signal, else 1 for a spawn error.
-
-  This is `dev-all.ts:23-48` parity. A nested action name or a fewer-than-2 array fails at config load and names `builder.actions.<name>`.
-  - starts each entry in its own process group (detached);
-  - forwards SIGINT, SIGTERM and SIGHUP to every group;
-  - on the first child exit, SIGTERMs the rest, then SIGKILLs after `graceMs`;
-  - exits with the first non-zero child code (0 if all exited 0).
-
-  A nested action name or an empty array fails at config load and names `builder.actions.<name>`.
-- [ ] R3. `.spur/config.yaml` defines:
-
-  ```yaml
-  actions.dev:
-    parallel:
-      - bun run --filter @gobing-ai/spur-server dev
-      - bun run --filter @gobing-ai/spur-web dev
-  ```
-
-  `spur self exec dev` replaces `dev-all`. `scripts/commands/dev-all.ts`, its heavy test (migrated) and the `--host-probe` arm with `runHostProbe` are removed from `scripts/commands`. RETIRED entries cover `dev-all`; the `fleet-e2e --host-probe` arm prints a pointer to `spur agent doctor-hosts`. The A94 inventory is updated.
-- [ ] R4. `docs/design/sdlc-actions.md` documents the parallel form (schema, signals, exit, `--list` row). `fleet-join/SKILL.md:109` and `spur-cli/references/agent.md:247` cite `spur agent doctor-hosts`.
-
-**Out of scope:** the fleet matrix/perf lanes, restart policies, log multiplexing beyond inherited stdio, a `dev` noun.
+- [ ] R1. `spur agent doctor-hosts [--real-hosts] [--agents <csv>] [--out <file>] [--json]`: probes `HOST_PROBE_AGENTS` (or the `--agents` subset; unknown → exit 2), writes the same report shape to `--out` (default `docs/reports/fleet-host-capabilities.json` under the cwd), exits 0 when every probed row completes and 1 otherwise. Without `--real-hosts` it uses the fixture hosts.
+- [ ] R2. The host drivers live in `packages/app/src/agent/host-probe-hosts.ts` behind `runHostProbe`'s injected `runE2e`; both that module and `host-probe.ts` meet the 90% per-file coverage gate without a real coding host on the gate path.
+- [ ] R3. `scripts/commands/fleet-e2e.ts` loses the probe region (`:1486-1961`); `--host-probe` prints a pointer to the verb; the A94 inventory drops `fleet-e2e-host-probe.test.ts`; `plugins/sp/skills/{fleet-join,spur-cli/references/agent}` cite `spur agent doctor-hosts`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Fleet host probe is an agent verb (req: R1, R3, R4)
-- [ ] AC2 — Dev supervisor runs configured processes downstream (req: R2, R3, R4)
+#### Acceptance Criteria (re-scoped)
+
+- [ ] AC1 — Fleet host probe is an agent verb (req: R1, R3)
+- [ ] AC2 — The probe's host drivers are covered without a real host (req: R2)
 
 ### Q&A
 
@@ -97,6 +72,14 @@ Note (2026-11-20): the task title still says "agent doctor --hosts" because the 
 - **Q:** Handle SIGHUP and use first-exiting-child exit codes, which the consent text words differently? **A (closed):** yes. This is exact `dev-all.ts:23-48` parity, a semantics clarification of C10, recorded in satellite §4.
 - **Q:** Can parallel entries name actions? **A (closed):** no. They are shell commands only, and nesting is rejected at load.
 - **Q:** How does the probe spawn the CLI outside the repo? **A (closed):** it re-invokes the running CLI (`process.execPath` + entry), never a repo path.
+
+#### Q&A entry — 2026-11-20T21:31:43.594Z
+
+#### Q&A entry — 2026-11-20T21:31:00.000Z
+
+- **Q:** 1414 bundles the host probe and the parallel supervisor; the probe cannot meet the 90% per-file coverage gate (its bulk is the real host drivers: spawn a coding host and watch it join a fleet; measured 54% with an injected `runE2e` seam). Split or keep whole? **A (closed, operator-authorized):** split. The parallel half shipped as **1416** (`7b502395b`). This task keeps only `agent doctor-hosts`.
+- **Q:** Where should the probe's host drivers live so the gate can pass? **A (closed):** extract `runFixtureHost`/`runRealHost` and their prompts into `packages/app/src/agent/host-probe-hosts.ts` behind the injected `runE2e` runner (already present in the reverted implementation), and cover that module with the fixture-host lane (a local script, no coding host required). The probe module then measures only observation + report.
+- **Q:** What is preserved from the reverted attempt? **A (closed):** `.spur/run/1414-wip/` holds `host-probe.ts` (with the `runE2e` seam), `doctor-hosts.ts`, the two transport/service test files, and the fleet-e2e pointer edit. Reuse them; the fleet host probe region in `scripts/commands/fleet-e2e.ts` is `:1486-1961`.
 
 ### Design
 

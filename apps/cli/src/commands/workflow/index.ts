@@ -5,10 +5,12 @@ import { registerWorkflowCleanCommand } from './clean';
 import { registerWorkflowCommitGuardCommand } from './commit-guard';
 import { registerWorkflowContinueCommand } from './continue';
 import { registerWorkflowCostCommand } from './cost';
+import { registerWorkflowEvalCommand } from './eval';
 import { registerWorkflowListCommand } from './list';
 import { registerWorkflowPersistCommand } from './persist';
 import { registerWorkflowProfileCommand } from './profile';
 import { registerWorkflowProgressCommand } from './progress';
+import { registerWorkflowPromoteCommand } from './promote';
 import { registerWorkflowRunCommand } from './run';
 import { registerWorkflowShowCommand } from './show';
 import { registerWorkflowSummaryCommand } from './summary';
@@ -26,6 +28,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
     registerWorkflowListCommand(workflow, context);
     registerWorkflowShowCommand(workflow, context);
     registerWorkflowTraceCommand(workflow, context);
+    // A94 1413: pipeline evaluation and candidate promotion as leaf verbs.
+    registerWorkflowEvalCommand(workflow, context);
+    registerWorkflowPromoteCommand(workflow, context);
     registerWorkflowProgressCommand(workflow, context);
     // Run measurement read-outs absorbed from the plugin scripts (script-absorption PR-6).
     registerWorkflowSummaryCommand(workflow, context);

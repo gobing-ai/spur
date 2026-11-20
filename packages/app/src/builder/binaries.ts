@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
 import {
     type BuildArtifact,
     type BuildDiagnostics,
@@ -27,9 +27,17 @@ const TARGETS: Record<string, string> = {
     'windows-arm64': 'bun-windows-arm64',
 };
 
-/** Release asset file name. A `.exe` outfile is what Bun writes for Windows targets. */
-export function binaryAssetName(suffix: string): string {
-    return suffix.startsWith('windows-') ? `spur-${suffix}.exe` : `spur-${suffix}`;
+/** Every cross-compile target this verb accepts (`--targets` values). */
+export const BINARY_TARGETS = Object.keys(TARGETS);
+
+/**
+ * Release asset file name. A `.exe` outfile is what Bun writes for Windows targets.
+ *
+ * @param suffix - target suffix, e.g. `windows-x64`
+ * @param name - asset base name (default `spur`, the release contract `scripts/install.sh` verifies)
+ */
+export function binaryAssetName(suffix: string, name = 'spur'): string {
+    return suffix.startsWith('windows-') ? `${name}-${suffix}.exe` : `${name}-${suffix}`;
 }
 
 /** Every release asset name, in build order. */
@@ -51,10 +59,35 @@ export async function writeSha256Sums(dir: string, assetNames: readonly string[]
     return content;
 }
 
-/** Cross-compile all per-platform `spur` binaries into `<root>/dist/cli/` plus `SHA256SUMS`. */
-export async function buildBinaries(
-    options: { sourceRoot?: string; cwd?: string; run?: BuildRunner } = {},
-): Promise<BuildResult> {
+/** Options accepted by {@link buildBinaries}. */
+export interface BuildBinariesOptions {
+    /** Spur checkout to build; ignored when `entry` is set (nothing is validated but `entry`). */
+    sourceRoot?: string;
+    cwd?: string;
+    run?: BuildRunner;
+    /**
+     * Generic mode (A94 1411): compile this entry for the requested targets and write
+     * `<name>-<target>[.exe]` plus `SHA256SUMS` into `out`. No Spur source-root check, and the
+     * runtime patches are off because a downstream project has neither patched source.
+     */
+    entry?: string;
+    /** Asset base name; defaults to the entry basename without its extension. */
+    name?: string;
+    /** Target subset; defaults to every target. */
+    targets?: readonly string[];
+    /** Output directory; defaults to `dist/bin` under the cwd. */
+    out?: string;
+}
+
+/**
+ * Cross-compile release binaries.
+ *
+ * Legacy mode (no `entry`): every per-platform `spur` binary into `<root>/dist/cli/` plus
+ * `SHA256SUMS`, byte-identical to the route it replaced.
+ * Generic mode (`entry`): `<name>-<target>[.exe]` assets for the requested targets into `out`.
+ */
+export async function buildBinaries(options: BuildBinariesOptions = {}): Promise<BuildResult> {
+    if (options.entry !== undefined) return buildEntryBinaries(options, options.entry);
     const sourceRoot = resolveSourceRoot(options.sourceRoot, options.cwd ?? process.cwd());
     const outDir = join(sourceRoot, 'dist', 'cli');
     await mkdir(outDir, { recursive: true });
@@ -90,4 +123,50 @@ export async function buildBinaries(
     );
     artifacts.push({ path: join(outDir, 'SHA256SUMS'), kind: `sha256sums:${sums.split('\n').filter(Boolean).length}` });
     return { ok: true, sourceRoot, artifacts, diagnostics };
+}
+
+/** Generic mode: compile one entry per requested target and checksum the results. */
+async function buildEntryBinaries(options: BuildBinariesOptions, entry: string): Promise<BuildResult> {
+    const cwd = options.cwd ?? process.cwd();
+    const requested = options.targets ?? BINARY_TARGETS;
+    if (requested.length === 0) throw new BuildError('no targets requested', cwd);
+    for (const target of requested) {
+        if (!(target in TARGETS)) {
+            throw new BuildError(`unknown target: ${target} (valid: ${BINARY_TARGETS.join(',')})`, cwd);
+        }
+    }
+    const name = options.name ?? basename(entry, extname(entry));
+    const outDir = resolve(cwd, options.out ?? join('dist', 'bin'));
+    const absoluteEntry = resolve(cwd, entry);
+    await mkdir(outDir, { recursive: true });
+
+    const artifacts: BuildArtifact[] = [];
+    const diagnostics: BuildDiagnostics[] = [];
+    for (const target of requested) {
+        const outfile = join(outDir, binaryAssetName(target, name));
+        try {
+            const result = await buildCompiledBinary({
+                entry: absoluteEntry,
+                outfile,
+                sourceRoot: cwd,
+                targets: [TARGETS[target] as string],
+                patchRuntime: false,
+                ...(options.run !== undefined ? { run: options.run } : {}),
+            });
+            artifacts.push(...result.artifacts);
+            diagnostics.push(...result.diagnostics);
+        } catch (error) {
+            throw new BuildError(
+                `target ${target} failed: ${error instanceof Error ? error.message : String(error)}`,
+                cwd,
+            );
+        }
+    }
+
+    const sums = await writeSha256Sums(
+        outDir,
+        artifacts.map((artifact) => artifact.path.slice(outDir.length + 1)),
+    );
+    artifacts.push({ path: join(outDir, 'SHA256SUMS'), kind: `sha256sums:${sums.split('\n').filter(Boolean).length}` });
+    return { ok: true, sourceRoot: cwd, artifacts, diagnostics };
 }

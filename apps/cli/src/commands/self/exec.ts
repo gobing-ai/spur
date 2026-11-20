@@ -1,4 +1,5 @@
 import type { Command } from '@commander-js/extra-typings';
+import { superviseParallel } from '@gobing-ai/spur-app';
 import { listActions, type ResolvedAction, resolveAction } from '@gobing-ai/spur-app/sdlc-actions';
 import { shQuote } from '@gobing-ai/spur-app/shell-quote';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -60,6 +61,33 @@ export function registerExecCommand(self: Command, context: CliContext, options:
             const resolved = resolveAction(builder, action);
             if (resolved.kind === 'unbound') {
                 fail(unboundMessage(action));
+                return;
+            }
+
+            // A parallel group runs every entry at once under one supervisor.
+            if (resolved.kind === 'parallel') {
+                if (args.length > 0) {
+                    fail(`parallel action "${action}" does not accept arguments`);
+                    return;
+                }
+                const supervisor = superviseParallel({
+                    commands: resolved.commands,
+                    cwd: context.cwd,
+                    graceMs: resolved.graceMs,
+                    env: { SPUR_ACTION: action },
+                    onChildEvent: (event) => {
+                        context.output.error(
+                            `[${action}] ${event.label} exited ${event.signal ?? `with code ${event.code}`}`,
+                        );
+                    },
+                });
+                const code = await supervisor.exited;
+                if (opts.json === true) {
+                    context.output.write(toJson({ action, exitCode: code, parallel: resolved.commands.length }));
+                } else {
+                    context.output.error(`[${action}] supervised group exited ${code}`);
+                }
+                context.setExitCode(code);
                 return;
             }
 
@@ -146,6 +174,7 @@ function listRow(action: ResolvedAction): Record<string, unknown> {
     const base = { name: action.name, reserved: action.reserved, source: action.source };
     if (action.kind === 'command') return { ...base, command: action.command };
     if (action.kind === 'composite') return { ...base, steps: action.steps };
+    if (action.kind === 'parallel') return { ...base, parallel: action.commands, graceMs: action.graceMs };
     return base;
 }
 
@@ -158,7 +187,9 @@ export function formatActionList(rows: readonly ResolvedAction[]): string {
             ? row.command
             : row.kind === 'composite'
               ? row.steps.join(' → ')
-              : '(unbound)'
+              : row.kind === 'parallel'
+                ? `${row.commands.join(' & ')} (parallel)`
+                : '(unbound)'
         ).replace(/\n/g, '\\n'),
     }));
     const width = (pick: (cell: (typeof body)[number]) => string): number =>

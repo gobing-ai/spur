@@ -83,6 +83,62 @@ spur workflow show [options] <file>
 Render a workflow definition: mermaid FSM diagram (default) or declared-step todo checklist.
 Read-only — never executes the definition.
 
+## spur workflow eval
+
+```
+spur workflow eval [options] [pipelines...]
+```
+
+| Option | Description |
+|---|---|
+| `--fixture <name>` | Fixture template to run (repeatable; default `fixture-minimal`) |
+| `--runs <n>` | Runs per pipeline for variance (1-20, default 1) |
+| `--label <name>` | Label recorded on the report (default: `run`) |
+| `--keep` | Retain the run worktree and report its path |
+| `--dry-run` | Print the resolved plan and create nothing |
+| `--json` | Machine-readable report |
+
+## spur workflow promote-check
+
+```
+spur workflow promote-check [options]
+```
+
+| Option | Description |
+|---|---|
+| `--candidates <path>` | Candidate record (default: `config/workflow-candidates.json`) |
+| `--workflows-dir <dir>` | Workflow definitions (default: `config/workflows`) |
+| `--db <path>` | Project database (default: `.spur/spur.db`) |
+| `--now <iso>` | Clock override for deadline evaluation |
+| `--json` | Machine-readable report |
+
+## spur workflow promote-evaluate
+
+```
+spur workflow promote-evaluate [options] <id>
+```
+
+| Option | Description |
+|---|---|
+| `--candidates <path>` | Candidate record (default: `config/workflow-candidates.json`) |
+| `--workflows-dir <dir>` | Workflow definitions (default: `config/workflows`) |
+| `--db <path>` | Project database (default: `.spur/spur.db`) |
+| `--now <iso>` | Clock override for the measurement window |
+| `--json` | Machine-readable report |
+
+## spur workflow promote-resolve
+
+```
+spur workflow promote-resolve [options] <id>
+```
+
+| Option | Description |
+|---|---|
+| `--decision <decision>` | `promote`, `retire` or `hold` (required) |
+| `--candidates <path>` | Candidate record (default: `config/workflow-candidates.json`) |
+| `--workflows-dir <dir>` | Workflow definitions (default: `config/workflows`) |
+| `--json` | Machine-readable report |
+
 ## spur workflow run
 
 ```

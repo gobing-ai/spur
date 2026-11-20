@@ -99,6 +99,11 @@ redaction:
 # defaults; adjust here instead of patching release code when conventions
 # change (schema: packages/config/src/index.ts BuilderBumpVerConfigSchema).
 builder:
+  # A94 1411: the package scope `spur builder check-deps` reports on (stale `bun link` dist +
+  # lockfile drift). Empty scope skips both checks; this repo names its own packages instead of
+  # the retired scripts' hardcoded `@gobing-ai`.
+  dependencyScope:
+    - '@gobing-ai/*'
   # A92 / docs/design/sdlc-actions.md §3.5: `bun` binds the reserved action
   # vocabulary to this repo's bun scripts (the default, declared so the dogfood
   # exercises the map); the custom actions below are this repo's own names, each
@@ -106,6 +111,12 @@ builder:
   # `spur self exec <name>`.
   preset: bun
   actions:
+    # A94 wave 6a: the dev supervisor as configuration — `spur self exec dev` runs both processes
+    # under one supervisor (per-child process groups, bounded SIGTERM→SIGKILL shutdown).
+    dev:
+      parallel:
+        - bun run --filter @gobing-ai/spur-server dev
+        - bun run --filter @gobing-ai/spur-web dev
     # Incremental gate: the lcov `coverage-gate` rule certifies a FULL-suite run, so the
     # per-task tier runs only the static post rule; its coverage floor is the changed-file
     # check in the gate itself. `bun run test-post-check` (full gate) keeps both.

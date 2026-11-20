@@ -9,26 +9,19 @@
  * Commands (the layer is recorded here, never in the path — A92 R5):
  *
  *   L1 build / package
- *   bundle-config <out-dir>                     copy config/ into a tarball dir
- *   bundle-laya-worker [out-dir]                copy the laya-local Python worker next to the bundle
- *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
- *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
- *   emit-board-types                            emit apps/cli/board/index.d.ts and the module-kit declarations from their authoring sources
- *   emit-migration-sql                          emit the 0037 migration SQL module from its released .sql
- *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
- *   build-binaries                              forward to `spur builder build-binaries`
- *   build-cli                                   forward to `spur builder build-cli`
- *   build-server                                forward to `spur builder build-server`
  *   plugin-install-smoke                       prove the plugin surface is standalone and installs clean
+ *
+ *   Retired into the CLI by A94 1410/1411 (each name now prints its replacement and exits 2):
+ *   build-cli, build-server, bundle-config, bundle-web, bundle-plugins, bundle-laya-worker,
+ *   emit-board-types, emit-migration-sql, verify-pack, build-binaries — all `spur builder <verb>`;
+ *   link-check and dependency-drift-check — both `spur builder check-deps`.
  *
  *   L2 test runner / coverage
  *   run-tests <bun test args>                  run the suite with the repo's hermetic env; owns coverage certification
- *   coverage-provenance-check                  refuse a post-check whose LCOV is not certified
  *
  *   L3 repo contract checks
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
  *   script-contract-check [--placement-only]    ADR-130 script/hook placement contract
- *   transition-shim-check                      transition-shim manifest ↔ source markers, two-sided
  *   dependency-drift-check                     lockfile @gobing-ai versions must match installed
  *   validate-commands                          sp command files against the thin-wrapper contract
  *   flag-contract-check                        cross-surface flag parity gate for the sp contract surfaces
@@ -36,7 +29,6 @@
  *   promotion [args]                            workflow candidate promotion/retirement records
  *
  *   L4 dev / eval
- *   dev-all                                     run server + web under one supervisor
  *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
  *   fleet-e2e [--inject-failure <step>]         prove the inbox-only fleet end to end, write the receipt
  *   a2a-serve-e2e                               prove `spur self serve` speaks A2A through the real `a2a` CLI, write the receipt
@@ -60,22 +52,8 @@ import { join } from 'node:path';
 import { runA2aMemberE2e } from './commands/a2a-member-e2e';
 import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
-import { buildReleaseBinaries } from './commands/build-binaries';
-import { buildCliBinary } from './commands/build-cli';
-import { buildServerBinary } from './commands/build-server';
-import { bundleConfigOutput } from './commands/bundle-config';
-import { bundleLayaWorker } from './commands/bundle-laya-worker';
-import { bundlePlugins } from './commands/bundle-plugins';
-import { bundleWebOutput } from './commands/bundle-web';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
-import { devAll } from './commands/dev-all';
-import { emitBoardDeclarations, emitKitDeclarations } from './commands/emit-board-types';
-import { emitMigrationSql } from './commands/emit-migration-sql';
-import { evalPipeline } from './commands/eval-pipeline';
 import { runFleetE2e } from './commands/fleet-e2e';
-import { linkCheck } from './commands/link-check';
-import { verifyPackTarball } from './commands/verify-pack';
-import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 /**
  * L2–L4 modules that own their own argv parsing and exit code (A92 R5). They run as a child
@@ -83,21 +61,47 @@ import { runWorkflowPromotion } from './commands/workflow-promotion';
  */
 const DELEGATED: Record<string, string> = {
     'run-tests': 'run-tests.ts',
-    'coverage-provenance-check': 'coverage-provenance-check.ts',
     'plugin-install-smoke': 'plugin-install-smoke.ts',
     'script-contract-check': 'script-contract-check.ts',
-    'transition-shim-check': 'transition-shim-check.ts',
-    'dependency-drift-check': 'dependency-drift-check.ts',
     'validate-commands': 'validate-commands.ts',
     'flag-contract-check': 'validate-flag-contracts.ts',
     'surface-drift-inventory': 'surface-drift-inventory.ts',
     'skill-eval': 'skill-eval.ts',
 };
 
+/**
+ * Every name the switch below answers. `usage()` prints it and
+ * `repo-wide-tests/a93-script-ownership.test.ts` pins it to the switch's own `case` labels, so a
+ * registration cannot drift out of the usage list (task 1409 R3).
+ */
+const COMMANDS = ['fleet-e2e', 'a2a-serve-e2e', 'a2a-member-e2e', 'a2a-two-install-e2e', 'delegate-workflow-e2e'];
+
+/**
+ * Retired dispatcher names mapped to the spur command that replaced them (A94 waves add entries as
+ * they delete routes). A retired name prints a pointer and exits 2 — never the generic unknown-command
+ * failure that leaves a caller guessing (task 1409 R4).
+ */
+export const RETIRED: Record<string, string> = {
+    'build-cli': 'spur builder build-cli',
+    'build-server': 'spur builder build-server',
+    'bundle-config': 'spur builder bundle-config',
+    'bundle-web': 'spur builder bundle-web',
+    'bundle-plugins': 'spur builder bundle-plugins',
+    'bundle-laya-worker': 'spur builder bundle-laya-worker',
+    'emit-board-types': 'spur builder emit-board-types',
+    'emit-migration-sql': 'spur builder emit-migration-sql',
+    'verify-pack': 'spur builder verify-pack',
+    'build-binaries': 'spur builder build-binaries',
+    'link-check': 'spur builder check-deps',
+    'dependency-drift-check': 'spur builder check-deps',
+    'transition-shim-check': 'spur rule check-shims',
+    'coverage-provenance-check': 'spur rule check-coverage-cert',
+    'eval-pipeline': 'spur workflow eval',
+    promotion: 'spur workflow promote-check',
+};
+
 function usage(message?: string): never {
-    console.error(
-        `Commands: bundle-config, bundle-laya-worker, bundle-web, bundle-plugins, emit-board-types, emit-migration-sql, verify-pack, build-binaries, build-cli, build-server, dev-all, link-check, eval-pipeline, fleet-e2e, a2a-serve-e2e, a2a-member-e2e, promotion, ${Object.keys(DELEGATED).join(', ')}`,
-    );
+    console.error(`Commands: ${[...COMMANDS, ...Object.keys(DELEGATED)].join(', ')}`);
     process.exit(message ? 1 : 0);
 }
 
@@ -114,65 +118,14 @@ function delegate(module: string, args: string[]): never {
 
 const [command, ...args] = process.argv.slice(2);
 
+const replacement = command === undefined ? undefined : RETIRED[command];
+if (replacement !== undefined) {
+    console.error(`spur-dev: '${command}' moved to '${replacement}'`);
+    process.exit(2);
+}
+
 try {
     switch (command) {
-        case 'bundle-config': {
-            const result = await bundleConfigOutput(args[0]);
-            console.log(
-                `Bundled config -> ${result.target} (fixtures/OS junk excluded, ${result.injected} $schema directives injected)`,
-            );
-            break;
-        }
-        case 'bundle-laya-worker': {
-            const result = await bundleLayaWorker(args[0]);
-            console.log(`Bundled laya worker ${result.source} -> ${result.target} (${result.bytes} bytes)`);
-            break;
-        }
-        case 'bundle-web': {
-            const result = await bundleWebOutput(args[0]);
-            console.log(`Bundled board assets ${result.source} -> ${result.target}`);
-            break;
-        }
-        case 'bundle-plugins': {
-            const result = await bundlePlugins();
-            console.log(`Staged plugins ${result.pluginTarget} + marketplace ${result.marketplaceTarget} for npm`);
-            break;
-        }
-        case 'emit-migration-sql': {
-            const result = await emitMigrationSql();
-            console.log(`${result.changed ? 'Wrote' : 'Unchanged'} migration SQL module ${result.target}`);
-            break;
-        }
-        case 'emit-board-types': {
-            const result = await emitBoardDeclarations();
-            console.log(`${result.changed ? 'Wrote' : 'Unchanged'} board declaration ${result.target}`);
-            const kit = await emitKitDeclarations();
-            console.log(
-                `${kit.changed ? 'Wrote' : 'Unchanged'} module-kit declarations (${kit.files} files) ${kit.entry}`,
-            );
-            break;
-        }
-        case 'verify-pack': {
-            const tarball = args[0];
-            if (!tarball) throw new Error('Usage: spur-dev verify-pack <path-to-.tgz>');
-            process.exit(await verifyPackTarball(tarball));
-            break;
-        }
-        case 'build-cli':
-            await buildCliBinary();
-            break;
-        case 'build-server':
-            await buildServerBinary();
-            break;
-        case 'build-binaries':
-            await buildReleaseBinaries();
-            break;
-        case 'dev-all':
-            devAll();
-            break;
-        case 'eval-pipeline':
-            process.exit(await evalPipeline(args));
-            break;
         case 'fleet-e2e':
             process.exit(await runFleetE2e(args));
             break;
@@ -187,12 +140,6 @@ try {
             break;
         case 'delegate-workflow-e2e':
             process.exit(await runDelegateWorkflowE2e(args));
-            break;
-        case 'link-check':
-            process.exit(await linkCheck());
-            break;
-        case 'promotion':
-            process.exit(await runWorkflowPromotion(args));
             break;
         default: {
             const module = command === undefined ? undefined : DELEGATED[command];

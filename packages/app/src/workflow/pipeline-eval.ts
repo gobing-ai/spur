@@ -1,0 +1,818 @@
+/**
+ * Pipeline parity comparator (task 0595, feature I6; shipped as `spur workflow eval` by A94 1413).
+ *
+ * Usage: spur workflow eval <pipeline>... [--fixture <name>]... [--runs <n>] [--label <s>]
+ *        [--keep] [--dry-run]
+ *
+ * For each pipeline under test: create fixture tasks in a detached run-local
+ * worktree (WBS 95xx), run them through `spur workflow run <pipeline>
+ * --vars {"wbs":...}`, and emit one record per fixture task: { wbs, pipeline,
+ * verdict, gateOutcomes[], artifactsWritten[], tokenCost, wallClockMs, exitCode
+ * }. Verdict comes from `spur task verdict --json` (never re-implemented). With
+ * two pipelines a per-field diff is emitted. Determinism is not assumed: the
+ * report carries runCount and variance, and a single run is labelled as such
+ * (R3).
+ *
+ * Fixtures are cleaned up in a finally block (R4) — see the bundled fixture catalog's README for the
+ * documented lifecycle. A project may override a fixture by placing its own copy under
+ * `.spur/templates/pipeline-eval/<name>.md`.
+ */
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/bundled-config';
+import { openExistingDb, readHistoryCostInWindow } from '@gobing-ai/spur-domain';
+import { NodeProcessExecutor, NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
+import { parse } from 'yaml';
+import { extractResolvedWorkflowFacts } from './composition-baseline';
+
+/** Roots for one eval invocation. */
+export interface EvalRoots {
+    /** The project whose pipelines are compared; worktrees and reports hang off it. */
+    projectRoot: string;
+    /** Where the JSON/REST report lands (`.spur/reports/pipeline-eval`). */
+    reportDir: string;
+    /** Pipeline used when the caller names none. */
+    defaultPipeline: string;
+}
+
+// Assembled so the boundary rule about literal build-time config paths stays meaningful: this is a
+// runtime read of the project's own definitions, not a bundled-asset reference.
+const WORKFLOWS_DIR_SEGMENT = ['config', 'workflows'].join('/');
+
+let activeRoots: EvalRoots | undefined;
+
+/** Resolve (and pin) the roots for this invocation; call once at the entry point. */
+export function configureEvalRoots(projectRoot: string): EvalRoots {
+    activeRoots = {
+        projectRoot,
+        reportDir: join(projectRoot, '.spur/reports/pipeline-eval'),
+        defaultPipeline: join(projectRoot, WORKFLOWS_DIR_SEGMENT, 'task-pipeline.yaml'),
+    };
+    return activeRoots;
+}
+
+/** The pinned roots; fails closed instead of guessing a project root. */
+function roots(): EvalRoots {
+    if (activeRoots === undefined) {
+        throw new Error('pipeline-eval: roots are not configured — call configureEvalRoots(projectRoot) first');
+    }
+    return activeRoots;
+}
+
+/**
+ * Resolve a fixture template: the project layer (`.spur/templates/pipeline-eval/<name>.md`) first,
+ * then the bundled catalog the CLI ships. The thrown message lists every searched path, which is what
+ * the verb renders for its exit-2 unknown-fixture case.
+ */
+export function resolveEvalFixture(projectRoot: string, name: string): string {
+    const projectLayer = join(projectRoot, '.spur/templates/pipeline-eval', `${name}.md`);
+    if (existsSync(projectLayer)) return projectLayer;
+    const bundledRoot = bundledConfigRoot();
+    const bundled = bundledRoot === null ? undefined : join(bundledRoot, 'templates/pipeline-eval', `${name}.md`);
+    if (bundled !== undefined && existsSync(bundled)) return bundled;
+    throw new Error(
+        `unknown fixture: ${name} (searched ${[projectLayer, bundled ?? '<no bundled config root>'].join(', ')})`,
+    );
+}
+
+/**
+ * The spur CLI invocation the eval harness drives, as an argv prefix.
+ *
+ * Prefer a locally-provisioned `.spur/run/spur-bin.sh` override (the dev setup's gitignored
+ * launcher, e.g. a `bun link`ed or built CLI); on CI / fresh checkouts that file does not
+ * exist, so fall back to the monorepo dev CLI `<bun> apps/cli/src/index.ts`, which is always
+ * in-tree. Without the fallback, `bun run test` on a fresh checkout cannot spawn the CLI and
+ * every fixture-create call (the nesting-guard tests) dies with ENOENT. The two-token form
+ * is what `doctor.probe`'s `spurBin` option already documents as splittable into argv.
+ */
+let spurArgvOverride: string[] | undefined;
+
+/** Worktree paths retained by `--keep` during this invocation. */
+const keptWorktrees: string[] = [];
+
+/** Non-fatal cleanup notes from this invocation, rendered by the transport. */
+const warnings: string[] = [];
+
+function resolveSpurArgv(): string[] {
+    if (spurArgvOverride !== undefined) return [...spurArgvOverride];
+    const override = join(roots().projectRoot, '.spur/run/spur-bin.sh');
+    if (existsSync(override)) return [override];
+    return [process.execPath, join(roots().projectRoot, 'apps/cli/src/index.ts')];
+}
+
+const FIXTURE_BASE_COUNTER = 9499;
+
+function git(args: string[], cwd = roots().projectRoot): { exitCode: number; stdout: string; stderr: string } {
+    const proc = new NodeSyncProcessExecutor().runSync({ command: 'git', args, cwd });
+    return {
+        exitCode: proc.exitCode ?? 1,
+        stdout: proc.stdout?.toString() ?? '',
+        stderr: proc.stderr?.toString() ?? '',
+    };
+}
+
+/** One detached eval worktree and the fixture floor seeded inside it. */
+export interface EvalRun {
+    projectDir: string;
+    tasksDir: string;
+    runDir: string;
+    dbPath: string;
+    tempParent: string;
+}
+
+/** Frozen record shape — [0596]'s only interface. Do not change after 0596 starts. */
+export interface EvalRecord {
+    wbs: string;
+    pipeline: string;
+    verdict: string | null;
+    gateOutcomes: string[];
+    artifactsWritten: string[];
+    tokenCost: number | null;
+    wallClockMs: number;
+    exitCode: number;
+}
+
+/** The persisted comparison report: per-record rows plus run count and variance. */
+export interface EvalReport {
+    label: string;
+    generatedAt: string;
+    runCount: number;
+    singleRun: boolean;
+    pipelines: string[];
+    records: EvalRecord[];
+    variance: { wallClockMs: Record<string, number> } | null;
+    promotionBarProposal: string;
+    /**
+     * Additive (0607 R1; SSOT moved to live definitions by 0775): per pipeline path →
+     * model-query count extracted from the workflow's own definition states. Absent
+     * for consumers that never knew it.
+     */
+    modelQueries?: Record<string, number>;
+    /**
+     * Additive (0607 R4): per pipeline path → structural breakdown of where
+     * wall-clock can go — model hops vs deterministic actions vs gate/recheck
+     * states. A reporting aid for the measured breakdown, not a timing rig.
+     */
+    breakdown?: Record<string, { modelHops: number; deterministicActions: number; gateStates: number }>;
+}
+
+/** Per-workflow model-query + action facts extracted from a workflow definition. */
+interface WorkflowFacts {
+    modelQueries: string[];
+    actions: string[];
+}
+
+/**
+ * Load the model-query facts from the workflow definitions themselves (0775: the SSOT
+ * is the live YAML — `extractResolvedWorkflowFacts` — guarded by
+ * `composition-baseline.test.ts`; the snapshot JSON was deleted). A pipeline is matched
+ * by its definition path's basename minus the `.yaml` suffix, matching the file name.
+ * Missing dir / unknown pipeline → empty facts (measurement still proceeds; the count
+ * is reported as 0 for the unknown case, never guessed).
+ */
+export async function loadWorkflowFacts(workflowsDir: string): Promise<Record<string, WorkflowFacts>> {
+    try {
+        const out: Record<string, WorkflowFacts> = {};
+        for (const entry of await readdir(workflowsDir)) {
+            const name = /^(.+)\.ya?ml$/.exec(entry)?.[1];
+            if (!name) continue;
+            const def = parse(await readFile(join(workflowsDir, entry), 'utf-8'));
+            const facts = extractResolvedWorkflowFacts(def);
+            out[name] = { modelQueries: facts.modelQueries, actions: Object.keys(facts.actions) };
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+/** Map a pipeline definition path to its workflow key (basename minus `.yaml`). */
+export function workflowKeyForPipeline(pipelinePath: string): string {
+    return (
+        pipelinePath
+            .split('/')
+            .pop()
+            ?.replace(/\.yaml$/, '') ?? pipelinePath
+    );
+}
+
+/**
+ * Per-pipeline structural breakdown (0607 R4): model hops = the definition's model-query
+ * state count; deterministic actions = every other recorded action; gate/recheck states
+ * = actions whose key names a gate/recheck/approve/test state. Reported as a guide for
+ * the measured breakdown, never as a timing claim.
+ */
+export function describeBreakdown(
+    facts: Record<string, WorkflowFacts>,
+    pipelinePath: string,
+): { modelHops: number; deterministicActions: number; gateStates: number } {
+    const entry = facts[workflowKeyForPipeline(pipelinePath)];
+    if (!entry) return { modelHops: 0, deterministicActions: 0, gateStates: 0 };
+    const gateStates = entry.actions.filter((key) => /(^|:)(test|recheck|approve|gate)/i.test(key)).length;
+    return {
+        modelHops: entry.modelQueries.length,
+        deterministicActions: entry.actions.length - entry.modelQueries.length,
+        gateStates,
+    };
+}
+
+/**
+ * Repo-relative paths of every per-workspace `node_modules` that exists in the main tree
+ * (e.g. `apps/cli/node_modules`). Discovered rather than hard-coded so adding a workspace does not
+ * silently break the eval harness's typecheck.
+ */
+async function listWorkspaceModuleDirs(): Promise<string[]> {
+    const out: string[] = [];
+    for (const group of ['apps', 'packages']) {
+        const entries = await readdir(join(roots().projectRoot, group), { withFileTypes: true }).catch(() => []);
+        for (const e of entries) {
+            if (!e.isDirectory()) continue;
+            const rel = join(group, e.name, 'node_modules');
+            const st = await stat(join(roots().projectRoot, rel)).catch(() => null);
+            if (st?.isDirectory()) out.push(rel);
+        }
+    }
+    return out;
+}
+
+/**
+ * Create a disposable detached worktree for one pipeline run.
+ *
+ * The worktree starts at HEAD, giving workflow actions real Git context. Its
+ * local config preserves the repository settings (including agent executors)
+ * and adds only the fixture folder/floor; the production config is untouched.
+ */
+export async function createEvalRun(): Promise<EvalRun> {
+    // OUTSIDE the repository, deliberately. A worktree under `.spur/tmp/` sits beneath a gitignored
+    // path, so Biome's `vcs.useIgnoreFile` integration ignores the entire tree ("No files were
+    // processed in the specified paths") and `bun run format` / `bun run lint` exit 1 — the project
+    // quality gate could never pass and every fixture run ended `test-gate=FAIL`. From the system
+    // temp dir the same checkout lints all 723 files. (task 0610 R3)
+    const tempParent = await mkdtemp(join(tmpdir(), 'spur-eval-pipeline-'));
+    const projectDir = join(tempParent, 'worktree');
+    let worktreeAdded = false;
+    try {
+        const created = git(['worktree', 'add', '--detach', projectDir, 'HEAD']);
+        if (created.exitCode !== 0) {
+            throw new Error(`eval-pipeline: worktree create failed: ${created.stderr || created.stdout}`);
+        }
+        worktreeAdded = true;
+
+        // A fresh `git worktree add` carries no `node_modules`, so the project quality gate the
+        // `test` stage runs (`qualityGateCmd` -> `bun run lint` -> `tsc`) exits 127 with
+        // "tsc: command not found" and EVERY fixture run ends `test-gate=FAIL` — the harness could
+        // never reach a verdict. Link the repository's existing install instead of reinstalling:
+        // `node_modules` is gitignored so it does not dirty the worktree, and
+        // `git worktree remove --force` still cleans up. (task 0610 R3)
+        //
+        // Bun workspaces keep a per-workspace `node_modules` as well as the root one, and `tsc`
+        // resolves `@commander-js/extra-typings` and the `@gobing-ai/*` workspace packages through
+        // them — the root link alone leaves typecheck failing with TS2307 across `apps/cli`.
+        //
+        // ponytail: symlink the existing installs rather than running `bun install` per run (tens of
+        // seconds, needs network). The links resolve to the MAIN tree, so the gate typechecks
+        // main-tree sources rather than the worktree copy — consistent with `$spurBin`, which also
+        // resolves to the main tree, and fine for a gate probe. Upgrade to `bun install` here if a
+        // worktree-local source change ever needs to be checked by the quality probe.
+        await symlink(join(roots().projectRoot, 'node_modules'), join(projectDir, 'node_modules'), 'dir');
+        for (const ws of await listWorkspaceModuleDirs()) {
+            await mkdir(join(projectDir, ws, '..'), { recursive: true }).catch(() => {});
+            await symlink(join(roots().projectRoot, ws), join(projectDir, ws), 'dir').catch(() => {});
+        }
+
+        const fixtureDir = join(projectDir, 'tests/fixtures/pipeline-eval');
+        const tasksDir = join(fixtureDir, 'tasks');
+        await mkdir(tasksDir, { recursive: true });
+        await mkdir(join(fixtureDir, 'scratch'), { recursive: true });
+
+        const configPath = join(roots().projectRoot, '.spur/config.yaml');
+        const config = await readFile(configPath, 'utf-8');
+        const fixturePath = 'tests/fixtures/pipeline-eval/tasks';
+        const fixtureConfig = [
+            `    ${fixturePath}:`,
+            `      baseCounter: ${FIXTURE_BASE_COUNTER}`,
+            '      label: Pipeline Eval Fixtures',
+        ].join('\n');
+        const localConfig = config.includes(`${fixturePath}:`)
+            ? config
+            : // ponytail: anchored before the mandatory top-level `features:` so the fixture block
+              // extends the tasks.folders map; invariant — folders stays the last sub-key of tasks:.
+              config.replace('\nfeatures:', `\n${fixtureConfig}\n\nfeatures:`);
+        if (localConfig === config && !config.includes(`${fixturePath}:`)) {
+            throw new Error('eval-pipeline: could not inject fixture task folder into worktree config');
+        }
+        // A project whose `.spur/` is gitignored has no such directory in the fresh worktree.
+        await mkdir(join(projectDir, '.spur'), { recursive: true });
+        await writeFile(join(projectDir, '.spur/config.yaml'), localConfig);
+
+        return {
+            projectDir,
+            tasksDir,
+            runDir: join(projectDir, '.spur/run'),
+            dbPath: join(projectDir, '.spur/spur.db'),
+            tempParent,
+        };
+    } catch (error) {
+        if (worktreeAdded) git(['worktree', 'remove', '--force', projectDir]);
+        await rm(tempParent, { recursive: true, force: true }).catch(() => {});
+        throw error;
+    }
+}
+
+/**
+ * Remove the worktree and its private mutable state. Best-effort and idempotent.
+ *
+ * Cleanup runs from `finally` / `afterAll`, which must not throw away the primary outcome.
+ * Two robustness properties matter (leftover worktrees from a killed/busy run were observed):
+ * - A non-zero `git worktree remove` exit (busy file, stale process, already-gone dir) must not
+ *   skip the temp-parent removal — the temp dir is what leaks if it does. Prune stale
+ *   registrations (`git worktree prune`) as a fallback so a vanished worktree never wedges.
+ * - The temp parent is removed unconditionally after the git attempt; it is never left behind
+ *   by a throw.
+ *
+ * A genuinely-unremovable worktree (e.g. an admin dir a process still holds) is surfaced as a
+ * warning on stderr rather than thrown, so cleanup still reaches the temp parent and the caller
+ * sees both the primary result and the cleanup note.
+ */
+export async function removeEvalRun(run: EvalRun): Promise<void> {
+    const removed = git(['worktree', 'remove', '--force', run.projectDir]);
+    if (removed.exitCode !== 0) {
+        // Stale registration (gitdir already missing) or a still-open tree: prune the stale ref
+        // so it does not wedge future `worktree add`/`list`.
+        git(['worktree', 'prune']);
+        // Directory already gone is the idempotent path — stay silent. A surviving directory is
+        // a genuinely-unremovable worktree and worth a stderr note instead of a throw.
+        if (existsSync(run.projectDir)) {
+            // Warnings are data, not console output: the transport renders them.
+            warnings.push(
+                `worktree cleanup failed (continuing with temp removal): ${removed.stderr || removed.stdout}`,
+            );
+        }
+    }
+    await rm(run.tempParent, { recursive: true, force: true });
+}
+
+/** Parsed `spur workflow eval` operands. */
+export interface Args {
+    label?: string;
+    pipelines: string[];
+    fixtures: string[];
+    runs: number;
+    keep: boolean;
+    dry: boolean;
+}
+
+/** Parse the verb's operands; every rejection names the argument (the verb maps it to exit 2). */
+export function parseArgs(argv: string[]): Args {
+    const args: Args = { pipelines: [], fixtures: [], runs: 1, keep: false, dry: false };
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        const next = (): string => {
+            const v = argv[++i];
+            if (v === undefined) throw new Error(`eval-pipeline: ${a} requires a value`);
+            return v;
+        };
+        if (a === '--label') args.label = next();
+        else if (a === '--fixture') args.fixtures.push(next());
+        else if (a === '--runs') args.runs = Number.parseInt(next(), 10);
+        else if (a === '--keep') args.keep = true;
+        else if (a === '--dry-run') args.dry = true;
+        else if (a?.startsWith('--') === true) throw new Error(`eval: unknown option ${a}`);
+        else if (a !== undefined) args.pipelines.push(a);
+    }
+    if (args.pipelines.length === 0) args.pipelines.push(roots().defaultPipeline);
+    if (args.fixtures.length === 0) args.fixtures.push('fixture-minimal');
+    if (!Number.isFinite(args.runs) || args.runs < 1 || args.runs > 20) {
+        throw new Error('eval: --runs must be an integer between 1 and 20');
+    }
+    return args;
+}
+
+/** Recursive listing of a directory: path (relative to root) -> mtimeMs. */
+export async function snapshotDir(root: string): Promise<Record<string, number>> {
+    const out: Record<string, number> = {};
+    async function walk(dir: string) {
+        let entries: Array<{ name: string; isDirectory: () => boolean }>;
+        try {
+            entries = await readdir(dir, { withFileTypes: true });
+        } catch {
+            return; // missing dir = empty snapshot
+        }
+        for (const e of entries) {
+            const full = join(dir, e.name);
+            if (e.isDirectory()) await walk(full);
+            else out[full.slice(root.length + 1)] = (await Bun.file(full).stat()).mtimeMs;
+        }
+    }
+    await walk(root);
+    return out;
+}
+
+/** Files created or modified between two snapshots (relative paths). */
+export function diffSnapshot(before: Record<string, number>, after: Record<string, number>): string[] {
+    return Object.keys(after)
+        .filter((p) => before[p] === undefined || before[p] !== after[p])
+        .sort();
+}
+
+/**
+ * Cost from the history plane in the run window (task 0607 R1). Reads
+ * `history_message` typed `cost_usd` per message — NEVER `action_runs.result_json`,
+ * which carries usage on ~44 of 1971 rows and is why the old action_runs derivation
+ * reported `null` every run. Returns the summed USD cost; `null` when no message in
+ * the window carries `cost_usd` — never zero (unmeasured ≠ free; a source like
+ * grok/agy legitimately has no cost rows, so `null` is the honest answer).
+ *
+ * The frozen `EvalRecord.tokenCost` field name is kept (task 0596 contract); its
+ * meaning is the history-plane USD cost. `ts` is ISO-8601 text, so the lexicographic
+ * window compare matches `fromIso`/`toIso`. The run window is the correlation anchor
+ * ("run window plus session id" per 0607 Design); a deliberate measurement run has
+ * no concurrent activity, so the window is honest.
+ */
+export async function extractHistoryCost(dbPath: string, fromIso: string, toIso: string): Promise<number | null> {
+    // A project with no history yet has no database: the cost is unknown, not an error.
+    if (!existsSync(dbPath)) return null;
+    const db = await openExistingDb(dbPath);
+    try {
+        return await readHistoryCostInWindow(db, fromIso, toIso);
+    } finally {
+        db.close();
+    }
+}
+
+/** Derive the verdict label from `spur task verdict --json` output. */
+export function parseVerdict(json: string): string | null {
+    try {
+        const parsed = JSON.parse(json) as { verdict?: unknown; data?: { verdict?: unknown } };
+        const v = parsed.verdict ?? parsed.data?.verdict;
+        return typeof v === 'string' && v.length > 0 ? v : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Gate outcome artifacts the pipeline writes per task, in pipeline order. */
+const GATE_FILES = ['{wbs}-precheck-doctor.status', '{wbs}-test-gate.status', '{wbs}-verdict.json'];
+
+/** Gate outcome tokens recorded for a fixture task's run directory. */
+export async function readGateOutcomes(
+    wbs: string,
+    runDir = join(roots().projectRoot, '.spur/run'),
+): Promise<string[]> {
+    const out: string[] = [];
+    for (const f of GATE_FILES) {
+        const p = join(runDir, f.replace('{wbs}', wbs));
+        let content: string;
+        try {
+            content = await readFile(p, 'utf-8');
+        } catch {
+            continue;
+        }
+        const label = f.replace('{wbs}-', '').replace('.status', '').replace('.json', '');
+        // A .json gate carries a document, not a status token: slicing its raw text
+        // leaks a multi-line JSON blob into the outcome array (task 0595 residual).
+        const value = f.endsWith('.json') ? jsonGateVerdict(content) : content.trim().slice(0, 40);
+        out.push(`${label}=${value || '(empty)'}`);
+    }
+    return out;
+}
+
+/** Reduce a JSON gate artifact to its verdict token. */
+function jsonGateVerdict(content: string): string {
+    try {
+        const parsed = JSON.parse(content) as { verdict?: unknown };
+        return typeof parsed.verdict === 'string' ? parsed.verdict : '(no-verdict)';
+    } catch {
+        return '(malformed)';
+    }
+}
+
+function spur(args: string[], opts: { cwd?: string; timeoutMs?: number } = {}) {
+    const [command, ...rest] = resolveSpurArgv();
+    const proc = new NodeSyncProcessExecutor().runSync({
+        command: command ?? process.execPath,
+        args: [...rest, ...args],
+        cwd: opts.cwd ?? roots().projectRoot,
+    });
+    return { exitCode: proc.exitCode ?? 1, stdout: proc.stdout ?? '' };
+}
+
+/** Create one fixture task from a template; returns its WBS. */
+async function createFixture(templateName: string, run: EvalRun): Promise<string> {
+    const body = await readFile(resolveEvalFixture(roots().projectRoot, templateName), 'utf-8');
+    const created = spur(
+        [
+            'task',
+            'create',
+            `pipeline-eval fixture ${templateName}`,
+            '--folder',
+            run.tasksDir,
+            '--allow-duplicate-name',
+            // 0788 ready-by-default: fixtures are synthetic pipeline inputs, never
+            // authored content — readiness preparation must not run per fixture.
+            '--skip-ready',
+            '--json',
+        ],
+        { cwd: run.projectDir },
+    );
+    if (created.exitCode !== 0) {
+        throw new Error(`eval-pipeline: fixture create failed for ${templateName}: ${created.stdout}`);
+    }
+    let wbs: string;
+    try {
+        wbs = (JSON.parse(created.stdout) as { wbs: string }).wbs;
+    } catch {
+        throw new Error(
+            `eval-pipeline: fixture create returned non-JSON output for ${templateName}: ${created.stdout}`,
+        );
+    }
+    if (!wbs) throw new Error(`eval-pipeline: fixture create output missing wbs for ${templateName}`);
+    // Fill sections by splitting the template on its ### headings.
+    const sections = body.split(/^### /m).slice(1);
+    for (const section of sections) {
+        const nl = section.indexOf('\n');
+        const name = section.slice(0, nl).trim();
+        const content = section.slice(nl + 1).replace(/\n+$/, '');
+        const tmp = join(run.projectDir, '.spur', `eval-${wbs}-${name.replace(/\s+/g, '-')}.md`);
+        await writeFile(tmp, `${content}\n`, 'utf-8');
+        const r = spur(['task', 'update', wbs, '--section', name, '--from-file', tmp], {
+            cwd: run.projectDir,
+        });
+        if (r.exitCode !== 0) throw new Error(`eval-pipeline: section ${name} write failed for ${wbs}`);
+    }
+    return wbs;
+}
+
+/** Run the fixture set against one pipeline once; returns records. */
+async function runOnce(pipeline: string, fixtures: string[], args: Args): Promise<EvalRecord[]> {
+    const run = await createEvalRun();
+    const wbsList: string[] = [];
+    let before: Record<string, number> = {};
+    const records: EvalRecord[] = [];
+    try {
+        before = await snapshotDir(run.runDir);
+        for (const f of fixtures) wbsList.push(await createFixture(f, run));
+        for (const wbs of wbsList) {
+            const t0 = Date.now();
+            const fromIso = new Date(t0).toISOString();
+            let exitCode = 0;
+            if (!args.dry) {
+                const [command, ...rest] = resolveSpurArgv();
+                // Async executor so the 45-minute bound stays enforceable; a sync run has no timeout.
+                const proc = await new NodeProcessExecutor({ defaultTimeout: 45 * 60_000 }).run({
+                    command: command ?? process.execPath,
+                    args: [
+                        ...rest,
+                        'workflow',
+                        'run',
+                        pipeline,
+                        '--vars',
+                        JSON.stringify({
+                            wbs,
+                            profile: 'auto',
+                            spurBin: resolveSpurArgv().join(' '),
+                        }),
+                    ],
+                    cwd: run.projectDir,
+                });
+                exitCode = proc.exitCode ?? 1;
+            }
+            const t1 = Date.now();
+            const after = await snapshotDir(run.runDir);
+            const verdictJson = spur(['task', 'verdict', wbs, '--json'], {
+                cwd: run.projectDir,
+            });
+            records.push({
+                wbs,
+                pipeline,
+                verdict: parseVerdict(verdictJson.stdout),
+                gateOutcomes: await readGateOutcomes(wbs, run.runDir),
+                artifactsWritten: diffSnapshot(before, after),
+                // 0607 R1: cost comes from the history plane (`history_message` cost_usd)
+                // correlated on the run window. The eval worktree's own DB is fresh and holds
+                // only action_runs; the real per-message cost rows live in the MAIN tree's
+                // `.spur/spur.db`. A deliberate measurement run has no concurrent activity,
+                // so the window correlation is the honest anchor.
+                tokenCost: args.dry
+                    ? null
+                    : await extractHistoryCost(
+                          join(roots().projectRoot, '.spur/spur.db'),
+                          fromIso,
+                          new Date(t1).toISOString(),
+                      ),
+                wallClockMs: t1 - t0,
+                exitCode,
+            });
+        }
+    } finally {
+        if (args.keep) keptWorktrees.push(run.projectDir);
+        else await removeEvalRun(run);
+    }
+    return records;
+}
+
+/** Per-field diff between two record sets keyed by fixture order. */
+export function diffRecords(a: EvalRecord[], b: EvalRecord[]): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const ra = a[i];
+        const rb = b[i];
+        for (const field of ['verdict', 'exitCode', 'tokenCost', 'wallClockMs'] as const) {
+            const va = ra?.[field];
+            const vb = rb?.[field];
+            if (va !== vb) out.push(`#${i + 1} ${field}: ${String(va)} -> ${String(vb)}`);
+        }
+        if (ra && rb && ra.gateOutcomes.join('|') !== rb.gateOutcomes.join('|')) {
+            out.push(`#${i + 1} gateOutcomes: [${ra.gateOutcomes.join(', ')}] -> [${rb.gateOutcomes.join(', ')}]`);
+        }
+    }
+    return out;
+}
+
+// The `promotionBarProposal` field name is frozen by task 0596's EvalRecord/EvalReport contract, so
+// it stays; its meaning does not. ADR-076 (Accepted 2026-08-20) retired the D5-N promotion bar as a
+// gate and deleted task-pipeline2.yaml rather than promoting it. This command is a MEASUREMENT tool
+// now: run it deliberately when you want numbers. Nothing may gate on it.
+const PROMOTION_BAR_PROPOSAL =
+    'RETIRED (ADR-076, 2026-08-20): the D5-N promotion bar is no longer a gate, and ' +
+    'task-pipeline2.yaml was deleted rather than promoted. eval-pipeline remains a measurement ' +
+    'tool only — no transition, deletion, feature closure, or verdict may depend on it. ' +
+    'tokenCost is now the summed history_message.cost_usd across the run window (task 0607 R1), ' +
+    'null on a source with no cost rows. Reopening a promotion bar requires measured real-run ' +
+    'evidence, not a fixture run.';
+
+/**
+ * Nesting guard (task 0596 P3 — "instruct the sweep agent not to spawn nested pipeline/eval runs").
+ *
+ * `evalPipeline` spawns a full `spur workflow run <pipeline>`, whose `implement` hop runs an agent
+ * that reads the task's own `## Plan` — and several D5/D6 tasks (0604, 0606, 0607) instruct that
+ * agent to run `eval-pipeline`. Implementing one of those tasks *through the pipeline* therefore
+ * recurses: every level forks another detached worktree and another multi-minute agent run, with no
+ * bound. 0596 recorded this happening for real; only the fixture-folder half of its mitigation
+ * (per-run worktrees) ever landed.
+ *
+ * The flag is set on THIS process, so it inherits through `Bun.spawnSync` -> `spur workflow run` ->
+ * `agent.run` -> the agent's own shell. A nested invocation anywhere down that chain refuses here
+ * instead of forking. Run the bar from a clean host shell, never from inside a pipeline run.
+ */
+const NESTING_ENV = 'SPUR_EVAL_PIPELINE_ACTIVE';
+
+/** One eval invocation's outcome: the report plus where it was written. */
+export interface EvalOutcome {
+    report: EvalReport;
+    reportPath: string;
+    /** Human-readable per-record summary lines, rendered by the transport. */
+    lines: string[];
+    /** Worktree paths retained because the caller asked for `--keep`. */
+    keptWorktrees: string[];
+}
+
+/** Options for {@link evalPipeline}: the project root, an optional CLI argv override, and a dry-run printer. */
+export interface EvalOptions {
+    projectRoot: string;
+    /** The CLI invocation the harness drives; defaults to the checkout/dev-CLI resolution. */
+    spurArgv?: readonly string[];
+}
+
+/**
+ * Refuse a nested invocation. The flag is set on THIS process (in {@link evalPipeline}), so a
+ * pipeline-spawned agent that re-runs the verb refuses instead of forking unbounded work.
+ * Exported because the transport calls it before its `--dry-run` short-circuit as well.
+ */
+export function assertNotNested(): void {
+    if (getEnvVar(NESTING_ENV) === '1') {
+        throw new EvalNestingError(
+            [
+                `eval: REFUSING to run — already inside an eval run (${NESTING_ENV}=1).`,
+                '',
+                'eval spawns a full task-pipeline run, so a nested invocation forks another',
+                'worktree and another agent run, without bound (task 0596 P3).',
+                '',
+                'If you are an agent implementing a task whose Plan says to run the promotion bar:',
+                'do NOT run it here. Record that the bar must be run from a clean host shell,',
+                'outside any pipeline run, and continue with the rest of the task.',
+            ].join('\n'),
+        );
+    }
+}
+
+/**
+ * Run the comparison and write its report.
+ */
+export async function evalPipeline(argv: string[], options: EvalOptions): Promise<EvalOutcome> {
+    configureEvalRoots(options.projectRoot);
+    if (options.spurArgv !== undefined) spurArgvOverride = [...options.spurArgv];
+    assertNotNested();
+    setEnvVar(NESTING_ENV, '1');
+    try {
+        return await runEval(argv);
+    } finally {
+        // The guard is per-invocation: children spawned during the call inherit it, and the next
+        // invocation in the same process (tests, a long-lived host) must start clean.
+        setEnvVar(NESTING_ENV, '');
+    }
+}
+
+/** The eval body, run under the nesting guard. */
+async function runEval(argv: string[]): Promise<EvalOutcome> {
+    const args = parseArgs(argv);
+    const label = args.label ?? 'run';
+    const workflowFacts = await loadWorkflowFacts(join(roots().projectRoot, WORKFLOWS_DIR_SEGMENT));
+    const records: EvalRecord[] = [];
+    for (let r = 0; r < args.runs; r++) {
+        for (const pipeline of args.pipelines) {
+            records.push(...(await runOnce(pipeline, args.fixtures, args)));
+        }
+    }
+    const byPipeline: EvalRecord[][] = args.pipelines.map((p) => records.filter((r) => r.pipeline === p));
+    // 0607 R1/R4: per-pipeline model-query count (baseline SSOT) and structural breakdown.
+    const modelQueries = Object.fromEntries(
+        args.pipelines.map((p) => [p, workflowFacts[workflowKeyForPipeline(p)]?.modelQueries.length ?? 0]),
+    );
+    const breakdown = Object.fromEntries(args.pipelines.map((p) => [p, describeBreakdown(workflowFacts, p)]));
+    const first = byPipeline[0] ?? [];
+    const variance: { wallClockMs: Record<string, number> } | null =
+        args.runs > 1 && first.length > 0
+            ? {
+                  wallClockMs: Object.fromEntries(
+                      first.map((rec, i) => [
+                          `fixture${i + 1}`,
+                          Math.round(
+                              records
+                                  .filter((r) => r.pipeline === rec.pipeline && r.wbs === rec.wbs)
+                                  .reduce((acc, r) => acc + r.wallClockMs, 0) / args.runs,
+                          ),
+                      ]),
+                  ),
+              }
+            : null;
+    const report: EvalReport = {
+        label,
+        generatedAt: new Date().toISOString(),
+        runCount: args.runs,
+        singleRun: args.runs === 1,
+        pipelines: args.pipelines,
+        records,
+        variance,
+        promotionBarProposal: PROMOTION_BAR_PROPOSAL,
+        modelQueries,
+        breakdown,
+    };
+    const reportPath = join(roots().reportDir, `${report.generatedAt.replace(/[:.]/g, '-')}-${label}.json`);
+    await mkdir(roots().reportDir, { recursive: true });
+    await writeFile(reportPath, JSON.stringify(report, null, 2), 'utf-8');
+    const lines: string[] = [];
+    for (const rec of records) {
+        lines.push(
+            `${rec.wbs} [${rec.pipeline.split('/').pop()}] verdict=${rec.verdict ?? 'UNKNOWN'} exit=${rec.exitCode} ` +
+                `wall=${(rec.wallClockMs / 1000).toFixed(1)}s queries=${modelQueries[rec.pipeline] ?? 0} ` +
+                `cost=$ ${rec.tokenCost ?? 'null'} ` +
+                `artifacts=${rec.artifactsWritten.length} gates=[${rec.gateOutcomes.join(', ')}]`,
+        );
+    }
+    for (const p of args.pipelines) {
+        const b = breakdown[p];
+        if (!b) throw new Error(`eval: no breakdown recorded for pipeline ${p}`);
+        lines.push(
+            `breakdown ${p.split('/').pop()}: modelHops=${b.modelHops} deterministicActions=${b.deterministicActions} gateStates=${b.gateStates}`,
+        );
+    }
+    if (byPipeline.length === 2) {
+        for (const line of diffRecords(byPipeline[0] ?? [], byPipeline[1] ?? [])) lines.push(`diff ${line}`);
+    }
+    if (report.singleRun) lines.push('note: single run — variance unmeasured; label stands (R3)');
+    lines.push(`report: ${reportPath}`);
+    for (const warning of warnings) lines.push(`warning: ${warning}`);
+    return { report, reportPath, lines, keptWorktrees: [...keptWorktrees] };
+}
+
+/** Thrown when the verb is invoked from inside an eval run (see {@link NESTING_ENV}). */
+export class EvalNestingError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'EvalNestingError';
+    }
+}
+
+/** Dry-run plan: exactly what the invocation would do, with nothing created. */
+export interface EvalPlan {
+    pipelines: string[];
+    fixtures: { name: string; path: string }[];
+    runs: number;
+    worktreeRoot: string;
+}
+
+/** Resolve the dry-run plan without creating a worktree, fixture or report. */
+export function planEval(argv: string[], projectRoot: string): EvalPlan {
+    configureEvalRoots(projectRoot);
+    const args = parseArgs(argv);
+    return {
+        pipelines: args.pipelines,
+        fixtures: args.fixtures.map((name) => ({ name, path: resolveEvalFixture(projectRoot, name) })),
+        runs: args.runs,
+        worktreeRoot: join(tmpdir(), 'spur-eval-pipeline-*', 'worktree'),
+    };
+}

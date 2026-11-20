@@ -765,7 +765,12 @@ export function planLightChecks(
     const plan = (id: string, action: string, values: ScopedValues): LightCheckPlan => {
         const resolved = resolveAction(builder, action);
         if (resolved.kind === 'unbound') return { id, cmd: '', skipped: 'unbound' };
-        const command = resolved.kind === 'command' ? resolved.command : resolved.steps.join(' && ');
+        const command =
+            resolved.kind === 'command'
+                ? resolved.command
+                : resolved.kind === 'parallel'
+                  ? resolved.commands.join(' & ')
+                  : resolved.steps.join(' && ');
         return { id, cmd: renderScoped(command, values) };
     };
     const plans: LightCheckPlan[] = [];
@@ -960,7 +965,12 @@ function changedCoverageCheck(
     if (related.length === 0) return null;
     const resolved = resolveAction(builder, 'test-changed');
     if (resolved.kind === 'unbound') return null;
-    const command = resolved.kind === 'command' ? resolved.command : resolved.steps.join(' && ');
+    const command =
+        resolved.kind === 'command'
+            ? resolved.command
+            : resolved.kind === 'parallel'
+              ? resolved.commands.join(' & ')
+              : resolved.steps.join(' && ');
     const cmd = renderScoped(command, { workspace, paths: ['./'] });
     const startedAtMs = Date.now();
     const full = runShellCommand(cmd, cwd, undefined, timeoutMs);

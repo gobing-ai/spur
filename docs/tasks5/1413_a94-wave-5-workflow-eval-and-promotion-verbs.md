@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "A94 wave 5: workflow eval and promotion verbs"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.085Z
-updated_at: "2026-11-20T08:38:08.099Z"
+updated_at: "2026-11-20T18:36:50.332Z"
 feature_id: A94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1410"]
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1413. A94 wave 5: workflow eval and promotion verbs
@@ -37,23 +39,23 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Requirements
 
-- [ ] R1. `spur workflow eval <pipeline>… [--fixture <name>] [--runs <n>] [--label <s>] [--keep] [--dry-run] [--json]` keeps the eval record shape:
+- [x] R1. `spur workflow eval <pipeline>… [--fixture <name>] [--runs <n>] [--label <s>] [--keep] [--dry-run] [--json]` keeps the eval record shape:
   - per run: `wbs, pipeline, verdict, gateOutcomes[], artifactsWritten[], tokenCost, wallClockMs, exitCode`;
   - aggregate: `runCount`, variance.
 
   It also keeps the worktree isolation, the 9499+ fixture WBS range and the `SPUR_EVAL_PIPELINE_ACTIVE` nesting refusal. `--fixture` defaults to `fixture-minimal`. An unknown fixture → exit 2 listing the searched paths.
-- [ ] R2. Three verbs share `--candidates <path>` (default `config/workflow-candidates.json`), `--json`, and today's schema and refusal semantics (zero-history refusal, strict-fewer bar, pinned baseline, contradicting resolve refused):
+- [x] R2. Three verbs share `--candidates <path>` (default `config/workflow-candidates.json`), `--json`, and today's schema and refusal semantics (zero-history refusal, strict-fewer bar, pinned baseline, contradicting resolve refused):
   - `spur workflow promote-check`
   - `spur workflow promote-evaluate <id>`
   - `spur workflow promote-resolve <id>`
-- [ ] R3. Root `package.json:100` `workflow-promotion-check` runs `bun run apps/cli/src/index.ts workflow promote-check`. The `eval-pipeline` (`scripts/spur-dev.ts:173`) and `promotion` (`:194`) cases go to RETIRED. `scripts/commands/{eval-pipeline,workflow-promotion}.ts` and their tests move or are deleted. `tests/fixtures/pipeline-eval/templates/*` moves to `config/templates/pipeline-eval/`. The A94 inventory is updated.
+- [x] R3. Root `package.json:100` `workflow-promotion-check` runs `bun run apps/cli/src/index.ts workflow promote-check`. The `eval-pipeline` (`scripts/spur-dev.ts:173`) and `promotion` (`:194`) cases go to RETIRED. `scripts/commands/{eval-pipeline,workflow-promotion}.ts` and their tests move or are deleted. `tests/fixtures/pipeline-eval/templates/*` moves to `config/templates/pipeline-eval/`. The A94 inventory is updated.
 
 **Out of scope:** `--vars` (not consented), skill-eval, new candidate-schema fields, nested groups (`workflow promotion <op>` was rejected).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Pipeline evaluation is a workflow verb (req: R1, R3)
-- [ ] AC2 — Workflow promotion records are workflow verbs (req: R2, R3)
+- [x] AC1 — Pipeline evaluation is a workflow verb (req: R1, R3)
+- [x] AC2 — Workflow promotion records are workflow verbs (req: R2, R3)
 
 ### Q&A
 
@@ -95,28 +97,82 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Plan
 
-- [ ] 1. Write a failing E2E `apps/cli/tests/commands/workflow/eval-promote.e2e.test.ts`:
+- [x] 1. Write a failing E2E `apps/cli/tests/commands/workflow/eval-promote.e2e.test.ts`:
   - `workflow eval task-pipeline.yaml --dry-run --json` prints the plan, and a project-layer fixture override wins;
   - an unknown fixture → 2; `--vars` → usage error; nested `SPUR_EVAL_PIPELINE_ACTIVE=1` → refusal;
   - the promote verbs against a temp candidates file: zero-history refusal, strict-fewer pass/fail, contradicting resolve refused.
 
   (R1, R2)
-- [ ] 2. Move the service and fixtures, add the fixture resolver. (R1)
-- [ ] 3. Add the promotion command glue and register the four verbs. (R1, R2)
-- [ ] 4. Rewire `package.json:100`, add RETIRED entries, delete the scripts, update A94. (R3)
-- [ ] 5. Receipt `.spur/run/1413-receipt.md`: one real `workflow eval` (`--runs 1`) record, `bun run workflow-promotion-check`, packed and standalone `--dry-run` proofs, `bun run spur-check`. (all)
+- [x] 2. Move the service and fixtures, add the fixture resolver. (R1)
+- [x] 3. Add the promotion command glue and register the four verbs. (R1, R2)
+- [x] 4. Rewire `package.json:100`, add RETIRED entries, delete the scripts, update A94. (R3)
+- [x] 5. Receipt `.spur/run/1413-receipt.md`: one real `workflow eval` (`--runs 1`) record, `bun run workflow-promotion-check`, packed and standalone `--dry-run` proofs, `bun run spur-check`. (all)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHAT.** Pipeline comparison and candidate promotion became four leaf workflow verbs (`eval`, `promote-check`, `promote-evaluate`, `promote-resolve`) over services in `packages/app/src/workflow/`; the fixture catalog moved to the bundled `config/templates/pipeline-eval/` with a project-layer override, and the two repository scripts retired.
+
+**WHY.** A downstream project runs its own pipelines but had no way to compare them or to keep the candidate/deadline discipline; both lived in `scripts/commands/` behind repository paths.
+
+**Change map** (one anchored row per file):
+
+| Area | Anchor | Change |
+| --- | --- | --- |
+| eval service | packages/app/src/workflow/pipeline-eval.ts:99 | moved from `scripts/commands/`, roots pinned by `configureEvalRoots`, executor-based spawns |
+| fixture resolution | packages/app/src/workflow/pipeline-eval.ts:141 | `resolveEvalFixture`: project layer then bundled catalog, unknown fixture names every searched path |
+| nesting guard | packages/app/src/workflow/pipeline-eval.ts:676 | per-invocation: set for the call, cleared afterwards (children inherit during the run) |
+| eval entry | packages/app/src/workflow/pipeline-eval.ts:702 | returns `{report, reportPath, lines, keptWorktrees}` instead of printing |
+| dry-run plan | packages/app/src/workflow/pipeline-eval.ts:790 | `planEval` resolves pipelines, fixtures and worktree root without creating anything |
+| promotion service | packages/app/src/workflow/promotion-commands.ts:60 | moved from `scripts/commands/`, roots pinned, three verb entry points returning outcomes |
+| promotion entry points | packages/app/src/workflow/promotion-commands.ts:397 | `promoteCheck` / `promoteEvaluate` / `promoteResolve`, refusal lines preserved verbatim |
+| zero-history tolerance | packages/app/src/workflow/promotion-commands.ts:495 | no history DB → measured on an empty window instead of failing |
+| app barrel | packages/app/src/index.ts:1339 | exports both services, their types and helpers |
+| eval transport | apps/cli/src/commands/workflow/eval.ts:46 | `--fixture/--runs/--label/--keep/--dry-run/--json`, exit 0/1/2 |
+| promote transport | apps/cli/src/commands/workflow/promote.ts:63 | three verbs, findings envelope, uniform flag grammar |
+| workflow noun | apps/cli/src/commands/workflow/index.ts:32 | registers the four verbs |
+| fixture catalog | config/templates/pipeline-eval/fixture-minimal.md:1 | moved from `tests/fixtures/pipeline-eval/` (bundled and overridable) |
+| root script | package.json:100 | `workflow-promotion-check` runs the verb |
+| dispatcher | scripts/spur-dev.ts:110 | `eval-pipeline` and `promotion` RETIRED; imports, cases and usage entries removed |
+| inventory | docs/reports/A94-script-ownership.json:1 | 40 → 35 entries; caller anchors re-resolved |
+| boundary rule | config/rules/strict/runtime-boundaries.yaml:88 | two fs-io exemptions (mtime snapshots, recursive worktree cleanup) |
+| tests | packages/app/tests/workflow/pipeline-eval.test.ts:1 | moved; adds the full dry-run, non-dry and variance paths |
+| tests | packages/app/tests/workflow/promotion-commands-coverage.test.ts:1 | the service suite (moved from `apps/cli`) |
+| tests | apps/cli/tests/commands/workflow/eval.test.ts:1 | transport: plan, unknown fixture, runs bounds, nesting, JSON, text failure |
+| tests | apps/cli/tests/commands/workflow/promote.test.ts:1 | transport: check/evaluate/resolve outcomes and usage errors |
+| tests | apps/cli/tests/commands/workflow/promote.e2e.test.ts:1 | moved E2E against disposable fixtures through the verbs |
+| help pages | docs/help/cmd_workflow.md:86 | four verb sections with their flags |
+| plugin help page | docs/help2/workflow.md:39 | the same four sections |
+| prompt reference | plugins/sp/skills/spur-cli/references/workflows.md:271 | command surface + the eval/promotion rows |
+| surface matrix | docs/help/spur-cli-matrix.md:22 | `workflow` 17 → 21 verbs, unique 102 → 106, cells 129 → 133 |
+| JSON inventory | docs/design/data-output-contracts.md:224 | eval + three promote rows |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/workflow/pipeline-eval.ts:702 (`evalPipeline` keeps the record shape) and :790 (`planEval`); transport proven at apps/cli/tests/commands/workflow/eval.test.ts (plan, bounds, unknown fixture, nesting, JSON, text) |
+| R2 | MET | packages/app/src/workflow/promotion-commands.ts:397-545 (three verbs, unchanged refusal semantics); transport at apps/cli/tests/commands/workflow/promote.test.ts and the moved E2E |
+| R3 | MET | package.json:100 runs the verb; scripts/spur-dev.ts:110 retires both names; scripts, tests and the fixture catalog moved; inventory 40 → 35 (`docs/reports/A94-script-ownership.json`) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Pipeline evaluation is a workflow verb (req: R1, R3) | MET | test | apps/cli/tests/commands/workflow/eval.test.ts — 7 cases incl. a JSON dry-run over a fixture project and a text run whose record exits 1 |
+| AC2 — Workflow promotion records are workflow verbs (req: R2, R3) | MET | test | apps/cli/tests/commands/workflow/promote.test.ts (7 transport cases) + promote.e2e.test.ts (9 end-to-end cases through the verbs) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -125,3 +181,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 - Upstream: 1410. Downstream: 1415.
 
 ### History
+
+- 2026-11-20T17:46:08.115Z todo → wip (system)
+- 2026-11-20T18:36:49.093Z wip → testing (system)
+- 2026-11-20T18:36:50.326Z testing → done (system)
+

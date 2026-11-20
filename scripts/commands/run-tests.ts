@@ -28,15 +28,15 @@
  * spawning and, only on an exit-zero run over an unchanged working tree, certifies
  * `.coverage/lcov.info` in `.coverage/coverage-certification.json`. Targeted `bun test`,
  * heavy/repo-wide gates and interrupted runs never publish. Recovery for a refused
- * artifact: rerun `bun run test:full` (see coverage-certification.ts). Each child writes
+ * artifact: rerun `bun run test:full` (see packages/app/src/rules/coverage-certification.ts). Each child writes
  * isolated LCOV; only a canonical publisher can replace the shared artifact. Certifying adds
  * no second suite execution — the digests come from the run this process already drove.
  */
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
+import { certifyCanonicalRun, startCanonicalRun } from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
-import { certifyCanonicalRun, startCanonicalRun } from './coverage-certification';
 import { windowsTestSuiteTermination } from './test-suite-termination';
 
 // Internal launcher flag (task 1203): consumed BEFORE forwarding; never reaches Bun.

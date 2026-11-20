@@ -2,7 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { assertSafeMembers, parseArchiveListing, verifyPack, verifyPackExtract } from '../../src/builder/verify-pack';
+import {
+    assertSafeMembers,
+    parseArchiveListing,
+    verifyPack,
+    verifyPackExtract,
+    verifySpurPack,
+    verifySpurPackExtract,
+} from '../../src/builder/verify-pack';
 
 /**
  * Tarball verification (A93 1355 R3). Failure modes first — each one is a way the verifier could
@@ -72,7 +79,7 @@ describe('assertSafeMembers', () => {
     });
 });
 
-describe('verifyPackExtract — the archive owns the version', () => {
+describe('verifySpurPackExtract — Spur package invariants', () => {
     function fixtureArchive(version: string | undefined, options: { pluginVersion?: string; pruned?: boolean } = {}) {
         const root = mkdtempSync(join(tmpdir(), 'spur-pack-unit-'));
         const pkg = join(root, 'package');
@@ -93,13 +100,13 @@ describe('verifyPackExtract — the archive owns the version', () => {
     }
 
     test('reports the archive version and plugin file count', async () => {
-        const result = await verifyPackExtract(fixtureArchive('9.9.9'));
+        const result = await verifySpurPackExtract(fixtureArchive('9.9.9'));
         expect(result.version).toBe('9.9.9');
         expect(result.files).toBeGreaterThan(0);
     });
 
     test('a plugin version that disagrees with the archive manifest fails', async () => {
-        await expect(verifyPackExtract(fixtureArchive('9.9.9', { pluginVersion: '0.0.1' }))).rejects.toThrow(
+        await expect(verifySpurPackExtract(fixtureArchive('9.9.9', { pluginVersion: '0.0.1' }))).rejects.toThrow(
             'plugin.json version 0.0.1 != archive package 9.9.9',
         );
     });
@@ -119,7 +126,7 @@ describe('verifyPackExtract — the archive owns the version', () => {
             join(pkg, '.claude-plugin/marketplace.json'),
             JSON.stringify({ plugins: [{ name: 'other', source: './plugins/other', version: '1.0.0' }] }),
         );
-        await expect(verifyPackExtract(root)).rejects.toThrow('marketplace entry mismatch');
+        await expect(verifySpurPackExtract(root)).rejects.toThrow('marketplace entry mismatch');
     });
 
     test('a malformed plugin.json fails with its path', async () => {
@@ -133,11 +140,11 @@ describe('verifyPackExtract — the archive owns the version', () => {
             join(pkg, '.claude-plugin/marketplace.json'),
             JSON.stringify({ plugins: [{ name: 'sp', source: './plugins/sp', version: '1.0.0' }] }),
         );
-        await expect(verifyPackExtract(root)).rejects.toThrow('plugins/sp/plugin.json');
+        await expect(verifySpurPackExtract(root)).rejects.toThrow('plugins/sp/plugin.json');
     });
 
     test('pruned test content is refused', async () => {
-        await expect(verifyPackExtract(fixtureArchive('9.9.9', { pruned: true }))).rejects.toThrow(
+        await expect(verifySpurPackExtract(fixtureArchive('9.9.9', { pruned: true }))).rejects.toThrow(
             'pruned content found',
         );
     });
@@ -205,6 +212,35 @@ describe('verifyPack — real archives (default tar runner)', () => {
         });
         const result = await verifyPack(tarball);
         expect(result.version).toBe('3.2.1');
+    });
+
+    test('verifySpurPack asserts the plugin, marketplace and prune invariants on a real archive', async () => {
+        const good = packArchive({
+            'package.json': manifest('4.1.0'),
+            'plugins/sp/plugin.json': plugin('4.1.0'),
+            '.claude-plugin/marketplace.json': market('4.1.0'),
+            'plugins/sp/skills/dev-plan/SKILL.md': '# skill\n',
+        });
+        const result = await verifySpurPack(good);
+        expect(result).toEqual({ version: '4.1.0', files: 2 });
+
+        const pruned = packArchive({
+            'package.json': manifest('4.1.0'),
+            'plugins/sp/plugin.json': plugin('4.1.0'),
+            '.claude-plugin/marketplace.json': market('4.1.0'),
+            'plugins/sp/tests/fixture.ts': '// ships by mistake\n',
+        });
+        await expect(verifySpurPack(pruned)).rejects.toThrow('pruned content found in packed plugins');
+    });
+
+    test('verifyPack --require names a missing member and passes when it ships', async () => {
+        const tarball = packArchive({ 'package.json': manifest('5.0.0'), 'worker/laya_worker.py': 'print(1)\n' });
+        await expect(verifyPack(tarball, { requires: ['worker/laya_worker.py'] })).resolves.toMatchObject({
+            version: '5.0.0',
+        });
+        await expect(verifyPack(tarball, { requires: ['worker/missing.py'] })).rejects.toThrow(
+            'required member missing: worker/missing.py',
+        );
     });
 
     test('a real link member is refused before extraction', async () => {

@@ -48,6 +48,14 @@ per-job contract is still env.
 | `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` | packages/app (execution policy) | Legacy fallback for `schedulerCustomTimeoutMs` |
 | `SPUR_HISTORY_REFRESH_TIMEOUT_MS` | packages/app (execution policy) | Legacy fallback for `historyRefreshTimeoutMs` |
 | `SPUR_SCHEDULER_KILL_GRACE_MS` | packages/app (bounded child run) | Legacy fallback for `schedulerKillGraceMs` |
+
+## Coverage certification (per-run child contract)
+
+Set by `spur rule certify-coverage` for the command it spawns; a child reads it to write isolated LCOV.
+
+| Variable | Read by | Purpose |
+| --- | --- | --- |
+| `SPUR_COVERAGE_DIR` | the spawned command (Bun `--coverage-dir`, or your own reporter) | This run's isolated coverage directory; `{coverageDir}` in the argv expands to the same path |
 | `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` | scheduler custom-job service, apps/server (`serve`) | **Live per-job timeout contract** — one timeout per scheduled job name |
 | `SPUR_HISTORY_SOURCE_TIMEOUT_MS` | apps/cli (history refresh spawn) | Per-source timeout for a single history refresh run |
 

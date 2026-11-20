@@ -52,6 +52,19 @@ export interface MainOptions {
     startServer?: typeof import('@gobing-ai/spur-server').startServer;
 }
 
+/**
+ * Project-config load for callers that tolerate a missing or broken config: one named helper so the
+ * tolerant-accessor path has a single covered implementation instead of a fresh `.catch()` closure
+ * per call site (A94 1411).
+ */
+async function loadProjectConfigOrNull(root: string): Promise<SpurConfig | null> {
+    try {
+        return await loadSpurConfig(root, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+    } catch {
+        return null;
+    }
+}
+
 /** Run the Spur CLI with explicit argv and injectable runtime dependencies. */
 export async function main(argv = process.argv.slice(2), options: MainOptions = {}): Promise<number> {
     const output = options.output ?? consoleOutput;
@@ -59,10 +72,18 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
 
     const cwd = options.cwd ?? process.cwd();
     const env = options.env ?? getEnvVars();
-    const bootContext = createCliContext({ cwd, env, output });
+    // A boot-free verb that needs project config (e.g. `builder check-deps` reading
+    // `builder.dependencyScope`) asks for it lazily through the threaded accessor; nothing loads
+    // eagerly here, so the boot-free contract is unchanged (A94 1411).
+    const bootContext = createCliContext({
+        cwd,
+        env,
+        output,
+        loadAgentConfig: loadProjectConfigOrNull,
+    });
     const bootProgram = buildProgram(bootContext, output, {
         startServer: options.startServer,
-        loadProjectConfig: (root) => loadSpurConfig(root, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }).catch(() => null),
+        loadProjectConfig: loadProjectConfigOrNull,
     });
     const mode = bootFreeMode(bootProgram, argv);
     if (mode !== undefined) {

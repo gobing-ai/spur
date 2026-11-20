@@ -1072,7 +1072,19 @@ const SDLC_SCOPED_PLACEHOLDERS: Readonly<Record<string, readonly string[]>> = {
 const SDLC_PLACEHOLDER_PATTERN = /\{(?:files|paths|workspace)\}/g;
 
 /** One `builder.actions` value: a shell command, or a composite of action names run in order. */
-const BuilderActionValueSchema = z.union([z.string(), z.array(z.string())]);
+/**
+ * Parallel action form (A94 wave 6a): 2+ shell commands started together, supervised as one unit.
+ * Entries are commands, never action names — nesting is rejected at load.
+ */
+export const ParallelActionSchema = z
+    .object({
+        parallel: z.array(z.string().min(1)).min(2),
+        graceMs: z.number().int().positive().optional(),
+    })
+    .strict();
+
+/** One `builder.actions.<name>` binding: a command, a composite step list, or a parallel group. */
+const BuilderActionValueSchema = z.union([z.string(), z.array(z.string()), ParallelActionSchema]);
 
 /**
  * Load-time validation of the `builder.actions` binding (R2). Every failure names the key path
@@ -1080,7 +1092,10 @@ const BuilderActionValueSchema = z.union([z.string(), z.array(z.string())]);
  * that resolve to no action, and composite cycles rendered as `a → b → a`.
  */
 function refineBuilderActions(
-    value: { preset: SdlcPreset; actions: Record<string, string | string[]> },
+    value: {
+        preset: SdlcPreset;
+        actions: Record<string, string | string[] | { parallel: string[]; graceMs?: number }>;
+    },
     ctx: z.RefinementCtx,
 ): void {
     const declared = new Set(Object.keys(value.actions));
@@ -1111,6 +1126,18 @@ function refineBuilderActions(
                         ? `uses placeholder ${misplaced} — placeholders are only allowed in ${SDLC_SCOPED_ACTIONS.join(', ')}`
                         : `uses placeholder ${misplaced} — ${name} accepts only ${allowed.join(', ')}`,
                 );
+            }
+            continue;
+        }
+        // A parallel group runs shell commands side by side; its entries are never action names.
+        if (!Array.isArray(entry)) {
+            if (entry.parallel.some((command) => command.trim().length === 0)) {
+                issue(name, 'parallel entries must not be blank commands');
+            }
+            for (const command of entry.parallel) {
+                if (resolvable.has(command)) {
+                    issue(name, `parallel entry "${command}" is an action name — parallel entries are shell commands`);
+                }
             }
             continue;
         }
@@ -1165,6 +1192,12 @@ export const BuilderConfigSchema = z
         preset: z.enum(SDLC_PRESETS).default('bun'),
         /** `action name → shell command | composite step list` (see {@link SDLC_ACTIONS}). */
         actions: z.record(z.string(), BuilderActionValueSchema).default({}),
+        /**
+         * Package globs `spur builder check-deps` reports on (stale `bun link` dist + lockfile
+         * drift). Empty skips both checks; a downstream project names its own scope instead of
+         * inheriting `@gobing-ai/*` (A94 1411).
+         */
+        dependencyScope: z.array(z.string()).default([]),
     })
     .superRefine(refineBuilderActions);
 

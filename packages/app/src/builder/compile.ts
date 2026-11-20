@@ -205,6 +205,13 @@ export interface CompileRequest {
     /** Extra `--target` triples (cross-compilation); empty for a host-native build. */
     targets?: readonly string[];
     run?: BuildRunner;
+    /**
+     * Apply the ts-runtime / laya-locl source patches before compiling (default true).
+     *
+     * A94 1411: a downstream project compiled through `builder build-binaries --entry` has neither
+     * of those sources, so the generic path turns the patches off instead of failing on them.
+     */
+    patchRuntime?: boolean;
 }
 
 /**
@@ -230,8 +237,10 @@ export async function buildCompiledBinary(request: CompileRequest): Promise<Buil
             assetRoot = await mkdtemp(join(tmpdir(), 'spur-build-assets-'));
             await bundleConfig(join(assetRoot, 'config'), { sourceRoot });
         }
-        restores.push(patchTsRuntimeImport(sourceRoot));
-        const restoreLaya = layaMlxInstalled(sourceRoot) ? patchLayaMlxSourceImport(sourceRoot) : undefined;
+        const patchRuntime = request.patchRuntime ?? true;
+        if (patchRuntime) restores.push(patchTsRuntimeImport(sourceRoot));
+        const restoreLaya =
+            patchRuntime && layaMlxInstalled(sourceRoot) ? patchLayaMlxSourceImport(sourceRoot) : undefined;
         if (restoreLaya !== undefined) restores.push(restoreLaya);
 
         for (const target of request.targets ?? [null]) {

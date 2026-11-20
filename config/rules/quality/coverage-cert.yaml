@@ -1,0 +1,26 @@
+# [quality] Certified coverage provenance (A94 1412 R4).
+#
+# Runs in the quality category beside `coverage-gate`, so a downstream project can trust per-file
+# coverage numbers: the marker must bind the CURRENT tracefile bytes and the CURRENT tree.
+# SKIPs (exit 0) when the project never produced a certification, so enabling this preset cannot
+# break a project that has not adopted certification.
+#
+# Reached through `spur rule check-coverage-cert`; the marker-guarded command keeps the repository
+# checkout on its own source CLI (a linked `spur` may be older than the tree under test).
+rules:
+  - id: coverage-cert
+    description: "Per-file coverage evidence must be certified: .coverage/coverage-certification.json binds the current .coverage/lcov.info bytes and the current tree; missing certification is a SKIP, stale/pending/superseded/byte-mismatched evidence fails."
+    severity: error
+    evaluator:
+      type: exit-code
+      config:
+        command: sh
+        args:
+          - -c
+          - >-
+            [ -f .coverage/coverage-certification.json ] || { echo "SKIP: no coverage certification in this project"; exit 0; };
+            if [ -f scripts/spur-dev.ts ]; then
+            bun run apps/cli/src/index.ts rule check-coverage-cert;
+            else
+            spur rule check-coverage-cert;
+            fi

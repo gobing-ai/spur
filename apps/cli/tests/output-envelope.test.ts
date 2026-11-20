@@ -394,6 +394,17 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
         // outside each verb's chunk.
         'builder.ts:bundle-config': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
         'builder.ts:bundle-web': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        // A94 1410: the four staging/generator verbs moved out of scripts/commands onto the same body.
+        'builder.ts:bundle-plugins': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:bundle-laya-worker': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:emit-board-types': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:emit-migration-sql': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:verify-pack': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        'builder.ts:build-binaries': { helper: 'runVerb', file: 'apps/cli/src/commands/builder/build.ts' },
+        // A94 1413: the three promotion verbs share one `render()` body in the same module.
+        'workflow.ts:promote-check': { helper: 'render', file: 'apps/cli/src/commands/workflow/promote.ts' },
+        'workflow.ts:promote-evaluate': { helper: 'render', file: 'apps/cli/src/commands/workflow/promote.ts' },
+        'workflow.ts:promote-resolve': { helper: 'render', file: 'apps/cli/src/commands/workflow/promote.ts' },
     };
 
     const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "A94 wave 3: generic build-binaries, verify-pack and check-deps"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.084Z
-updated_at: "2026-11-20T08:38:07.663Z"
+updated_at: "2026-11-20T11:04:40.204Z"
 feature_id: A94
 priority: P1
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1410"]
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1411. A94 wave 3: generic build-binaries, verify-pack and check-deps
@@ -35,7 +37,7 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Requirements
 
-- [ ] R1. `spur builder build-binaries --entry <file> [--name <bin>] [--targets <csv>] [--out <dir>]`:
+- [x] R1. `spur builder build-binaries --entry <file> [--name <bin>] [--targets <csv>] [--out <dir>]`:
   - compiles `<entry>` with no Spur source-root check;
   - `--name` defaults to the entry basename without its extension;
   - `--targets` is a subset of `darwin-arm64,darwin-x64,linux-arm64,linux-x64,windows-x64,windows-arm64` (default all);
@@ -43,31 +45,31 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
   - writes `<name>-<target>[.exe]` plus GNU-format `SHA256SUMS`.
 
   With no `--entry`, output is byte-identical to today (`dist/cli/spur-*`). An unknown target fails before any compile, with exit 1 and `unknown target: <t> (valid: …)`.
-- [ ] R2. `spur builder verify-pack <tgz> [--require <member>]…` checks:
+- [x] R2. `spur builder verify-pack <tgz> [--require <member>]…` checks:
   - member safety;
   - a non-empty `package/package.json` version;
   - every `--require` path present as `package/<member>`.
 
   A missing member fails with exit 1 and `required member missing: <member>`. Plugin and marketplace version equality plus the prune check live only in exported `verifySpurPackExtract()`, asserted by Spur's packed-tarball E2E.
-- [ ] R3. `spur builder check-deps [--scope <glob>]…` reads `builder.dependencyScope` (`string[]`, default `[]`). A non-empty `--scope` replaces it. For every installed package whose name matches:
+- [x] R3. `spur builder check-deps [--scope <glob>]…` reads `builder.dependencyScope` (`string[]`, default `[]`). A non-empty `--scope` replaces it. For every installed package whose name matches:
   - **linked check:** a `bun link` symlink resolving outside the project whose newest `dist/` mtime is older than its newest `src/` (logic from link-check);
   - **drift check:** a `bun.lock` resolved version that differs from `node_modules/<pkg>/package.json` version, skipping `workspace:`/`link:` specs.
 
   An empty scope prints `check-deps: no dependencyScope configured — skipped` and exits 0. `.spur/config.yaml` sets `builder.dependencyScope: ['@gobing-ai/*']`.
-- [ ] R4. `check-deps` exits:
+- [x] R4. `check-deps` exits:
   - 0 with no findings;
   - 1 on findings;
   - 2 on usage or input errors (invalid config value, unreadable `bun.lock` when the scope is non-empty).
 
   `--json` emits `{ok, findings: [{kind: "stale-link"|"drift", package, detail}]}` through the standard envelope (`--json-envelope`).
-- [ ] R5. Root `package.json` replaces `link-check` and `dependency-drift-check` with one `check-deps` script (`bun run apps/cli/src/index.ts builder check-deps`), used in `spur-check-feature` and `spur-check:full`. `scripts/commands/{link-check,dependency-drift-check,build-binaries,verify-pack}.ts` are deleted and RETIRED entries are added. The A94 inventory is updated.
+- [x] R5. Root `package.json` replaces `link-check` and `dependency-drift-check` with one `check-deps` script (`bun run apps/cli/src/index.ts builder check-deps`), used in `spur-check-feature` and `spur-check:full`. `scripts/commands/{link-check,dependency-drift-check,build-binaries,verify-pack}.ts` are deleted and RETIRED entries are added. The A94 inventory is updated.
 
 **Out of scope:** new targets, signing or notarization, publishing, a `.github/workflows` edit, an evaluator type in ts-rule-engine.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Builder packaging verbs work for a downstream project (req: R1, R2)
-- [ ] AC2 — Linked dist and lockfile drift checks are configurable (req: R3, R4, R5)
+- [x] AC1 — Builder packaging verbs work for a downstream project (req: R1, R2)
+- [x] AC2 — Linked dist and lockfile drift checks are configurable (req: R3, R4, R5)
 
 ### Q&A
 
@@ -120,16 +122,16 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Plan
 
-- [ ] 1. Write a failing `downstream.e2e.test.ts` against the non-Spur fixture:
+- [x] 1. Write a failing `downstream.e2e.test.ts` against the non-Spur fixture:
   - `build-binaries --entry` (host target) produces `<name>-<t>` and SHA256SUMS;
   - `verify-pack` on the fixture's `npm pack` output passes, and `--require missing.txt` exits 1;
   - `check-deps`: empty scope skips (0), a drift fixture → 1 with `--json` finding, a bad config value → 2.
 
   Add the Spur-tgz assertion with `verifySpurPackExtract`. (R1–R4)
-- [ ] 2. Generalize `binaries.ts` and `verify-pack.ts`, keeping existing Spur tests green. (R1, R2)
-- [ ] 3. Create `check-deps.ts` from the two scripts, add the config key, set `.spur/config.yaml`, register the verb. (R3, R4)
-- [ ] 4. Rewire root `package.json`, update `sdlc-actions.md:279,281`, delete the four scripts, add RETIRED entries, update A94. (R5)
-- [ ] 5. Receipt `.spur/run/1411-receipt.md`:
+- [x] 2. Generalize `binaries.ts` and `verify-pack.ts`, keeping existing Spur tests green. (R1, R2)
+- [x] 3. Create `check-deps.ts` from the two scripts, add the config key, set `.spur/config.yaml`, register the verb. (R3, R4)
+- [x] 4. Rewire root `package.json`, update `sdlc-actions.md:279,281`, delete the four scripts, add RETIRED entries, update A94. (R5)
+- [x] 5. Receipt `.spur/run/1411-receipt.md`:
   - `bun run apps/cli/src/index.ts builder build-binaries` sha256 matches the pre-change build;
   - `bun run check-deps` → 0;
   - packed-tarball and standalone-binary runs of the three verbs;
@@ -139,15 +141,71 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**WHAT.** The three remaining packaging/repository checks became one generic builder surface: `build-binaries` grew an `--entry` mode, `verify-pack` kept only archive-generic assertions and gained repeatable `--require`, and `link-check` + `dependency-drift-check` merged into a scope-driven `check-deps`. The four repository scripts and their two tests are gone.
+
+**WHY.** A93's builder verbs only worked on Spur's own checkout, and the dependency checks carried a hardcoded `@gobing-ai` prefix and `process.exit` printing, so no downstream project could use them and no preset could reach them.
+
+**Change map** (one anchored row per file):
+
+| Area | Anchor | Change |
+| --- | --- | --- |
+| generic compile | packages/app/src/builder/compile.ts:214 | `patchRuntime` option: the generic path skips the Spur-only source patches |
+| entry binaries | packages/app/src/builder/binaries.ts:129 | `buildEntryBinaries`: `--entry`/`--name`/`--targets`/`--out`, target validation before compiling, `SHA256SUMS` |
+| archive checks | packages/app/src/builder/verify-pack.ts:112 | `verifyPackExtract` = version + requires; Spur invariants moved to `verifySpurPackExtract` |
+| Spur pack path | packages/app/src/builder/verify-pack.ts:233 | `verifySpurPack` = generic extraction + Spur assertions, for the packed-tarball E2E |
+| dependency checks | packages/app/src/builder/check-deps.ts:111 | `findStaleLinks` scope-driven; `lockKeyInScope`; `checkDeps` merges both findings |
+| barrel | packages/app/src/builder/index.ts:26 | exports the check-deps surface, `BINARY_TARGETS`, the pack split |
+| CLI verbs | apps/cli/src/commands/builder/build.ts:236 | `check-deps` (0/1/2, envelope) and the `build-binaries`/`verify-pack` flags |
+| config schema | packages/config/src/index.ts:1168 | `builder.dependencyScope` (glob list, default `[]`) |
+| repo config | .spur/config.yaml:101 | `dependencyScope: ['@gobing-ai/*']` |
+| boot-free config access | apps/cli/src/index.ts:60 | `loadProjectConfigOrNull` threads a lazy loader into the boot-free context |
+| root scripts | package.json:93 | `check-deps` replaces `link-check` + `dependency-drift-check` in both repo-wide chains |
+| dispatcher | scripts/spur-dev.ts:111 | four more RETIRED names; imports/cases and the usage entries removed |
+| inventory | docs/reports/A94-script-ownership.json:1 | 51 → 45 entries; caller anchors re-resolved to the shrunk dispatcher |
+| boundary rule | config/rules/strict/runtime-boundaries.yaml:86 | one exemption for symlink/mtime `node:fs` use, with its reason |
+| help pages | docs/help/cmd_builder.md:60 | `--entry`/`--name`/`--targets`/`--out`, `--require`, and the `check-deps` section |
+| plugin help page | docs/help2/builder.md:14 | the same rows and sections |
+| prompt reference | plugins/sp/skills/spur-cli/references/builder.md:34 | verb-map rows for `--entry`, `--require` and `check-deps` |
+| surface matrix | docs/help/spur-cli-matrix.md:22 | `builder` 18 → 19 verbs, unique verbs 98 → 99, cells 125 → 126 |
+| JSON inventory | docs/design/data-output-contracts.md:233 | `check-deps` findings-envelope row |
+| scope test | plugins/sp/tests/feature-verification-scope.test.ts:25 | the repo-wide list names `check-deps` instead of the two retired scripts |
+| envelope sweeps | apps/cli/tests/output-envelope.test.ts:395 | `verify-pack` + `build-binaries` recorded as `runVerb` delegates; census 89 → 91 |
+| unit proofs | packages/app/tests/builder/check-deps.test.ts:44 | merge/empty-scope/input-error/scope-selection cases |
+| entry proofs | packages/app/tests/builder/binaries.test.ts:105 | generic mode assets, naming defaults, unknown-target refusal |
+| archive proofs | packages/app/tests/builder/verify-pack.test.ts:216 | `verifySpurPack` on a real archive + `--require` presence/absence |
+| transport proofs | apps/cli/tests/commands/builder/check-deps.test.ts:63 | skip/findings/exit-2/envelope and the generic build refusals |
+| moved tests | packages/app/tests/builder/link-check.test.ts:14 | same cases, explicit scope argument |
+| moved tests | packages/app/tests/builder/dependency-drift-check.test.ts:10 | same cases, explicit scope argument |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/builder/binaries.ts:129 `buildEntryBinaries`; assets/SHA256SUMS/name/out and the pre-compile target refusal pinned at packages/app/tests/builder/binaries.test.ts:105 |
+| R2 | MET | packages/app/src/builder/verify-pack.ts:112 generic extract + `--require`; Spur invariants at :140/:233; receipt shows `required member missing: worker/laya_worker.py` and a clean 257-file tarball |
+| R3 | MET | packages/app/src/builder/check-deps.ts:111 scope-driven checks; `.spur/config.yaml:101` sets `['@gobing-ai/*']`; live run prints `check-deps OK — @gobing-ai/* in step with source and lockfile.` |
+| R4 | MET | exit codes proven at apps/cli/tests/commands/builder/check-deps.test.ts:63 (0 skip, 1 findings, 2 input error) with the `{ok, findings}` envelope |
+| R5 | MET | four scripts + two companion tests deleted; `check-deps` wired into `spur-check-feature`/`spur-check:full` (package.json:93); RETIRED carries all four names; inventory 51 → 45 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Builder packaging verbs work for a downstream project (req: R1, R2) | MET | test | packages/app/tests/builder/binaries.test.ts:105 and verify-pack.test.ts:216 run both verbs against fixture projects and archives with no Spur checkout |
+| AC2 — Linked dist and lockfile drift checks are configurable (req: R3, R4, R5) | MET | command | `bun apps/cli/src/index.ts builder check-deps` on this repo (exit 0); fixture findings and exit-2 case in apps/cli/tests/commands/builder/check-deps.test.ts:63 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -156,3 +214,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 - Upstream: 1410 (rewired `build:binaries`). Downstream: 1415.
 
 ### History
+
+- 2026-11-20T10:40:23.150Z todo → wip (system)
+- 2026-11-20T11:04:39.018Z wip → testing (system)
+- 2026-11-20T11:04:40.198Z testing → done (system)
+

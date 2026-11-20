@@ -8,8 +8,13 @@ Release plumbing: compiled artifacts, version bumps, release tags, npm publish, 
 | --- | --- |
 | `bundle-config <out-dir> [flags]` | Stage the checkout's `config/` tree with `$schema` injection |
 | `bundle-web [out-dir] [flags]` | Stage the built Board assets into the CLI package tree |
-| `verify-pack <tgz> [flags]` | Inspect a packed tarball (member safety, archive-owned versions) |
-| `build-binaries [flags]` | Cross-compile the six release binaries plus `SHA256SUMS` |
+| `bundle-plugins [flags]` | Stage `plugins/` + `.claude-plugin/` into the CLI package tree (tests/evals pruned) |
+| `bundle-laya-worker [out-dir] [flags]` | Stage the installed laya-local Python worker beside the bundled config |
+| `emit-board-types [flags]` | Emit the board declaration and the module-kit declaration mirror |
+| `emit-migration-sql [flags]` | Emit the embedded migration SQL module from its released `.sql` |
+| `verify-pack <tgz> [flags]` | Inspect a packed tarball (member safety, archive-owned version, required members) |
+| `check-deps [flags]` | Report stale `bun link` dist and lockfile drift for the configured scope |
+| `build-binaries [flags]` | Cross-compile the six release binaries plus `SHA256SUMS`, or one entry for chosen targets |
 | `build-cli [flags]` | Compile the checkout's `spur` binary |
 | `build-server [flags]` | Compile the checkout's standalone server |
 | `bump-ver [target] [version]` | Bump a package version, commit, tag, optionally push |
@@ -52,6 +57,10 @@ spur builder build-binaries [options]
 | Option | Description |
 |---|---|
 | `--source-root <dir>` | Spur source checkout to build (default: the current directory) |
+| `--entry <file>` | Compile this entry instead of the Spur release build |
+| `--name <bin>` | Asset base name (default: the entry basename without its extension) |
+| `--targets <csv>` | Comma-separated targets (default: all six) |
+| `--out <dir>` | Output directory in `--entry` mode (default: `dist/bin`) |
 | `--json` | Machine-readable report |
 
 ## spur builder bundle-config
@@ -76,6 +85,50 @@ spur builder bundle-web [options] [out-dir]
 | `--source-root <dir>` | Spur source checkout (default: the current directory) |
 | `--json` | Machine-readable report |
 
+## spur builder bundle-plugins
+
+```
+spur builder bundle-plugins [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder bundle-laya-worker
+
+```
+spur builder bundle-laya-worker [options] [out-dir]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-board-types
+
+```
+spur builder emit-board-types [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
+## spur builder emit-migration-sql
+
+```
+spur builder emit-migration-sql [options]
+```
+
+| Option | Description |
+|---|---|
+| `--source-root <dir>` | Spur source checkout (default: the current directory) |
+| `--json` | Machine-readable report |
+
 ## spur builder verify-pack
 
 ```
@@ -84,6 +137,18 @@ spur builder verify-pack [options] <tgz>
 
 | Option | Description |
 |---|---|
+| `--require <member>` | Member that must ship at `package/<member>` (repeatable) |
+| `--json` | Machine-readable report |
+
+## spur builder check-deps
+
+```
+spur builder check-deps [options]
+```
+
+| Option | Description |
+|---|---|
+| `--scope <glob>` | Package glob to check (repeatable; replaces `builder.dependencyScope`) |
 | `--json` | Machine-readable report |
 
 ## spur builder bump-ver

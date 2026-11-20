@@ -1,0 +1,509 @@
+{
+    "schemaVersion": 2,
+    "generatedAt": "2026-11-20T20:51:14Z",
+    "sourceCommit": "8d286a317f9f8763353c9330f5edd279ac8cba10",
+    "consentStatus": {
+        "state": "granted",
+        "at": "2026-11-19",
+        "by": "Robin",
+        "record": "docs/design/downstream-tooling-absorption.md §5",
+        "amendment": "2026-11-20 surface-shape"
+    },
+    "waves": ["1410", "1411", "1412", "1413", "1414", "1415"],
+    "entries": [
+        {
+            "path": "scripts/commands/a2a-member-e2e.ts",
+            "responsibility": "A2A member delivery E2E proof (cold, live, restart) executed through the real `a2a` CLI",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 104
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 36
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: isolated multi-install A2A fixture, not runtime behavior"
+        },
+        {
+            "path": "scripts/commands/a2a-serve-e2e.ts",
+            "responsibility": "A2A serving E2E proof that `spur serve` speaks A2A, writing its receipt",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 103
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 35
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: isolated multi-install A2A fixture, not runtime behavior"
+        },
+        {
+            "path": "scripts/commands/a2a-two-install-e2e.ts",
+            "responsibility": "Two-install A2A dispatch E2E proof with write fencing, writing its receipt",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 105
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 37
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: isolated multi-install A2A fixture, not runtime behavior"
+        },
+        {
+            "path": "scripts/commands/command-contract.test.ts",
+            "responsibility": "Thin-wrapper contract test over the authored `plugins/sp/commands/*.md` corpus",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill",
+            "noRuntimeCaller": true,
+            "subject": "plugins/sp/commands"
+        },
+        {
+            "path": "scripts/commands/delegate-workflow-e2e.ts",
+            "responsibility": "Two-install delegation workflow E2E proof (1397): install A's workflow delegates through install B's A2A surface and links the created task, writing its receipt",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 38
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 38
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: two-install delegation scenario fixture, not runtime behavior"
+        },
+        {
+            "path": "scripts/commands/executor-selection-contract.test.ts",
+            "responsibility": "Cross-reference contract test for executor-selection and value-behavior tables",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/validate-flag-contracts.ts"
+        },
+        {
+            "path": "scripts/commands/fixtures/fleet-host-fixture.ts",
+            "responsibility": "Host-capability probe test host used by the fleet E2E lane",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "line": 1503
+                },
+                {
+                    "path": "scripts/commands/fleet-e2e-host-probe.test.ts",
+                    "line": 180
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: fleet fixture data; only the host-probe arm moves"
+        },
+        {
+            "path": "scripts/commands/flag-contract-parity.test.ts",
+            "responsibility": "Cross-surface flag parity fixture for the authored command corpus",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "packages/app/src/services/quality-gate.ts",
+                    "line": 686
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: pins Spur’s own CLI flag surface, a repository contract",
+            "subject": "plugins/sp/commands"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-batch-perf.heavy.test.ts",
+            "responsibility": "Heavy-lane real serial-vs-parallel measurement of the fleet batch benchmark arm",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-batch-perf.test.ts",
+            "responsibility": "Companion tests for the fleet batch benchmark arm's decision rows",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-batch-perf.ts",
+            "responsibility": "Paired-stub batch benchmark trials per target agent with recorded receipts",
+            "tests": [
+                "scripts/commands/fleet-e2e-batch-perf.heavy.test.ts",
+                "scripts/commands/fleet-e2e-batch-perf.test.ts"
+            ],
+            "callers": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "line": 77
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-host-probe.test.ts",
+            "responsibility": "Decision-contract tests for the host-capability probe report",
+            "tests": [],
+            "callers": [],
+            "downstream": "move",
+            "disposition": "pending",
+            "surface": "agent doctor-hosts",
+            "waveWbs": "1414",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/fleet-e2e.ts"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-matrix.test.ts",
+            "responsibility": "Decision-contract tests for the executor matrix columns and receipts",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: repository-only proof or policy with no downstream consumer",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/fleet-e2e.ts"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-perf.test.ts",
+            "responsibility": "Decision-contract tests for the perf lane's warm-row qualification",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: repository-only proof or policy with no downstream consumer",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/fleet-e2e.ts"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-turn-perf.test.ts",
+            "responsibility": "Companion tests for paired turn-perf comparison rows",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: repository-only proof or policy with no downstream consumer",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/fleet-e2e-turn-perf.ts"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-turn-perf.ts",
+            "responsibility": "Paired turn-perf comparison trials and measured-row projection",
+            "tests": ["scripts/commands/fleet-e2e-turn-perf.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/fleet-e2e.ts",
+                    "line": 78
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: repository-only proof or policy with no downstream consumer"
+        },
+        {
+            "path": "scripts/commands/fleet-e2e.ts",
+            "responsibility": "Inbox-only fleet integration proof including guest-join, matrix, perf and host-probe arms",
+            "tests": [
+                "scripts/commands/fleet-e2e-matrix.test.ts",
+                "scripts/commands/fleet-e2e-host-probe.test.ts",
+                "scripts/commands/fleet-e2e-perf.test.ts"
+            ],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 102
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 34
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: fleet E2E scenario fixture; only the host-probe arm moves (1414)"
+        },
+        {
+            "path": "scripts/commands/install-sh.test.ts",
+            "responsibility": "Bootstrap fixture tests for checksum verification and atomic replacement",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: proves the first-binary bootstrap, a repository-only step",
+            "noRuntimeCaller": true,
+            "subject": "scripts/install.sh"
+        },
+        {
+            "path": "scripts/commands/plugin-install-smoke.ts",
+            "responsibility": "Release gate proving the bundled plugin surface is standalone and installs clean",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 88
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 12
+                },
+                {
+                    "path": "apps/cli/src/release-ops.ts",
+                    "line": 152
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
+        },
+        {
+            "path": "scripts/commands/release-alias.test.ts",
+            "responsibility": "Contracts for root release aliases forwarding to the public `spur builder` noun",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: pins repository release aliases, a repository-only contract",
+            "noRuntimeCaller": true,
+            "subject": "apps/cli/src/release-ops.ts"
+        },
+        {
+            "path": "scripts/commands/run-tests.ts",
+            "responsibility": "Hermetic test launcher owning the environment, coverage certification and child termination",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 85
+                },
+                {
+                    "path": "package.json",
+                    "line": 85
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 20
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo’s suite policy"
+        },
+        {
+            "path": "scripts/commands/script-contract-check.test.ts",
+            "responsibility": "Companion tests for the ADR-130 script and hook placement contract",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/script-contract-check.ts"
+        },
+        {
+            "path": "scripts/commands/script-contract-check.ts",
+            "responsibility": "Enforce the ADR-130 script and hook placement contract, including `--placement-only`",
+            "tests": ["scripts/commands/script-contract-check.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 93
+                },
+                {
+                    "path": "config/rules/boundary/sp-script-placement.yaml",
+                    "line": 18
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 24
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
+        },
+        {
+            "path": "scripts/commands/skill-eval.test.ts",
+            "responsibility": "Companion tests for skill scenario eval fixtures and report rendering",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/skill-eval.ts"
+        },
+        {
+            "path": "scripts/commands/skill-eval.ts",
+            "responsibility": "Run skill eval scenarios and render their report",
+            "tests": ["scripts/commands/skill-eval.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 97
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 41
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
+        },
+        {
+            "path": "scripts/commands/surface-drift-inventory.test.ts",
+            "responsibility": "Companion tests for plugin/workflow drift inventory extraction",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/surface-drift-inventory.ts"
+        },
+        {
+            "path": "scripts/commands/surface-drift-inventory.ts",
+            "responsibility": "Re-runnable plugin/workflow drift inventory against the live source-local CLI",
+            "tests": ["scripts/commands/surface-drift-inventory.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 28
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
+        },
+        {
+            "path": "scripts/commands/test-suite-termination.test.ts",
+            "responsibility": "Companion tests for Windows child-suite termination behavior",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: child-termination proof for this repo’s suite",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/test-suite-termination.ts"
+        },
+        {
+            "path": "scripts/commands/test-suite-termination.ts",
+            "responsibility": "Terminate child test suites reliably on Windows",
+            "tests": ["scripts/commands/test-suite-termination.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/run-tests.ts",
+                    "line": 40
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: child-termination proof for this repo’s suite"
+        },
+        {
+            "path": "scripts/commands/validate-commands.ts",
+            "responsibility": "Validate the authored `sp` command files against the thin-wrapper contract",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 101
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 26
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
+        },
+        {
+            "path": "scripts/commands/validate-flag-contracts.ts",
+            "responsibility": "Cross-surface flag parity gate for the `sp` contract surfaces",
+            "tests": ["scripts/commands/executor-selection-contract.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 69
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
+        },
+        {
+            "path": "scripts/install.sh",
+            "responsibility": "POSIX first-binary bootstrap: OS/arch selection, download, checksum verification, atomic rename",
+            "tests": ["scripts/commands/install-sh.test.ts"],
+            "callers": [
+                {
+                    "path": "README.md",
+                    "line": 81
+                },
+                {
+                    "path": "apps/cli/README.md",
+                    "line": 46
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: first-binary bootstrap with no runtime behavior to absorb"
+        },
+        {
+            "path": "scripts/spur-dev.ts",
+            "responsibility": "Repository developer dispatcher: L1-L4 command registry and delegated child-process routing",
+            "tests": [],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 85
+                },
+                {
+                    "path": "apps/cli/package.json",
+                    "line": 54
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: dispatcher for the retained repository-only entries; shrinks as waves retire routes"
+        }
+    ],
+    "boundaryEdges": []
+}

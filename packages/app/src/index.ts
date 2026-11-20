@@ -150,6 +150,32 @@ export {
     writeJsonError,
 } from './output/envelope';
 export {
+    CANONICAL_RECOVERY,
+    type CanonicalRunStart,
+    CERT_RELATIVE_PATH,
+    type CertificationMarker,
+    type CertificationRefusalReason,
+    type CertificationStatus,
+    type CertifyOutcome,
+    type CertifyRunner,
+    COVERAGE_DIR_ENV,
+    COVERAGE_DIR_TOKEN,
+    certifyCanonicalRun,
+    certifyCommand,
+    LCOV_RELATIVE_PATH,
+    startCanonicalRun,
+    treeFingerprint,
+    type ValidationResult,
+    validateCoverageCertification,
+} from './rules/coverage-certification';
+export {
+    type CheckShimsOptions,
+    type CheckShimsResult,
+    checkShims,
+    DEFAULT_SHIM_MANIFEST,
+    type ShimViolation,
+} from './rules/transition-shims';
+export {
     createProjectCardRefResolver,
     envProjectCardRefResolver,
     type ProjectCardTarget,
@@ -628,6 +654,11 @@ export {
     WaitError,
     waitForOccupant,
 } from './services/occupant-wait';
+export {
+    type ParallelSupervisorHandle,
+    type ParallelSupervisorOptions,
+    superviseParallel,
+} from './services/parallel-supervisor';
 export type {
     EnsurePipelineRunLinkOptions,
     EnsurePipelineRunLinkResult,
@@ -1309,6 +1340,18 @@ export {
     type WorkflowRunStartedEvent,
     type WorkflowTransitionEvent,
 } from './workflow/observability';
+export {
+    assertNotNested,
+    configureEvalRoots,
+    EvalNestingError,
+    type EvalOptions,
+    type EvalOutcome,
+    type EvalPlan,
+    type EvalRoots,
+    evalPipeline,
+    planEval,
+    resolveEvalFixture,
+} from './workflow/pipeline-eval';
 // Phased plan projection — def→two-layer A-Z/1-9 plan from `display` annotations (1104)
 export {
     type BatchTask,
@@ -1340,6 +1383,34 @@ export {
     type WorkflowStateProgress,
     type WorkflowTransitionProgress,
 } from './workflow/progress-projection';
+export type {
+    PromotionCheckFinding,
+    PromotionOutcome,
+    PromotionRoots,
+    WorkflowCandidatesConfig,
+    WorkflowRetirementRecord,
+} from './workflow/promotion-commands';
+export {
+    CANDIDATES_RELATIVE_PATH,
+    checkRetirementGuard,
+    checkWorkflowPromotion,
+    configurePromotionRoots,
+    countAgentRunActions,
+    countRealTerminalRuns,
+    DB_RELATIVE_PATH,
+    everTrackedDefinitionNames,
+    findParallelDefinitions,
+    formatFinding,
+    isPastDeadline,
+    loadCanonicalAgentRunCounts,
+    loadWorkflowCandidates,
+    promoteCheck,
+    promoteEvaluate,
+    promoteResolve,
+    saveWorkflowCandidates,
+    validateCandidate,
+    WORKFLOWS_RELATIVE_DIR,
+} from './workflow/promotion-commands';
 export {
     type AgentRunMeasurement,
     type AgentRunStat,

@@ -24,10 +24,10 @@ const REPO_ROOT = join(import.meta.dir, '../../..');
 
 /** The repo-wide check names relocated out of the per-task gate (task 0872 R2/R3). */
 const REPO_WIDE_CHECKS = [
-    'link-check',
+    // A94 1411 merged the two repository checks into one scoped builder verb.
+    'check-deps',
     'transition-shim-check',
     'script-contract-check',
-    'dependency-drift-check',
     'importer-schema-check',
 ] as const;
 

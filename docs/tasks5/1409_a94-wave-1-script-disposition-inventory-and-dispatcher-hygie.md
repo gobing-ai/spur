@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "A94 wave 1: script disposition inventory and dispatcher hygiene"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.081Z
-updated_at: "2026-11-20T08:38:07.206Z"
+updated_at: "2026-11-20T08:54:14.455Z"
 feature_id: A94
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - tooling
 
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1409. A94 wave 1: script disposition inventory and dispatcher hygiene
@@ -33,7 +35,7 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Requirements
 
-- [ ] R1. `docs/reports/A94-script-ownership.json` (schemaVersion 2) has one entry per tracked candidate. The candidate set uses the A93 rule: `scripts/install.sh`, `scripts/spur-dev.ts`, every `scripts/commands/**/*.ts`. Each entry keeps the A93 fields (`path`, `responsibility`, `tests`, `callers`) and adds:
+- [x] R1. `docs/reports/A94-script-ownership.json` (schemaVersion 2) has one entry per tracked candidate. The candidate set uses the A93 rule: `scripts/install.sh`, `scripts/spur-dev.ts`, every `scripts/commands/**/*.ts`. Each entry keeps the A93 fields (`path`, `responsibility`, `tests`, `callers`) and adds:
   - `downstream`: `move | generalize | forwarder | retain`.
   - `surface`: the `spur <noun> <verb>` or config key, required for move/generalize.
   - `waveWbs`: one of 1410–1415, required unless retain.
@@ -41,7 +43,7 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
   - `disposition`: `pending | done | retained`.
 
   Values copy satellite §2 verbatim.
-- [ ] R2. `repo-wide-tests/a93-script-ownership.test.ts` reads the A94 report and fails on:
+- [x] R2. `repo-wide-tests/a93-script-ownership.test.ts` reads the A94 report and fails on:
   - a missing, stray or duplicate entry against `git ls-files`;
   - retain/forwarder without `downstreamReason`;
   - move/generalize without `surface` or `waveWbs`;
@@ -49,17 +51,17 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
   - a caller anchor that is not a real line.
 
   The boundary-edge block now reads the A94 `boundaryEdges` (expected empty).
-- [ ] R3. Running `bun scripts/spur-dev.ts` with no arguments prints every `case '<name>'` in the dispatcher switch plus every `DELEGATED` key. The test asserts this by parsing the source, so a later addition cannot drift.
-- [ ] R4. `scripts/spur-dev.ts` exports `RETIRED: Record<string, string>` (old name → replacement command). A retired name prints `spur-dev: '<name>' moved to '<replacement>'` to stderr and exits 2. RETIRED keys never collide with a live case. 1409 ships it empty; waves 1410–1414 add entries as they delete routes.
-- [ ] R5. The inventory's `consentStatus` reads `{state: "granted", at: "2026-11-19", by: "Robin", record: "docs/design/downstream-tooling-absorption.md §5", amendment: "2026-11-20 surface-shape"}`. The test asserts it before any `surface` value is accepted.
+- [x] R3. Running `bun scripts/spur-dev.ts` with no arguments prints every `case '<name>'` in the dispatcher switch plus every `DELEGATED` key. The test asserts this by parsing the source, so a later addition cannot drift.
+- [x] R4. `scripts/spur-dev.ts` exports `RETIRED: Record<string, string>` (old name → replacement command). A retired name prints `spur-dev: '<name>' moved to '<replacement>'` to stderr and exits 2. RETIRED keys never collide with a live case. 1409 ships it empty; waves 1410–1414 add entries as they delete routes.
+- [x] R5. The inventory's `consentStatus` reads `{state: "granted", at: "2026-11-19", by: "Robin", record: "docs/design/downstream-tooling-absorption.md §5", amendment: "2026-11-20 surface-shape"}`. The test asserts it before any `surface` value is accepted.
 
 **Out of scope:** moving or deleting any script (waves 1410–1415), editing `A93-script-ownership.json`, any new CLI verb.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Every script has a downstream-use disposition (req: R1, R2)
-- [ ] AC2 — Public surfaces are consented before implementation (req: R5)
-- [ ] AC3 — Dispatcher shrinks to retained entries (req: R3, R4)
+- [x] AC1 — Every script has a downstream-use disposition (req: R1, R2)
+- [x] AC2 — Public surfaces are consented before implementation (req: R5)
+- [x] AC3 — Dispatcher shrinks to retained entries (req: R3, R4)
 
 ### Q&A
 
@@ -97,10 +99,10 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Plan
 
-- [ ] 1. Retarget the test to A94 and add the downstream, usage-coverage and RETIRED assertions. Confirm it fails because the A94 JSON is absent. (R2, R3, R4, R5)
-- [ ] 2. Build `A94-script-ownership.json`: candidates from `git ls-files`, fields carried from the A93 entries, downstream/surface/wave from satellite §2, current `sourceCommit`. (R1, R5)
-- [ ] 3. Fix `usage()` and add `RETIRED` with the exit-2 branch. (R3, R4)
-- [ ] 4. Verify:
+- [x] 1. Retarget the test to A94 and add the downstream, usage-coverage and RETIRED assertions. Confirm it fails because the A94 JSON is absent. (R2, R3, R4, R5)
+- [x] 2. Build `A94-script-ownership.json`: candidates from `git ls-files`, fields carried from the A93 entries, downstream/surface/wave from satellite §2, current `sourceCommit`. (R1, R5)
+- [x] 3. Fix `usage()` and add `RETIRED` with the exit-2 branch. (R3, R4)
+- [x] 4. Verify:
   - `bun scripts/spur-dev.ts run-tests test --reporter=dots ./repo-wide-tests/a93-script-ownership.test.ts`
   - `bun scripts/spur-dev.ts; echo $?` → 0, full list
   - `bun scripts/spur-dev.ts nope; echo $?` → 1
@@ -109,15 +111,82 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `docs/features/A94_downstream-usable-tooling-absorb-remaining-repository-scripts-into-spur-surfaces.md:173` |
+| `docs/features/A94_downstream-usable-tooling-absorb-remaining-repository-scripts-into-spur-surfaces.md:185` |
+| `docs/features/A94_downstream-usable-tooling-absorb-remaining-repository-scripts-into-spur-surfaces.md:5` |
+| `docs/features/A94_downstream-usable-tooling-absorb-remaining-repository-scripts-into-spur-surfaces.md:9` |
+| `docs/features/INDEX.md:27` |
+| `repo-wide-tests/a93-script-ownership.test.ts:11` |
+| `repo-wide-tests/a93-script-ownership.test.ts:112` |
+| `repo-wide-tests/a93-script-ownership.test.ts:119` |
+| `repo-wide-tests/a93-script-ownership.test.ts:121` |
+| `repo-wide-tests/a93-script-ownership.test.ts:124` |
+| `repo-wide-tests/a93-script-ownership.test.ts:136` |
+| `repo-wide-tests/a93-script-ownership.test.ts:14` |
+| `repo-wide-tests/a93-script-ownership.test.ts:143` |
+| `repo-wide-tests/a93-script-ownership.test.ts:146` |
+| `repo-wide-tests/a93-script-ownership.test.ts:149` |
+| `repo-wide-tests/a93-script-ownership.test.ts:155` |
+| `repo-wide-tests/a93-script-ownership.test.ts:157` |
+| `repo-wide-tests/a93-script-ownership.test.ts:165` |
+| `repo-wide-tests/a93-script-ownership.test.ts:2` |
+| `repo-wide-tests/a93-script-ownership.test.ts:20` |
+| `repo-wide-tests/a93-script-ownership.test.ts:253` |
+| `repo-wide-tests/a93-script-ownership.test.ts:26` |
+| `repo-wide-tests/a93-script-ownership.test.ts:267` |
+| `repo-wide-tests/a93-script-ownership.test.ts:272` |
+| `repo-wide-tests/a93-script-ownership.test.ts:295` |
+| `repo-wide-tests/a93-script-ownership.test.ts:32` |
+| `repo-wide-tests/a93-script-ownership.test.ts:329` |
+| `repo-wide-tests/a93-script-ownership.test.ts:338` |
+| `repo-wide-tests/a93-script-ownership.test.ts:351` |
+| `repo-wide-tests/a93-script-ownership.test.ts:365` |
+| `repo-wide-tests/a93-script-ownership.test.ts:4` |
+| `repo-wide-tests/a93-script-ownership.test.ts:47` |
+| `repo-wide-tests/a93-script-ownership.test.ts:50` |
+| `repo-wide-tests/a93-script-ownership.test.ts:56` |
+| `repo-wide-tests/a93-script-ownership.test.ts:6` |
+| `repo-wide-tests/a93-script-ownership.test.ts:71` |
+| `scripts/spur-dev.ts:132` |
+| `scripts/spur-dev.ts:149` |
+| `scripts/spur-dev.ts:97` |
+| `docs/reports/A94-script-ownership.json:1` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | docs/reports/A94-script-ownership.json:1 — 63 entries, one per tracked candidate, each with downstream/surface/waveWbs/disposition; candidate set regenerated by repo-wide-tests/a93-script-ownership.test.ts:118 |
+| R2 | MET | repo-wide-tests/a93-script-ownership.test.ts:136 (downstream/destination/wave), :175 (done-while-tracked), :197 (real anchors); 18 tests pass |
+| R3 | MET | scripts/spur-dev.ts:102 COMMANDS printed by usage(); repo-wide-tests/a93-script-ownership.test.ts:317 spawns the dispatcher and compares to its parsed case labels |
+| R4 | MET | scripts/spur-dev.ts:129 exported RETIRED map, :150 exit-2 pointer branch; repo-wide-tests/a93-script-ownership.test.ts:331 asserts exit 2 + message and no live collision |
+| R5 | MET | docs/reports/A94-script-ownership.json:5 consentStatus granted 2026-11-19 with the surface-shape amendment; asserted at repo-wide-tests/a93-script-ownership.test.ts:279 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Every script has a downstream-use disposition (req: R1, R2) | MET | test | bun test ./repo-wide-tests/a93-script-ownership.test.ts — 18 pass, 0 fail; docs/reports/A94-script-ownership.json:1 |
+| AC2 — Public surfaces are consented before implementation (req: R5) | MET | test | repo-wide-tests/a93-script-ownership.test.ts:279 asserts the exact consentStatus block; no surface is accepted while state != granted |
+| AC3 — Dispatcher shrinks to retained entries (req: R3, R4) | MET | command | bun scripts/spur-dev.ts -> exit 0 listing all 29 live names; bun scripts/spur-dev.ts nope -> exit 1; RETIRED spawn assertion passes |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -127,3 +196,8 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 - Concurrency: no other worktrees or wip tasks (`git worktree list`, `spur task list --status wip`, checked 2026-11-20).
 
 ### History
+
+- 2026-11-20T08:47:25.855Z todo → wip (system)
+- 2026-11-20T08:53:48.661Z wip → testing (system)
+- 2026-11-20T08:53:57.663Z testing → done (system)
+

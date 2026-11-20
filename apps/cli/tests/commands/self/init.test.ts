@@ -382,7 +382,7 @@ describe('init command', () => {
             const { text, builder } = await initAndParse(cwd);
 
             expect(text).toContain('builder:\n  preset: bun');
-            expect(builder).toEqual({ preset: 'bun', actions: {} });
+            expect(builder).toEqual({ preset: 'bun', actions: {}, dependencyScope: [] });
         }
     });
 
@@ -424,7 +424,7 @@ describe('init command', () => {
 
         const { text, builder } = await initAndParse(cwd);
 
-        expect(builder).toEqual({ preset: 'none', actions: {} });
+        expect(builder).toEqual({ preset: 'none', actions: {}, dependencyScope: [] });
         expect(text).toContain('  # actions:');
         expect(text).toContain('  #   build: <command>');
         expect(text).toContain('  #   test-changed: <command>');
@@ -494,6 +494,7 @@ describe('JavaScript action onboarding (1303)', () => {
         const { text, builder, cwd, options } = await scaffold(JSON.stringify({ scripts, packageManager }), [...locks]);
         expect(builder).toEqual({
             preset: 'none',
+            dependencyScope: [],
             actions: {
                 build: `${manager} run build`,
                 'test-full': `${manager} run test-full`,
@@ -575,18 +576,21 @@ describe('JavaScript action onboarding (1303)', () => {
         [null, ['package-lock.json'], 'no package.json'],
     ] as const)('keeps ambiguous or malformed input unbound: %s %j', async (manifest, locks, diagnostic) => {
         const { text, builder } = await scaffold(manifest, [...locks]);
-        expect(builder).toEqual({ preset: 'none', actions: {} });
+        expect(builder).toEqual({ preset: 'none', actions: {}, dependencyScope: [] });
         expect(text).toContain(diagnostic);
         expect(text).toContain('#   build: <command>');
     });
 
-    test.each([{}, { scripts: null }, { scripts: [] }, { scripts: 'check' }, { scripts: { check: false } }])(
-        'does not infer commands from missing or invalid scripts: %j',
-        async (manifest) => {
-            const { builder } = await scaffold(JSON.stringify(manifest), ['package-lock.json']);
-            expect(builder.actions).toEqual({});
-        },
-    );
+    test.each([
+        {},
+        { scripts: null },
+        { scripts: [] },
+        { scripts: 'check' },
+        { scripts: { check: false } },
+    ])('does not infer commands from missing or invalid scripts: %j', async (manifest) => {
+        const { builder } = await scaffold(JSON.stringify(manifest), ['package-lock.json']);
+        expect(builder.actions).toEqual({});
+    });
 
     test('Make targets override matching scripts and leave remaining scripts available', async () => {
         const { builder, text } = await scaffold(
@@ -607,7 +611,7 @@ describe('JavaScript action onboarding (1303)', () => {
         const make = await scaffold(manifest, ['package-lock.json'], 'build:\n\ttouch discovery-ran\n');
         expect(make.builder.actions).toEqual({ build: 'make build' });
         const bun = await scaffold(manifest, ['bun.lock', 'package-lock.json'], 'build:\n');
-        expect(bun.builder).toEqual({ preset: 'bun', actions: {} });
+        expect(bun.builder).toEqual({ preset: 'bun', actions: {}, dependencyScope: [] });
     });
 
     test('re-init preserves every byte of custom actions even when discovery evidence conflicts', async () => {
@@ -665,6 +669,7 @@ describe('language and package-root onboarding (1304)', () => {
         });
         expect(builder).toEqual({
             preset: 'none',
+            dependencyScope: [],
             actions: {
                 build: 'cargo build',
                 typecheck: 'cargo check',
@@ -756,7 +761,11 @@ describe('language and package-root onboarding (1304)', () => {
             'child/package.json': JSON.stringify({ packageManager: `${manager}@1.0.0`, scripts: { check: ':' } }),
             ...(manager === 'bun' ? { 'child/bun.lock': '' } : {}),
         });
-        expect(builder).toEqual({ preset: 'none', actions: { check: `cd ./child && ${manager} run check` } });
+        expect(builder).toEqual({
+            preset: 'none',
+            dependencyScope: [],
+            actions: { check: `cd ./child && ${manager} run check` },
+        });
     });
 
     test('multiple mixed roots list sorted paths and propose no actions', async () => {
