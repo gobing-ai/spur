@@ -7470,3 +7470,75 @@ Skipped: the pre-existing `changelog-confidence` red (already recorded for the G
 - **Runall light gates are check.reused-heavy by design.** Sibling tasks at the same git tree digest skip repeated checks; the integrated full gate is owed **once at the batch base ref** (1111 R3), not per task. Reviews scope diffs via the recorded base (`1374-base.sha`) and exclude sibling surfaces already reviewed PASS.
 - **Deferral leaves must be closed somewhere.** 1372 explicitly deferred `docs/04_DESIGN.md` endpoint ownership to the wrapup — this wrapup closed it (ADR-152, satellite, index row, config rows, gateway line, CLI entry, 03 §33). Wrapups should sweep every "leaves for …" clause in the batch's task records.
 
+## 2026-11-20 — 1418 (provider entitlement lapse)
+
+- A provider's 4xx body reaches the classifier only as `stderr`/`stdout` text: `HTTP_STATUS_PATTERN`
+  reads a code after `status`/`http`/`api error`, so a bare `400 {"error":…` prefix yields no status
+  at all. A rule keyed on `statusCodes: [400]` would therefore be dead weight — and would also risk
+  matching an unrelated 400. Match the vendor code + prose pair instead.
+- `FAILURE_RULES.patterns` is a CONJUNCTION (`every`), not an OR list. The narrow two-pattern shape
+  is the repo's precision idiom (1260 R1 / 0687); reuse it rather than adding a new matcher.
+- `signal: 'resource-exhaustion'` is the only availability signal in the objective vocabulary, and it
+  is the one that walks the ladder without the per-policy fallback bound. `auth` stops at stages with
+  no `auth` fallback — the wrong choice for "this credential is dead, try the next rung".
+- The 1323 run-scoped breaker keys on `executorUnavailabilityEvidence`, which took only
+  `exitCode`/`signal`. Widening it to `stdout`/`stderr` is enough: `agent-run-executor.ts` already
+  passes the full `AgentRunResult`, so the breaker gained the class with no executor-loop edit.
+- Fixture hygiene: a provider error body carries the account id and request id. Mask them in the
+  test fixture — the classification surface is the code + phrase, not the operator's identity.
+
+## 2026-11-20 — 1419 (unmeasured executors)
+
+- Silence is not headroom. `agent-usage-producer` only classified providers the source returned, so
+  an executor whose provider codexbar never mentions stayed enabled and unmeasured — which is exactly
+  how a lapsed volc account stayed the cheapest elected standard executor.
+- An ERRORED provider counts as reported (it is already listed under `erroredProviders`); only total
+  absence is "unreported". Do not re-derive provider↔executor mapping: `mapProvidersToExecutors`
+  (agent slug or `model` prefix) is the one rule.
+- Reuse `executorDisabled` from `executor-tier.ts`; the doctor fingerprint already trusts it.
+- Informational, never an action: unreported executors get no `changes[]` row and no availability
+  write. Auto-disabling on a capture gap would be worse than the disease.
+- The doctor reads the snapshot, not a live capture, so the list must be PERSISTED
+  (`unreported_executors`) for the footer to see it; and it must be intersected with the executors
+  enabled NOW, or a since-disabled one reads as outstanding work.
+- Adding a required field to `DoctorUsageInfo` breaks every `toEqual` fixture in the doctor tests —
+  plain `toEqual({capturedAt, age, stale})` assertions in `agent-service.test.ts` only surface in the
+  FULL suite, not the focused run. Run the repo gate before landing, not just the task gate.
+
+## 2026-11-20 — 1420 (stamped provenance identity)
+
+- Root cause of `not available: invocation executor absent` was a trace-projection WHITELIST
+  (`TRACE_INVOCATION_FIELDS`), not a missing field on the invocation: `AgentRunExecutor` already put
+  `executor`/`tier`/`role` there. When a traced value is "absent", check the projection allowlist
+  before adding a new seam.
+- The ladder arrives at the trace as `result.ladder` (an array of decision rows). Project only what
+  the consumer needs: one bounded `a→b, b→c` scalar beats an array projection, and `omitted ≠ ''`
+  keeps "no escalation" distinguishable from "escalated to nothing".
+- Probe-time identity cannot know the elected executor (no dispatch has happened yet). Turn the
+  placeholder into a TOKEN and substitute deterministically at stamp — the model-authored body is a
+  copy of whatever it was given, so a formatting rule ("copy verbatim") plus an exact-string
+  replacement is enough; never parse markdown.
+- Cache-hit republish: keep the published model half verbatim, but rewrite a placeholder identity to
+  `not-applicable: cache hit, no agent stage ran`. Echoing a probe placeholder as if a dispatch had
+  produced it is the defect, not the missing value.
+- `noUncheckedIndexedAccess` + `as const` tuples: a `readonly [string, string]` annotation keeps
+  `.includes(value)` on `string` while still giving literal-free indexing. Optional interface fields
+  (`model?: string`) widen `replaceAll`'s second argument — coalesce before the call.
+
+## 2026-11-20 — batch mechanics (dev-runall --worktree --wrap)
+
+- The worktree's commit must run the REAL hooks. `git -c core.hooksPath=.git/hooks` inside a worktree
+  points at a nonexistent directory (`.git` is a file there) and silently skips lefthook. Commit
+  plainly; if a commit went in without hooks, `git reset --soft HEAD~1` and recommit (hooks run on
+  the common-dir hooks path).
+- Main can advance while a batch runs: the WT-4 ancestry check correctly refuses the FF. The
+  documented recovery is merge main INTO the branch inside the worktree, re-run the full gate on the
+  merged tree, then FF main — and record the integration note on the marker.
+- Inline host driving of `task-pipeline.yaml` resumes with a RECEIPT FILE, not prose:
+  `.spur/run/<runId>/receipts/<state>.json` with `{runId, state, executor:'host', outcome:'done', …}`,
+  passed as `--answer-text <path>`. Free text is rejected as a malformed receipt.
+- The pipeline pauses at `hitl.confirm` for the approval gate even under `profile: auto`; resume with
+  `--answer yes`.
+- Task gate receipts are tree-hash bound: any test-fixture edit after `spur task gate light` forces a
+  recheck.
+

@@ -99,10 +99,16 @@ run overstated validation by 48.5 minutes. `stamp` takes `--validation <v.txt>` 
 before stamping. The appended `dispatches[]` list carries one row per successful `agent.run` action
 (`node`, `actionId`, canonical `agent`, executor profile, `model`, `timeoutMs` as a positive number
 or `unbounded`), and top-level `executor`/`model` name the FINAL validation invocation with
-`executorProfile` kept separately. The `auto` selector is never provenance — `cache-probe` no longer
+`executorProfile` kept separately. A dispatch that failed over before answering also carries an
+optional `failover` scalar rendered as `a→b, b→c` (task 1420) — the run's ladder escalation rows,
+never the whole decision array. The `auto` selector is never provenance — `cache-probe` no longer
 passes `--executor "$agent"` — and a miss that cannot produce a passing receipt fails closed rather
 than stamping an unresolved executor. A genuinely absent value renders a stated reason
-(`not available: invocation model absent`), never a bare `not available`.
+(`not available: invocation model absent`), never a bare `not available`. Probe-time identity is a
+TOKEN, not prose (`pending: executor resolved at stamp` / `pending: model resolved at stamp`) so the
+stamp can substitute it deterministically in the model-authored body from the stamped values; a
+cache-hit republish rewrites a placeholder identity to `not-applicable: cache hit, no agent stage
+ran` (1420).
 
 **The semantic digest** is SHA-256 over the artifact JSON normalized to exclude only volatile
 generation fields (`generatedAt`, absolute paths, the artifact's own digest field). It deliberately

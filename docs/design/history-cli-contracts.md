@@ -540,7 +540,11 @@ one row per successful `agent.run` action — `node`, `actionId`, canonical `age
 `model`, and `timeoutMs` (a positive number or `unbounded`) — read from the run's own action
 receipts. Top-level `executor`/`model` name the FINAL validation invocation and `executorProfile`
 keeps its profile; an absent value renders a stated reason (`not available: invocation model
-absent`), never a bare `not available`. The `auto` selector is never provenance: `cache-probe` no
+absent`), never a bare `not available`. A dispatch that escalated before answering carries an
+optional `failover` scalar (`a→b, b→c`, task 1420). Probe-time identity is a pending token
+(`pending: executor resolved at stamp` / `pending: model resolved at stamp`) that the stamp
+substitutes in the model-authored body from the stamped values, and a cache-hit republish rewrites
+a placeholder identity to `not-applicable: cache hit, no agent stage ran`. The `auto` selector is never provenance: `cache-probe` no
 longer passes `--executor "$agent"`. A miss that did model work but cannot produce a passing
 validation receipt fails closed at stamp. Omitting both flags preserves the pre-1326 stamp surface
 for unit use.
