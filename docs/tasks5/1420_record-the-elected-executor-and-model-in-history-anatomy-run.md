@@ -1,0 +1,177 @@
+---
+schema_version: 1
+name: Record the elected executor and model in history-anatomy run provenance
+status: todo
+template: issue
+created_at: 2026-11-21T04:33:09.024Z
+updated_at: "2026-11-21T04:42:49.185Z"
+feature_id: E6
+
+priority: P3
+ac_altitude: task-local
+estimate_hours: 4
+---
+
+## 1420. Record the elected executor and model in history-anatomy run provenance
+
+### Background
+
+History-anatomy reports do not record which executor profile served the agent stages or whether the run failed
+over, and the model-authored `Scope and provenance` body still prints the probe-time placeholder.
+
+**Evidence (observed 2026-11-20, re-verified 2026-11-20 refine).**
+
+- `docs/report/2026-11-20-history-anatomy.md:57`: `Executor is \`not available: probe did not receive an executor\`.
+  Model is \`not available: probe did not receive a model\`.` — body text, written by enrich from the probe-time
+  `.spur/run/<runId>-provenance.json`.
+- The same report's stamped frontmatter already names the agent and model (`:29` `executor: "pi"`, `:31` `model:
+  "commandcode/deepseek/deepseek-v4.1-flash"`) but `:30` `executorProfile: "not available: invocation executor absent"`
+  and every `dispatches` row (`:38-44`) carries the same absent executor.
+- The run actually dispatched `commandcode` / `deepseek/deepseek-v4.1-flash`
+  (`.spur/run/0a2b3965-…/agent-sessions/coder/fresh-enrich/*.jsonl` `model_change` event).
+
+**Refine corrections (2026-11-20)**
+
+- Premise "provenance records neither executor nor model" → stale: 1326 `applyFinalProvenance`
+  (`packages/app/src/services/history-anatomy.ts:901-950`, called by `stamp` in `history-anatomy-cli.ts:236-257`)
+  already records agent + model per dispatch and at top level. Missing: the executor PROFILE (always
+  `invocation executor absent`), failover visibility, and the body placeholder.
+- R1 "the provenance file … names that executor" → the probe-time `-provenance.json` is a workflow-internal input
+  written before any dispatch (`config/workflows/history-anatomy.yaml` probe state); it cannot know the elected
+  executor. The published report's stamped provenance is the record of truth; R1/AC1 re-targeted to it.
+- Root cause of `invocation executor absent` → `AgentRunExecutor` does put `executor`, `tier`, `role` on the
+  invocation (`agent-run-executor.ts:795-817`) but the trace projection whitelist `TRACE_INVOCATION_FIELDS`
+  (`workflow-trace-projection.ts:143`) drops them.
+- R2 "failover visible" → the ladder is persisted as `resultData.ladder` (`agent-run.ts:1687`,
+  `AgentLadderDecision[]`), but the projection copies scalars only (`workflow-trace-projection.ts:253-280`), so it
+  never reaches stamp.
+- R3 "the Scope and provenance section renders the recorded executor/model" → that section is model-authored by
+  enrich from probe values (`plugins/sp/skills/history-anatomy/references/operations.md:27`; no deterministic
+  renderer emits it), before stamp. Fix is a deterministic stamp-time substitution of explicit pending tokens.
+- AC3 "cache-probe hit records `not-applicable`" → a hit reuses the published model half via `refreshReport`
+  (`history-anatomy.ts:1126-1131`), whose stamped identity correctly names who authored that half. Only a cached
+  report still carrying a placeholder/pending value gets the explicit `not-applicable` rewrite.
+
+### Requirements
+
+- [ ] R1. The stamped (published) report's per-dispatch provenance names the executor profile that served each agent
+  stage (`DispatchProvenance.executor`), sourced from the dispatch invocation — never
+  `not available: invocation executor absent` when the dispatch recorded one.
+- [ ] R2. A dispatch that failed over records it: `DispatchProvenance.failover` (optional, `a→b[, b→c]`) derived
+  from the run's ladder escalation decisions, rendered in frontmatter and parsed back symmetrically; the serving
+  executor stays the dispatch's final `executor`.
+- [ ] R3. The published body's `Scope and provenance` never carries a probe placeholder: probe writes explicit
+  pending tokens, enrich copies them verbatim, and stamp deterministically substitutes them with the stamped
+  executor/model.
+- [ ] R4. Cache-hit refresh never emits a probe placeholder: a cached report whose identity is a legacy placeholder
+  or pending token is rewritten to `not-applicable: cache hit, no agent stage ran`; a cached report with a real
+  stamped identity keeps it.
+
+Out of scope: changing which executor is elected; new workflow states; recording identity for non-history-anatomy
+workflows beyond the shared trace projection fields.
+
+### Acceptance Criteria
+
+- [ ] AC1 — Stamped provenance names the executor profile (req: R1): Given a trace whose enrich action invocation
+  carries `executor: "pi-commandcode-dsv4.1"`, `applyFinalProvenance` records it on the dispatch row and the stamped
+  frontmatter renders it; `invocation executor absent` appears only when the invocation lacked the field. Layer:
+  `packages/app/tests/services/history-anatomy-final-provenance.test.ts` + `workflow-trace-projection.test.ts`
+  (projection keeps `executor`/`tier`/`role`).
+- [ ] AC2 — Failover is visible (req: R2): Given an action result whose `ladder` has escalation rows `a→b`, the
+  projected trace carries `failover: "a→b"`, the dispatch row records it, and `parseProvenance(stampReport(…))`
+  round-trips it; a run with no escalation has no `failover` key. Layer: same two test files.
+- [ ] AC3 — Body placeholder resolved at stamp (req: R3): Given a candidate body containing the probe pending tokens,
+  `stampReport` output contains the stamped executor and model in their place and no `not available: probe did not
+  receive` / pending token remains. Layer: `history-anatomy-final-provenance.test.ts`.
+- [ ] AC4 — Cache hit stays defined (req: R4): `refreshReport` on a report with legacy placeholder identity yields
+  `not-applicable: cache hit, no agent stage ran`; on a report with a real identity it is byte-identical apart from
+  `validated_at` / disposition. Layer: existing history-anatomy refresh tests.
+
+### Q&A
+
+- **Closed (refine 2026-11-20):** the stamped published report is the provenance of record; the probe-time
+  `-provenance.json` stays a pre-dispatch input.
+- **Closed:** failover is a bounded scalar (`a→b, b→c`), not a projected array.
+- **Closed:** body placeholder fixed by deterministic token substitution at stamp, not by trusting enrich.
+
+### Design
+
+**WHAT.** Carry dispatch identity + failover through the trace projection into 1326's stamp, and make the body
+placeholder a deterministic stamp-time token.
+
+**Frozen names.**
+
+- `TRACE_INVOCATION_FIELDS` += `'executor'`, `'tier'`, `'role'` (`workflow-trace-projection.ts:143`).
+- Projected result scalar `failover`: built in `projectActionTraceResult` from `result.ladder` rows with
+  `kind === 'escalation'` as `${executor}→${toExecutor}` joined by `, `, passed through `redactAndBound(…, 256)`;
+  omitted when there are no rows. No new array projection.
+- `DispatchProvenance.failover?: string` (`history-anatomy.ts:47`); render/parse symmetric with the other dispatch
+  fields; absent key ≠ empty string.
+- Probe tokens (replace `history-anatomy.ts:1020-1021`): `PENDING_EXECUTOR = 'pending: executor resolved at stamp'`,
+  `PENDING_MODEL = 'pending: model resolved at stamp'` (exported consts).
+- Stamp substitution: in the stamp path, replace every body occurrence of `PENDING_EXECUTOR` / `PENDING_MODEL` and the
+  legacy `not available: probe did not receive an executor|a model` strings with the stamped top-level
+  executor / model. Plain string replace — no markdown parsing.
+- Refresh: `refreshReport` maps a cached identity equal to a pending token or legacy placeholder to
+  `NOT_APPLICABLE_HIT = 'not-applicable: cache hit, no agent stage ran'`.
+- Rubric: `plugins/sp/skills/history-anatomy/references/operations.md:27` — one line: copy provenance executor/model
+  values verbatim (they may be pending tokens the stamp resolves); do not paraphrase them.
+
+**WHERE.** `packages/app/src/services/workflow-trace-projection.ts`, `packages/app/src/services/history-anatomy.ts`,
+`plugins/sp/skills/history-anatomy/references/operations.md`; tests in the two existing test files. No workflow
+YAML change (stamp already receives `--trace`).
+
+**Anti-patterns.** Do not have stamp re-read agent-session JSONL; do not rewrite the probe-time provenance file; do
+not project the full ladder array into the trace; do not parse model prose beyond exact-token replace.
+
+**Decisions.** Closed: stamped report is the record of truth (not the probe file). Closed: failover is a bounded
+scalar string, not structured trace data.
+
+### Plan
+
+1. Failing tests first: projection keeps `executor`/`tier`/`role` and derives `failover`
+   (`packages/app/tests/services/workflow-trace-projection.test.ts`); dispatch executor + failover round-trip, body
+   token substitution, refresh rewrite (`history-anatomy-final-provenance.test.ts`).
+2. Projection: whitelist fields + `failover` derivation (R1, R2).
+3. `history-anatomy.ts`: `DispatchProvenance.failover`, render/parse, pending consts, stamp substitution, refresh
+   rewrite (R2–R4).
+4. Rubric line in `operations.md` (R3).
+5. `(cd packages/app && bun test tests/services/workflow-trace-projection.test.ts tests/services/history-anatomy-final-provenance.test.ts)`,
+   then `bun run spur-check`.
+
+### Root Cause
+
+Three gaps between the dispatch and the published report:
+
+1. **Trace projection drops identity.** `TRACE_INVOCATION_FIELDS` (`packages/app/src/services/workflow-trace-projection.ts:143`)
+   omits `executor` / `tier` / `role`, so `applyFinalProvenance` (`history-anatomy.ts:926-931`) always falls back
+   to `not available: invocation executor absent`.
+2. **Trace projection drops failover.** `projectActionTraceResult` (`:212-284`) copies only string fields of
+   `TRACE_RESULT_FIELDS`; `resultData.ladder` (array, `agent-run.ts:1687`) is discarded.
+3. **Body authored from probe placeholders.** `buildProvenance` (`history-anatomy.ts:1020-1021`) writes
+   `not available: probe did not receive …`; enrich copies it into `Scope and provenance`; `stampReport` only
+   rewrites frontmatter, so the placeholder survives into the published body.
+
+### Solution
+
+<!-- Filled during implementation: file:line change map and concise rationale. -->
+
+### Testing
+
+<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+
+### Review
+
+<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+
+### References
+
+- `packages/app/src/services/workflow-trace-projection.ts:131-156`, `:212-284`
+- `packages/app/src/services/history-anatomy.ts:47-56`, `:901-950`, `:1020-1021`, `:1126-1131`
+- `packages/app/src/services/history-anatomy-cli.ts:236-257`; `agent-run-executor.ts:795-817`; `agent-run.ts:1687`
+- `config/workflows/history-anatomy.yaml` (probe, refresh-provenance, stamp)
+- `plugins/sp/skills/history-anatomy/references/operations.md:27`
+- Related: 1326 (final provenance stamp), 1418 (failover that this makes visible)
+- Concurrency: no other worktree, no `wip` task (checked 2026-11-20).
+
+### History

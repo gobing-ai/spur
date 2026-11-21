@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B6"
 name: "Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:01.980Z"
-updated_at: "2026-10-19T16:54:28.216Z"
+updated_at: "2026-11-21T04:33:00.419Z"
 ---
 
 # B6: Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer
@@ -134,4 +134,5 @@ Feature: Executor availability lifecycle
 - 2026-10-19T16:51:40.437Z verifying → active (system)
 - 2026-10-19T16:54:26.808Z active → verifying (system)
 - 2026-10-19T16:54:28.216Z verifying → done (system)
+- 2026-11-21T04:33:00.419Z done → active (system)
 
