@@ -1050,7 +1050,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
     test('history-anatomy render leaves sidecar writing to history report alone (1338)', () => {
         const text = readFileSync(join(WORKFLOWS_DIR, 'history-anatomy.yaml'), 'utf8');
-        const commands = text.match(/\$spurBin history report [^\n]+/g) ?? [];
+        const commands = text.match(/\$spurBin (?:--no-logo )?history report [^\n]+/g) ?? [];
         expect(commands).toHaveLength(2);
         for (const command of commands) {
             expect(command).not.toMatch(/\s>\s*\.spur\/run\/\$__runId-history-anatomy-(?:current|baseline)\.md/);
