@@ -124,8 +124,12 @@ export function runCacheCli(argv: string[], deps: HistoryAnatomyCliDeps = {}): c
                 };
             }
             const expects = new Set<string>();
-            for (const arg of argv.slice(1)) {
+            const rest = argv.slice(1);
+            for (let i = 0; i < rest.length; i++) {
+                const arg = rest[i] as string;
+                // Both spellings: the workflow passes `--expect <path>`, parseFlags keeps only one value.
                 if (arg.startsWith('--expect=')) expects.add(arg.slice('--expect='.length));
+                else if (arg === '--expect' && rest[i + 1] !== undefined) expects.add(rest[++i] as string);
             }
             let now: string;
             try {

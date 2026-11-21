@@ -548,6 +548,21 @@ describe('CLI assert-clean (0676 R3)', () => {
                 dir,
             ]);
             expect(declaredOk.exitCode).toBe(0);
+
+            // The workflow passes `--expect <path>` (space form); a visible declared output
+            // must be honored there too, not only in the `--expect=<path>` spelling.
+            writeFileSync(join(dir, 'declared.md'), 'report');
+            const spaceForm = runCacheCli([
+                'assert-clean',
+                '--baseline',
+                baseline,
+                '--expect',
+                'declared.md',
+                '--cwd',
+                dir,
+            ]);
+            expect(spaceForm.stderr).toBe('');
+            expect(spaceForm.exitCode).toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
