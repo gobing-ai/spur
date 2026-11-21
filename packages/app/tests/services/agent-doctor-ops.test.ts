@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { DoctorRunner } from '@gobing-ai/ts-ai-runner';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { AgentDoctorOps } from '../../src/services/agent-doctor-ops';
 import { AgentResolver } from '../../src/services/agent-resolver';
 import type { AgentRoleDefinition, AgentRunDeps, AgentServiceContext } from '../../src/services/agent-service';
@@ -76,5 +80,68 @@ describe('AgentDoctorOps.doctor', () => {
         const json = harness({ rolesSource: 'fallback' });
         await json.ops.doctor({ json: true }, doctorDeps(['claude']).deps);
         expect(json.errors.some((e) => e.includes('DEFAULT_AGENT_ROLES fallback'))).toBe(false);
+    });
+});
+
+describe('1419 unmeasured executors (AC3)', () => {
+    test('the footer intersects the persisted list with executors enabled NOW', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-doctor-usage-'));
+        try {
+            const snapshot = join(dir, 'agent-usage.json');
+            writeFileSync(
+                snapshot,
+                JSON.stringify({
+                    captured_at: '2026-10-14T00:00:00Z',
+                    source: 'codexbar',
+                    providers: [],
+                    unreported_executors: ['live', 'retired'],
+                }),
+            );
+            const { ops, lines } = harness({
+                cwd: dir,
+                agentConfig: {
+                    executors: [
+                        { name: 'live', agent: 'pi', disabled: false },
+                        { name: 'retired', agent: 'pi', disabled: true },
+                    ],
+                },
+            });
+            const { deps } = doctorDeps(['live']);
+            await ops.doctor(
+                { json: false, usageSnapshotPath: snapshot },
+                { ...deps, fileSystem: createNodeFileSystem(dir), now: () => Date.parse('2026-10-14T00:00:00Z') },
+            );
+            const footer = lines.join('\n');
+            expect(footer).toContain('; unmeasured: live');
+            // `retired` is disabled now, so it is not outstanding work.
+            expect(footer).not.toContain('retired,');
+            expect(footer).not.toContain('unmeasured: retired');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('--json carries the same intersected list, and an absent field adds nothing', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-doctor-usage-'));
+        try {
+            const snapshot = join(dir, 'agent-usage.json');
+            writeFileSync(
+                snapshot,
+                JSON.stringify({ captured_at: '2026-10-14T00:00:00Z', source: 'codexbar', providers: [] }),
+            );
+            const { ops, lines } = harness({
+                cwd: dir,
+                agentConfig: { executors: [{ name: 'live', agent: 'pi', disabled: false }] },
+            });
+            const { deps } = doctorDeps(['live']);
+            await ops.doctor(
+                { json: true, usageSnapshotPath: snapshot },
+                { ...deps, fileSystem: createNodeFileSystem(dir), now: () => Date.parse('2026-10-14T00:00:00Z') },
+            );
+            const parsed = JSON.parse(lines.find((line) => line.includes('"agents"')) ?? '');
+            expect(parsed.usage.unreportedExecutors).toEqual([]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

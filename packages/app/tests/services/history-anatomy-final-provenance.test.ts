@@ -208,3 +208,124 @@ describe('applyFinalProvenance (1326 R5/R6)', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// 1420: stamped identity, failover, and the body placeholder
+// ---------------------------------------------------------------------------
+
+describe('1420 stamped provenance identity', () => {
+    const EXECUTOR = 'pi-commandcode-dsv4.1';
+
+    function traceFile(
+        dir: string,
+        result: Record<string, unknown> = {},
+    ): { validationPath: string; tracePath: string } {
+        const validationPath = join(dir, 'validation.txt');
+        writeFileSync(validationPath, 'Checked independently.\n\nVerdict: PASS\n');
+        const tracePath = join(dir, 'trace.json');
+        writeFileSync(
+            tracePath,
+            JSON.stringify({
+                events: [
+                    {
+                        actionKind: 'agent.run',
+                        actionId: 'a1',
+                        node: 'enrich',
+                        ok: true,
+                        invocation: {
+                            agent: 'pi',
+                            model: 'commandcode/deepseek/deepseek-v4.1-flash',
+                            executor: EXECUTOR,
+                            tier: 'standard',
+                            role: 'coder',
+                            timeoutMs: 3_600_000,
+                        },
+                        result: { agent: 'pi', ...result },
+                    },
+                ],
+            }),
+        );
+        return { validationPath, tracePath };
+    }
+
+    test('AC1 — the elected executor profile lands on the dispatch row and the frontmatter', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-1420-'));
+        try {
+            const p = applyFinalProvenance(provenance(), traceFile(dir));
+            expect(p.dispatches?.[0]?.executor).toBe(EXECUTOR);
+            expect(p.executorProfile).toBe(EXECUTOR);
+            const stamped = stampReport('## Scope and provenance\n\nbody\n', p);
+            expect(stamped).toContain(`executorProfile: "${EXECUTOR}"`);
+            expect(stamped).toContain(`executor: ${EXECUTOR},`);
+            expect(parseProvenance(stamped)?.dispatches?.[0]?.executor).toBe(EXECUTOR);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC2 — failover is rendered, omitted when absent, and round-trips', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-1420-'));
+        try {
+            const withFailover = applyFinalProvenance(
+                provenance(),
+                traceFile(dir, { failover: 'pi-volc→pi-commandcode-dsv4.1' }),
+            );
+            expect(withFailover.dispatches?.[0]?.failover).toBe('pi-volc→pi-commandcode-dsv4.1');
+            const stamped = stampReport('body\n', withFailover);
+            expect(stamped).toContain('failover: pi-volc→pi-commandcode-dsv4.1');
+            expect(parseProvenance(stamped)?.dispatches?.[0]?.failover).toBe('pi-volc→pi-commandcode-dsv4.1');
+
+            const withoutFailover = applyFinalProvenance(provenance(), traceFile(dir));
+            expect(withoutFailover.dispatches?.[0]?.failover).toBeUndefined();
+            expect(stampReport('body\n', withoutFailover)).not.toContain('failover:');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC3 — the body placeholder is resolved at stamp time', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-1420-'));
+        try {
+            const p = applyFinalProvenance(provenance(), traceFile(dir));
+            const body = [
+                '## Scope and provenance',
+                '',
+                'Executor is `pending: executor resolved at stamp`. Model is `pending: model resolved at stamp`.',
+                'Legacy: `not available: probe did not receive an executor` / `not available: probe did not receive a model`.',
+                '',
+            ].join('\n');
+            const stamped = stampReport(body, p);
+            expect(stamped).toContain(`Executor is \`${EXECUTOR}\``);
+            expect(stamped).toContain('Model is `commandcode/deepseek/deepseek-v4.1-flash`');
+            expect(stamped).not.toContain('pending: executor resolved at stamp');
+            expect(stamped).not.toContain('pending: model resolved at stamp');
+            expect(stamped).not.toContain('not available: probe did not receive');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC4 — a cache-hit republish rewrites a placeholder identity, keeps a real one', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-1420-'));
+        try {
+            const p = applyFinalProvenance(provenance(), traceFile(dir));
+            const legacy = stampReport(
+                'body\n',
+                provenance({
+                    executor: 'not available: probe did not receive an executor',
+                    model: 'not available: probe did not receive a model',
+                }),
+            );
+            const refreshed = refreshReport(legacy, '2026-11-21T00:00:00.000Z', 'hit');
+            expect(refreshed).toContain('not-applicable: cache hit, no agent stage ran');
+            expect(refreshed).not.toContain('not available: probe did not receive');
+
+            const real = stampReport('body\n', p);
+            const kept = refreshReport(real, '2026-11-21T00:00:00.000Z', 'hit');
+            expect(kept).toContain(EXECUTOR);
+            expect(parseProvenance(kept)?.validatedAt).toBe('2026-11-21T00:00:00.000Z');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

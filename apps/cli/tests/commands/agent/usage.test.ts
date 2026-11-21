@@ -51,7 +51,7 @@ async function fixtureStdout(): Promise<string> {
  * the fixture → no observation); operator-exec (operator disable survives).
  * grok/zed/antigravity stay unmapped.
  */
-async function makeProjectCtx(): Promise<{
+async function makeProjectCtx(extraExecutors: string[] = []): Promise<{
     cwd: string;
     home: string;
     out: ReturnType<typeof createCapturedOutput>;
@@ -94,6 +94,7 @@ async function makeProjectCtx(): Promise<{
             '    - name: operator-exec',
             '      agent: claude',
             '      disabled: true',
+            ...extraExecutors,
         ].join('\n'),
     );
     return {
@@ -242,6 +243,36 @@ describe('spur agent usage (0892)', () => {
             expect(printed).toContain('Unmapped providers (never guessed):');
             await expect(readFile(snapshotPath, 'utf8')).rejects.toThrow();
             expect(await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8')).toBe(before);
+        } finally {
+            setAgentUsageSourceForTesting(undefined);
+            await cleanup();
+        }
+    });
+
+    test('1419: executors the source never reports are named as unmeasured, never touched', async () => {
+        const { cwd, home, out, cleanup } = await makeProjectCtx([
+            '    - name: pi-volc-live',
+            '      agent: pi',
+            '      model: volc/deepseek-v4-1-flash',
+        ]);
+        try {
+            const fixture = await fixtureStdout();
+            setAgentUsageSourceForTesting({
+                source: stubSource(() => ({ stdout: fixture, stderr: '' })),
+                snapshotPath: join(home, '.config', 'spur', 'agent-usage.json'),
+            });
+            const code = await main(['agent', 'usage'], { cwd, output: out, dbUrl: ':memory:' });
+            expect(code).toBe(0);
+            expect(out.messages.join('\n')).toContain('Unmeasured executors (not reported by codexbar): pi-volc-live');
+            out.messages.length = 0;
+            const jsonCode = await main(['agent', 'usage', '--dry-run', '--json'], {
+                cwd,
+                output: out,
+                dbUrl: ':memory:',
+            });
+            expect(jsonCode).toBe(0);
+            const parsed = JSON.parse(out.messages.join('\n')) as { unreportedExecutors?: string[] };
+            expect(parsed.unreportedExecutors).toEqual(['pi-volc-live']);
         } finally {
             setAgentUsageSourceForTesting(undefined);
             await cleanup();

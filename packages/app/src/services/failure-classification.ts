@@ -18,6 +18,19 @@ export type FailureRule = {
 };
 
 /**
+ * Provider entitlement lapse (1418): the account's plan is not valid, so EVERY dispatch against
+ * the executor fast-fails with a 4xx that no status rule can read — the refusal arrives as a bare
+ * `400 {"error":…` prefix, and the 2026-11-20 history-daily-report run died on it in 11.6s because
+ * neither the classifier nor the breaker recognised it. Two patterns, both required: the vendor
+ * error code AND the lapse prose, so a bare HTTP 400 or an incidental "subscription" mention stays
+ * unmatched (0407 precision bias).
+ */
+const ENTITLEMENT_LAPSE_PATTERNS: readonly RegExp[] = [
+    /\bInvalidSubscription\b/,
+    /(?:does not have a valid [^.\n]{0,40}subscription|subscription has expired)/i,
+];
+
+/**
  * Provider failure vocabulary. Status codes are matched only when presented as
  * an HTTP/status value; patterns are intentionally narrow to preserve the 0407
  * precision bias. A provider with status-only evidence keeps an empty pattern
@@ -71,6 +84,16 @@ export const FAILURE_RULES: FailureRule[] = [
         patterns: [
             /(?:api key not found for provider ['"]?volc|volc.*(?:api key|authentication).*(?:missing|invalid))/i,
         ],
+    },
+    {
+        // 1418: a lapsed plan is availability, not auth — `resource-exhaustion` is the only
+        // availability signal in the objective vocabulary and it walks the ladder without the
+        // per-policy fallback bound. No `statusCodes`: the body's `400` prefix never reaches the
+        // status extractor, so a code list here would be dead weight that also risks matching an
+        // unrelated 400.
+        provider: 'volc',
+        signal: 'resource-exhaustion',
+        patterns: [...ENTITLEMENT_LAPSE_PATTERNS],
     },
     {
         provider: 'zai',
@@ -182,9 +205,18 @@ export function classifyDispatch(
  * signal is the same condition named structurally.
  */
 export function executorUnavailabilityEvidence(
-    result: Pick<AgentRunResult, 'exitCode' | 'signal'>,
+    result: Pick<AgentRunResult, 'exitCode' | 'signal' | 'stdout' | 'stderr'>,
 ): string | undefined {
     if (result.exitCode === 2) return `dispatch-level exit 2 (executor unusable for this run)`;
     if (result.signal === 'unavailable') return `terminal signal ${result.signal}`;
+    // 1418: a lapsed provider plan refuses every dispatch, so no retry into the same executor can
+    // succeed. Content-based, never timing-based: a slow provider returning the same body must trip
+    // the run-scoped breaker exactly like a fast one (the 2026-11-20 dispatch took 11.6s to say it).
+    if (typeof result.exitCode === 'number' && result.exitCode !== 0) {
+        const text = `${result.stderr ?? ''} ${result.stdout ?? ''}`;
+        if (ENTITLEMENT_LAPSE_PATTERNS.every((pattern) => pattern.test(text))) {
+            return 'provider entitlement lapsed (InvalidSubscription)';
+        }
+    }
     return undefined;
 }

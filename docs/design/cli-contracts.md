@@ -710,9 +710,12 @@ agent with the ELECTED marker and per-row failure reasons plus an `N eligible, M
 summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabilityTier`, `model` (pinned or null),
 `roles`, and `elected`; each entry also carries `disabled` (feature B5 / 0796, config state) and, feature B8 / 0889,
 `capabilities` + `capabilityStale`; feature B6 / 0893 adds `availability {disabled, owner|null, since|null, reason|null}`
-per entry plus a top-level `usage` snapshot report (`{capturedAt, age, stale}`; `usage: none` when no
+per entry plus a top-level `usage` snapshot report (`{capturedAt, age, stale, unreportedExecutors}`; `usage: none` when no
 `~/.config/spur/agent-usage.json` exists — informational only, never a warning, never gating; ≥6 h
-renders text `stale` and sets `usage.stale: true`); a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
+renders text `stale` and sets `usage.stale: true`); feature 1419 adds `unreportedExecutors`: enabled executors the
+current configured set still holds whose provider the usage source never reported (capture-time list intersected
+with the executors enabled *now*, so a since-disabled one drops out), rendered as a `; unmeasured: a, b` suffix on the
+text `usage:` footer and `[]` when there is nothing to report or the snapshot predates the field; a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
 60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier/disabled), served
 only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
 mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and
@@ -729,10 +732,17 @@ Selector precedence inside the arg: exact executor/agent name first, role id sec
 Run-once quota-usage producer (feature B6 / 0892, ADR-121; consent row in
 [harness-surface-governance](harness-surface-governance.md) §4): executes the external `codexbar`
 capture once (`--source <name>`, default `codexbar`), writes the snapshot to
-`~/.config/spur/agent-usage.json` (`{captured_at, source, providers, raw}`;
+`~/.config/spur/agent-usage.json` (`{captured_at, source, providers, unreported_executors, raw}`;
 `SPUR_AGENT_USAGE_SNAPSHOT` overrides the path for tests), maps providers to executors per
 [session-pinned-dispatch](session-pinned-dispatch.md) §3.4, and drains the resulting observations
-as `owner: quota` events through the single availability writer. `--dry-run` prints the would-be
+as `owner: quota` events through the single availability writer. Feature 1419 adds
+`unreported_executors`: the name-sorted enabled executors that no returned provider (healthy *or*
+errored) maps to — the source said nothing about them, so their availability is **unmeasured**, never
+headroom. The text output prints one `Unmeasured executors (not reported by <source>): …` line and
+`--json` carries `unreportedExecutors`; the capture writes no `changes[]` row and no availability
+change for them (the operator `disabled:` flag stays the only demotion lever), and the list drains on
+the next capture once the source reports the provider. `--dry-run` computes the list but writes no
+snapshot. `--dry-run` prints the would-be
 executor changes and writes nothing. A missing/failing capture exits non-zero and changes nothing;
 the capture is bounded by a finite deadline (300000 ms default in `CodexbarUsageSource` via
 `@gobing-ai/ts-runtime` `NodeProcessExecutor.run({ timeout })`, overridable with

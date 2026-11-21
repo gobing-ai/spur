@@ -153,6 +153,11 @@ const TRACE_INVOCATION_FIELDS = [
     'model',
     'translatedFrom',
     'sessionId',
+    // 1420 R1: the elected identity. Without these three the published provenance could only
+    // say `not available: invocation executor absent` for a dispatch that resolved fine.
+    'executor',
+    'tier',
+    'role',
 ] as const;
 
 function durationBetween(startedAt: string, completedAt: string | null): number | null {
@@ -281,6 +286,25 @@ export function projectActionTraceResult(
             else if (typeof value === 'number' || typeof value === 'boolean') invocation[field] = value;
         }
     }
+    // 1420 R2: the ladder's escalation rows as ONE bounded scalar (`a→b, b→c`). The whole decision
+    // array stays out of the trace — the published report only needs to show that a dispatch failed
+    // over, and a scalar keeps that surface stable.
+    const failover = Array.isArray(data.ladder)
+        ? data.ladder
+              .filter(
+                  (row): row is Record<string, unknown> =>
+                      typeof row === 'object' && row !== null && !Array.isArray(row),
+              )
+              .filter(
+                  (row) =>
+                      row.kind === 'escalation' &&
+                      typeof row.executor === 'string' &&
+                      typeof row.toExecutor === 'string',
+              )
+              .map((row) => `${row.executor as string}→${row.toExecutor as string}`)
+              .join(', ')
+        : '';
+    if (failover !== '') resultFields.failover = redactAndBound(failover, secretValues, 256);
     const error = typeof result.error === 'string' ? redactAndBound(result.error, secretValues, 512) : null;
     return {
         result: Object.keys(resultFields).length === 0 ? null : resultFields,

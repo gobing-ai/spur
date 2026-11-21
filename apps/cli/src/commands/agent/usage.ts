@@ -140,6 +140,14 @@ export async function runAgentUsage(
                 ...(result.unmappedProviders.length > 0
                     ? [`Unmapped providers (never guessed): ${result.unmappedProviders.join(', ')}`]
                     : []),
+                // 1419: silence is not headroom. These executors stay enabled and are never
+                // changed by a capture; naming them is the only signal an operator gets before
+                // a run discovers the dead credential.
+                ...(result.unreportedExecutors.length > 0
+                    ? [
+                          `Unmeasured executors (not reported by ${result.source}): ${result.unreportedExecutors.join(', ')}`,
+                      ]
+                    : []),
                 ...(result.drain !== null
                     ? [
                           `Drain: ${result.drain.applied} applied, ${result.drain.skippedOperatorOwned} operator-skipped, ${result.drain.failed} failed.`,

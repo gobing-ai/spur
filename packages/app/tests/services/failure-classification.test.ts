@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentRunResult } from '@gobing-ai/ts-ai-runner';
 import { classifyDispatch, permissionFailureEvidence, rescueEvidenceTail } from '../../src';
+import { executorUnavailabilityEvidence } from '../../src/services/failure-classification';
 
 function result(stderr: string, overrides: Partial<AgentRunResult> = {}): AgentRunResult {
     return {
@@ -40,6 +41,49 @@ describe('0503 failure classification registry', () => {
 
     test('termination signal classifies as timeout before provider text', () => {
         expect(classifyDispatch(result('status 401', { signal: 'SIGTERM' }))).toBe('timeout');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: provider entitlement lapse (task 1418)
+// ---------------------------------------------------------------------------
+
+/**
+ * The 2026-11-20 body. The 05:00 history-daily-report dispatch against an account whose CodingPlan
+ * had lapsed died on it in 11.6s with exit 3, and nothing recognised it. Account number and request
+ * id are masked: they identify the operator, not the failure shape being classified.
+ */
+const ENTITLEMENT_LAPSE_BODY =
+    '400 {"error":{"code":"InvalidSubscription","message":"Your account (…) does not have a valid ' +
+    'CodingPlan subscription, or your subscription has expired. Please visit ' +
+    'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?OpenModelVisible=false&tab=CodingPlan ' +
+    'to review your subscription status or complete the subscription or renewal process.  Request id: …",' +
+    '"param":"","type":"Bad Request"}}';
+
+describe('1418 provider entitlement lapse', () => {
+    test('AC1 — the verbatim InvalidSubscription body classifies as resource exhaustion', () => {
+        expect(classifyDispatch(result(ENTITLEMENT_LAPSE_BODY, { exitCode: 3 }))).toBe('resource-exhaustion');
+    });
+
+    test('AC2 — the same body is executor-unavailability evidence, so the run breaker trips', () => {
+        expect(executorUnavailabilityEvidence({ exitCode: 3, stderr: ENTITLEMENT_LAPSE_BODY, stdout: '' })).toBe(
+            'provider entitlement lapsed (InvalidSubscription)',
+        );
+    });
+
+    test('AC3 — a status-only 400 and a bare subscription mention stay unmatched', () => {
+        expect(classifyDispatch(result('status 400', { exitCode: 3 }))).toBeUndefined();
+        expect(executorUnavailabilityEvidence({ exitCode: 3, stderr: 'status 400', stdout: '' })).toBeUndefined();
+        const renews = 'Your subscription renews on 1 Dec';
+        expect(classifyDispatch(result(renews, { exitCode: 3 }))).toBeUndefined();
+        expect(executorUnavailabilityEvidence({ exitCode: 3, stderr: renews, stdout: '' })).toBeUndefined();
+    });
+
+    test('a successful dispatch carrying the body never classifies and is never unavailability', () => {
+        expect(classifyDispatch(result(ENTITLEMENT_LAPSE_BODY, { exitCode: 0 }))).toBeUndefined();
+        expect(
+            executorUnavailabilityEvidence({ exitCode: 0, stderr: ENTITLEMENT_LAPSE_BODY, stdout: '' }),
+        ).toBeUndefined();
     });
 });
 

@@ -263,3 +263,60 @@ describe('artifact lookups', () => {
         );
     });
 });
+
+// ---------------------------------------------------------------------------
+// 1420: elected identity + failover survive the projection
+// ---------------------------------------------------------------------------
+
+describe('1420 invocation identity and failover', () => {
+    const invocationRow = (overrides: Record<string, unknown> = {}, result: Record<string, unknown> = {}) =>
+        JSON.stringify({
+            data: {
+                agent: 'pi',
+                invocation: {
+                    agent: 'pi',
+                    model: 'commandcode/deepseek/deepseek-v4.1-flash',
+                    executor: 'pi-commandcode-dsv4.1',
+                    tier: 'standard',
+                    role: 'coder',
+                    timeoutMs: 3_600_000,
+                    ...overrides,
+                },
+                ...result,
+            },
+        });
+
+    test('AC1 — executor, tier and role are projected from the invocation', () => {
+        const projected = projectActionTraceResult(invocationRow(), [], 'agent.run');
+        expect(projected.invocation?.executor).toBe('pi-commandcode-dsv4.1');
+        expect(projected.invocation?.tier).toBe('standard');
+        expect(projected.invocation?.role).toBe('coder');
+    });
+
+    test('AC2 — escalation ladder rows become one bounded `a→b` scalar', () => {
+        const projected = projectActionTraceResult(
+            invocationRow(
+                {},
+                {
+                    ladder: [
+                        { kind: 'breaker-trip', executor: 'pi-volc' },
+                        { kind: 'escalation', executor: 'pi-volc', toExecutor: 'pi-commandcode-dsv4.1' },
+                        { kind: 'escalation', executor: 'pi-commandcode-dsv4.1', toExecutor: 'pi-zai' },
+                    ],
+                },
+            ),
+            [],
+            'agent.run',
+        );
+        expect(projected.result?.failover).toBe('pi-volc→pi-commandcode-dsv4.1, pi-commandcode-dsv4.1→pi-zai');
+    });
+
+    test('a dispatch with no escalation row carries no failover key at all', () => {
+        const projected = projectActionTraceResult(
+            invocationRow({}, { ladder: [{ kind: 'breaker-skip', executor: 'pi-volc' }] }),
+            [],
+            'agent.run',
+        );
+        expect(projected.result?.failover).toBeUndefined();
+    });
+});

@@ -61,7 +61,18 @@ export class AgentDoctorOps {
         const fileSystem = deps?.fileSystem ?? createNodeFileSystem(this.ctx.cwd);
         // 0893 R2: report-only read of the usage snapshot — age/staleness are rendered,
         // never turned into an availability mutation (doctor is read-only by design).
-        const usage = readUsageSnapshot(fileSystem, args.usageSnapshotPath, now);
+        const usageSnapshot = readUsageSnapshot(fileSystem, args.usageSnapshotPath, now);
+        // 1419 R3: the snapshot is a capture-time list, so intersect it with the executors enabled
+        // NOW — an executor the operator disabled after the capture is not work still unmeasured.
+        const usage =
+            usageSnapshot === null
+                ? null
+                : {
+                      ...usageSnapshot,
+                      unreportedExecutors: usageSnapshot.unreportedExecutors.filter((name) =>
+                          (executors ?? []).some((executor) => executor.name === name && !executorDisabled(executor)),
+                      ),
+                  };
         // R1 (0622 F2/F4 residue): a Layer-1 role (`coder`, `planner`, …) is not an
         // executor. Resolve it through the SAME ranked doctor-walk dispatch uses
         // (`resolveRole`): cheapest eligible → most expensive, checking each until

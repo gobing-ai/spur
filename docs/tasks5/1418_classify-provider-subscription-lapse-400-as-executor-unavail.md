@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Classify provider subscription-lapse 400 as executor unavailability so the ladder advances
-status: todo
+status: done
 template: issue
 created_at: 2026-11-21T04:33:04.639Z
-updated_at: "2026-11-21T04:40:46.425Z"
+updated_at: "2026-11-21T04:51:29.841Z"
 feature_id: B6
 
 priority: P1
 ac_altitude: task-local
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1418. Classify provider subscription-lapse 400 as executor unavailability so the ladder advances
@@ -51,17 +53,17 @@ escalation path recognised it, so the ladder never walked to the next funded run
 
 ### Requirements
 
-- [ ] R1. `FAILURE_RULES` (`packages/app/src/services/failure-classification.ts:26`) gains one entitlement-lapse rule
+- [x] R1. `FAILURE_RULES` (`packages/app/src/services/failure-classification.ts:26`) gains one entitlement-lapse rule
   with `signal: 'resource-exhaustion'`, NO `statusCodes`, and a two-pattern conjunction (both must match): the code
   `InvalidSubscription` AND the phrase `does not have a valid … subscription` / `subscription has expired`. A bare
   HTTP 400 never matches.
-- [ ] R2. `executorUnavailabilityEvidence` (`failure-classification.ts:184-190`) additionally returns evidence when
+- [x] R2. `executorUnavailabilityEvidence` (`failure-classification.ts:184-190`) additionally returns evidence when
   the dispatch's stderr/stdout carries that same entitlement-lapse conjunction (non-zero exit, any elapsed time),
   so the 1323 run-scoped breaker excludes the executor for the rest of the run.
-- [ ] R3. The 0407 / 1260 precision bias survives: a status-only 400, or a body that mentions "subscription"
+- [x] R3. The 0407 / 1260 precision bias survives: a status-only 400, or a body that mentions "subscription"
   without the code+phrase pair, stays unmatched (`classifyDispatch` → `undefined`, no breaker trip) and keeps
   today's fail-the-run behaviour.
-- [ ] R4. Regression tests use the verbatim 2026-11-20 `InvalidSubscription` body and prove (a) classification,
+- [x] R4. Regression tests use the verbatim 2026-11-20 `InvalidSubscription` body and prove (a) classification,
   (b) breaker trip + failover to the next eligible rung in the executor loop, (c) the negative cases.
 
 Out of scope: re-enabling or auto-disabling `pi-dsv4.1-flash-volc` in config (operator-owned, B6 lifecycle);
@@ -69,18 +71,18 @@ the usage-source blind spot (task 1419); the catalog rescue (1264); any new publ
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Entitlement-lapse body classifies as resource exhaustion (req: R1): Given the verbatim 2026-11-20
+- [x] AC1 — Entitlement-lapse body classifies as resource exhaustion (req: R1): Given the verbatim 2026-11-20
   `InvalidSubscription` stderr with exitCode 3, `classifyDispatch` returns `resource-exhaustion`. Layer:
   `packages/app/tests/services/failure-classification.test.ts`.
-- [ ] AC2 — Entitlement lapse trips the run breaker and the ladder walks (req: R2; R4): Given a stage whose first
+- [x] AC2 — Entitlement lapse trips the run breaker and the ladder walks (req: R2; R4): Given a stage whose first
   executor returns exit 3 with that body, `AgentRunExecutor` records a `breaker-trip` ladder decision for it,
   dispatches the next eligible executor exactly once, and spends exactly one dispatch on the dead executor; a later
   dispatch in the same run id excludes it. Layer: `packages/app/tests/services/agent-run-executor-d3.test.ts`
   (fake runner — the classifier and breaker run real, only the subprocess is faked).
-- [ ] AC3 — Precision bias holds (req: R3): Given `status 400` alone, and given `Your subscription renews on 1 Dec`
+- [x] AC3 — Precision bias holds (req: R3): Given `status 400` alone, and given `Your subscription renews on 1 Dec`
   without the `InvalidSubscription` code, `classifyDispatch` returns `undefined` and
   `executorUnavailabilityEvidence` returns `undefined`. Layer: `failure-classification.test.ts`.
-- [ ] AC4 — No weakened expectations (req: R4): The new tests fail on the pre-change tree and pass after; no
+- [x] AC4 — No weakened expectations (req: R4): The new tests fail on the pre-change tree and pass after; no
   existing `failure-classification` / `agent-run-executor-d3` expectation is edited or deleted.
 
 ### Q&A
@@ -147,15 +149,46 @@ Two independent misses, both verified in the current tree:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File:lines | Change |
+| --- | --- |
+| `packages/app/src/services/failure-classification.ts:21-31` | `ENTITLEMENT_LAPSE_PATTERNS` — one shared conjunction (`InvalidSubscription` AND the lapse prose) so the classifier and the breaker cannot drift apart. |
+| `packages/app/src/services/failure-classification.ts:88-97` | `FAILURE_RULES` entry mapping that body to `resource-exhaustion`, with no `statusCodes` (the body's `400` prefix never reaches the status extractor, so a code list would be dead weight that could match an unrelated 400). |
+| `packages/app/src/services/failure-classification.ts:207-222` | `executorUnavailabilityEvidence` widens to `stdout`/`stderr` and returns `provider entitlement lapsed (InvalidSubscription)` on the same conjunction, so the 1323 run-scoped breaker excludes the executor. Existing exit-2 / `unavailable` branches unchanged and still first. |
+| `packages/app/tests/services/failure-classification.test.ts:55-86` | AC1/AC2/AC3: the 2026-11-20 body classifies and is breaker evidence; status-only 400 and a bare "subscription renews" mention stay unmatched; exit 0 never classifies. The fixture masks the account number and request id — they identify the operator, not the failure shape. |
+| `packages/app/tests/services/agent-run-executor-d3.test.ts:341-372` | AC2 through the real dispatch core: one dispatch on the lapsed executor, `breaker-trip` recorded, failover to `codex-main`, and a later node in the same run id gets `breaker-skip`. |
+
+`agent-run-executor.ts` is untouched by design: it already calls `executorUnavailabilityEvidence(result)` with the full result and already forces the ladder walk on a breaker trip.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/failure-classification.ts:88-97` adds the entitlement-lapse rule (`resource-exhaustion`, no `statusCodes`, `patterns: [...ENTITLEMENT_LAPSE_PATTERNS]`); `:21-31` is the shared conjunction. AC1 test proves the classification. |
+| R2 | MET | `packages/app/src/services/failure-classification.ts:207-222` widens `executorUnavailabilityEvidence` to `stdout`/`stderr` and returns `provider entitlement lapsed (InvalidSubscription)` on the same conjunction; the exit-2 and `unavailable` branches stay first. `agent-run-executor.ts:953` already passes the full `AgentRunResult`, so no caller edit was needed. |
+| R3 | MET | The rule carries no `statusCodes`, so the `400 {"error":…` prefix contributes nothing; `failure-classification.test.ts:74-79` asserts `status 400` and `Your subscription renews on 1 Dec` stay unmatched in both `classifyDispatch` and `executorUnavailabilityEvidence`. |
+| R4 | MET | Four tests added, no existing expectation edited (`git diff` on both test files is insertion-only apart from the widened import). Red-then-green observed: 4 new tests failed before the source change, 42 pass / 0 fail after. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/failure-classification.test.ts:64` — the 2026-11-20 `InvalidSubscription` body at exit 3 classifies as `resource-exhaustion`. |
+| AC2 | MET | test | `packages/app/tests/services/agent-run-executor-d3.test.ts:341-372` — one dispatch on the lapsed executor, `breaker-trip` recorded, failover to `codex-main`, and `breaker-skip` for a later node in the same run id. |
+| AC3 | MET | test | `packages/app/tests/services/failure-classification.test.ts:74` — status-only 400 and a bare subscription mention stay unmatched; exit 0 never classifies (`:82`). |
+| AC4 | MET | command | `(cd packages/app && bun test tests/services/failure-classification.test.ts tests/services/agent-run-executor-d3.test.ts)` → 42 pass / 0 fail; the same command before the source change → 4 fail (both recorded in this session), and `spur task gate 1418 light` → PASS. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -167,3 +200,8 @@ Two independent misses, both verified in the current tree:
 - Concurrency: no other worktree, no `wip` task (checked 2026-11-20).
 
 ### History
+
+- 2026-11-21T04:50:13.145Z todo → wip (system)
+- 2026-11-21T04:51:28.264Z wip → testing (system)
+- 2026-11-21T04:51:29.837Z testing → done (system)
+

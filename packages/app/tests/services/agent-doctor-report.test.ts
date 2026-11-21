@@ -105,9 +105,22 @@ describe('readUsageSnapshot', () => {
             capturedAt: '2026-10-14T11:30:00Z',
             age: 30 * 60_000,
             stale: false,
+            unreportedExecutors: [],
         });
         expect(readUsageSnapshot(fs, '/stale', now)?.stale).toBe(true);
         expect(readUsageSnapshot(fs, '/future', now)?.age).toBe(0);
+    });
+
+    test('1419: unreported_executors parses to strings only; absent reads as empty', () => {
+        const { fs } = memFs({
+            '/with': '{"captured_at":"2026-10-14T11:30:00Z","unreported_executors":["b",7,null,"a"]}',
+            '/garbage': '{"captured_at":"2026-10-14T11:30:00Z","unreported_executors":"a"}',
+            '/absent': '{"captured_at":"2026-10-14T11:30:00Z"}',
+        });
+        expect(readUsageSnapshot(fs, '/with', now)?.unreportedExecutors).toEqual(['b', 'a']);
+        // A pre-1419 snapshot has no field at all: informational, never a parse failure.
+        expect(readUsageSnapshot(fs, '/absent', now)?.unreportedExecutors).toEqual([]);
+        expect(readUsageSnapshot(fs, '/garbage', now)?.unreportedExecutors).toEqual([]);
     });
 });
 
@@ -279,7 +292,7 @@ describe('renderDoctorTable', () => {
                     availability: { disabled: true } as DoctorRow['availability'],
                 }),
             ],
-            { capturedAt: '2026-10-14T00:00:00Z', age: 5 * 60_000, stale: false },
+            { capturedAt: '2026-10-14T00:00:00Z', age: 5 * 60_000, stale: false, unreportedExecutors: [] },
         );
         const lines = out.split('\n');
         expect(lines[0]).toMatch(
@@ -300,9 +313,30 @@ describe('renderDoctorTable', () => {
         const plain = [row({ elected: [] })];
         expect(renderDoctorTable(plain)).toContain('1 usable, 0 missing\nusage: none');
         expect(renderDoctorTable(plain, null)).not.toContain('elected executor');
-        expect(renderDoctorTable(plain, { capturedAt: 'c', age: 0, stale: true })).toContain('usage: c (stale)');
-        expect(renderDoctorTable(plain, { capturedAt: 'c', age: 10, stale: false })).toContain('(<1m)');
-        expect(renderDoctorTable(plain, { capturedAt: 'c', age: 2 * 3_600_000, stale: false })).toContain('(2h)');
+        expect(renderDoctorTable(plain, { capturedAt: 'c', age: 0, stale: true, unreportedExecutors: [] })).toContain(
+            'usage: c (stale)',
+        );
+        expect(renderDoctorTable(plain, { capturedAt: 'c', age: 10, stale: false, unreportedExecutors: [] })).toContain(
+            '(<1m)',
+        );
+        expect(
+            renderDoctorTable(plain, { capturedAt: 'c', age: 2 * 3_600_000, stale: false, unreportedExecutors: [] }),
+        ).toContain('(2h)');
+    });
+
+    test('1419: the usage footer names unmeasured executors, and stays unchanged when empty', () => {
+        const plain = [row({ elected: [] })];
+        expect(
+            renderDoctorTable(plain, {
+                capturedAt: 'c',
+                age: 0,
+                stale: false,
+                unreportedExecutors: ['pi-volc', 'z-ghost'],
+            }),
+        ).toContain('usage: c (<1m); unmeasured: pi-volc, z-ghost');
+        expect(renderDoctorTable(plain, { capturedAt: 'c', age: 0, stale: false, unreportedExecutors: [] })).toEndWith(
+            'usage: c (<1m)',
+        );
     });
 });
 

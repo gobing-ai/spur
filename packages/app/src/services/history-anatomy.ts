@@ -53,6 +53,11 @@ export interface DispatchProvenance {
     executor: string;
     model: string;
     timeoutMs: number | 'unbounded';
+    /**
+     * 1420 R2: `a→b, b→c` when this dispatch failed over before answering, derived from the run's
+     * ladder escalation decisions. Absent (never an empty string) when the first rung answered.
+     */
+    failover?: string;
 }
 
 /** Full provenance for a history-anatomy report: identity, digests, coverage, and disposition. */
@@ -276,6 +281,9 @@ export function parseProvenance(reportMarkdown: string): CacheProvenance | null 
                       model: String(d.model ?? ''),
                       // Render/parse symmetry: the literal survives as a string, a budget as a number.
                       timeoutMs: d.timeoutMs === 'unbounded' ? ('unbounded' as const) : Number(d.timeoutMs ?? 0),
+                      // 1420 R2: absent key ≠ empty string — an escalation that never happened stays
+                      // absent across the cache-hit republish.
+                      ...(typeof d.failover === 'string' && d.failover !== '' ? { failover: d.failover } : {}),
                   }))
                 : undefined,
             cacheDisposition: DISPOSITIONS.includes(obj.cacheDisposition as CacheDisposition)
@@ -878,6 +886,8 @@ interface TraceAction {
         model?: string | null;
         timeoutMs?: number | null;
     } | null;
+    /** Projected result scalars (1420: carries `failover`). */
+    result?: { failover?: string | null } | null;
 }
 
 /** Depth-first collect of successful `agent.run` actions, in the trace's own order. */
@@ -930,6 +940,9 @@ export function applyFinalProvenance(p: CacheProvenance, input: FinalProvenanceI
                     : 'not available: invocation executor absent',
             model: inv.model != null && inv.model !== '' ? inv.model : 'not available: invocation model absent',
             timeoutMs: typeof inv.timeoutMs === 'number' && inv.timeoutMs > 0 ? inv.timeoutMs : 'unbounded',
+            ...(typeof action.result?.failover === 'string' && action.result.failover !== ''
+                ? { failover: action.result.failover }
+                : {}),
         });
     }
     if (dispatches.length === 0) {
@@ -1016,9 +1029,11 @@ export function buildProvenance(opts: ProbeOptions): CacheProvenance {
         schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : undefined,
         // 1326 R6: the selector is not provenance. Left as a STATED reason here; the stamp state's
         // `applyFinalProvenance` overwrites both from the run's own action receipts, so an
-        // unresolved `auto` can never be stamped as if it were an executor.
-        executor: opts.executor ?? 'not available: probe did not receive an executor',
-        model: opts.model ?? 'not available: probe did not receive a model',
+        // unresolved `auto` can never be stamped as if it were an executor. 1420 R3: they are
+        // PENDING TOKENS, not prose, so the stamp can substitute them deterministically — enrich
+        // copies them verbatim and never has to guess who was elected.
+        executor: opts.executor ?? PENDING_EXECUTOR,
+        model: opts.model ?? PENDING_MODEL,
     };
 }
 
@@ -1066,6 +1081,30 @@ function yamlScalar(v: unknown): string {
     return `"${String(v).replaceAll('"', '\\"')}"`;
 }
 
+/**
+ * Probe-time placeholders (1420 R3). They are TOKENS rather than prose so the stamp can replace
+ * them exactly: the probe runs before any dispatch, so it cannot know who will serve the run, and
+ * the model-authored body copies whatever it is given. Recognising the legacy prose forms keeps
+ * already-published reports and their cache-hit republish behaving.
+ */
+export const PENDING_EXECUTOR = 'pending: executor resolved at stamp';
+/** The model half of the probe-time placeholder (1420 R3). */
+export const PENDING_MODEL = 'pending: model resolved at stamp';
+/** 1420 R4: the identity of a cache-hit republish that never ran an agent stage. */
+export const NOT_APPLICABLE_HIT = 'not-applicable: cache hit, no agent stage ran';
+
+/** The legacy probe prose a pre-1420 report may still carry: `[executor, model]`. */
+const LEGACY_PENDING_PROSE: readonly [string, string] = [
+    'not available: probe did not receive an executor',
+    'not available: probe did not receive a model',
+];
+
+/** True when an identity value is a placeholder rather than a recorded executor/model. */
+function isPendingIdentity(value: string | undefined): boolean {
+    if (value === undefined) return false;
+    return value === PENDING_EXECUTOR || value === PENDING_MODEL || LEGACY_PENDING_PROSE.includes(value);
+}
+
 /** Render the full R7 provenance block as report frontmatter (parseable back by parseProvenance). */
 export function renderProvenanceFrontmatter(p: CacheProvenance): string {
     const lines = [
@@ -1093,8 +1132,9 @@ export function renderProvenanceFrontmatter(p: CacheProvenance): string {
     if (p.dispatches !== undefined && p.dispatches.length > 0) {
         lines.push('dispatches:');
         for (const d of p.dispatches) {
+            const failover = d.failover === undefined ? '' : `, failover: ${d.failover}`;
             lines.push(
-                `  - node: ${d.node}, actionId: ${d.actionId}, agent: ${d.agent}, executor: ${d.executor}, model: ${d.model}, timeoutMs: ${d.timeoutMs}`,
+                `  - node: ${d.node}, actionId: ${d.actionId}, agent: ${d.agent}, executor: ${d.executor}, model: ${d.model}, timeoutMs: ${d.timeoutMs}${failover}`,
             );
         }
     }
@@ -1115,7 +1155,19 @@ function stripHeader(md: string): string {
 
 /** Attach the provenance frontmatter and freshness banner to a candidate report. */
 export function stampReport(candidateMarkdown: string, p: CacheProvenance): string {
-    return `${renderProvenanceFrontmatter(p)}\n\n${bannerLine(p)}\n\n${stripHeader(candidateMarkdown).replace(/^\n+/, '')}`;
+    // 1420 R3: the body's provenance sentence is model-authored from probe values, which are
+    // pending tokens. Resolve them HERE, deterministically, from the stamped identity — never by
+    // trusting enrich to have guessed the elected executor.
+    const executor = isPendingIdentity(p.executorProfile)
+        ? isPendingIdentity(p.executor)
+            ? NOT_APPLICABLE_HIT
+            : (p.executor as string)
+        : (p.executorProfile as string);
+    let body = stripHeader(candidateMarkdown);
+    const model = p.model ?? NOT_APPLICABLE_HIT;
+    for (const token of [PENDING_EXECUTOR, LEGACY_PENDING_PROSE[0]] as const) body = body.replaceAll(token, executor);
+    for (const token of [PENDING_MODEL, LEGACY_PENDING_PROSE[1]] as const) body = body.replaceAll(token, model);
+    return `${renderProvenanceFrontmatter(p)}\n\n${bannerLine(p)}\n\n${body.replace(/^\n+/, '')}`;
 }
 
 /**
@@ -1126,7 +1178,17 @@ export function stampReport(candidateMarkdown: string, p: CacheProvenance): stri
 export function refreshReport(publishedMarkdown: string, validatedAt: string, disposition: CacheDisposition): string {
     const cached = parseProvenance(publishedMarkdown);
     if (cached === null) return publishedMarkdown;
-    const refreshed: CacheProvenance = { ...cached, validatedAt, cacheDisposition: disposition };
+    // 1420 R4: a cached report whose identity is still a placeholder never had an agent stage in
+    // the run that republishes it, so saying "cache hit" is the honest value — better than echoing
+    // a probe placeholder as if a dispatch had produced it. A real identity is kept verbatim.
+    const refreshed: CacheProvenance = {
+        ...cached,
+        validatedAt,
+        cacheDisposition: disposition,
+        ...(isPendingIdentity(cached.executor) ? { executor: NOT_APPLICABLE_HIT } : {}),
+        ...(isPendingIdentity(cached.model) ? { model: NOT_APPLICABLE_HIT } : {}),
+        ...(isPendingIdentity(cached.executorProfile) ? { executorProfile: NOT_APPLICABLE_HIT } : {}),
+    };
     return stampReport(publishedMarkdown, refreshed);
 }
 

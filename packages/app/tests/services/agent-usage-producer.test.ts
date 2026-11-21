@@ -377,3 +377,72 @@ describe('mapProvidersToExecutors', () => {
 
 // Type-only guard: options stay structural for CLI injection.
 export type { RunAgentUsageOptions };
+
+// ---------------------------------------------------------------------------
+// Tests: unreported executors (task 1419)
+// ---------------------------------------------------------------------------
+
+describe('1419 unreported executors', () => {
+    /**
+     * Two enabled executors whose provider the source never mentions, plus one operator-disabled
+     * one. The 2026-11-20 shape: volc's account had lapsed, codexbar reports no `volc` provider at
+     * all, so the ladder kept electing a dead executor that no capture could demote.
+     */
+    function writeVolcConfig(): void {
+        writeConfig([
+            '    - name: pi-volc-live',
+            '      agent: pi',
+            '      model: volc/deepseek-v4-1-flash',
+            '    - name: pi-volc-second',
+            '      agent: pi',
+            '      model: volc/glm-5.3-flash',
+            '    - name: pi-volc-retired',
+            '      agent: pi',
+            '      model: volc/gone',
+            '      disabled: true',
+        ]);
+    }
+
+    test('AC1 — executors no returned provider maps to are listed and persisted', async () => {
+        writeVolcConfig();
+        const result = await run(JSON.stringify([healthyEntry('claude', 10)]));
+        expect(result.unreportedExecutors).toEqual(['pi-volc-live', 'pi-volc-second']);
+        const snapshot = JSON.parse(readFileSync(join(root, 'agent-usage.json'), 'utf8')) as {
+            unreported_executors?: string[];
+        };
+        expect(snapshot.unreported_executors).toEqual(['pi-volc-live', 'pi-volc-second']);
+    });
+
+    test('AC2 — unreported executors drive no change row and no availability write', async () => {
+        writeVolcConfig();
+        const result = await run(JSON.stringify([healthyEntry('claude', 10)]));
+        expect(result.changes.some((change) => change.executor.startsWith('pi-volc'))).toBe(false);
+        expect(await dao.getUpdate(root, 'pi-volc-live')).toBeUndefined();
+        expect(await yamlRawDisabled('pi-volc-live')).toBeUndefined();
+    });
+
+    test('AC4 — the set drains once the source reports the provider', async () => {
+        writeVolcConfig();
+        const result = await run(JSON.stringify([healthyEntry('volc', 10)]));
+        expect(result.unreportedExecutors).toEqual([]);
+    });
+
+    test('an errored provider counts as reported — the source spoke about it', async () => {
+        writeVolcConfig();
+        const payload = JSON.stringify([
+            { provider: 'volc', error: { message: 'capture failed' } },
+            healthyEntry('claude', 10),
+        ]);
+        const result = await run(payload);
+        expect(result.erroredProviders.map((errored) => errored.provider)).toContain('volc');
+        expect(result.unreportedExecutors).toEqual([]);
+    });
+
+    test('a dry run still computes the set and writes no snapshot', async () => {
+        writeVolcConfig();
+        const result = await run(JSON.stringify([healthyEntry('claude', 10)]), { dryRun: true });
+        expect(result.unreportedExecutors).toEqual(['pi-volc-live', 'pi-volc-second']);
+        expect(result.snapshotPath).toBeNull();
+        expect(existsSync(join(root, 'agent-usage.json'))).toBe(false);
+    });
+});

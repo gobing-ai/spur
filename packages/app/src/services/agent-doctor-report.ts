@@ -38,6 +38,12 @@ export interface DoctorUsageInfo {
     age: number;
     /** True when {@link age} reached {@link USAGE_SNAPSHOT_STALE_MS} (6 h). */
     stale: boolean;
+    /**
+     * 1419: enabled executors the usage source never reported — the capture measured nothing for
+     * them, so their availability is unknown. Always present (`[]` when the snapshot predates the
+     * field), and already intersected with the executors enabled NOW by the caller.
+     */
+    unreportedExecutors: string[];
 }
 
 /** Detection-cache provenance reported by `agent doctor` (hit, age, cache path). */
@@ -88,12 +94,20 @@ export function readUsageSnapshot(
     if (path === undefined) return null;
     try {
         if (fileSystem.exists(path) !== true) return null;
-        const parsed = JSON.parse(fileSystem.readFile(path) as string) as { captured_at?: unknown } | null;
+        const parsed = JSON.parse(fileSystem.readFile(path) as string) as {
+            captured_at?: unknown;
+            unreported_executors?: unknown;
+        } | null;
         if (parsed === null || typeof parsed !== 'object' || typeof parsed.captured_at !== 'string') return null;
         const capturedMs = Date.parse(parsed.captured_at);
         if (!Number.isFinite(capturedMs)) return null;
         const age = Math.max(0, now() - capturedMs);
-        return { capturedAt: parsed.captured_at, age, stale: age >= USAGE_SNAPSHOT_STALE_MS };
+        // 1419: a snapshot written before the field existed reads as `[]`, never as an error —
+        // doctor's usage footer is informational (0893 R3) and must not gain a new failure mode.
+        const unreportedExecutors = Array.isArray(parsed.unreported_executors)
+            ? parsed.unreported_executors.filter((name): name is string => typeof name === 'string')
+            : [];
+        return { capturedAt: parsed.captured_at, age, stale: age >= USAGE_SNAPSHOT_STALE_MS, unreportedExecutors };
     } catch {
         return null;
     }
@@ -446,8 +460,9 @@ export function renderDoctorTable(results: DoctorRow[], usage?: DoctorUsageInfo 
     const footerLines = [
         usableFooter,
         // 0893 R2/R3: snapshot provenance is always reported; a missing producer
-        // snapshot is a plain `usage: none`, never a warning.
-        `usage: ${usage === null || usage === undefined ? 'none' : `${usage.capturedAt} (${usage.stale ? 'stale' : formatUsageAge(usage.age)})`}`,
+        // snapshot is a plain `usage: none`, never a warning. 1419: unmeasured executors ride the
+        // same line — the source said nothing about them, which is not the same as headroom.
+        `usage: ${usage === null || usage === undefined ? 'none' : `${usage.capturedAt} (${usage.stale ? 'stale' : formatUsageAge(usage.age)})${usage.unreportedExecutors.length > 0 ? `; unmeasured: ${usage.unreportedExecutors.join(', ')}` : ''}`}`,
         ...(results.some((result) => result.elected.length > 0) ? ['(* = elected executor for that role)'] : []),
     ];
 

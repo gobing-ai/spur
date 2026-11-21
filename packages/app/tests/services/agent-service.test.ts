@@ -5120,6 +5120,9 @@ describe('AgentService.doctor — availability provenance (0893)', () => {
             capturedAt: new Date(T0 - 60_000).toISOString(),
             age: 60_000,
             stale: false,
+            // 1419: the snapshot in this fixture predates the field, which reads as "nothing
+            // unmeasured" rather than as an error.
+            unreportedExecutors: [],
         });
 
         const stale = captureOutput();

@@ -337,3 +337,43 @@ describe('1327 review finding — lifecycle starts on the first real dispatch', 
         expect(started[0]?.kind === 'started' && started[0]?.agent).toBe('codex');
     });
 });
+
+describe('1418 AC2 — a lapsed provider plan trips the breaker instead of killing the run', () => {
+    /** The shape the 2026-11-20 05:00 history-daily-report dispatch died on (exit 3, 11.6s). */
+    const LAPSED_PLAN_BODY =
+        '400 {"error":{"code":"InvalidSubscription","message":"Your account (…) does not have a valid ' +
+        'CodingPlan subscription, or your subscription has expired.","type":"Bad Request"}}';
+
+    test('the lapsed executor costs exactly one dispatch, then the ladder walks to the next rung', async () => {
+        const seen = stubSpawn(async (options) =>
+            options.command === 'pi'
+                ? { ...ok(options), exitCode: 3, stderr: LAPSED_PLAN_BODY }
+                : ok(options, 'backup finished the work'),
+        );
+        const svc = twoExecutorService();
+        const traced = await svc.runTraced('do the stage work', d3Flags('d3-lapse-1'), usableForAllDeps(), {
+            heartbeatMs: 0,
+        });
+        expect(seen.filter((options) => options.command === 'pi')).toHaveLength(1);
+        expect(traced.exitCode).toBe(0);
+        expect(traced.invocation?.executor).toBe('codex-main');
+        expect((traced.ladder ?? []).some((d) => d.kind === 'breaker-trip' && d.executor === 'pi-flash')).toBe(true);
+    });
+
+    test('a later node in the same run never re-dispatches the lapsed executor', async () => {
+        const seen = stubSpawn(async (options) =>
+            options.command === 'pi'
+                ? { ...ok(options), exitCode: 3, stderr: LAPSED_PLAN_BODY }
+                : ok(options, 'backup finished the work'),
+        );
+        const svc = twoExecutorService();
+        await svc.runTraced('first node', d3Flags('d3-lapse-2'), usableForAllDeps(), { heartbeatMs: 0 });
+        const traced = await svc.runTraced('retry-bound node', d3Flags('d3-lapse-2'), usableForAllDeps(), {
+            heartbeatMs: 0,
+        });
+        expect(seen.filter((options) => options.command === 'pi')).toHaveLength(1);
+        expect(traced.exitCode).toBe(0);
+        expect(traced.invocation?.executor).toBe('codex-main');
+        expect((traced.ladder ?? []).some((d) => d.kind === 'breaker-skip' && d.executor === 'pi-flash')).toBe(true);
+    });
+});

@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Report executors whose provider is unreported by the usage source
-status: todo
+status: done
 template: issue
 created_at: 2026-11-21T04:33:08.544Z
-updated_at: "2026-11-21T04:41:41.146Z"
+updated_at: "2026-11-21T05:03:33.732Z"
 feature_id: B6
 
 priority: P2
 ac_altitude: task-local
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1419. Report executors whose provider is unreported by the usage source
@@ -46,17 +48,17 @@ let a lapsed volc account stay the cheapest elected standard-tier executor until
 
 ### Requirements
 
-- [ ] R1. `AgentUsageRunResult` (`packages/app/src/services/agent-usage-producer.ts:219-232`) gains
+- [x] R1. `AgentUsageRunResult` (`packages/app/src/services/agent-usage-producer.ts:219-232`) gains
   `unreportedExecutors: string[]`: the name-sorted enabled executors that no returned provider (healthy or errored)
   maps to via `mapProvidersToExecutors`. Computed on every run including `--dry-run`; persisted in the snapshot as
   `unreported_executors` (non-dry runs).
-- [ ] R2. Unreported executors are reported as unmeasured, never as headroom: `spur agent usage` prints one
+- [x] R2. Unreported executors are reported as unmeasured, never as headroom: `spur agent usage` prints one
   `Unmeasured executors (not reported by <source>): …` line when non-empty, `--json` carries the field, and the
   capture produces no `changes[]` row and no availability write for them (operator `disabled:` stays the only lever).
-- [ ] R3. `spur agent doctor` reads `unreported_executors` from the snapshot and, intersected with the executors that
+- [x] R3. `spur agent doctor` reads `unreported_executors` from the snapshot and, intersected with the executors that
   are enabled now, appends `; unmeasured: <names>` to the `usage:` footer line and `unreportedExecutors` to the
   `--json` `usage` object; nothing is added when the intersection is empty or the snapshot predates the field.
-- [ ] R4. When the source starts reporting a provider, its executors leave the set on the next capture with no code
+- [x] R4. When the source starts reporting a provider, its executors leave the set on the next capture with no code
   or config change.
 
 Out of scope: auto-disabling unreported executors; probing provider credentials; changing the source (codexbar);
@@ -64,18 +66,18 @@ the run-time classifier (1418); new CLI verbs or flags.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Capture lists executors the source did not report (req: R1): Given a fake source payload without `volc`
+- [x] AC1 — Capture lists executors the source did not report (req: R1): Given a fake source payload without `volc`
   and a config with two enabled volc-model executors plus one disabled one, `runAgentUsage` returns
   `unreportedExecutors` = the two enabled names (sorted), and the written snapshot carries the same
   `unreported_executors`. Layer: `packages/app/tests/services/agent-usage-producer.test.ts`.
-- [ ] AC2 — Unreported executors are unmeasured, never changed (req: R2): For the same payload, `changes[]` has no row
+- [x] AC2 — Unreported executors are unmeasured, never changed (req: R2): For the same payload, `changes[]` has no row
   for those executors and their config availability is unchanged; `spur agent usage` text prints the `Unmeasured
   executors` line and `--json` includes the field. Layer: `apps/cli/tests/commands/agent/usage.test.ts`.
-- [ ] AC3 — Doctor names the unreported set (req: R3): Given a snapshot with `unreported_executors: ["a","b"]` where
+- [x] AC3 — Doctor names the unreported set (req: R3): Given a snapshot with `unreported_executors: ["a","b"]` where
   `b` is now disabled, the doctor footer reads `usage: <ts> (<age>); unmeasured: a` and `--json` `usage.unreportedExecutors`
   = `["a"]`; given an empty list or a snapshot without the field, the footer is unchanged. Layer:
   `packages/app/tests/services/agent-doctor-report.test.ts`.
-- [ ] AC4 — The set drains when the source reports the provider (req: R4): A payload that includes `volc` with a
+- [x] AC4 — The set drains when the source reports the provider (req: R4): A payload that includes `volc` with a
   healthy window yields `unreportedExecutors: []` and otherwise identical changes. Layer:
   `agent-usage-producer.test.ts`.
 
@@ -148,15 +150,55 @@ to — is never asked, so the result (`:442-452`), the snapshot (`:346-351`), `s
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File:lines | Change |
+| --- | --- |
+| `packages/app/src/services/agent-usage-producer.ts:230-238` | `AgentUsageRunResult.unreportedExecutors` — the field itself, with the 2026-11-20 rationale (silence is not headroom). |
+| `packages/app/src/services/agent-usage-producer.ts:331-339` | Derivation: returned providers = healthy + errored (an errored provider already spoke, and is listed under `erroredProviders`), intersect `mapProvidersToExecutors` with the enabled executors, name-sort. `executorDisabled` is imported from `executor-tier.ts`, the same helper the doctor fingerprint uses. |
+| `packages/app/src/services/agent-usage-producer.ts:364-370` | Snapshot payload gains `unreported_executors` so `doctor` can read it without a live capture. |
+| `packages/app/src/services/agent-usage-producer.ts:466-473` | Result literal carries the field (`--dry-run` included). |
+| `apps/cli/src/commands/agent/usage.ts:144-150` | One conditional `Unmeasured executors (not reported by <source>): …` line beside the existing unmapped-providers line. |
+| `packages/app/src/services/agent-doctor-report.ts:39-47` | `DoctorUsageInfo.unreportedExecutors` (always present, `[]` when the snapshot predates the field). |
+| `packages/app/src/services/agent-doctor-report.ts:99-110` | `readUsageSnapshot` parses `unreported_executors`, keeping strings only; a pre-1419 snapshot or a non-array reads as `[]`, never a parse failure (doctor's usage footer gained no new failure mode). |
+| `packages/app/src/services/agent-doctor-report.ts:463-465` | Footer appends `; unmeasured: <names>` when non-empty. |
+| `packages/app/src/services/agent-doctor-ops.ts:64-77` | Intersection with the executors enabled NOW, before text render and `--json`, so a since-disabled executor is not reported as outstanding work. |
+| `docs/design/cli-contracts.md:711,735-745` | T3 surface update: the doctor `usage` object and the usage snapshot shape both document the new field. |
+| `packages/app/tests/services/agent-usage-producer.test.ts:385-450` | AC1/AC2/AC4: listing + snapshot persistence, no change row and no availability write, drain when the provider is reported, errored-provider-is-reported, and `--dry-run` computing without writing. |
+| `packages/app/tests/services/agent-doctor-report.test.ts:114-125,327-338` | Snapshot parsing (strings only, absent/garbage → `[]`) and the footer suffix, including unchanged output when empty. |
+| `packages/app/tests/services/agent-doctor-ops.test.ts:86-140` | AC3 through `AgentDoctorOps.doctor`: a persisted `["live","retired"]` footer-renders `unmeasured: live` once `retired` is disabled, and `--json` carries the intersected list. |
+| `apps/cli/tests/commands/agent/usage.test.ts:252-283` | AC2 at the CLI: the text line and `--json` field for an executor the fixture's source never reports. |
+
+No availability write, no `changes[]` row and no auto-disable exists for an unreported executor: it is reported, never acted on.
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-usage-producer.ts:331-339` derives the list from returned providers (healthy + errored) intersected with enabled executors via the existing `mapProvidersToExecutors`; `:364-370` persists `unreported_executors`; `:466-473` returns it. Computed before the `--dry-run` branch, so a dry run yields the list and writes no snapshot (`agent-usage-producer.test.ts:441-450`). No second provider-mapping rule was introduced, and `executorDisabled` is the existing helper from `executor-tier.ts`. |
+| R2 | MET | `apps/cli/src/commands/agent/usage.ts:144-150` prints the `Unmeasured executors (not reported by <source>): …` line only when non-empty; `--json` carries `unreportedExecutors` because the whole result is enveloped. No `changes[]` row and no availability write: `agent-usage-producer.test.ts:416-422` asserts no change row for the unreported executors plus an undefined DAO row and an untouched `disabled:` key. |
+| R3 | MET | `agent-doctor-report.ts:39-47` adds the always-present field, `:99-110` parses it (strings only; pre-1419 or garbage → `[]`, no new failure mode), `:463-465` renders `; unmeasured: …`. The enabled-now intersection lives in `agent-doctor-ops.ts:64-77`, before both the text render and the `--json` payload, so a since-disabled executor drops out. |
+| R4 | MET | `agent-usage-producer.test.ts:424-428` — a payload reporting `volc` yields `[]` with no code or config change; the errored-provider case (`:430-436`) pins the closed Q&A decision that an errored provider counts as reported. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:406` — two enabled volc executors plus one disabled yields `['pi-volc-live','pi-volc-second']`, and the written snapshot carries the same array. |
+| AC2 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:416` (no change row, no availability write) + `apps/cli/tests/commands/agent/usage.test.ts:252` (text line and `--json` field for an executor the fixture's source never reports). |
+| AC3 | MET | test | `packages/app/tests/services/agent-doctor-ops.test.ts:86` — persisted `["live","retired"]` renders `; unmeasured: live` once `retired` is disabled, and `--json` `usage.unreportedExecutors` is the intersected list; the empty/absent cases are `agent-doctor-report.test.ts:114` and `:327`. |
+| AC4 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:424` — a payload including a healthy `volc` drains the list to `[]`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -168,3 +210,8 @@ to — is never asked, so the result (`:442-452`), the snapshot (`:346-351`), `s
 - Concurrency: no other worktree, no `wip` task (checked 2026-11-20).
 
 ### History
+
+- 2026-11-21T05:03:07.373Z todo → wip (system)
+- 2026-11-21T05:03:32.251Z wip → testing (system)
+- 2026-11-21T05:03:33.728Z testing → done (system)
+

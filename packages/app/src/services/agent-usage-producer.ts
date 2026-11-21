@@ -47,6 +47,7 @@ import {
     drainPendingAgentQuotaUpdates,
 } from './agent-quota-updates';
 import { type UsageSource, UsageSourceError } from './agent-usage-source';
+import { executorDisabled } from './executor-tier';
 
 /** One codexbar rate window (P1-verified shape; floats allowed). */
 const codexbarWindowSchema = z.object({
@@ -227,6 +228,14 @@ export interface AgentUsageRunResult {
     unmappedProviders: string[];
     /** Healthy providers whose windows are all null — no signal, skipped. */
     noUsageProviders: string[];
+    /**
+     * 1419: enabled executors that NO returned provider (healthy or errored) maps to. The source
+     * said nothing about them, so their availability is unmeasured — neither headroom nor
+     * exhaustion. Silence is not evidence of a usable executor: on 2026-11-20 a lapsed volc plan
+     * stayed elected because this list did not exist. Nothing is disabled from it (operator
+     * `disabled:` remains the only lever); it is reported, never acted on.
+     */
+    unreportedExecutors: string[];
     /** Drain summary; `null` for `--dry-run`. */
     drain: AgentQuotaDrainSummary | null;
 }
@@ -320,6 +329,14 @@ export async function runAgentUsageProducer(
     const mappedSet = new Set(mapping.keys());
     const unmappedProviders = [...new Set(healthyProviders)].filter((p) => !mappedSet.has(p));
     const noUsageProviders = healthy.filter((h) => h.classification.status === 'no-usage').map((h) => h.entry.provider);
+    // 1419: an errored provider still counts as reported — the source spoke about it, and it is
+    // already surfaced under `erroredProviders`. Only total silence leaves an executor unmeasured.
+    const returnedProviders = [...healthyProviders, ...erroredProviders.map((errored) => errored.provider)];
+    const reportedExecutors = new Set([...mapProvidersToExecutors(returnedProviders, executors).values()].flat());
+    const unreportedExecutors = executors
+        .filter((executor) => !executorDisabled(executor) && !reportedExecutors.has(executor.name))
+        .map((executor) => executor.name)
+        .sort();
 
     const providerSummaries: AgentUsageProviderSummary[] = healthy.map(({ entry, classification }) => ({
         provider: entry.provider,
@@ -347,6 +364,9 @@ export async function runAgentUsageProducer(
             captured_at: capturedAt,
             source: source.name,
             providers: providerSummaries,
+            // 1419: persisted so `spur agent doctor` can surface unmeasured executors from the
+            // same snapshot it already reads (it has no live capture of its own).
+            unreported_executors: unreportedExecutors,
             raw: parsed,
         });
     }
@@ -450,6 +470,7 @@ export async function runAgentUsageProducer(
         erroredProviders,
         unmappedProviders,
         noUsageProviders,
+        unreportedExecutors,
         drain,
     };
 }

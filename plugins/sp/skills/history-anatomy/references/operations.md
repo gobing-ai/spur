@@ -26,7 +26,8 @@ Given the current and baseline artifacts, author the model half of the report. A
 
 1. **Scope and provenance** + **Executive summary** + **Evidence ledger** are populated from the
    artifact and rendered deterministically (or stated as the artifact's own data). The model
-   authors only the sections listed as model-authored.
+   authors only the sections listed as model-authored. Copy the provenance `executor` and `model`
+   values **verbatim** — they may be pending tokens the stamp resolves; never paraphrase them.
 2. **Baseline comparison** — apply the comparison semantics: daily → immediately preceding local
    calendar day; ad-hoc → immediately preceding equal-duration window. If baseline coverage is
    insufficient or materially different, emit `not comparable` and **no** trend/delta/percentage.
