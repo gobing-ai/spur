@@ -78,10 +78,16 @@ bootstrap:
       # lands after the roster settles and before kk-daily-ai-voice reads it. CodexBar credentials and
       # the provider endpoints are the operator's; a provider that errors is skipped, never treated as
       # recovery (the command's own contract), and the job is read-only against the project.
+      #
+      # 2026-11-20: runs the repo-local CLI, never a bare `spur`. The bundled binary
+      # statically imports schemas/spur-config.schema.json (apps/cli/src/config/embedded-schemas.ts),
+      # so a bundle older than a config-schema change fails every tick on JSON-Schema
+      # validation — the 14:00 and 14:30 ticks died that way after 7b502395b added the
+      # `dev` parallel action at 13:31 and the bundle was not rebuilt until 15:00.
       - name: agent-usage-refresh
         cron: "0,30 4-23 * * *"
         timeoutMs: 600000
-        command: spur --no-logo agent usage
+        command: bun apps/cli/src/index.ts --no-logo agent usage
 
 rules:
   paths:
