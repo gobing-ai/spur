@@ -356,6 +356,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `workflow.transition.denied` | `runId`, `workflowName`, `from`, `to`, `reason` | `[workflow] {workflowName} denied {from} -> {to}` | `reason` |
 | `workflow.action.started` | `runId`, `workflowName`, node identity, action id, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} started` | — |
 | `workflow.action.finished` | run/workflow/node/action identity, `kind`, duration, `status`, `ok` | `[workflow] {workflowName} · {nodeLabel | kind} finished` | `status` / `ok` |
+| `workflow.action.output` | run/workflow/node/action identity, `kind`, `stream` (diagnostic tier; chunk text never persisted) | `[workflow] {workflowName} · {stream}` | — |
 | `workflow.action.failed_continue` | run/workflow/node identity, transitionsTaken, `error` | `[workflow] {workflowName} · {nodeLabel} failed; continuing` | `error` |
 | `workflow.guard.evaluated` | `runId`, `workflowName`, `from`, `to`, `kind`, `passed` | `[workflow] {workflowName} guard {from} -> {to}` | `passed` |
 | `workflow.hitl.ask` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} awaiting input` | — |
