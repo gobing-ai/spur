@@ -8,6 +8,26 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.41] - 2026-11-20
+
+### Added
+- classify a lapsed provider plan as executor unavailability so the run trips its breaker and fails over instead of retrying the same executor (bd570c8b1)
+  <!-- src: packages/app/src/services/failure-classification.ts:216, packages/app/src/services/agent-run-executor.ts:953 · confidence: HIGH -->
+- report executors whose provider the usage source never reports, on `spur agent usage` and in the `agent doctor` usage line (bd570c8b1)
+  <!-- src: packages/app/src/services/agent-usage-producer.ts:336, apps/cli/src/commands/agent/usage.ts:146, packages/app/src/services/agent-doctor-report.ts:465 · confidence: HIGH -->
+- record the elected executor and model and the ladder failover in the history-anatomy provenance, and stamp them into the finished report (bd570c8b1)
+  <!-- src: packages/app/src/services/workflow-trace-projection.ts:158, packages/app/src/services/history-anatomy.ts:1136 · confidence: HIGH -->
+
+### Fixed
+- pass `--no-logo` to the nested spur calls in the history-anatomy workflow (43348f29b)
+  <!-- src: config/workflows/history-anatomy.yaml:115 · confidence: HIGH -->
+- catalog `workflow.action.output` as a diagnostic metadata-only event (5a3ef425c)
+  <!-- src: packages/app/src/services/event-names.ts:410 · confidence: HIGH -->
+- key `anatomy-assert-clean` by the fixed-column porcelain path so a staged/unstaged flip is not a new write, and honor the `--expect <path>` spelling the workflow passes (ccb42c32c)
+  <!-- src: packages/app/src/services/history-anatomy.ts:1237, packages/app/src/services/history-anatomy-cli.ts:132 · confidence: HIGH -->
+- never stamp an `undefined` executor identity when a probe carries no `executorProfile` (70502a0fb)
+  <!-- src: packages/app/src/services/history-anatomy.ts:1164 · confidence: HIGH -->
+
 ## [0.4.40] - 2026-11-20
 
 ### Added
