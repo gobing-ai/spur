@@ -8,6 +8,44 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.40] - 2026-11-20
+
+### Added
+- move plugin, laya-worker, board-type and migration-SQL staging behind `spur builder` verbs so a downstream checkout packages its own artifacts (50ef01cb1)
+  <!-- src: apps/cli/src/commands/builder/build.ts:105 · confidence: HIGH -->
+- compile a downstream entry with `build-binaries --entry`, keep `verify-pack` archive-generic, and merge the link and dependency-drift checks into one `check-deps` scoped by `builder.dependencyScope` (792ee5146)
+  <!-- src: packages/config/src/index.ts:1201 · confidence: HIGH -->
+- ship the shim ledger and coverage provenance as `rule check-shims`, `check-coverage-cert` and `certify-coverage`, with two shipped presets reaching them through the exit-code evaluator (32383c037)
+  <!-- src: apps/cli/src/commands/rule/check-shims.ts:15 · confidence: HIGH -->
+- add `workflow eval` and `promote-check|evaluate|resolve` over the app layer, with the eval fixture catalog in the bundled templates (8d286a317)
+  <!-- src: apps/cli/src/commands/workflow/eval.ts:23 · confidence: HIGH -->
+- run `builder.actions.<name>` parallel entries under one process-group supervisor with a single bounded shutdown (7b502395b)
+  <!-- src: packages/app/src/services/parallel-supervisor.ts:58 · confidence: HIGH -->
+- ship `agent doctor-hosts` to probe each installed host binary and write the host-capability report (b91e54c83)
+  <!-- src: apps/cli/src/commands/agent/doctor-hosts.ts:31 · confidence: HIGH -->
+- guard the shipped surface with a repo-wide scan for repository-only references and pin the 13 A94 verbs as leaves (a52c7828e)
+  <!-- src: repo-wide-tests/a94-shipped-surface.test.ts:100 · confidence: HIGH -->
+
+### Fixed
+- let the installed MCP entry discover and call project tools by translating the legacy stdio lifecycle in the bridge while the gateway keeps the project credential separate (397a84f7c)
+  <!-- src: apps/cli/src/commands/mcp.ts:77 · confidence: HIGH -->
+- own the inbox transaction bracket on the synchronous `bun:sqlite` client after `DbAdapter.transaction` was removed (f5999470b)
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:233 · confidence: HIGH -->
+
+### Changed
+- take ts-runtime 0.8.1 so `@gobing-ai/spur/schemas/*.json` references resolve from the host package when the CLI is installed outside the project tree (14a60bebd)
+  <!-- src: package.json:44 · confidence: HIGH -->
+- upgrade the external dependency set to the current catalog versions (2095a9241)
+  <!-- src: bun.lock · confidence: MEDIUM -->
+
+### Other
+- add the A94 downstream-use inventory that tracks each `scripts/` candidate by the downstream use it earns (d2cf837be)
+- plan the A94 downstream-usable tooling absorption (a0520a6fc)
+- re-scope 1414 to the host probe after the coverage ceiling (81e7b13ec)
+- format the merged test surface (4cd62e8b0)
+- repoint the changelog anchors at the moved A94 modules (95ba4b96a)
+- record A94 at verifying once every linked task closed (1e54ba566)
+
 ## [0.4.39] - 2026-11-19
 
 ### Added
