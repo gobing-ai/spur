@@ -98,6 +98,7 @@ export const RETIRED: Record<string, string> = {
     'coverage-provenance-check': 'spur rule check-coverage-cert',
     'eval-pipeline': 'spur workflow eval',
     promotion: 'spur workflow promote-check',
+    'dev-all': 'spur self exec dev',
 };
 
 function usage(message?: string): never {

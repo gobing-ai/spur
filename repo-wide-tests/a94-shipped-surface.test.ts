@@ -140,13 +140,14 @@ describe('shipped surfaces do not execute repository-only commands', () => {
         expect(problems).toEqual([]);
     });
 
-    test('no shipped file cites a path whose inventory disposition is done', () => {
-        const gone = REPORT.entries.filter((entry) => entry.disposition === 'done').map((entry) => entry.path);
+    // Moved modules leave the inventory instead of lingering as `done`, so the check is existence:
+    // every repository script path a shipped file cites must still be on disk.
+    test('no shipped file cites a repository script that no longer exists', () => {
         const problems: string[] = [];
         for (const file of files) {
             const text = readFileSync(join(REPO_ROOT, file), 'utf-8');
-            for (const path of gone) {
-                if (text.includes(path)) problems.push(`${file}: cites retired ${path}`);
+            for (const [path] of text.matchAll(/\bscripts\/commands\/[\w./-]+\.ts\b/g)) {
+                if (!existsSync(join(REPO_ROOT, path))) problems.push(`${file}: cites missing ${path}`);
             }
         }
         expect(problems).toEqual([]);

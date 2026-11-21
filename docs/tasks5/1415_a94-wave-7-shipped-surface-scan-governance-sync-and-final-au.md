@@ -4,7 +4,7 @@ name: "A94 wave 7: shipped-surface scan, governance sync and final audit"
 status: done
 template: feature-impl
 created_at: 2026-11-20T07:58:05.086Z
-updated_at: "2026-11-20T23:15:07.665Z"
+updated_at: "2026-11-21T00:04:22.578Z"
 feature_id: A94
 priority: P1
 tags:
@@ -164,17 +164,17 @@ Design authority: docs/design/downstream-tooling-absorption.md (consent C1–C10
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | repo-wide-tests/a94-shipped-surface.test.ts:1 — 6 cases over the shipped tree (script refs, aliases, retired citations), EXCLUDE imported from bundle-plugins |
-| R2 | MET | plugins/sp/README.md:432 paragraph + inventory reasons asserted (a94-shipped-surface.test.ts, "names Superskill") |
-| R3 | MET | docs/00_ADR.md:2253 amendment marked implemented 1409–1415; satellite `status: implemented` + §6 receipt index; docs/04_DESIGN.md:30 row; harness-surface-governance.md §2 and cli-contracts.md list the 13 verbs + `builder.dependencyScope` + the parallel form; environment_variables.md carries `SPUR_COVERAGE_DIR` |
-| R4 | MET | .spur/run/1415-receipt.md — 13 verbs × source/packed/binary `--help`, 0 failures; `build:all` exit 0; `spur-check-feature` ran 12,979 tests green (certification refused only by a concurrent writer) |
-| R5 | MET | repo-wide-tests/a94-surface-shape.test.ts:1 — 26 cases (13 verbs × leaf + consented flags) |
-| R6 | MET | inventory has no `pending` entries (asserted); dispatcher usage + RETIRED exit 2 covered by a93-script-ownership.test.ts |
+| R1 | MET | `repo-wide-tests/a94-shipped-surface.test.ts:145` — re-verify (2026-11-20) found the original (b) check hollow: moved modules leave the inventory instead of becoming `done`, so it compared against an empty set while `config/rules/structure/test-location.yaml:46`, `config/templates/pipeline-eval/fixture-minimal.md:39` and `plugins/sp/skills/spur-cli/references/builder.md:13,72` still cited removed `scripts/commands/*` paths. Fix pass replaced it with an existence check (red on those hits, then green after repointing them) |
+| R2 | MET | `plugins/sp/README.md:441` Superskill paragraph; inventory reasons asserted at `repo-wide-tests/a94-shipped-surface.test.ts:166` |
+| R3 | MET | `docs/00_ADR.md:2253` marked implemented; `docs/design/downstream-tooling-absorption.md` `status: implemented`; `docs/04_DESIGN.md:30`; `docs/help/environment_variables.md` carries `SPUR_COVERAGE_DIR` |
+| R4 | MET | `.spur/run/1415-receipt.md` three-way `--help` proof; fresh source-CLI `--help` exit 0 for all 13 A94 verbs plus `build-binaries`/`verify-pack` (2026-11-20); feature verification pass `.spur/run/a94-verify3.log` |
+| R5 | MET | `repo-wide-tests/a94-surface-shape.test.ts:1`; `bun run test-repo-wide` 64 pass / 0 fail. Fix pass: `package.json:94` now runs it under `bunfig.heavy.toml` (coverage off), because importing `buildProgram` made source files test-visible and tripped the per-file 90/90 threshold, so the step exited 1 with 0 failing tests and failed every feature verify since 2026-11-20 |
+| R6 | MET | `scripts/spur-dev.ts:84` RETIRED map; `docs/reports/A94-script-ownership.json` has no `pending` entries (32 retained) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Shipped surfaces do not reference repository-only scripts (req: R1, R2) | MET | test | `bun test repo-wide-tests/a94-shipped-surface.test.ts` — 6 pass |
-| AC2 — Final audit, surface shape and governance sync (req: R3, R4, R5, R6) | MET | command | `bun run gate` exit 0; `.spur/run/1415-receipt.md` (13 verbs × 3 routes, 0 failures) |
+| R13 — Shipped surfaces do not reference repository-only scripts | MET | test | `repo-wide-tests/a94-shipped-surface.test.ts:145` (strengthened), 64/64 repo-wide pass |
+| R15 — Source, packed and standalone proofs precede route retirement | MET | command | `.spur/run/1415-receipt.md`; `repo-wide-tests/a94-surface-shape.test.ts:1` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

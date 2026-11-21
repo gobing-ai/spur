@@ -4,7 +4,7 @@ name: "A94 wave 6a: parallel builder actions and the dev supervisor"
 status: done
 template: feature-impl
 created_at: 2026-11-20T20:46:27.786Z
-updated_at: "2026-11-20T21:31:17.348Z"
+updated_at: "2026-11-21T00:04:47.700Z"
 feature_id: A94
 
 done_forced: "false"
@@ -97,15 +97,15 @@ Carried work: the reverted wave-6 implementation is parked at `.spur/run/1414-wi
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/config/src/index.ts:1075 `ParallelActionSchema` + validator; apps/cli/schemas/spur-config.schema.json oneOf branch; `self exec --list` shows the parallel row |
-| R2 | MET | packages/app/src/services/parallel-supervisor.ts:60 `superviseParallel`; heavy suite proves 0/7/143/130/127 with real children |
-| R3 | MET | packages/app/src/services/sdlc-actions.ts:76 `kind: 'parallel'`; apps/cli/src/commands/self/exec.ts:69 dispatch; quality-gate projection |
-| R4 | MET | .spur/config.yaml actions.dev.parallel; scripts/commands/dev-all.ts deleted; RETIRED entry; docs/design/sdlc-actions.md documented |
+| R1 | MET | `packages/config/src/index.ts:1080` `ParallelActionSchema` and its validator |
+| R2 | MET | `packages/app/src/services/parallel-supervisor.ts:58` `superviseParallel`; `apps/cli/tests/commands/self/exec-parallel.heavy.test.ts` |
+| R3 | MET | `packages/app/src/services/sdlc-actions.ts:82` `kind: 'parallel'`; `apps/cli/src/commands/self/exec.ts:68` |
+| R4 | MET | Re-verify (2026-11-20) found `dev-all` removed from the dispatcher without the required RETIRED pointer (exit 1 "unknown command"). Fix pass added `'dev-all': 'spur self exec dev'` at `scripts/spur-dev.ts:101`; `bun scripts/spur-dev.ts dev-all` now prints the pointer and exits 2 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Dev supervisor runs configured processes downstream (req: R1, R2, R4) | MET | command | `bun test apps/cli/tests/commands/self/exec-parallel.heavy.test.ts` — 5 cases, 4 s; `.spur/config.yaml` actions.dev.parallel |
-| AC2 — Parallel binding is a first-class action form (req: R1, R3) | MET | test | packages/app/tests/services/sdlc-actions.test.ts (resolution + default) and apps/cli/tests/commands/self/exec.test.ts (dispatch, args refusal, `--list`) |
+| R12 — Dev supervisor runs configured processes downstream | MET | test | `apps/cli/tests/commands/self/exec-parallel.heavy.test.ts` (in `test:heavy`, feature verification pass) |
+| AC2 — Parallel binding is a first-class action form | MET | test | `packages/app/tests/services/sdlc-actions.test.ts:200` (15/15 pass, 2026-11-20: `{parallel, graceMs}` resolves to the parallel kind and lists as such); `apps/cli/tests/commands/self/exec.test.ts:266` (26/26 pass: `spur self exec dev` reports `parallel: 2`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

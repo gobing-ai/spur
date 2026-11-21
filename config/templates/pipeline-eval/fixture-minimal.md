@@ -36,4 +36,4 @@ changes. The backticked path above is the implement scope guard's allowlist.
 
 - [ ] Create `tests/fixtures/pipeline-eval/scratch/{{WBS}}.md` with the single line
       `fixture {{WBS}} ok`
-- [ ] Verification: `bun test scripts/commands/eval-pipeline.test.ts` green
+- [ ] Verification: `test -f tests/fixtures/pipeline-eval/scratch/{{WBS}}.md` exits 0

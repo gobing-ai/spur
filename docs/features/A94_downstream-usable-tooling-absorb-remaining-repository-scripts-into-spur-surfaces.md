@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A94"
 name: "Downstream-usable tooling: absorb remaining repository scripts into spur surfaces"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-11-20T07:53:05.455Z"
-updated_at: "2026-11-20T23:22:32.470Z"
+updated_at: "2026-11-21T00:16:35.187Z"
 ---
 
 # A94: Downstream-usable tooling: absorb remaining repository scripts into spur surfaces
@@ -186,4 +186,5 @@ Feature: Downstream-usable tooling absorbed from repository scripts
 
 - 2026-11-20T08:47:33.146Z backlog → active (system)
 - 2026-11-20T23:22:32.470Z active → verifying (system)
+- 2026-11-21T00:16:35.187Z verifying → done (system)
 

@@ -9,8 +9,8 @@ see_also:
 
 `spur builder` is the CLI for **version bumps and release tags**, plus the PR-review loop and the
 read-only branch report. It wraps the internal
-`release-ops` implementation behind a public eight-verb surface. The repo-local forwarder
-(`scripts/commands/release.ts`) and its `spur-dev` dispatcher cases were retired in task 1173; the
+`release-ops` implementation behind a public eight-verb surface. The repo-local release forwarder
+and its `spur-dev` dispatcher cases were retired in task 1173; the
 root `bun run bump-ver` / `bun run drop-tags` names route to `spur builder` directly. Package ids are
 the unscoped short names (`@gobing-ai/spur` → `spur`); the released set and the aggregate tag are
 discovered from the repo's own workspace manifests, so the same code serves any git+semver
@@ -68,9 +68,9 @@ spur builder build-server --source-root ../other-checkout
 spur builder build-binaries --json           # six targets + dist/cli/SHA256SUMS
 ```
 
-The compile implementation lives in `@gobing-ai/spur-app/builder`; the repository's
-`scripts/commands/build-*.ts` are thin forwarders so package scripts and CI can build before the
-CLI's generated config bundle exists (a build must never depend on its own output). `--source-root`
+The compile implementation lives in `@gobing-ai/spur-app/builder`; package scripts and CI call
+the source CLI directly (`bun apps/cli/src/index.ts builder …`), which boots without the generated
+config bundle, so a build never depends on its own output (A94, task 1410). `--source-root`
 must be a Spur checkout and is validated before any lock or patch. Both compile patches are restored
 on every exit path, a second patch-acquisition failure still restores the first, and the single
 `.spur-compile.lock` refuses a concurrent build. Failures exit nonzero and never publish.
