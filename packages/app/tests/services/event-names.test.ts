@@ -169,6 +169,8 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.handler.error');
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.emit.done');
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.emit.noop');
+        // Streamed shell chunks (shell.ts) — uncataloged, they hit the catch-all warn on every run.
+        expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('workflow.action.output');
         expect(SYSTEM_EVENT_DIAGNOSTIC_NAMES).toContain('bus.handler.async.enqueued');
     });
 

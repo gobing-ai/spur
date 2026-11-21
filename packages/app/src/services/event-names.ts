@@ -407,6 +407,7 @@ const BASE_CATALOG = [
     baseEvent('workflow.action.started', 'workflow', 'workflow-action'),
     baseEvent('workflow.action.finished', 'workflow', 'workflow-action'),
     baseEvent('workflow.action.failed_continue', 'workflow', 'workflow-action'),
+    baseEvent('workflow.action.output', 'workflow', 'workflow-action', 'metadata-only', 'diagnostic'),
     baseEvent('workflow.guard.evaluated', 'workflow', 'workflow-guard', 'metadata-only', 'diagnostic'),
     baseEvent('workflow.hitl.ask', 'workflow', 'workflow-hitl', 'redacted'),
     baseEvent('workflow.hitl.response', 'workflow', 'workflow-hitl', 'redacted'),
@@ -1562,6 +1563,23 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             support: 'derived',
             derive: ({ data }) => s(data, 'status') ?? n(data, 'ok'),
         },
+    },
+    'workflow.action.output': {
+        description: 'A running workflow action streamed one bounded, redacted stdout/stderr chunk.',
+        fields: [
+            field('runId', 'Run'),
+            field('workflowName', 'Workflow'),
+            field('node', 'Node'),
+            field('actionId', 'Action'),
+            field('kind', 'Kind'),
+            field('stream', 'Stream'),
+        ],
+        summary: (input) => {
+            const name = humanWorkflowTitle(input);
+            const stream = s(input.data, 'stream') ?? 'output';
+            return name !== '' ? `[workflow] ${name} · ${stream}` : `[workflow] action ${stream}`;
+        },
+        outcome: unsupported,
     },
     'workflow.action.failed_continue': {
         description: 'A workflow action failed but the workflow continued, carrying the error.',

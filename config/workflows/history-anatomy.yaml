@@ -112,7 +112,7 @@ states:
           # PR-6 — HA_HELPER is the running spur, HA_SKILL the resolved skill dir). Avoid
           # `${...}` here — that syntax collides with the engine's own template interpolation.
           command: >-
-            $spurBin history anatomy-paths --report-dir "$reportDir" --date "$date"
+            $spurBin --no-logo history anatomy-paths --report-dir "$reportDir" --date "$date"
             --output "$output" --mode "$mode" --since "$since" --until "$until"
             --focus "$focus" --recompute "$recompute" --run-id "$__runId"
             --out .spur/run/$__runId-paths.txt
@@ -148,7 +148,7 @@ states:
           # `auto`; the resolved executor/model now come from the run's own action receipts at stamp.
           command: >-
             . .spur/run/$__runId-paths.txt;
-            $spurBin history anatomy-probe --artifact .spur/run/$__runId-history-anatomy-current.json
+            $spurBin --no-logo history anatomy-probe --artifact .spur/run/$__runId-history-anatomy-current.json
             --baseline .spur/run/$__runId-history-anatomy-baseline.json --target "$HA_TARGET"
             --mode "$mode" --date "$HA_DATE" --recompute "$recompute"
             --skill-dir "$HA_SKILL" --contract "$HA_SKILL/references/report-contract.md"
@@ -164,8 +164,8 @@ states:
         options:
           command: >-
             mkdir -p .spur/run;
-            $spurBin history report .spur/run/$__runId-history-anatomy-current.json --mode forensics;
-            $spurBin history report .spur/run/$__runId-history-anatomy-baseline.json --mode forensics || true
+            $spurBin --no-logo history report .spur/run/$__runId-history-anatomy-current.json --mode forensics;
+            $spurBin --no-logo history report .spur/run/$__runId-history-anatomy-baseline.json --mode forensics || true
 
   - id: enrich
     description: >
@@ -189,7 +189,7 @@ states:
       - kind: shell
         options:
           command: >-
-            $spurBin history anatomy-assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md
+            $spurBin --no-logo history anatomy-assert-clean --baseline .spur/run/$__runId-baseline-enrich.txt --expect .spur/run/$__runId-candidate.md
 
   - id: structure-gate
     description: >
@@ -200,7 +200,7 @@ states:
       - kind: shell
         options:
           command: >-
-            $spurBin history anatomy-check \
+            $spurBin --no-logo history anatomy-check \
               .spur/run/$__runId-candidate.md > .spur/run/$__runId-structure-gate.txt 2>&1 || true
 
   - id: validate
@@ -266,7 +266,7 @@ states:
       - kind: shell
         options:
           command: >-
-            $spurBin history anatomy-assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
+            $spurBin --no-logo history anatomy-assert-clean --baseline .spur/run/$__runId-baseline-validate.txt --expect .spur/run/$__runId-validation.txt
 
   - id: correct
     description: >
@@ -303,7 +303,7 @@ states:
       - kind: shell
         options:
           command: >-
-            $spurBin history anatomy-assert-clean --baseline .spur/run/$__runId-baseline-correct.txt --expect .spur/run/$__runId-candidate.md
+            $spurBin --no-logo history anatomy-assert-clean --baseline .spur/run/$__runId-baseline-correct.txt --expect .spur/run/$__runId-candidate.md
 
   - id: refresh-provenance
     description: >
@@ -316,7 +316,7 @@ states:
         options:
           command: >-
             . .spur/run/$__runId-paths.txt;
-            $spurBin history anatomy-refresh --report "$HA_TARGET"
+            $spurBin --no-logo history anatomy-refresh --report "$HA_TARGET"
             --out .spur/run/$__runId-publishable.md --disposition hit
 
   - id: stamp
@@ -337,7 +337,7 @@ states:
         options:
           command: >-
             . .spur/run/$__runId-paths.txt;
-            $spurBin history anatomy-stamp --candidate .spur/run/$__runId-candidate.md
+            $spurBin --no-logo history anatomy-stamp --candidate .spur/run/$__runId-candidate.md
             --provenance .spur/run/$__runId-provenance.json
             --validation .spur/run/$__runId-validation.txt
             --trace .spur/run/$__runId-trace.json
@@ -354,7 +354,7 @@ states:
           command: >-
             . .spur/run/$__runId-paths.txt;
             mkdir -p "$(dirname "$HA_TARGET")";
-            $spurBin history anatomy-publish .spur/run/$__runId-publishable.md "$HA_TARGET"
+            $spurBin --no-logo history anatomy-publish .spur/run/$__runId-publishable.md "$HA_TARGET"
 
   - id: published
     description: Terminal — report published atomically after a passing validation.

@@ -444,6 +444,13 @@ describe('diffPorcelain (0676 R3)', () => {
         const now = '?? already-dirty.txt\n?? .spur/run/candidate.md\n';
         expect(diffPorcelain(before, now, new Set(['.spur/run/candidate.md']))).toEqual([]);
     });
+    test('keys by bare path: an XY status change on pre-existing dirt is not a new write', () => {
+        // ` M x` (unstaged) → `M  x` / `MM x` (staged) is the same path; the old parser keyed
+        // the leading-space form as `M x` and reported it as a gained write.
+        const before = ' M docs/a.md\n?? docs/b.md\n';
+        const now = 'MM docs/a.md\nA  docs/b.md\n M docs/c.md\nR  old.md -> new.md\n';
+        expect(diffPorcelain(before, now, new Set())).toEqual(['docs/c.md', 'new.md']);
+    });
 });
 describe('publishAtomically (R6)', () => {
     test('publishes a candidate onto the target atomically', () => {

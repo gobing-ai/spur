@@ -33,6 +33,7 @@ import { join } from 'node:path';
 // Leaf import, not the @gobing-ai/spur-domain barrel: this module is bundled standalone for
 // plugins/sp (task 1005), and the barrel would drag the whole domain graph into the generated lib.
 import { semanticArtifactDigest } from '@gobing-ai/spur-domain/artifact-digest';
+import { porcelainPath } from '../workflow/wrapup/steps';
 /** The frozen cache identity vocabulary (0658/0660): what the cached report was generated from. */
 export interface CacheIdentity {
     contractVersion: string;
@@ -1228,13 +1229,17 @@ export interface CacheCliResult {
     stderr: string;
 }
 
-/** Parse a `git status --porcelain` text into its path set. */
+/**
+ * Parse a `git status --porcelain` text into its path set. v1 lines are a fixed two-column
+ * `XY` status plus one space, so the path starts at column 3 — splitting on whitespace instead
+ * kept ` M x` as `M x` and made a staged/unstaged flip look like a new write.
+ */
 export function porcelainPaths(text: string): Set<string> {
     return new Set(
         text
             .split('\n')
-            .map((line) => line.replace(/^\S+\s+/, '').trim())
-            .filter((line) => line.length > 0),
+            .filter((line) => line.length > 3)
+            .map(porcelainPath),
     );
 }
 
