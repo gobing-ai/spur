@@ -33,6 +33,40 @@ describe('bundleLayaWorker', () => {
         if (target) await rm(target, { recursive: true, force: true });
     });
 
+    test('stages worker/laya_worker.py from a resolved package into the target', async () => {
+        // The copy path must be measurable on every host: the real MLX package is darwin-only, so on
+        // Linux CI it is absent, this suite's real-package case skips, and the file fell below the
+        // per-file 90% line gate while every test still passed.
+        const root = await mkdtemp(join(tmpdir(), 'spur-laya-stage-'));
+        target = await mkdtemp(join(tmpdir(), 'spur-laya-out-'));
+        try {
+            const pkg = join(root, 'packages', 'app');
+            const installed = join(pkg, 'node_modules', '@gobing-ai', 'ts-laya-mlx');
+            const worker = join(installed, 'worker', 'laya_worker.py');
+            await mkdir(join(installed, 'worker'), { recursive: true });
+            await writeFile(join(pkg, 'package.json'), JSON.stringify({ name: 'app' }));
+            await writeFile(
+                join(installed, 'package.json'),
+                JSON.stringify({ name: '@gobing-ai/ts-laya-mlx', main: 'index.js' }),
+            );
+            await writeFile(join(installed, 'index.js'), 'export const worker = null;\n');
+            await writeFile(worker, 'import laya_mlx\n');
+
+            const result = await bundleLayaWorker({ sourceRoot: root, target });
+
+            const destination = join(target, 'laya_worker.py');
+            expect(await readFile(destination, 'utf8')).toBe('import laya_mlx\n');
+            expect(result.ok).toBe(true);
+            expect(result.diagnostics).toEqual([]);
+            expect(result.artifacts[0]).toEqual({ path: destination, kind: 'worker' });
+            // ResolveSync reports the real path (/var vs /private/var on macOS), so compare the tail.
+            expect(result.artifacts[1]?.kind).toBe('source');
+            expect(result.artifacts[1]?.path.endsWith(join('worker', 'laya_worker.py'))).toBe(true);
+        } finally {
+            await rm(root, { recursive: true, force: true });
+        }
+    });
+
     test.skipIf(!HAS_LAYA_MLX)('copies a non-empty laya_worker.py from the installed package', async () => {
         target = await mkdtemp(join(tmpdir(), 'spur-laya-worker-'));
         const result = await bundleLayaWorker({ sourceRoot: SOURCE_ROOT, target });
