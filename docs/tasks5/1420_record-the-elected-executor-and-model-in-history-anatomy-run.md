@@ -4,7 +4,7 @@ name: Record the elected executor and model in history-anatomy run provenance
 status: done
 template: issue
 created_at: 2026-11-21T04:33:09.024Z
-updated_at: "2026-11-21T05:14:59.253Z"
+updated_at: "2026-11-21T06:22:47.862Z"
 feature_id: E6
 
 priority: P3
@@ -181,17 +181,17 @@ No workflow-YAML change: `stamp` already receives `--trace`. The probe-time `-pr
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/workflow-trace-projection.ts:143-160` adds `executor`, `tier`, `role` to `TRACE_INVOCATION_FIELDS`; `history-anatomy.ts:925-940` reads `inv.executor` into `DispatchProvenance.executor`, so `invocation executor absent` now appears only when the invocation genuinely lacked the field, and `refreshReport` keeps a real identity verbatim. |
-| R2 | MET | `workflow-trace-projection.ts:268-292` derives one bounded scalar from `result.ladder` rows with `kind === 'escalation'` (`a→b, b→c`), omitting it when no row matches — no array projection. `history-anatomy.ts:47-58` declares `DispatchProvenance.failover?: string`, `:878-891` records it, `:1104-1112` renders it, `:272-280` parses it back, so the cache-hit republish keeps it. |
-| R3 | MET | Probe identity is now `PENDING_EXECUTOR`/`PENDING_MODEL` (`history-anatomy.ts:1030-1052`), and `stampReport` (`:1155-1172`) replaces those tokens **and** the legacy prose in the body with the stamped executor profile (falling back to the agent when the profile itself is absent) and model — an exact-token replace, no markdown parsing, no re-reading of session JSONL. `plugins/sp/skills/history-anatomy/references/operations.md:26-30` instructs enrich to copy the values verbatim. |
-| R4 | MET | `refreshReport` (`:1174-1192`) maps a pending/legacy placeholder identity to `not-applicable: cache hit, no agent stage ran` and leaves a real identity untouched; absent key ≠ empty string end-to-end. |
+| R1 | MET | `packages/app/src/services/workflow-trace-projection.ts:156-160` whitelist; test `packages/app/tests/services/workflow-trace-projection.test.ts:289`, `packages/app/tests/services/history-anatomy-final-provenance.test.ts:251` |
+| R2 | MET | `packages/app/src/services/workflow-trace-projection.ts:289-307` failover scalar; `packages/app/src/services/history-anatomy.ts:284-286` parse; `:1135` render; tests `packages/app/tests/services/workflow-trace-projection.test.ts:296`, `:314` |
+| R3 | MET | `packages/app/src/services/history-anatomy.ts:1158-1176` stamp substitution (verify fix pass: shared resolver, no `undefined` when `executorProfile` is unset); `plugins/sp/skills/history-anatomy/references/operations.md:28-29`; test `packages/app/tests/services/history-anatomy-final-provenance.test.ts:308` |
+| R4 | MET | `packages/app/src/services/history-anatomy.ts:1179-1195` refresh rewrite; AC4 test in `packages/app/tests/services/history-anatomy-final-provenance.test.ts` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/workflow-trace-projection.test.ts:331` (identity fields projected) and `history-anatomy-final-provenance.test.ts:215` (row + `executorProfile` in frontmatter, round-trips through `parseProvenance`). |
-| AC2 | MET | test | `history-anatomy-final-provenance.test.ts:232` — `failover` recorded on the row, rendered in frontmatter, round-tripped; a dispatch without escalation carries no key and the rendered frontmatter contains no `failover:`. |
-| AC3 | MET | test | `history-anatomy-final-provenance.test.ts:253` — a body carrying both pending tokens and the legacy prose stamps to the stamped executor/model with none of the four placeholder strings left. |
-| AC4 | MET | test | `history-anatomy-final-provenance.test.ts:270` — legacy-placeholder identity republishes as `not-applicable: cache hit, no agent stage ran`; a real identity keeps the executor and only `validatedAt`/disposition change. |
+| AC1 | MET | test | `packages/app/tests/services/workflow-trace-projection.test.ts:289`; `packages/app/tests/services/history-anatomy-final-provenance.test.ts:251` |
+| AC2 | MET | test | `packages/app/tests/services/workflow-trace-projection.test.ts:296`, `:314` |
+| AC3 | MET | test | `packages/app/tests/services/history-anatomy-final-provenance.test.ts:308` (new regression: failed pre-fix with `Executor is \`undefined\``, passes after) |
+| AC4 | MET | test | `packages/app/tests/services/history-anatomy-final-provenance.test.ts` AC4 case; 113 pass / 0 fail across history-anatomy tests |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Classify provider subscription-lapse 400 as executor unavailability so the
 status: done
 template: issue
 created_at: 2026-11-21T04:33:04.639Z
-updated_at: "2026-11-21T04:51:29.841Z"
+updated_at: "2026-11-21T06:22:47.239Z"
 feature_id: B6
 
 priority: P1
@@ -167,17 +167,17 @@ Two independent misses, both verified in the current tree:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/failure-classification.ts:88-97` adds the entitlement-lapse rule (`resource-exhaustion`, no `statusCodes`, `patterns: [...ENTITLEMENT_LAPSE_PATTERNS]`); `:21-31` is the shared conjunction. AC1 test proves the classification. |
-| R2 | MET | `packages/app/src/services/failure-classification.ts:207-222` widens `executorUnavailabilityEvidence` to `stdout`/`stderr` and returns `provider entitlement lapsed (InvalidSubscription)` on the same conjunction; the exit-2 and `unavailable` branches stay first. `agent-run-executor.ts:953` already passes the full `AgentRunResult`, so no caller edit was needed. |
-| R3 | MET | The rule carries no `statusCodes`, so the `400 {"error":…` prefix contributes nothing; `failure-classification.test.ts:74-79` asserts `status 400` and `Your subscription renews on 1 Dec` stay unmatched in both `classifyDispatch` and `executorUnavailabilityEvidence`. |
-| R4 | MET | Four tests added, no existing expectation edited (`git diff` on both test files is insertion-only apart from the widened import). Red-then-green observed: 4 new tests failed before the source change, 42 pass / 0 fail after. |
+| R1 | MET | `packages/app/src/services/failure-classification.ts:28-31` shared conjunction; `packages/app/src/services/failure-classification.ts:88-97` rule (`resource-exhaustion`, no `statusCodes`); test `packages/app/tests/services/failure-classification.test.ts:64` |
+| R2 | MET | `packages/app/src/services/failure-classification.ts:207-222` entitlement branch after exit-2/unavailable; test `packages/app/tests/services/failure-classification.test.ts:68` |
+| R3 | MET | no `statusCodes` on the rule; `packages/app/tests/services/failure-classification.test.ts:74` and `:82` negative cases |
+| R4 | MET | `packages/app/tests/services/agent-run-executor-d3.test.ts:347` and `:363`; focused run 112 pass / 0 fail (this verify) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/failure-classification.test.ts:64` — the 2026-11-20 `InvalidSubscription` body at exit 3 classifies as `resource-exhaustion`. |
-| AC2 | MET | test | `packages/app/tests/services/agent-run-executor-d3.test.ts:341-372` — one dispatch on the lapsed executor, `breaker-trip` recorded, failover to `codex-main`, and `breaker-skip` for a later node in the same run id. |
-| AC3 | MET | test | `packages/app/tests/services/failure-classification.test.ts:74` — status-only 400 and a bare subscription mention stay unmatched; exit 0 never classifies (`:82`). |
-| AC4 | MET | command | `(cd packages/app && bun test tests/services/failure-classification.test.ts tests/services/agent-run-executor-d3.test.ts)` → 42 pass / 0 fail; the same command before the source change → 4 fail (both recorded in this session), and `spur task gate 1418 light` → PASS. |
+| AC1 | MET | test | `packages/app/tests/services/failure-classification.test.ts:64` |
+| AC2 | MET | test | `packages/app/tests/services/agent-run-executor-d3.test.ts:347` (breaker-trip + one dispatch + failover), `:363` (breaker-skip same run id) |
+| AC3 | MET | test | `packages/app/tests/services/failure-classification.test.ts:74` |
+| AC4 | MET | command | `git show bd570c8b1 -- packages/app/tests/services/failure-classification.test.ts packages/app/tests/services/agent-run-executor-d3.test.ts` insertion-only; focused tests 112 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -1159,13 +1159,13 @@ export function stampReport(candidateMarkdown: string, p: CacheProvenance): stri
     // 1420 R3: the body's provenance sentence is model-authored from probe values, which are
     // pending tokens. Resolve them HERE, deterministically, from the stamped identity — never by
     // trusting enrich to have guessed the elected executor.
-    const executor = isPendingIdentity(p.executorProfile)
-        ? isPendingIdentity(p.executor)
-            ? NOT_APPLICABLE_HIT
-            : (p.executor as string)
-        : (p.executorProfile as string);
+    // First recorded value wins; a probe-only stamp (no receipts) has no `executorProfile`, and an
+    // unset or pending value must never be substituted as `undefined` or re-emitted as a token.
+    const resolve = (...candidates: (string | undefined)[]): string =>
+        candidates.find((c) => c !== undefined && c !== '' && !isPendingIdentity(c)) ?? NOT_APPLICABLE_HIT;
+    const executor = resolve(p.executorProfile, p.executor);
+    const model = resolve(p.model);
     let body = stripHeader(candidateMarkdown);
-    const model = p.model ?? NOT_APPLICABLE_HIT;
     for (const token of [PENDING_EXECUTOR, LEGACY_PENDING_PROSE[0]] as const) body = body.replaceAll(token, executor);
     for (const token of [PENDING_MODEL, LEGACY_PENDING_PROSE[1]] as const) body = body.replaceAll(token, model);
     return `${renderProvenanceFrontmatter(p)}\n\n${bannerLine(p)}\n\n${body.replace(/^\n+/, '')}`;

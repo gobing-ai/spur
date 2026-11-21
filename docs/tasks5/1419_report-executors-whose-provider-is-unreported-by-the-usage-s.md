@@ -4,7 +4,7 @@ name: Report executors whose provider is unreported by the usage source
 status: done
 template: issue
 created_at: 2026-11-21T04:33:08.544Z
-updated_at: "2026-11-21T05:03:33.732Z"
+updated_at: "2026-11-21T06:22:47.547Z"
 feature_id: B6
 
 priority: P2
@@ -177,17 +177,17 @@ No availability write, no `changes[]` row and no auto-disable exists for an unre
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-usage-producer.ts:331-339` derives the list from returned providers (healthy + errored) intersected with enabled executors via the existing `mapProvidersToExecutors`; `:364-370` persists `unreported_executors`; `:466-473` returns it. Computed before the `--dry-run` branch, so a dry run yields the list and writes no snapshot (`agent-usage-producer.test.ts:441-450`). No second provider-mapping rule was introduced, and `executorDisabled` is the existing helper from `executor-tier.ts`. |
-| R2 | MET | `apps/cli/src/commands/agent/usage.ts:144-150` prints the `Unmeasured executors (not reported by <source>): …` line only when non-empty; `--json` carries `unreportedExecutors` because the whole result is enveloped. No `changes[]` row and no availability write: `agent-usage-producer.test.ts:416-422` asserts no change row for the unreported executors plus an undefined DAO row and an untouched `disabled:` key. |
-| R3 | MET | `agent-doctor-report.ts:39-47` adds the always-present field, `:99-110` parses it (strings only; pre-1419 or garbage → `[]`, no new failure mode), `:463-465` renders `; unmeasured: …`. The enabled-now intersection lives in `agent-doctor-ops.ts:64-77`, before both the text render and the `--json` payload, so a since-disabled executor drops out. |
-| R4 | MET | `agent-usage-producer.test.ts:424-428` — a payload reporting `volc` yields `[]` with no code or config change; the errored-provider case (`:430-436`) pins the closed Q&A decision that an errored provider counts as reported. |
+| R1 | MET | `packages/app/src/services/agent-usage-producer.ts:332-339` derivation via `mapProvidersToExecutors` + `executorDisabled`; `:367-369` snapshot key; `:473` result field; test `packages/app/tests/services/agent-usage-producer.test.ts:406`, dry run `:441` |
+| R2 | MET | `apps/cli/src/commands/agent/usage.ts:143-150` text line; no changes/availability path in producer; tests `packages/app/tests/services/agent-usage-producer.test.ts:416`, `apps/cli/tests/commands/agent/usage.test.ts:266` |
+| R3 | MET | `packages/app/src/services/agent-doctor-report.ts:105-110` parse; `packages/app/src/services/agent-doctor-ops.ts:64-75` intersection; `packages/app/src/services/agent-doctor-report.ts:465` footer; tests `packages/app/tests/services/agent-doctor-ops.test.ts:87`, `:124` |
+| R4 | MET | `packages/app/tests/services/agent-usage-producer.test.ts:424` drain on report |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:406` — two enabled volc executors plus one disabled yields `['pi-volc-live','pi-volc-second']`, and the written snapshot carries the same array. |
-| AC2 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:416` (no change row, no availability write) + `apps/cli/tests/commands/agent/usage.test.ts:252` (text line and `--json` field for an executor the fixture's source never reports). |
-| AC3 | MET | test | `packages/app/tests/services/agent-doctor-ops.test.ts:86` — persisted `["live","retired"]` renders `; unmeasured: live` once `retired` is disabled, and `--json` `usage.unreportedExecutors` is the intersected list; the empty/absent cases are `agent-doctor-report.test.ts:114` and `:327`. |
-| AC4 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:424` — a payload including a healthy `volc` drains the list to `[]`. |
+| AC1 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:406` |
+| AC2 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:416`; `apps/cli/tests/commands/agent/usage.test.ts:266` (11 pass / 0 fail this verify) |
+| AC3 | MET | test | `packages/app/tests/services/agent-doctor-ops.test.ts:87`, `:124`; `packages/app/tests/services/agent-doctor-report.test.ts:120-123` |
+| AC4 | MET | test | `packages/app/tests/services/agent-usage-producer.test.ts:424` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

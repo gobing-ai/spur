@@ -305,6 +305,24 @@ describe('1420 stamped provenance identity', () => {
         }
     });
 
+    test('AC3 — a stamp without receipts (no executorProfile) never writes "undefined" into the body', () => {
+        // The `anatomy-stamp` call without --validation/--trace stamps the probe JSON directly,
+        // and the probe never sets `executorProfile`.
+        const body =
+            'Executor is `pending: executor resolved at stamp`. Model is `pending: model resolved at stamp`.\n';
+        const named = stampReport(body, provenance({ executor: 'pi', model: 'commandcode/m' }));
+        expect(named).toContain('Executor is `pi`');
+        expect(named).toContain('Model is `commandcode/m`');
+        const unnamed = stampReport(
+            body,
+            provenance({ executor: 'pending: executor resolved at stamp', model: 'pending: model resolved at stamp' }),
+        );
+        for (const out of [named, unnamed]) {
+            expect(out).not.toContain('undefined');
+            expect(out).not.toContain('resolved at stamp`');
+        }
+    });
+
     test('AC4 — a cache-hit republish rewrites a placeholder identity, keeps a real one', () => {
         const dir = mkdtempSync(join(tmpdir(), 'ha-1420-'));
         try {
