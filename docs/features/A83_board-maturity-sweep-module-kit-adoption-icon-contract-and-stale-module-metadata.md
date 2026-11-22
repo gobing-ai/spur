@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-22T02:19:46.668Z"
-updated_at: "2026-11-22T04:13:46.479Z"
+updated_at: "2026-11-22T07:09:13.873Z"
 ---
 
 # A83: Board maturity sweep: module-kit adoption, icon contract and stale module metadata
@@ -30,13 +30,6 @@ Bring every built-in Spur Board module onto one shell and one metadata contract,
   - Hand-editing feature statuses around the L4 receipt gate.
 
 ## Acceptance Criteria
-
-- [ ] R1 — Every built-in Board module renders through the module-kit shell
-- [ ] R2 — Built-in module icons resolve through ModuleIcon by module id
-- [ ] R3 — Downstream module icon declarations keep working unchanged
-- [ ] R4 — Module descriptions and comments match current tabs and modules
-- [ ] R5 — Feature status drift is reconciled through the feature tool
-- [ ] R6 — A browser proof loads every built-in module and leaves an artifact
 
 ```gherkin
 Feature: Board maturity sweep: module-kit adoption, icon contract and stale module metadata
@@ -63,6 +56,7 @@ Feature: Board maturity sweep: module-kit adoption, icon contract and stale modu
 
   Scenario: R4 — Module descriptions and comments match current tabs and modules
     Given the Projects module exposes the Fleet, Inbox and Database tabs
+    When a reader opens the Projects module header and the module catalog
     Then its description names those surfaces rather than "Conversation and processes"
     And no built-in module source comment refers to a module that no longer exists
 
