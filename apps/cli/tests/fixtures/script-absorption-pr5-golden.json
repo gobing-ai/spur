@@ -820,7 +820,7 @@
             ],
             "files": {
                 ".spur/run/r1-idea-batch-create-result.json": "{\"wbs\":[\"0201\",\"0202\"]}",
-                ".spur/run/r1-idea-handoff.md": "# Idea pipeline handoff report\n\nFeature: F1\nRun ID: r1\n\n## Created tasks\n  - 0201\n  - 0202\n\n## Per-task readiness (evidence + digest + task check)\n\n| WBS | Outcome | Reason |\n|-----|---------|--------|\n| 0201 | UNREADY | no ready evidence recorded for this run |\n| 0202 | UNREADY | no ready evidence recorded for this run |\n\n## Preparation actions\n\n  - 0201: /sp:dev-refine 0201 --auto --depth ready\n  - 0202: /sp:dev-refine 0202 --auto --depth ready\n\n## Next command\n\n/sp:dev-refine --all --feature F1 --auto --depth ready\n",
+                ".spur/run/r1-idea-handoff.md": "# Idea pipeline handoff report\n\nFeature: F1\nRun ID: r1\n\n## Created tasks\n  - 0201\n  - 0202\n\n## Per-task readiness (evidence + digest + task check)\n\n| WBS | Outcome | Reason |\n|-----|---------|--------|\n| 0201 | UNREADY | no ready evidence recorded for this run |\n| 0202 | UNREADY | no ready evidence recorded for this run |\n\n## Preparation actions\n\n  - 0201: /sp:dev-refine 0201 --auto --depth ready\n  - 0202: /sp:dev-refine 0202 --auto --depth ready\n\nFollow-up ledger check: skipped — this run has no idea-eval report.\n\n## Follow-ups filed\n\nnone\n\n## Excluded\n\nnone\n\n## Next command\n\n/sp:dev-refine --all --feature F1 --auto --depth ready\n",
                 ".spur/run/r1-idea-task-batch.json": "[{\"name\":\"alpha\"},{\"name\":\"beta\"}]",
                 ".spur/run/r1-idea-task-order.json": "[{\"name\":\"alpha\"},{\"name\":\"beta\",\"depends_on_names\":[\"alpha\"]}]"
             },

@@ -7,6 +7,7 @@ import {
     type ProcessExecutor,
     type ProcessResult,
 } from '@gobing-ai/ts-runtime';
+import { checkFollowupLedger, type FollowupLedgerResult, type FollowupLedgerRow } from '../services/feature-inventory';
 import { isTaskFrozen, undeprecateTaskCommand } from '../services/task-freeze';
 import {
     computePlanningDigest,
@@ -92,6 +93,26 @@ function premiseLintIo(root: string, fs: FileSystem): PremiseLintIo {
 }
 
 /**
+ * Ledger rows must match the documented array shape the feature-create shell gate
+ * writes (idea-pipeline.yaml): `[{item: "I<n>", disposition: "filed"|"existing",
+ * featureId, title}]`. Returns null for anything else (1434 R3 fail closed).
+ */
+function parseFollowupLedgerRows(parsed: unknown): FollowupLedgerRow[] | null {
+    if (!Array.isArray(parsed)) return null;
+    const rows: FollowupLedgerRow[] = [];
+    for (const row of parsed) {
+        if (typeof row !== 'object' || row === null) return null;
+        const r = row as Record<string, unknown>;
+        if (typeof r.item !== 'string' || !/^I\d+$/.test(r.item)) return null;
+        if (r.disposition !== 'filed' && r.disposition !== 'existing') return null;
+        if (typeof r.featureId !== 'string' || r.featureId === '') return null;
+        if (typeof r.title !== 'string') return null;
+        rows.push({ item: r.item, disposition: r.disposition, featureId: r.featureId, title: r.title });
+    }
+    return rows;
+}
+
+/**
  * Deterministically finalizes an idea pipeline run by validating batch creation,
  * applying task dependencies via `spur task deps`, refreshing feature roster,
  * running per-task readiness checks, and authoring the handoff markdown report.
@@ -115,6 +136,10 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
     // refine actions below — exit 0 from `task check` alone is never readiness.
     const readyPath = resolve(runDir, `${runId}-idea-ready.json`);
     const reportPath = resolve(runDir, `${runId}-idea-handoff.md`);
+    // I15 1434: run-scoped idea-eval report (written by discovery) + follow-up ledger
+    // (written by feature-create) — the completeness check's inputs.
+    const evalReportPath = resolve(runDir, `${runId}-idea-eval-report.md`);
+    const ledgerPath = resolve(runDir, `${runId}-idea-followups.json`);
 
     // Split the launch string once: `spurBin` legitimately resolves to `"<bun> <mainModule>"`
     // under the JS-runtime launch modes (resolveSpurBin), and the executor hands `command`
@@ -196,6 +221,71 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                 reportPath,
                 error: `Batch size mismatch: ${batch.length} items declared but ${result.wbs.length} WBS created`,
             };
+        }
+
+        // ── I15 1434: fail-closed follow-up ledger completeness ──
+        // Runs before any dependency write or report so a bad ledger costs no side effects.
+        let followupFiled: FollowupLedgerResult['filed'] = [];
+        let followupExcluded: FollowupLedgerResult['excluded'] = [];
+        let ledgerSkipLine: string | undefined;
+        let ledgerRows: FollowupLedgerRow[] | undefined;
+        if (await fs.exists(ledgerPath)) {
+            let parsedLedger: unknown;
+            try {
+                parsedLedger = JSON.parse(await fs.readFile(ledgerPath));
+            } catch {
+                parsedLedger = undefined;
+            }
+            const parsedRows = parseFollowupLedgerRows(parsedLedger);
+            if (parsedRows === null) {
+                return {
+                    ok: false,
+                    wbsList: result.wbs,
+                    nextCommand: '',
+                    reportPath,
+                    error:
+                        'Malformed follow-up ledger: expected a JSON array of ' +
+                        '{item: "I<n>", disposition: "filed"|"existing", featureId, title}',
+                };
+            }
+            ledgerRows = parsedRows;
+        }
+        if (await fs.exists(evalReportPath)) {
+            // Re-resolve every distinct ledger featureId here (feature-create checked them
+            // at creation): features can change between the two stages (1434 R3).
+            const resolvable = new Set<string>();
+            for (const id of new Set((ledgerRows ?? []).map((r) => r.featureId))) {
+                const showRes = await executor.run({
+                    command: spurCommand,
+                    args: [...spurArgsPrefix, 'feature', 'show', id, '--json'],
+                    cwd: root,
+                    forceBuffered: true,
+                    rejectOnError: false,
+                });
+                if (showRes.exitCode === 0) resolvable.add(id);
+            }
+            const ledgerCheck = checkFollowupLedger(await fs.readFile(evalReportPath), ledgerRows, resolvable);
+            followupFiled = ledgerCheck.filed;
+            followupExcluded = ledgerCheck.excluded;
+            if (ledgerCheck.findings.length > 0) {
+                return {
+                    ok: false,
+                    wbsList: result.wbs,
+                    nextCommand: '',
+                    reportPath,
+                    error: `Follow-up ledger incomplete: ${ledgerCheck.findings.map((f) => f.message).join('; ')}`,
+                };
+            }
+        } else {
+            // Pre-I15 runs have no eval report contract to enforce (1434 R4) — skip the
+            // check and record the skip; ledger rows still list as filed.
+            ledgerSkipLine = 'Follow-up ledger check: skipped — this run has no idea-eval report.';
+            followupFiled = (ledgerRows ?? []).map((r) => ({
+                item: r.item,
+                featureId: r.featureId,
+                title: r.title,
+                disposition: r.disposition,
+            }));
         }
 
         const names = batch.map((b) => b.name);
@@ -482,6 +572,19 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                       '',
                   ]
                 : []),
+            ...(ledgerSkipLine === undefined ? [] : [ledgerSkipLine, '']),
+            '## Follow-ups filed',
+            '',
+            ...(followupFiled.length > 0
+                ? followupFiled.map(
+                      (f) => `${f.item} → ${f.featureId} (${f.title}) — next: /sp:dev-plan --feature ${f.featureId}`,
+                  )
+                : ['none']),
+            '',
+            '## Excluded',
+            '',
+            ...(followupExcluded.length > 0 ? followupExcluded.map((e) => `${e.item} — ${e.reason}`) : ['none']),
+            '',
             '## Next command',
             '',
             nextCommand,

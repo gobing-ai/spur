@@ -251,6 +251,14 @@ spur feature update <id> --section Scope --from-file .spur/run/<runId>-idea-scop
 malformed ledger or a featureId that does not resolve, so a follow-up the idea names cannot be lost
 when a later stage fails. Each filed follow-up gets its AC and tasks from `/sp:dev-plan --feature <id>`.
 
+At handoff, `finalizeIdeaHandoff` re-checks ledger completeness against the run-scoped eval report
+(`.spur/run/<runId>-idea-eval-report.md`, re-resolving every ledger featureId through
+`spur feature show`) before any dependency write or report, and fails the handoff closed on any gap:
+an unfiled follow-up, a duplicate row, a filed excluded item, a dangling featureId, or a row naming
+an id outside the inventory. The handoff report then lists every filed follow-up under
+`## Follow-ups filed` and every excluded item (with its reason) under `## Excluded`, both before
+`## Next command`.
+
 **Design review artifact (system-design / design-approval).** One run-scoped file,
 `.spur/run/<runId>-idea-design-review.md`, with fixed headings `## Proposed design`,
 `## Operator feedback`, and `## Reconciliation`:

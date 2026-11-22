@@ -26,7 +26,14 @@ interface Transition {
 }
 interface Action {
     kind: string;
-    options?: { command?: string; input?: string; answerFile?: string; expectFile?: string; prompt?: string };
+    options?: {
+        command?: string;
+        input?: string;
+        answerFile?: string;
+        expectFile?: string;
+        expectFiles?: string[];
+        prompt?: string;
+    };
 }
 interface WorkflowDef {
     states: { id: string; pause?: boolean; onEnter?: Action[] }[];

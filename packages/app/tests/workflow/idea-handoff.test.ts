@@ -855,4 +855,230 @@ describe('finalizeIdeaHandoff', () => {
         await fs.deleteFile(`${runDir}/${runId}-idea-batch-create-result.json`);
         await fs.deleteFile(`${runDir}/${runId}-idea-task-order.json`);
     });
+
+    // ── I15 1434: fail-closed follow-up ledger completeness at handoff ──
+    const EVAL_REPORT = [
+        '# Idea Evaluation Report',
+        '',
+        '## Requirement inventory',
+        '',
+        '- I1 — In-scope requirement',
+        '- I2 — Operator ruled this out [deferred: excluded — out of scope]',
+        '- I3 — Work for another feature [deferred: follow-up — Follow-up feature]',
+        '',
+    ].join('\n');
+
+    /** Write batch/result/order + ready evidence + the given eval report and ledger rows. */
+    async function writeLedgerFixture(
+        runId: string,
+        wbs: string,
+        opts?: { evalReport?: string | null; ledger?: unknown | null },
+    ): Promise<Record<string, string>> {
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: [wbs] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+        const paths = await writeReadyFixture(runId, [wbs]);
+        if (opts?.evalReport !== null) {
+            await fs.writeFile(`${runDir}/${runId}-idea-eval-report.md`, opts?.evalReport ?? EVAL_REPORT);
+        }
+        if (opts?.ledger !== null) {
+            await fs.writeFile(`${runDir}/${runId}-idea-followups.json`, JSON.stringify(opts?.ledger ?? []));
+        }
+        return paths;
+    }
+
+    async function cleanupLedgerRun(runId: string, extra: string[]): Promise<void> {
+        const runDir = '.spur/run';
+        await cleanupRun(
+            runId,
+            [],
+            [...extra, `${runDir}/${runId}-idea-eval-report.md`, `${runDir}/${runId}-idea-followups.json`],
+        );
+    }
+
+    test('1434: an incomplete ledger fails closed before any deps write and writes no report', async () => {
+        const runId = 'test-idea-run-ledger-incomplete';
+        const featureId = 'D5';
+        if (await fs.exists(`.spur/run/${runId}-idea-handoff.md`)) {
+            await fs.deleteFile(`.spur/run/${runId}-idea-handoff.md`);
+        }
+        const paths = await writeLedgerFixture(runId, '0601', { ledger: [] });
+
+        const executed: string[][] = [];
+        const base = evidenceAwareExecutor(paths);
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                executed.push(opts.args ?? []);
+                return base.run(opts);
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: mockExecutor });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('I3');
+        expect(res.error).toContain('no ledger row');
+        expect(await fs.exists(res.reportPath)).toBe(false);
+        expect(executed.some((args) => args.includes('deps'))).toBe(false);
+
+        await cleanupLedgerRun(runId, [
+            `.spur/run/${runId}-idea-task-batch.json`,
+            `.spur/run/${runId}-idea-batch-create-result.json`,
+            `.spur/run/${runId}-idea-task-order.json`,
+        ]);
+    });
+
+    test('1434: a complete ledger passes and the report lists both sections before ## Next command', async () => {
+        const runId = 'test-idea-run-ledger-complete';
+        const featureId = 'D5';
+        const paths = await writeLedgerFixture(runId, '0601', {
+            ledger: [{ item: 'I3', disposition: 'filed', featureId: 'F9', title: 'Follow-up feature' }],
+        });
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: evidenceAwareExecutor(paths) });
+        expect(res.ok).toBe(true);
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('## Follow-ups filed');
+        expect(report).toContain('I3 → F9 (Follow-up feature) — next: /sp:dev-plan --feature F9');
+        expect(report).toContain('## Excluded');
+        expect(report).toContain('I2 — out of scope');
+        expect(report.indexOf('## Follow-ups filed')).toBeLessThan(report.indexOf('## Next command'));
+        expect(report.indexOf('## Excluded')).toBeLessThan(report.indexOf('## Next command'));
+        expect(report.match(/\/sp:dev-run --all --feature D5/g)).toHaveLength(1);
+
+        await cleanupLedgerRun(runId, [
+            `.spur/run/${runId}-idea-task-batch.json`,
+            `.spur/run/${runId}-idea-batch-create-result.json`,
+            `.spur/run/${runId}-idea-task-order.json`,
+            res.reportPath,
+        ]);
+    });
+
+    test('1434: legacy run with no ledger and no follow-up items passes as an empty ledger', async () => {
+        const runId = 'test-idea-run-ledger-legacy-clean';
+        const featureId = 'D5';
+        const evalReport = ['## Requirement inventory', '', '- I1 — In scope', ''].join('\n');
+        const paths = await writeLedgerFixture(runId, '0601', { evalReport, ledger: null });
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: evidenceAwareExecutor(paths) });
+        expect(res.ok).toBe(true);
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('## Follow-ups filed');
+        expect(report).toContain('## Excluded');
+
+        await cleanupLedgerRun(runId, [
+            `.spur/run/${runId}-idea-task-batch.json`,
+            `.spur/run/${runId}-idea-batch-create-result.json`,
+            `.spur/run/${runId}-idea-task-order.json`,
+            res.reportPath,
+        ]);
+    });
+
+    test('1434: no ledger with follow-up items present fails with unfiled findings', async () => {
+        const runId = 'test-idea-run-ledger-missing';
+        const featureId = 'D5';
+        if (await fs.exists(`.spur/run/${runId}-idea-handoff.md`)) {
+            await fs.deleteFile(`.spur/run/${runId}-idea-handoff.md`);
+        }
+        const paths = await writeLedgerFixture(runId, '0601', { ledger: null });
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: evidenceAwareExecutor(paths) });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('I3');
+        expect(res.error).toContain('no ledger row');
+        expect(await fs.exists(res.reportPath)).toBe(false);
+
+        await cleanupLedgerRun(runId, [
+            `.spur/run/${runId}-idea-task-batch.json`,
+            `.spur/run/${runId}-idea-batch-create-result.json`,
+            `.spur/run/${runId}-idea-task-order.json`,
+        ]);
+    });
+
+    test('1434: no eval report skips the check and records the skip line; ledger rows list as filed', async () => {
+        const runId = 'test-idea-run-ledger-no-report';
+        const featureId = 'D5';
+        const paths = await writeLedgerFixture(runId, '0601', {
+            evalReport: null,
+            ledger: [{ item: 'I3', disposition: 'existing', featureId: 'F9', title: 'Follow-up feature' }],
+        });
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: evidenceAwareExecutor(paths) });
+        expect(res.ok).toBe(true);
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('skipped');
+        expect(report).toContain('I3 → F9 (Follow-up feature) — next: /sp:dev-plan --feature F9');
+
+        await cleanupLedgerRun(runId, [
+            `.spur/run/${runId}-idea-task-batch.json`,
+            `.spur/run/${runId}-idea-batch-create-result.json`,
+            `.spur/run/${runId}-idea-task-order.json`,
+            res.reportPath,
+        ]);
+    });
+
+    test('1434: a malformed ledger fails closed even with no eval report', async () => {
+        const runId = 'test-idea-run-ledger-malformed';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-followups.json`, JSON.stringify([{ item: 'not-an-id' }]));
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: evidenceAwareExecutor({}) });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('Malformed follow-up ledger');
+        expect(await fs.exists(res.reportPath)).toBe(false);
+
+        await cleanupLedgerRun(runId, [
+            `${runDir}/${runId}-idea-task-batch.json`,
+            `${runDir}/${runId}-idea-batch-create-result.json`,
+            `${runDir}/${runId}-idea-task-order.json`,
+        ]);
+    });
+
+    test('1434: a ledger featureId that no longer resolves fails closed as dangling', async () => {
+        const runId = 'test-idea-run-ledger-dangling';
+        const featureId = 'D5';
+        if (await fs.exists(`.spur/run/${runId}-idea-handoff.md`)) {
+            await fs.deleteFile(`.spur/run/${runId}-idea-handoff.md`);
+        }
+        const paths = await writeLedgerFixture(runId, '0601', {
+            ledger: [{ item: 'I3', disposition: 'filed', featureId: 'GHOST', title: 'Follow-up feature' }],
+        });
+
+        const base = evidenceAwareExecutor(paths);
+        const mockExecutor: ProcessExecutor = {
+            run: async (opts) => {
+                if (opts.args?.includes('GHOST')) {
+                    return {
+                        command: opts.command,
+                        args: opts.args ?? [],
+                        durationMs: 1,
+                        exitCode: 1,
+                        stdout: '',
+                        stderr: 'not found',
+                    };
+                }
+                return base.run(opts);
+            },
+            runStreaming: () => ({}) as unknown as PipeProcess,
+        };
+
+        const res = await finalizeIdeaHandoff({ runId, featureId, processExecutor: mockExecutor });
+        expect(res.ok).toBe(false);
+        expect(res.error).toContain('I3');
+        expect(res.error).toContain('GHOST');
+        expect(await fs.exists(res.reportPath)).toBe(false);
+
+        await cleanupLedgerRun(runId, [
+            `.spur/run/${runId}-idea-task-batch.json`,
+            `.spur/run/${runId}-idea-batch-create-result.json`,
+            `.spur/run/${runId}-idea-task-order.json`,
+        ]);
+    });
 });

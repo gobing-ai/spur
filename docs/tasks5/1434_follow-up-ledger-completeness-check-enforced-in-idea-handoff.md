@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Follow-up ledger completeness check enforced in idea handoff
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T03:48:21.137Z
-updated_at: "2026-11-22T04:35:17.054Z"
+updated_at: "2026-11-22T05:46:23.018Z"
 feature_id: I15
 
 tags: ["I15"]
 priority: P1
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1434. Follow-up ledger completeness check enforced in idea handoff
@@ -30,38 +32,38 @@ The prompt/doc contract and the feature-create shape and id gate landed 2026-11-
 
 ### Requirements
 
-- [ ] R1. `parseInventory` also returns `dispositions: Map<id, {kind: 'excluded'|'follow-up', text}>` for deferred ids:
+- [x] R1. `parseInventory` also returns `dispositions: Map<id, {kind: 'excluded'|'follow-up', text}>` for deferred ids:
   - `[deferred: excluded — <reason>]` → excluded, with the reason;
   - `[deferred: follow-up — <title>]` or a bare `[deferred: <x>]` → follow-up.
 
   The marker may sit on a continuation line. `checkInventoryCoverage` output is byte-identical for existing inputs.
-- [ ] R2. The exported pure `checkFollowupLedger(reportText, ledger, resolvable: ReadonlySet<string>): FollowupLedgerResult` returns `{findings, filed: [{item, featureId, title, disposition}], excluded: [{item, reason}]}`. Findings carry `severity: 'error'`, a new `FINDING_CODES` entry, and a message naming the item:
+- [x] R2. The exported pure `checkFollowupLedger(reportText, ledger, resolvable: ReadonlySet<string>): FollowupLedgerResult` returns `{findings, filed: [{item, featureId, title, disposition}], excluded: [{item, reason}]}`. Findings carry `severity: 'error'`, a new `FINDING_CODES` entry, and a message naming the item:
   - follow-up item with no row (`unfiled`);
   - item with more than one row (`duplicate`);
   - row for an excluded item (`filed-excluded`);
   - row whose featureId is not in `resolvable` (`dangling`);
   - row for an id that is not in the inventory (`unknown-item`).
-- [ ] R3. `finalizeIdeaHandoff`:
+- [x] R3. `finalizeIdeaHandoff`:
   - reads the run-scoped eval report and `<runId>-idea-followups.json`;
   - resolves each distinct featureId via `spur feature show <id> --json` through the existing executor;
   - runs the check **before** any task deps or report write.
 
   Any finding → `ok: false` with an `error` that lists each finding, and no report file is written. A malformed ledger (not the documented array shape) → `ok: false`.
-- [ ] R4. Legacy runs:
+- [x] R4. Legacy runs:
   - no ledger file and no follow-up items → pass, treated as an empty ledger;
   - no ledger file and follow-up items present → `unfiled` for each;
   - no eval report → skip the check, recorded as a line in the report. Pre-I15 runs have no report contract to enforce.
 - [ ] R5. The handoff report adds `## Follow-ups filed` (one line per row: `<item> → <featureId> (<title>) — next: /sp:dev-plan --feature <featureId>`, or "none") and `## Excluded` (`<item> — <reason>`, or "none"). Both go **before** `## Next command`. The single main-feature next command is unchanged.
-- [ ] R6. Docs:
+- [x] R6. Docs:
   - `planning-workflow.md` Step 5.6 names the two sections and the fail-closed check;
   - `idea-evaluation.md` uses the run-scoped report path in all three places.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Every follow-up inventory item has exactly one resolvable ledger row
-- [ ] AC2 — Excluded inventory items are never filed and are reported with their reason
-- [ ] AC3 — Handoff finalization fails closed on an incomplete follow-up ledger
-- [ ] AC4 — The handoff report lists filed follow-ups and excluded items
+- [x] AC1 — Every follow-up inventory item has exactly one resolvable ledger row
+- [x] AC2 — Excluded inventory items are never filed and are reported with their reason
+- [x] AC3 — Handoff finalization fails closed on an incomplete follow-up ledger
+- [x] AC4 — The handoff report lists filed follow-ups and excluded items
 
 ### Q&A
 
@@ -105,15 +107,58 @@ Premises (verified 2026-11-21):
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### Change map
+
+| File:lines | What / why |
+| --- | --- |
+| `packages/config/src/finding-codes.ts:84` | Register the `followup-ledger` finding code (1434 R2) beside `inventory-coverage`. |
+| `packages/config/src/finding-codes.ts:186` | `FINDING_CODES.FOLLOWUP_LEDGER` named constant. |
+| `packages/app/src/services/feature-inventory.ts:28-31` | `DEFERRED_EXCLUDED_RE` / `DEFERRED_FOLLOWUP_RE` — disposition markers (em/en dash or hyphen; bare `[deferred:]` = follow-up). |
+| `packages/app/src/services/feature-inventory.ts:34-38,52,58-92` | `parseInventory` also returns `dispositions: Map<id, {kind, text}>` for deferred ids, absorbing continuation lines as before; `checkInventoryCoverage` behavior unchanged (byte-identical output for existing inputs). |
+| `packages/app/src/services/feature-inventory.ts:145-253` | `FollowupLedgerRow` (documented ledger shape), `FollowupLedgerResult`, and the pure `checkFollowupLedger(reportText, ledger|undefined, resolvable)`: unfiled / duplicate / filed-excluded / dangling / unknown-item error findings naming the item; `filed` and `excluded` lists for the report; `undefined` ledger behaves as empty (1434 R4). |
+| `packages/app/src/workflow/idea-handoff.ts:16-22` | Import the check + types. |
+| `packages/app/src/workflow/idea-handoff.ts:95-113` | `parseFollowupLedgerRows` — ledger shape validator (documented array shape; null = malformed). |
+| `packages/app/src/workflow/idea-handoff.ts:139-142` | Run-scoped eval-report and ledger paths. |
+| `packages/app/src/workflow/idea-handoff.ts:226-289` | Fail-closed wiring after the batch shape checks, before any deps/refresh/report: malformed ledger → error; report present → resolve each distinct featureId via `spur feature show --json` through the existing executor, run the check, any finding → `ok: false` listing findings, no report written; no report → skip with a recorded line, ledger rows still listed (1434 R3/R4). |
+| `packages/app/src/workflow/idea-handoff.ts:573-588` | Report sections `## Follow-ups filed` (`<item> → <featureId> (<title>) — next: /sp:dev-plan --feature <featureId>`, or "none") and `## Excluded` (`<item> — <reason>`, or "none"), both before `## Next command`; exact headings kept for task 1435's E2E. |
+| `packages/app/tests/services/feature-inventory.test.ts:133-322` | Coverage regression (excluded stays exempt) + 10 `checkFollowupLedger` failure-mode tests: unfiled, bare deferral, duplicate, filed-excluded, dangling, unknown-item, wrapped excluded marker, en-dash/hyphen variants, complete-ledger pass, empty-ledger pass. |
+| `packages/app/tests/workflow/idea-handoff.test.ts:859-1080` | Handoff wiring tests: incomplete ledger fails closed with no deps write and no report; complete ledger passes with both sections before `## Next command` and one next command; legacy no-ledger/no-follow-ups passes; no-ledger-with-follow-ups fails; no eval report skips with a recorded line; malformed ledger fails; dangling featureId fails. |
+| `plugins/sp/skills/spur-dev/references/idea-evaluation.md:5,19,102` | Doc drift fix (R6): run-scoped `.spur/run/<run-id>-idea-eval-report.md` in frontmatter description, Authorship line, and Pipeline-contract table. |
+| `plugins/sp/skills/spur-dev/references/planning-workflow.md:254-260` | Step 5.6 names the fail-closed handoff completeness check and the `## Follow-ups filed` / `## Excluded` sections (R6). |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:29` | One-line test-local type fix (`expectFiles?: string[]`) unblocking `typecheck:packages/app` — pre-existing TS2551 from sibling task 1433's commit 042b8a5a3, no assertion changed. |
+| `apps/cli/tests/fixtures/script-absorption-pr5-golden.json:823` | Parity golden for `featureHandoff > handoff-success`: the empty-ledger report now renders the ledger skip line plus `## Follow-ups filed` / `## Excluded` ("none") before `## Next command` (1434 report sections). |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test: feature-inventory.test.ts 19/19 (10 new checkFollowupLedger tests); static-ref packages/app/src/services/feature-inventory.ts:28-31 |
+| R2 | MET | test: idea-handoff.test.ts 26/26 (7 new fail-closed wiring tests); static-ref packages/app/src/workflow/idea-handoff.ts:102 (check before deps/report; ok:false skips report) |
+| R3 | MET | test: idea-handoff.test.ts report-section assertions; static-ref packages/app/src/workflow/idea-handoff.ts:492 |
+| R4 | MET | test: feature-inventory.test.ts:190 asserts f.code === FINDING_CODES.FOLLOWUP_LEDGER; static-ref packages/config/src/finding-codes.ts:84,186 |
+| R6 | MET | static-ref plugins/sp/skills/spur-dev/references/idea-evaluation.md:5,19,102; plugins/sp/skills/spur-dev/references/planning-workflow.md:227-246 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | feature-inventory.test.ts: 10 new tests — unfiled/duplicate rows and unknown-item ids each yield findings; filed rows resolve (19/19 pass) |
+| AC2 | MET | test | feature-inventory.test.ts: excluded-disposition tests — `[deferred: excluded — reason]` parsed, filed-excluded finding fires, reason carried |
+| AC3 | MET | test | idea-handoff.test.ts: 7 wiring tests — malformed ledger/missing rows/dangling featureId → ok:false with findings, no report, no deps write |
+| AC4 | MET | test | idea-handoff.test.ts section assertions for `## Follow-ups filed` / `## Excluded`; command: bun test apps/cli/tests/script-absorption-pr5-parity.test.ts 35/35 with updated golden |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -122,4 +167,7 @@ Premises (verified 2026-11-21):
 ### History
 
 - 2026-11-22T03:48:23.240Z backlog → todo (system)
+- 2026-11-22T05:08:09.869Z todo → wip (system)
+- 2026-11-22T05:46:21.272Z wip → testing (system)
+- 2026-11-22T05:46:23.013Z testing → done (system)
 

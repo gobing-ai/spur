@@ -2,7 +2,7 @@
 name: idea-evaluation
 description: >-
   Template SSOT for the post-discovery idea-evaluation report used by idea-pipeline's
-  idea-eval taste gate. Brainstorm fills an instance at .spur/run/idea-eval-report.md.
+  idea-eval taste gate. Brainstorm fills an instance at .spur/run/<run-id>-idea-eval-report.md.
 see_also:
   - spur-dev
   - brainstorm
@@ -16,7 +16,7 @@ The idea-evaluation report is the operator-facing artifact between **discovery**
 recommendation is mandatory, stakes in plain English, and approve/reject is the terminal choice.
 
 **Authorship:** `sp:brainstorm` (discovery) fills a concrete instance to
-`.spur/run/idea-eval-report.md`. The pipeline `idea-eval` state is HITL-only — it does not
+`.spur/run/<run-id>-idea-eval-report.md`. The pipeline `idea-eval` state is HITL-only — it does not
 re-author the report.
 
 **Sidecar rule:** The enhanced idea does **not** overwrite `vars.idea`. Feature-create reads both
@@ -99,7 +99,7 @@ only in prose.
 
 | Item | Value |
 |------|--------|
-| Filled instance path | `.spur/run/idea-eval-report.md` |
+| Filled instance path | `.spur/run/<run-id>-idea-eval-report.md` |
 | Template home | this file |
 | Requirement inventory | mandatory `## Requirement inventory` section (0887 R3); consumed by the `feature check --inventory` coverage gate (R4) |
 | HITL state | `idea-eval` in `idea-pipeline.yaml` |
