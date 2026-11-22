@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Codex HTTP MCP root cause and evidence-based adoption verdicts
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-22T02:21:35.008Z
-updated_at: "2026-11-22T04:26:15.940Z"
+updated_at: "2026-11-22T17:42:22.275Z"
 feature_id: B93
 
 tags: ["B93"]
@@ -77,7 +77,50 @@ Premises (verified 2026-11-21): version gate `protocol.ts:108-129`; bridge trans
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+## R1 — Codex HTTP root cause (from the 1432 receipt)
+
+**Case (b): client limitation on the transport, not a server fault.**
+
+| Evidence | Value |
+| --- | --- |
+| Codex HTTP row (`docs/reports/mcp-agent-interop-receipt.json`, `generatedAt 2026-11-22T17:39:37.618Z`) | `classification: config-isolation-unavailable`, `requests: []`, `clientRevision: null` |
+| `codex --version` | `codex-cli 0.171.0` |
+| Direct probe | `codex -c 'mcp_servers.spur.url="http://127.0.0.1:1/mcp"' mcp list` → `Error: failed to load bootstrap configuration / Caused by: url is not supported for stdio / in mcp_servers.spur` |
+| `codex mcp add --help` | `USAGE: codex mcp add [OPTIONS] <NAME> (--url <URL> \| -- <COMMAND>...)` — HTTP exists, but only through `codex mcp add`, which writes `~/.codex/config.toml` |
+| stdio probe | `codex -c mcp_servers.spur.command="bun" -c mcp_servers.spur.args=[…] mcp list` → the server is listed and `enabled` |
+
+So: codex 0.171.0 can speak streamable HTTP, but **only via the global config** (`codex mcp add
+--url`); the per-invocation `-c mcp_servers.*` override this run must use accepts stdio only. No
+server request was ever sent, so there is no server-side hypothesis to test — and the 401 flood in
+the first stdio attempt (4313 retries, now capped at 20 recorded rows + `requestCount`) was the
+bridge being spawned with a scrubbed env, not a server defect.
+
+**R2 working path:** `spur mcp` over stdio, declared with `-c mcp_servers.spur.command/args`. The
+receipt's codex stdio row is `no-request` in the final run (the agent's turn produced no MCP traffic
+inside the 120 s budget), so the working path is proven at the *configuration* level (codex accepts
+and lists the server) and not yet by a completed call. That is recorded as unobserved rather than
+asserted.
+
+## R3 — adoption doc rewritten from the receipt
+
+`docs/design/mcp-agent-adoption.md`: §1's "Highest revision claimed", "Stateless `2026-07-28` works"
+and a new "Receipt (http / stdio)" column now come from the receipt per transport; the values legend
+no longer offers `UNVERIFIED` as a verdict basis; every row cites the receipt path and its
+`generatedAt`. §2's verdict table is derived mechanically: `mcp-http` iff the HTTP row is `pass`,
+else `mcp-stdio-bridge` iff the stdio row is `pass`, else `cli-only`; a missing binary is
+`not-installed (unobserved)` and is never promoted from documentation.
+
+Result: **omp → `mcp-http`** (the only `pass`, and it passes over stdio too); every other installed
+agent → `cli-only`; antigravity and hermes → `not-installed (unobserved)`.
+
+## R4 — consumer guidance
+
+Consumers are links, not per-agent text: `docs/04_DESIGN.md:92`,
+`plugins/sp/skills/spur-cli/references/mcp-tools.md:9`,
+`plugins/sp/skills/spur-dev/references/cross-cutting.md:25`. No guidance names a transport per agent,
+so nothing there contradicted the new verdicts; the doc's own intro now states that `cli-only` means
+"not observed over MCP in the current receipt", so the bridge-first guidance stays true rather than
+being silently weakened.
 
 ### Testing
 
@@ -94,4 +137,5 @@ Premises (verified 2026-11-21): version gate `protocol.ts:108-129`; bridge trans
 ### History
 
 - 2026-11-22T02:22:14.635Z backlog → todo (system)
+- 2026-11-22T17:42:22.275Z todo → wip (system)
 

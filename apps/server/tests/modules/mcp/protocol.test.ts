@@ -63,7 +63,7 @@ describe('protocol version gate (R3 / AC1)', () => {
         expect(error.message).toContain('Mcp-Protocol-Version');
     });
 
-    for (const legacy of ['2024-11-05', '2025-03-26', '2025-11-25']) {
+    for (const legacy of ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25']) {
         test(`rejects legacy ${legacy} instead of negotiating`, async () => {
             const res = await post(registry(), { headers: { 'Mcp-Protocol-Version': legacy } });
             expect(res.status).toBe(400);
@@ -72,6 +72,32 @@ describe('protocol version gate (R3 / AC1)', () => {
             expect(error.message).toContain(VERSION);
         });
     }
+
+    test('every rejection names the accepted floor AND the stdio bridge fallback (B93 1431 R2)', async () => {
+        for (const headers of [
+            { 'Mcp-Protocol-Version': '' },
+            { 'Mcp-Protocol-Version': 'not-a-date' },
+            { 'Mcp-Protocol-Version': '2024-11-05' },
+        ]) {
+            const error = errorOf(await jsonOf(await post(registry(), { headers })));
+            expect(error.code).toBe('PROTOCOL_VERSION_UNSUPPORTED');
+            expect(error.message).toContain('2026-07-28');
+            expect(error.message).toContain('spur mcp');
+        }
+    });
+
+    test('a header-less legacy initialize body gets the same actionable message (B93 1431 R2)', async () => {
+        const res = await post(registry(), {
+            headers: { 'Mcp-Protocol-Version': '' },
+            body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } },
+        });
+        expect(res.status).toBe(400);
+        const error = errorOf(await jsonOf(res));
+        expect(error.code).toBe('PROTOCOL_VERSION_UNSUPPORTED');
+        expect(error.message).toContain('initialize');
+        expect(error.message).toContain('2026-07-28');
+        expect(error.message).toContain('spur mcp');
+    });
 
     test('rejects a malformed version string', async () => {
         const res = await post(registry(), { headers: { 'Mcp-Protocol-Version': 'not-a-date' } });

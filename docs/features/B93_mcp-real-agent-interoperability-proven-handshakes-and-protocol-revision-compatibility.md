@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B93"
 name: "MCP real-agent interoperability: proven handshakes and protocol-revision compatibility"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-22T02:19:46.961Z"
-updated_at: "2026-11-22T17:17:27.676Z"
+updated_at: "2026-11-22T17:21:00.411Z"
 ---
 
 # B93: MCP real-agent interoperability: proven handshakes and protocol-revision compatibility
@@ -69,9 +69,12 @@ Feature: MCP real-agent interoperability: proven handshakes and protocol-revisio
 | --- | ---- | ------ |
 | 1433 | Codex HTTP MCP root cause and evidence-based adoption verdicts | todo |
 | 1432 | Real-agent MCP interop harness and receipt | todo |
-| 1431 | MCP protocol-revision policy amendment and enforcement | todo |
+| 1431 | MCP protocol-revision policy amendment and enforcement | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-11-22T17:21:00.411Z backlog → active (system)
+

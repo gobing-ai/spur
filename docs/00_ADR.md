@@ -2974,14 +2974,23 @@ re-import pressure this entry already records).
 
 ## ADR-152: spur serve embeds a stateless MCP 2.0+ server that delegates to spur-app services
 
-- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9 · **Amended:** 2026-11-17 (task 1379)
+- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9 · **Amended:** 2026-11-17 (task 1379), 2026-11-20 (1417), 2026-11-22 (B93 1431)
 - **Amended 2026-11-17 (task 1379):** the five built-in tool names moved into the `sp` namespace
   (`sp_task_show`, `sp_task_list`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue`) —
   a breaking rename with no alias period; a call to an old unprefixed name is refused with a rename
   hint. Built-ins are Spur's in every project, independent of any future project namespace (1380).
-- **Amended 2026-11-20 (task 1417):** `spur mcp` translates the legacy stdio tool lifecycle before
-  forwarding to the stateless endpoint. The HTTP version floor and bearer checks apply to every
-  request sent by the bridge.
+- **Amended 2026-11-22 (B93 1431):** the protocol-revision policy is stated rather than implied.
+  **Accepted** = any `YYYY-MM-DD` revision **≥ `2026-07-28`** (an open-ended floor; nothing above it
+  needs registering). **Pre-2.0 clients are supported only through `spur mcp`** — the stdio bridge
+  translates the legacy lifecycle — while direct HTTP rejects them with
+  `400 PROTOCOL_VERSION_UNSUPPORTED`, naming both the floor and the bridge. **Consequence:** an agent
+  counts as `mcp-http` only if its HTTP client speaks at or above the floor; every other agent is
+  `stdio-bridge` or unsupported. The legacy list is one vocabulary shared with the bridge
+  (`2024-11-05`, `2025-03-26`, `2025-06-18`, `2025-11-25`). This is **Spur policy**, chosen for a
+  stateless-only server: the MCP specification does not require a server to accept older revisions,
+  and negotiation/downgrade is rejected in §Alternatives. (The `2026-07-28` floor itself comes from
+  the MCP 2.0+ stateless transport this module implements; the citation lives with the transport
+  adapter, `apps/server/src/modules/mcp/protocol.ts`.)
 - **Decision:** `spur serve` mounts `mcpModule` on `POST /mcp` (registered in the server module
   registry, off unless `server.mcp.enabled`) speaking stateless MCP 2.0+ Streamable HTTP only: a
   `2026-07-28` protocol-version floor is enforced on every request and legacy versions

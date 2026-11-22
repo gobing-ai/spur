@@ -55,6 +55,7 @@ import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { runFleetE2e } from './commands/fleet-e2e';
 import { runIntegrationsE2e } from './commands/integrations-e2e';
+import { runMcpAgentInterop } from './commands/mcp-agent-interop';
 
 /**
  * L2–L4 modules that own their own argv parsing and exit code (A92 R5). They run as a child
@@ -82,6 +83,7 @@ const COMMANDS = [
     'a2a-two-install-e2e',
     'delegate-workflow-e2e',
     'integrations-e2e',
+    'mcp-agent-interop',
 ];
 
 /**
@@ -152,6 +154,9 @@ try {
             break;
         case 'integrations-e2e':
             process.exit(await runIntegrationsE2e(args));
+            break;
+        case 'mcp-agent-interop':
+            process.exit(await runMcpAgentInterop(args));
             break;
         default: {
             const module = command === undefined ? undefined : DELEGATED[command];

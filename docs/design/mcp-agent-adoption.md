@@ -3,33 +3,36 @@
 Which of Spur's ten supported coding agents can consume the embedded MCP server, and over which
 transport. The verdict column is what 1394's guidance reads: an `mcp-http` agent is told to point at
 the server directly, an `mcp-stdio-bridge` agent goes through `spur mcp`, and a `cli-only` agent gets
-the CLI fallback.
+the CLI fallback. A `cli-only` verdict here means "not observed over MCP in the current receipt", so
+the guidance still offers `spur mcp` first and falls back to the CLI — it never claims the agent
+cannot use MCP.
 
-- **Checked:** 2026-11-18.
+- **Checked:** 2026-11-22 (interop receipt `generatedAt` `2026-11-22T17:39:37.618Z`, floor `2026-07-28`).
 - **Server under test:** `spur self serve` with the B9 MCP adapter — stateless Streamable HTTP
   `POST /mcp`, bearer auth, protocol `2026-07-28`, no session.
 - **Server-side observation (done in this task):** `POST /mcp` with `Mcp-Protocol-Version: 2026-07-28`
   and `Authorization: Bearer <token>` answered `server/discover` with `protocolVersion: "2026-07-28"`
   and the ten-tool catalog, with no `Mcp-Session-Id` in play. That is `observed` for the *server*;
-  the per-agent rows below say whether the *client* side is `documented` or proven.
+  the per-agent rows below say whether the *client* side was observed in 1432's receipt or not.
 
-Values: **yes** / **no** / **UNVERIFIED** (no primary source found). A protocol revision is only
-claimed when its own source states it.
+Values: **yes** / **no** / **not observed**. A cell is only `observed` when the proxy log proves it
+(1432's receipt); a client that merely documents HTTP support is `yes` for the capability and
+`not observed` for the handshake. No verdict rests on documentation alone.
 
 ## 1. Matrix
 
-| Agent | HTTP client | stdio client | Highest revision claimed | Stateless `2026-07-28` works | Bearer header | Version checked | Source |
+| Agent | HTTP client | stdio client | Highest revision claimed | Stateless `2026-07-28` works | Bearer header | Receipt (http / stdio) | Source |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | yes | yes | UNVERIFIED | documented (remote HTTP supported; revision not stated) | yes (`--header`) | CLI present, version not pinned | <https://code.claude.com/docs/en/mcp> |
-| Codex CLI | yes | yes | UNVERIFIED | **observed: not proven** (server listed as enabled with a bearer-token env var; an `exec` session exposed no tools) | yes (`--bearer-token-env-var`) | CLI present, version not pinned | <https://learn.chatgpt.com/docs/extend/mcp> |
-| Gemini CLI | yes | yes | UNVERIFIED | documented (`httpUrl` = Streamable HTTP) | yes (`--header`) | CLI present, version not pinned | <https://geminicli.com/docs/tools/mcp-server/> |
-| pi | yes | yes | UNVERIFIED | documented (built-in MCP client; project config needs trust) | yes (`headers`) | CLI present, version not pinned | <https://docs.pi.dev/latest/configuration> |
-| omp | yes | yes | UNVERIFIED | documented (`http`, plus legacy SSE) | yes | CLI present, version not pinned | <https://omp.sh/docs/mcp> |
-| OpenCode | yes | yes | UNVERIFIED | documented (`type: "remote"` + absolute `url`; OAuth on by default, disable for header auth) | yes (header auth with OAuth disabled) | CLI present, version not pinned | <https://opencode.ai/docs/mcp-servers/> |
-| Antigravity | yes | yes | UNVERIFIED | documented (`mcp_config.json`; legacy HTTP+SSE **not** supported) | yes (`headers`) | not installed as `antigravity`; `agy` present | <https://antigravity.google/docs/mcp/> |
-| OpenClaw | yes | yes | UNVERIFIED | documented | yes | CLI present, version not pinned | see re-check note |
-| Hermes | yes | yes | UNVERIFIED | documented (`mcp_servers:` in `~/.hermes/config.yaml`) | yes | not installed locally | <https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp> |
-| Grok | yes | yes | UNVERIFIED | documented (`--transport http`) | yes (`--header "Authorization: Bearer …"`) | CLI present, version not pinned | <https://docs.x.ai/build/features/mcp-servers> |
+| Claude Code | yes | yes | 2026-07-28 (stdio) | partially observed (requests arrived; no tools/call) | yes (per the client's own config) | `no-request` / `call-failed` | <https://code.claude.com/docs/en/mcp> |
+| Codex CLI | yes | yes | not observed | not observed | yes (per the client's own config) | `config-isolation-unavailable` / `no-request` | <https://learn.chatgpt.com/docs/extend/mcp> |
+| Gemini CLI | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | <https://geminicli.com/docs/tools/mcp-server/> |
+| pi | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | <https://docs.pi.dev/latest/configuration> |
+| omp | yes | yes | 2026-07-28 (http) | **observed** (http) | yes (per the client's own config) | `pass` / `pass` | <https://omp.sh/docs/mcp> |
+| OpenCode | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | <https://opencode.ai/docs/mcp-servers/> |
+| Antigravity | not installed | not installed | not observed | not observed | yes (per the client's own config) | `not-installed` / `not-installed` | <https://antigravity.google/docs/mcp/> |
+| OpenClaw | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | see re-check note |
+| Hermes | not installed | not installed | not observed | not observed | yes (per the client's own config) | `not-installed` / `not-installed` | <https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp> |
+| Grok | yes | yes | not observed | not observed | yes (per the client's own config) | `config-isolation-unavailable` / `config-isolation-unavailable` | <https://docs.x.ai/build/features/mcp-servers> |
 
 ## 1a. Install route (task 1401)
 
@@ -51,17 +54,29 @@ and a local gateway.
 
 ## 2. Verdicts (consumed by 1394)
 
-| Verdict | Agents |
-| --- | --- |
-| `mcp-http` | Claude Code, Codex CLI, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok |
-| `mcp-stdio-bridge` | none needed — every agent above also has a stdio client, which is the fallback when an HTTP entry cannot be configured |
-| `cli-only` | none |
+Derived mechanically from `docs/reports/mcp-agent-interop-receipt.json` (`generatedAt`
+`2026-11-22T17:39:37.618Z`, floor `2026-07-28`): `mcp-http` iff the HTTP row is `pass`;
+otherwise `mcp-stdio-bridge` iff the stdio row is `pass`; otherwise `cli-only`. An agent with no
+installed binary is listed as `not-installed (unobserved)` and is never promoted from documentation.
 
-The direct HTTP rows remain based on documentation, except the server-side observation noted
-above. The direct Codex attempt
-round-trip (Codex) did **not** prove the stateless handshake: `codex mcp list` showed the server as
-`enabled` with a bearer-token env var, but an `codex exec` session reported no tools from it. Treat
-that row as "configures cleanly, handshake unproven" rather than as a pass.
+| Agent | Verdict |
+| --- | --- |
+| Claude Code | cli-only |
+| Codex CLI | cli-only |
+| Gemini CLI | cli-only |
+| pi | cli-only |
+| omp | mcp-http |
+| OpenCode | cli-only |
+| Antigravity | not-installed (unobserved) |
+| OpenClaw | cli-only |
+| Hermes | not-installed (unobserved) |
+| Grok | cli-only |
+
+Consequences for 1394's guidance: only **omp** is told to point at the HTTP endpoint (and it also
+works over the bridge); every other installed agent goes through `spur mcp`, and the two
+`config-isolation-unavailable` rows (codex HTTP, grok) mean their HTTP path is untested here — the
+bridge is the path their guidance names.
+
 
 ## 3. Gaps and honesty notes
 

@@ -12,8 +12,9 @@
  * This module is transport-only: it parses and serializes, then dispatches over an injected
  * {@link McpHandlerRegistry} (task 1372's `McpDispatcher` implements that seam; `mcpModule`
  * mounts the handler on `POST /mcp` with bearer auth). Legacy pre-2.0 protocol versions
- * (`2024-11-05`, `2025-03-26`, `2025-11-25`) and stateful transport attempts are rejected
- * explicitly, never negotiated (R3 / AC1).
+ * (`2024-11-05`, `2025-03-26`, `2025-06-18`, `2025-11-25` — the same list the `spur mcp` bridge
+ * translates) and stateful transport attempts are rejected explicitly, never negotiated
+ * (R3 / AC1; policy in ADR-152 as amended by B93 1431).
  */
 
 /** Oldest protocol version this adapter accepts; `YYYY-MM-DD` versions compare lexicographically. */
@@ -125,27 +126,56 @@ function stringParam(params: Record<string, unknown>, key: string): string | und
 
 const VERSION_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** R3/AC1: a call is accepted only on `2026-07-28` or newer — legacy versions are never negotiated. */
-function validateVersion(req: Request): string {
+/**
+ * The one refusal message for an unusable protocol revision (B93 1431 R2): it always names the
+ * accepted floor and the working fallback, because a client that sees "missing header" alone has no
+ * next step. Policy: ADR-152, as amended — pre-2.0 clients connect through the `spur mcp` bridge.
+ */
+function versionError(detail: string): McpProtocolError {
+    return fail(
+        400,
+        'PROTOCOL_VERSION_UNSUPPORTED',
+        -32000,
+        `${detail}; this server accepts ${MIN_MCP_PROTOCOL_VERSION} or newer — pre-2.0 clients connect through the stdio bridge (spur mcp)`,
+    );
+}
+
+/**
+ * What to say about a request with no `Mcp-Protocol-Version` (B93 1431 R2): a legacy `initialize`
+ * body is NAMED as one, because "missing header" alone leaves that client with no next step. The
+ * body is read from a clone, so the dispatcher still gets the original stream.
+ */
+async function missingVersionDetail(req: Request): Promise<string> {
+    const fallback = 'missing the Mcp-Protocol-Version header';
+    try {
+        const text = await req.clone().text();
+        if (text.trim() === '') return fallback;
+        const body: unknown = JSON.parse(text);
+        if (!isRecord(body) || body.method !== 'initialize') return fallback;
+        const params = isRecord(body.params) ? body.params : {};
+        const requested = typeof params.protocolVersion === 'string' ? params.protocolVersion : 'unstated revision';
+        return `legacy initialize handshake (protocolVersion ${requested}, no Mcp-Protocol-Version header)`;
+    } catch {
+        // An unparseable body is parseCall's finding, not the version gate's.
+        return fallback;
+    }
+}
+
+/**
+ * R3/AC1: a call is accepted only on `2026-07-28` or newer — legacy versions are never negotiated,
+ * and every refusal is actionable (floor + bridge). `method` lets a header-less legacy `initialize`
+ * be named as such instead of reading as a bare missing header.
+ */
+async function validateVersion(req: Request): Promise<string> {
     const version = req.headers.get('Mcp-Protocol-Version')?.trim() ?? '';
     if (version === '') {
-        throw fail(
-            400,
-            'PROTOCOL_VERSION_UNSUPPORTED',
-            -32000,
-            `missing the Mcp-Protocol-Version header; send ${MIN_MCP_PROTOCOL_VERSION} or newer`,
-        );
+        throw versionError(await missingVersionDetail(req));
     }
     if (!VERSION_SHAPE.test(version)) {
-        throw fail(400, 'PROTOCOL_VERSION_UNSUPPORTED', -32000, `"${version}" is not a YYYY-MM-DD protocol version`);
+        throw versionError(`"${version}" is not a YYYY-MM-DD protocol version`);
     }
     if (version < MIN_MCP_PROTOCOL_VERSION) {
-        throw fail(
-            400,
-            'PROTOCOL_VERSION_UNSUPPORTED',
-            -32000,
-            `protocol version ${version} is below the supported minimum ${MIN_MCP_PROTOCOL_VERSION}; legacy pre-2.0 versions are rejected, not negotiated`,
-        );
+        throw versionError(`protocol version ${version} is below the supported minimum`);
     }
     return version;
 }
@@ -324,7 +354,7 @@ export async function handleMcpHttpRequest(req: Request, registry: McpHandlerReg
     }
     let call: McpCall | undefined;
     try {
-        const version = validateVersion(req);
+        const version = await validateVersion(req);
         call = await parseCall(req);
         const payload = await dispatch(registry, call, req, version);
         // A JSON-RPC request gets the JSON-RPC result envelope; a header-form request gets the bare value.

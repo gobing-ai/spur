@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: MCP protocol-revision policy amendment and enforcement
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:34.123Z
-updated_at: "2026-11-22T04:26:15.227Z"
+updated_at: "2026-11-22T17:21:01.623Z"
 feature_id: B93
 
 tags: ["B93"]
 priority: P2
 estimate_hours: 2
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1431. MCP protocol-revision policy amendment and enforcement
@@ -33,24 +35,24 @@ ADR-152 owns the MCP version contract. `docs/design/mcp-agent-adoption.md` §3 f
 
 ### Requirements
 
-- [ ] R1. An ADR-152 amendment (dated, appended to its Amended list) states:
+- [x] R1. An ADR-152 amendment (dated, appended to its Amended list) states:
   - accepted = any `YYYY-MM-DD` revision ≥ `2026-07-28` (open-ended floor);
   - pre-2.0 clients are supported only through `spur mcp` (stdio bridge), and direct HTTP rejects them;
   - the consequence: an agent is `mcp-http` only if its HTTP client speaks ≥ the floor.
 
   Cite the spec source, or label it Spur policy.
-- [ ] R2. Every `PROTOCOL_VERSION_UNSUPPORTED` message (missing, malformed, below floor) names the accepted floor **and** the fallback (`use the stdio bridge: spur mcp`). A body that is a legacy `initialize` with no version header gets that same actionable message rather than only "missing header".
-- [ ] R3. Tests in `apps/server/tests/modules/mcp/protocol.test.ts` cover the following:
+- [x] R2. Every `PROTOCOL_VERSION_UNSUPPORTED` message (missing, malformed, below floor) names the accepted floor **and** the fallback (`use the stdio bridge: spur mcp`). A body that is a legacy `initialize` with no version header gets that same actionable message rather than only "missing header".
+- [x] R3. Tests in `apps/server/tests/modules/mcp/protocol.test.ts` cover the following:
   - `server/discover` at the floor and at a later date succeeds;
   - each of `2024-11-05`, `2025-03-26`, `2025-06-18`, `2025-11-25` is rejected with a message containing `2026-07-28` and `spur mcp`;
   - a header-less legacy `initialize` body is rejected with the same message.
-- [ ] R4. The `protocol.ts:15` legacy list matches the bridge's `LEGACY_VERSIONS`.
+- [x] R4. The `protocol.ts:15` legacy list matches the bridge's `LEGACY_VERSIONS`.
 
 Out of scope: accepting the legacy lifecycle on HTTP (rejected by ADR-152 §Alternatives); the status code or error code change (both stay `400 PROTOCOL_VERSION_UNSUPPORTED`, so this is a non-breaking message change).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The server's MCP protocol-revision policy is explicit and tested
+- [x] AC1 — The server's MCP protocol-revision policy is explicit and tested
 
 ### Q&A
 
@@ -83,15 +85,50 @@ Premises (verified 2026-11-21): floor at `protocol.ts:20`; `validateVersion` at 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `docs/00_ADR.md:2982-2991` | ADR-152 amendment "Amended 2026-11-22 (B93 1431)": accepted = any revision ≥ `2026-07-28` (open-ended floor); pre-2.0 only through `spur mcp`; consequence for `mcp-http` verdicts; the legacy list; labelled **Spur policy** with the citation pointer | R1 — the policy is stated, not implied |
+| `apps/server/src/modules/mcp/protocol.ts:24-28` | legacy-list comment gains `2025-06-18` and names the bridge as the shared vocabulary | R4 — the two lists cannot drift |
+| `apps/server/src/modules/mcp/protocol.ts:150-165` | `versionError(detail)` — one builder: `${detail}; this server accepts 2026-07-28 or newer — pre-2.0 clients connect through the stdio bridge (spur mcp)` | R2 — every refusal is actionable |
+| `apps/server/src/modules/mcp/protocol.ts:167-186` | `missingVersionDetail(req)` peeks at a **clone** of the body: a legacy `initialize` reads `legacy initialize handshake (protocolVersion <x>, no Mcp-Protocol-Version header)` | R2 — a header-less legacy client is named, not told "missing header"; the dispatcher still gets the original stream |
+| `apps/server/src/modules/mcp/protocol.ts:188-205` | the three rejection sites (missing, malformed, below floor) all `throw versionError(...)` | R2 |
+| `apps/server/tests/modules/mcp/protocol.test.ts` | four legacy revisions in the negotiation loop, a "names floor + bridge" test over all three rejection classes, and the header-less `initialize` case | R3 |
+
+Frozen and unchanged: HTTP 400, `PROTOCOL_VERSION_UNSUPPORTED`, JSON-RPC `-32000`, `MIN_MCP_PROTOCOL_VERSION` (name and value), and the bridge's behaviour — this is a message-only change.
+
+Pre-existing repairs (not this task's scope, but the repo-wide post-check gate cannot pass without them):
+`InvalidArgumentsError` (`protocol.ts:23`) and three `integrations.ts` exports (`IntegrationsActivity`,
+`integrationsGatewayHealthSchema`, `integrationsUsageSchema`) were exported without TSDoc, all four
+introduced by main's `495d1b8f7` (A82 follow-up). Documentation only.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 ADR-152 amendment (dated, appended to the Amended list) states the accepted floor, the bridge-only support for pre-2.0, and the consequence for `mcp-http` verdicts, citing a source or labelled Spur policy | MET | `docs/00_ADR.md:2977` (Amended list), `:2982-2991` (the amendment: `≥ 2026-07-28` open-ended floor, pre-2.0 through `spur mcp` only, the `mcp-http` consequence, the shared legacy list, explicitly labelled **Spur policy** with the pointer to the transport adapter) |
+| R2 every `PROTOCOL_VERSION_UNSUPPORTED` message names the floor **and** the bridge; a header-less legacy `initialize` body gets that same actionable message | MET | `apps/server/src/modules/mcp/protocol.ts:150-165` (`versionError`), `:167-186` (`missingVersionDetail` via `req.clone()`), `:188-205` (all three sites) — `apps/server/tests/modules/mcp/protocol.test.ts` ("every rejection names the accepted floor AND the stdio bridge fallback", "a header-less legacy initialize body gets the same actionable message") |
+| R3 tests cover floor + later date accepted, each of the four legacy revisions rejected with `2026-07-28` and `spur mcp` in the message, header-less `initialize` rejected with the same message | MET | `apps/server/tests/modules/mcp/protocol.test.ts:66` (loop now includes `2025-06-18`), `:73-95` (the two new cases); pre-existing floor/future acceptance rows still green |
+| R4 `protocol.ts` legacy list matches the bridge's `LEGACY_VERSIONS` | MET | `apps/server/src/modules/mcp/protocol.ts:24-28` (comment now carries `2025-06-18` and names `spur mcp` as the shared vocabulary) vs `apps/cli/src/commands/mcp.ts:27` |
+| Frozen surface unchanged | MET | HTTP 400, `PROTOCOL_VERSION_UNSUPPORTED`, `-32000`, `MIN_MCP_PROTOCOL_VERSION` and bridge behaviour untouched — `bun test tests/modules/mcp/protocol.test.ts tests/modules/mcp-module.test.ts tests/mcp-e2e.test.ts` → 92 pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The server's MCP protocol-revision policy is explicit and tested | MET | test | `apps/server/tests/modules/mcp/protocol.test.ts` (version gate block) + `docs/00_ADR.md:2982` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -100,4 +137,7 @@ Premises (verified 2026-11-21): floor at `protocol.ts:20`; `validateVersion` at 
 ### History
 
 - 2026-11-22T02:22:13.966Z backlog → todo (system)
+- 2026-11-22T17:20:39.812Z todo → wip (system)
+- 2026-11-22T17:20:58.871Z wip → testing (system)
+- 2026-11-22T17:21:01.614Z testing → done (system)
 
