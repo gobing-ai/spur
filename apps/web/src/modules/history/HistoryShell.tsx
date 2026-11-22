@@ -11,6 +11,7 @@ import type {
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import ModuleIcon from '../../components/ModuleIcon';
+import { ModuleHeader, ModuleShell, ModuleTabs } from '../../components/module-kit';
 import { api } from '../../lib/rpc-client';
 import type { HistoryFilterOption } from './HistoryFilters';
 import HistoryFilters from './HistoryFilters';
@@ -443,6 +444,8 @@ export const HistoryShell: React.FC = () => {
         insights: insightsBadge,
         sources: sourcesBadge,
     };
+    // The kit strip renders the badge; the tab list stays the single source of ids and labels.
+    const tabsWithBadges = HISTORY_TABS.map((tab) => ({ ...tab, badge: badgeFor[tab.id] ?? null }));
 
     const lastImportChip = sourcesError
         ? '—'
@@ -518,58 +521,34 @@ export const HistoryShell: React.FC = () => {
     );
 
     return (
-        <div className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full">
-            {/* Header & Tab Navigation Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3">
-                <div className="flex items-center gap-3">
-                    <ModuleIcon id="history" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Histories</h1>
-                        <p className="text-xs text-base-content/60">
-                            Transcript telemetry, session traces, and prompt cache analytics
-                        </p>
-                        <p
-                            className="livechip mt-1 inline-flex items-center gap-1.5 rounded-full border border-base-content/10 px-2 py-0.5 text-xs text-base-content/60 font-mono"
-                            data-testid="history-last-import"
-                            role="status"
-                        >
-                            <span
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                    sourcesError ? 'bg-error' : 'bg-emerald-400 animate-pulse'
-                                }`}
-                                aria-hidden="true"
-                            />
-                            last import {lastImportChip}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Tab Strip */}
-                <div className="flex items-center gap-1 bg-base-300 p-1 rounded-xl">
-                    {HISTORY_TABS.map((tab) => (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                                activeTab === tab.id
-                                    ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                    : 'text-base-content/70 hover:bg-base-content/10'
-                            }`}
-                            onClick={() => setActiveTab(tab.id)}
-                        >
-                            {tab.label}
-                            {badgeFor[tab.id] !== null && (
-                                <span
-                                    className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-base-content/10"
-                                    data-testid={`history-badge-${tab.id}`}
-                                >
-                                    {badgeFor[tab.id]}
-                                </span>
-                            )}
-                        </button>
-                    ))}
-                </div>
-            </div>
+        <ModuleShell className="history" data-history-shell>
+            <ModuleHeader
+                icon={<ModuleIcon id="history" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                title="Histories"
+                subtitle="Transcript telemetry, session traces, and prompt cache analytics"
+                status={
+                    <p
+                        className="livechip mt-1 inline-flex items-center gap-1.5 rounded-full border border-base-content/10 px-2 py-0.5 text-xs text-base-content/60 font-mono"
+                        data-testid="history-last-import"
+                        role="status"
+                    >
+                        <span
+                            className={`h-1.5 w-1.5 rounded-full ${sourcesError ? 'bg-error' : 'bg-emerald-400 animate-pulse'}`}
+                            aria-hidden="true"
+                        />
+                        last import {lastImportChip}
+                    </p>
+                }
+                tabs={
+                    <ModuleTabs
+                        tabs={tabsWithBadges}
+                        value={activeTab}
+                        onChange={(id) => setActiveTab(id as typeof activeTab)}
+                        label="History tabs"
+                        idPrefix="history"
+                    />
+                }
+            />
 
             {/* Global Filter Bar (Hidden on Sources Tab) */}
             {activeTab !== 'sources' && (
@@ -672,7 +651,7 @@ export const HistoryShell: React.FC = () => {
                     />
                 )}
             </div>
-        </div>
+        </ModuleShell>
     );
 };
 export default HistoryShell;

@@ -13,7 +13,6 @@ import FeaturesShell from './FeaturesShell';
 export const module: WebModule = {
     id: 'features',
     name: 'Feature Board',
-    icon: '🏷️',
     route: 'features',
     component: FeaturesShell,
     sidebarLabel: 'Features',

@@ -10,7 +10,6 @@ import IntegrationsModule from './IntegrationsModule';
 export const module: WebModule = {
     id: 'integrations',
     name: 'Integrations',
-    icon: '🔌',
     route: 'integrations',
     component: IntegrationsModule,
     sidebarLabel: 'Integrations',

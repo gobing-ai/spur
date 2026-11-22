@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Board maturity browser proof across every built-in module
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:33.670Z
-updated_at: "2026-11-22T04:13:28.695Z"
+updated_at: "2026-11-22T08:28:16.233Z"
 feature_id: A83
 
 tags: ["A83"]
 dependencies: ["1426", "1427", "1428"]
 priority: P2
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1430. Board maturity browser proof across every built-in module
@@ -30,22 +32,22 @@ Runs after the shells (1426, 1427) and icons (1428) land. Complements the A82 in
 
 ### Requirements
 
-- [ ] R1. `apps/web/tests/modules/board-maturity-browser.heavy.test.ts` builds and serves the Board once, then visits `/board/<route>` for each of the ten built-in modules (frozen list in Background).
-- [ ] R2. Per module it asserts the following:
+- [x] R1. `apps/web/tests/modules/board-maturity-browser.heavy.test.ts` builds and serves the Board once, then visits `/board/<route>` for each of the ten built-in modules (frozen list in Background).
+- [x] R2. Per module it asserts the following:
   - exactly one `[data-<module>-shell]` (observability: its existing kit root);
   - one kit header with an `<svg>` icon and the module title;
   - no element of `ModuleErrorBoundary`'s fallback;
   - no `failedRequests()` entry outside `/api/` and `/rpc/` data paths;
   - no `logEntries()` entry of level `error` from an uncaught exception or CSP violation.
-- [ ] R3. The sidebar check: every built-in nav entry renders an `<svg>`, and its text content contains no emoji code points (`/\p{Extended_Pictographic}/u`).
-- [ ] R4. It writes `docs/reports/board-maturity-e2e-receipt.json`, with a stable name and overwritten each run. The receipt holds `{generatedAt, modules: [{id, route, shell, icon, errors: [], screenshot}]}`, plus one screenshot per module at `docs/reports/board-maturity-<id>.png` (light theme, 1280×800).
-- [ ] R5. With no browser binary (`availableBrowserBinary()` undefined) it skips with a reason, as the existing heavy tests do. Any assertion failure still writes the receipt, with the failing rows, before it fails.
+- [x] R3. The sidebar check: every built-in nav entry renders an `<svg>`, and its text content contains no emoji code points (`/\p{Extended_Pictographic}/u`).
+- [x] R4. It writes `docs/reports/board-maturity-e2e-receipt.json`, with a stable name and overwritten each run. The receipt holds `{generatedAt, modules: [{id, route, shell, icon, errors: [], screenshot}]}`, plus one screenshot per module at `docs/reports/board-maturity-<id>.png` (light theme, 1280×800).
+- [x] R5. With no browser binary (`availableBrowserBinary()` undefined) it skips with a reason, as the existing heavy tests do. Any assertion failure still writes the receipt, with the failing rows, before it fails.
 
 Out of scope: dark-mode or mobile screenshot matrices, data-path proofs (each module's own tests own these), and integrations protocol checks (1425).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A browser proof loads every built-in module and leaves an artifact
+- [x] AC1 — A browser proof loads every built-in module and leaves an artifact
 
 ### Q&A
 
@@ -78,15 +80,45 @@ Premises (verified 2026-11-21): the helpers at `board-build.ts:108`, `board-serv
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `apps/web/tests/modules/board-maturity-browser.heavy.test.ts` | production build + `serveBoard` + real Chromium over the frozen ten modules: one shell, kit header with an `<svg>` icon, no `ModuleErrorBoundary` fallback, no asset/MIME failure, no uncaught/CSP page error; then the sidebar check (`svg` present, no `Extended_Pictographic` text); screenshot per module; receipt written even when an assertion fails | R1-R5 |
+| `apps/web/src/modules/{designs,features,plans}/*Shell.tsx` | the loading and error branches now render inside `ModuleShell` + `ModuleHeader` instead of a bare `<div>` | The browser proof's first real finding: with data unreachable (no project API under `serveBoard`, or any slow first load) those three modules rendered NO module shell at all — no header, no title. A module's shell must not depend on its data |
+| `apps/web/src/modules/integrations/IntegrationsModule.tsx:43` | `data-integrations-shell` on `ModuleShell` | Every other shell carries its probe attribute; integrations (A82) was the only one missing it, so a structural check could not see it |
+
+Artifacts: `docs/reports/board-maturity-e2e-receipt.json` (`passed: 10`, `failed: 0`, `sidebar: {entries: 10, withSvg: 10, emoji: []}`) and `docs/reports/board-maturity-<id>.png` (ten light-theme screenshots, 1280x800).
+
+Measured: `(cd apps/web && bun test tests/modules/board-maturity-browser.heavy.test.ts)` → 1 pass, 1 skip (the no-browser row) in 8.8 s; `tests/modules` → 416 tests, 0 fail.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 builds and serves the Board once, then visits `/board/<route>` for the frozen ten modules | MET | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:46-57` (frozen list), `:110-135` (one build, one server, one page) — run: 1 pass in 8.8 s |
+| R2 per module: exactly one `[data-<module>-shell]`, one kit header with an `<svg>` icon and the module title, no error-boundary fallback, no non-data asset failure, no uncaught/CSP error | MET | `board-maturity-browser.heavy.test.ts:137-186` (`shells`, `h1`, `iconSvg`, boundary text, `assetFailures()`, `pageErrors()`), receipt `docs/reports/board-maturity-e2e-receipt.json` → all ten rows `shell: true, icon: true, errors: []` |
+| R3 sidebar: every built-in nav entry renders an `<svg>` and no `Extended_Pictographic` text | MET | `board-maturity-browser.heavy.test.ts:189-198`; receipt `sidebar: {ent: 10, withSvg: 10, emoji: []}` (1428's vector table is what makes this pass) |
+| R4 receipt `docs/reports/board-maturity-e2e-receipt.json` (stable name, overwritten) with `{generatedAt, modules[]}` + one screenshot per module at `docs/reports/board-maturity-<id>.png` | MET | `:100-127` (`writeReceipt`), `:170-176` (screenshot per module); `ls docs/reports/board-maturity-*.png` → 10 files; receipt shows `passed: 10, failed: 0` |
+| R5 skips with a reason without a browser binary, and a failing run still writes the receipt first | MET | `:203-206` (`test.skipIf(!browserReady)`), receipt written before the assertions (`:167-178`) |
+| Findings fixed by the proof | MET | `apps/web/src/modules/{designs,features,plans}/*Shell.tsx` loading/error branches now render inside `ModuleShell` + `ModuleHeader` (they rendered a bare `<div>`: no shell, no header, no title while data was unreachable); `IntegrationsModule.tsx:43` gained `data-integrations-shell` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A browser proof loads every built-in module and leaves an artifact | MET | command | `bun test tests/modules/board-maturity-browser.heavy.test.ts` → 1 pass; `docs/reports/board-maturity-e2e-receipt.json` + 10 PNGs |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -95,4 +127,7 @@ Premises (verified 2026-11-21): the helpers at `board-build.ts:108`, `board-serv
 ### History
 
 - 2026-11-22T02:22:13.647Z backlog → todo (system)
+- 2026-11-22T08:27:49.425Z todo → wip (system)
+- 2026-11-22T08:28:14.607Z wip → testing (system)
+- 2026-11-22T08:28:16.228Z testing → done (system)
 

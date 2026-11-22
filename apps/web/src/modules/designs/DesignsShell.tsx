@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { Button } from '@/ui';
 import DocumentMetadataModal from '../../components/DocumentMetadataModal';
 import ModuleIcon from '../../components/ModuleIcon';
+import { ModuleHeader, ModuleShell } from '../../components/module-kit';
 import {
     type DesignFileDetail,
     type DesignFileSummary,
@@ -134,89 +135,99 @@ export default function DesignsShell() {
 
     if (error) {
         return (
-            <div className="p-4 text-sm text-error" role="alert">
-                Failed to load design documents: {error}
-            </div>
+            <ModuleShell className={'relative p-4 overflow-hidden'} data-designs-shell>
+                <ModuleHeader
+                    icon={<ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                    title="Designs"
+                    subtitle="Design documents, architecture specifications, and surface contracts"
+                />
+                <div className="p-4 text-sm text-error" role="alert">
+                    Failed to load design documents: {error}
+                </div>
+            </ModuleShell>
         );
     }
 
     if (loadingFiles && files === null) {
         return (
-            <div className="flex items-center justify-center h-full text-spur-text-muted text-sm">
-                Loading design documents…
-            </div>
+            <ModuleShell className={'relative p-4 overflow-hidden'} data-designs-shell>
+                <ModuleHeader
+                    icon={<ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                    title="Designs"
+                    subtitle="Design documents, architecture specifications, and surface contracts"
+                />
+                <div className="flex items-center justify-center p-8 text-spur-text-muted text-sm">
+                    Loading design documents…
+                </div>
+            </ModuleShell>
         );
     }
 
     return (
-        <div className="relative h-full w-full p-4 overflow-hidden" data-designs-shell>
+        <ModuleShell className="relative p-4 overflow-hidden" data-designs-shell>
             {/* Central Workspace Container — matches FeaturesShell layout */}
             <div
                 className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"
                 data-designs-workspace
             >
                 {/* Module Header */}
-                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
-                    <div className="flex items-center gap-3">
-                        <ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                        <div>
-                            <h1 className="text-xl font-bold tracking-tight text-spur-text">Designs</h1>
-                            <p className="text-xs text-spur-text-muted">
-                                Design documents, architecture specifications, and surface contracts
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-1" data-designs-actions>
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            className="text-spur-text-muted hover:text-spur-accent"
-                            onClick={() => setIsListOpen((prev) => !prev)}
-                            aria-label={isListOpen ? 'Collapse design file list' : 'Expand design file list'}
-                            aria-expanded={isListOpen}
-                            aria-controls="design-files-dock"
-                            title={isListOpen ? 'Collapse design file list' : 'Expand design file list'}
-                        >
-                            {isListOpen ? '◧' : '▶'}
-                        </Button>
-                        {selectedPath && activeDetail?.content && (
+                <ModuleHeader
+                    icon={<ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                    title="Designs"
+                    subtitle="Design documents, architecture specifications, and surface contracts"
+                    filters={
+                        <div className="flex items-center gap-1" data-designs-actions>
                             <Button
                                 variant="ghost"
                                 size="xs"
                                 className="text-spur-text-muted hover:text-spur-accent"
-                                onClick={() => setIsTocOpen((prev) => !prev)}
-                                aria-label={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
-                                aria-expanded={isTocOpen}
-                                aria-controls="design-toc-dock"
-                                title={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
+                                onClick={() => setIsListOpen((prev) => !prev)}
+                                aria-label={isListOpen ? 'Collapse design file list' : 'Expand design file list'}
+                                aria-expanded={isListOpen}
+                                aria-controls="design-files-dock"
+                                title={isListOpen ? 'Collapse design file list' : 'Expand design file list'}
                             >
-                                {isTocOpen ? '📑' : '📖'}
+                                {isListOpen ? '◧' : '▶'}
                             </Button>
-                        )}
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            className="text-spur-text-muted hover:text-spur-accent"
-                            onClick={() => {
-                                void (async () => {
-                                    await loadFiles();
-                                    if (selectedPath) {
-                                        setContentCache((prev) => {
-                                            const next = { ...prev };
-                                            delete next[selectedPath];
-                                            return next;
-                                        });
-                                        void loadContent(selectedPath);
-                                    }
-                                })();
-                            }}
-                            aria-label="Refresh design documents"
-                            title="Refresh design documents"
-                        >
-                            🔄
-                        </Button>
-                    </div>
-                </header>
+                            {selectedPath && activeDetail?.content && (
+                                <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    className="text-spur-text-muted hover:text-spur-accent"
+                                    onClick={() => setIsTocOpen((prev) => !prev)}
+                                    aria-label={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
+                                    aria-expanded={isTocOpen}
+                                    aria-controls="design-toc-dock"
+                                    title={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
+                                >
+                                    {isTocOpen ? '📑' : '📖'}
+                                </Button>
+                            )}
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                className="text-spur-text-muted hover:text-spur-accent"
+                                onClick={() => {
+                                    void (async () => {
+                                        await loadFiles();
+                                        if (selectedPath) {
+                                            setContentCache((prev) => {
+                                                const next = { ...prev };
+                                                delete next[selectedPath];
+                                                return next;
+                                            });
+                                            void loadContent(selectedPath);
+                                        }
+                                    })();
+                                }}
+                                aria-label="Refresh design documents"
+                                title="Refresh design documents"
+                            >
+                                🔄
+                            </Button>
+                        </div>
+                    }
+                />
 
                 {/* Body Area — 3-zone adaptive layout on laptop (<3xl), floating outside on larger screens (3xl+) */}
                 <div
@@ -344,6 +355,6 @@ export default function DesignsShell() {
                 frontmatterRaw={frontmatterRaw}
                 frontmatter={frontmatter}
             />
-        </div>
+        </ModuleShell>
     );
 }

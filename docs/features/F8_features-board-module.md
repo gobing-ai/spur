@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:30.995Z"
-updated_at: "2026-11-05T20:03:46.988Z"
+updated_at: "2026-11-22T07:43:14.596Z"
 ---
 
 # F8: Features board module
@@ -91,6 +91,8 @@ Feature: Features board module
 Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
 
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F8`.
 
 ## History
 

@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-11-17T00:02:35.082Z"
-updated_at: "2026-11-17T01:11:13.400Z"
+updated_at: "2026-11-22T07:43:24.645Z"
 ---
 
 # K4: One-port project gateway with path prefixes and launchd daemon
@@ -157,6 +157,8 @@ Feature: One-port project gateway with path prefixes and launchd daemon
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync K4`.
 
 ## History
 

@@ -1,0 +1,93 @@
+{
+    "artifact": "board-maturity-e2e",
+    "generatedAt": "2026-11-22T08:28:12.853Z",
+    "sidebar": {
+        "entries": 10,
+        "withSvg": 10,
+        "emoji": []
+    },
+    "modules": [
+        {
+            "id": "designs",
+            "route": "designs",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-designs.png"
+        },
+        {
+            "id": "features",
+            "route": "features",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-features.png"
+        },
+        {
+            "id": "history",
+            "route": "history",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-history.png"
+        },
+        {
+            "id": "integrations",
+            "route": "integrations",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-integrations.png"
+        },
+        {
+            "id": "observability",
+            "route": "observability",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-observability.png"
+        },
+        {
+            "id": "plans",
+            "route": "plans",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-plans.png"
+        },
+        {
+            "id": "projects",
+            "route": "projects",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-projects.png"
+        },
+        {
+            "id": "search",
+            "route": "search",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-search.png"
+        },
+        {
+            "id": "settings",
+            "route": "settings",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-settings.png"
+        },
+        {
+            "id": "tasks",
+            "route": "tasks",
+            "shell": true,
+            "icon": true,
+            "errors": [],
+            "screenshot": "board-maturity-tasks.png"
+        }
+    ],
+    "passed": 10,
+    "failed": 0
+}

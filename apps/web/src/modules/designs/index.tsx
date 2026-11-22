@@ -12,7 +12,6 @@ import DesignsShell from './DesignsShell';
 export const module: WebModule = {
     id: 'designs',
     name: 'Designs',
-    icon: '📐',
     route: 'designs',
     component: DesignsShell,
     sidebarLabel: 'Designs',

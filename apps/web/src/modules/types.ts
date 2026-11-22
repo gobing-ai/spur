@@ -4,7 +4,11 @@ import type { ComponentType } from 'react';
 export interface WebModule {
     readonly id: string;
     readonly name: string;
-    readonly icon: string;
+    /**
+     * Optional declared icon. Built-ins resolve theirs from the module id through `ModuleIcon`
+     * (A83 1428); a downstream declaration still sets it from `bootstrap.modules[].icon`.
+     */
+    readonly icon?: string;
     readonly route: string;
     readonly component: ComponentType;
     readonly rightPanelComponent?: ComponentType;

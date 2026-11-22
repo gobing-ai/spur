@@ -46,8 +46,9 @@ export function isWebModule(value: unknown): value is WebModule {
         typeof value.id === 'string' &&
         'name' in value &&
         typeof value.name === 'string' &&
-        'icon' in value &&
-        typeof value.icon === 'string' &&
+        // `icon` is optional (A83 1428): a built-in resolves its glyph from `id`, and a module that
+        // still declares one must declare a string.
+        (!('icon' in value) || value.icon === undefined || typeof value.icon === 'string') &&
         'route' in value &&
         typeof value.route === 'string' &&
         'component' in value &&

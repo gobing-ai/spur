@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-13T16:46:48.295Z"
-updated_at: "2026-10-13T18:10:55.597Z"
+updated_at: "2026-11-22T07:43:11.271Z"
 ---
 
 # F43: Task-level deprecated status: frozen-but-retained task lifecycle state with guarded consumers
@@ -116,6 +116,8 @@ Feature: Task-level deprecated status
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F43`.
 
 ## History
 

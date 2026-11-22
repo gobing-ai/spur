@@ -2,6 +2,11 @@
 export interface ModuleTab {
     readonly id: string;
     readonly label: string;
+    /**
+     * Optional count/status shown after the label (A83 1427) — e.g. History's per-tab item count.
+     * `null`/absent renders no badge at all, so a caller can pass a computed value directly.
+     */
+    readonly badge?: string | number | null;
 }
 /** Controlled tab strip over an append-only tab list. */
 export interface ModuleTabsProps {

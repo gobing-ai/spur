@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: []
 created_at: "2026-11-05T19:58:26.056Z"
-updated_at: "2026-11-05T23:53:39.167Z"
+updated_at: "2026-11-22T07:43:20.464Z"
 ---
 
 # F22: Complete planning corpus reads with explicit diagnostics
@@ -56,6 +56,8 @@ Feature: Complete planning corpus reads with explicit diagnostics
 Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
 
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Evidence: `docs/reports/2026-11-05-codebase-review.md`. No implementation is claimed by this planning campaign.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F22`.
 
 ## History
 

@@ -17,13 +17,13 @@ import { OBSERVABILITY_TABS } from '../../src/modules/observability/tabs';
  *    only needs a new entry here.
  */
 describe('observability web module', () => {
-    test('exports a valid WebModule shape (id, name, route, component, icon)', () => {
+    test('exports a valid WebModule shape (id, name, route, component)', () => {
         expect(isWebModule(observabilityModule)).toBe(true);
         expect(observabilityModule.id).toBe('observability');
         expect(observabilityModule.name).toBe('Observabilities');
         expect(observabilityModule.route).toBe('observability');
-        expect(typeof observabilityModule.icon).toBe('string');
-        expect(observabilityModule.icon.length).toBeGreaterThan(0);
+        // A83 1428: built-ins carry no emoji — the glyph resolves from the module id.
+        expect(observabilityModule.icon).toBeUndefined();
         expect(typeof observabilityModule.component).toBe('function');
     });
 

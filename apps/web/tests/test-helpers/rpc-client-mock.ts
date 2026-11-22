@@ -36,6 +36,10 @@ function logTransportError(error: unknown): void {
 }
 
 // ── Default api surface ─────────────────────────────────────────────────
+// EVERY registration must expose the same surface: a module that reads a namespace this default
+// omits crashes only when another file's registration happens to win ("last registration wins"),
+// which is an order-dependent failure. Namespaces are added as modules start mounting in suite
+// tests (A83 1426/1427 added history/inbox/search).
 const defaultApi = {
     task: {
         list: async () => ({ data: [] }),
@@ -55,6 +59,33 @@ const defaultApi = {
         action: async () => ({ data: { runId: 'r1', action: 'run', status: 'queued' } }),
         folders: async () => ({ data: [] }),
     },
+    history: {
+        // `undefined`, not a fabricated payload: the History tabs compute charts from rich shapes,
+        // and a late-resolving promise outlives happy-dom teardown (a `window is not defined`
+        // setState). Undefined keeps every tab in its not-loaded state and settles immediately.
+        getSummary: async () => undefined,
+        getSessions: async () => undefined,
+        getSources: async () => ({
+            ok: true,
+            data: { agents: [], unparsedSources: [], overview: { lastImportedAt: null } },
+        }),
+        getTimeline: async () => undefined,
+        getToolSequence: async () => undefined,
+        getInsights: async () => undefined,
+        triggerImport: async () => ({ ok: true }),
+    },
+    inbox: {
+        list: async () => ({ messages: [], nextCursor: null }),
+        members: async () => [],
+        requests: async () => [],
+        read: async () => ({ readAt: 0, transitioned: false }),
+        reply: async () => ({ message: { id: 'm', requestKey: null } }),
+        send: async () => ({ message: { id: 'm', requestKey: null }, replayed: false }),
+    },
+    search: {
+        query: async () => ({ ok: true, data: { hits: [], total: 0, tookMs: 0 } }),
+        status: async () => ({ rg: { available: false }, zg: { index: 'unknown' } }),
+    },
 };
 
 // ── Builder: produces a full module surface with custom api overrides ──
@@ -68,7 +99,13 @@ export function buildFullRpcMock(overrides?: { api?: unknown }): Record<string, 
         setFetchForTesting,
         resetFetchForTesting,
         logTransportError,
-        api: overrides?.api ?? defaultApi,
+        // Merge, never replace: a caller overriding one namespace must not shrink the shared
+        // surface, because the LAST registration wins process-wide and a missing namespace then
+        // fails an unrelated file's shell test only in the aggregate run.
+        api:
+            overrides?.api === undefined
+                ? defaultApi
+                : { ...defaultApi, ...(overrides.api as Record<string, unknown>) },
     };
 }
 

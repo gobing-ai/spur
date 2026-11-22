@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-17T18:15:03.222Z"
-updated_at: "2026-11-17T18:15:14.622Z"
+updated_at: "2026-11-22T07:43:05.789Z"
 ---
 
 # R: Self noun hosts the daemon lifecycle as flat verbs
@@ -86,5 +86,7 @@ Feature: Self noun hosts the daemon lifecycle as flat verbs
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync R`.
 
 ## History

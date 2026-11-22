@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:33.480Z"
-updated_at: "2026-10-21T18:35:09.266Z"
+updated_at: "2026-11-22T07:43:21.778Z"
 ---
 
 # G1: Inbox IPC
@@ -80,6 +80,8 @@ G11 replaces TeamService/MessageService and /api/messages with InboxService and 
 ### Historical notes
 
 Authority retained, not forked: G61–G64 (project agent fleet program) consume this feature's message events, server message API, and `spur message watch`; recorded by G64's reconciliation (task 0851, 2026-09-13).
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync G1`.
 
 ## History
 

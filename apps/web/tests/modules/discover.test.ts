@@ -258,7 +258,8 @@ describe('discoverModules (real fs fallback under bun test)', () => {
         for (const mod of discoverModules()) {
             expect(typeof mod.id).toBe('string');
             expect(typeof mod.name).toBe('string');
-            expect(typeof mod.icon).toBe('string');
+            // `icon` is optional since A83 1428: built-ins resolve theirs from the id.
+            expect(mod.icon === undefined || typeof mod.icon === 'string').toBe(true);
             expect(typeof mod.route).toBe('string');
             expect(typeof mod.component).toBe('function');
         }

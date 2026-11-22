@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:01.980Z"
-updated_at: "2026-11-21T04:33:00.419Z"
+updated_at: "2026-11-22T07:43:04.301Z"
 ---
 
 # B6: Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer
@@ -123,6 +123,8 @@ Feature: Executor availability lifecycle
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync B6`.
 
 ## History
 

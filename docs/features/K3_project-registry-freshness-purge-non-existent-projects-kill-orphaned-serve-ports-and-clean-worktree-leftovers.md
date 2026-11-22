@@ -2,11 +2,11 @@
 schema_version: 1
 id: "K3"
 name: "Project registry freshness: purge non-existent projects, kill orphaned serve ports, and clean worktree leftovers"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-22T17:57:17.763Z"
-updated_at: "2026-10-10T07:29:30.051Z"
+updated_at: "2026-11-22T08:00:50.168Z"
 ---
 
 # K3: Project registry freshness: purge non-existent projects, kill orphaned serve ports, and clean worktree leftovers
@@ -84,10 +84,13 @@ Scenario: R4 — Cleanup projects.json on worktree removal across plugins/sp
 
 ## Notes
 
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync K3`.
+
 ## History
 
 - 2026-09-22T18:41:45.621Z backlog → active (system)
 - 2026-09-22T18:41:46.035Z active → verifying (system)
 - 2026-09-22T18:44:03.299Z verifying → done (system)
 - 2026-10-10T07:29:30.051Z done → active (system)
+- 2026-11-22T08:00:50.168Z active → verifying (system)
 

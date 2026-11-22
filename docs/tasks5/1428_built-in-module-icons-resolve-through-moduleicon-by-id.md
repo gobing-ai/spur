@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Built-in module icons resolve through ModuleIcon by id
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:32.650Z
-updated_at: "2026-11-22T04:07:23.115Z"
+updated_at: "2026-11-22T07:42:04.804Z"
 feature_id: A83
 
 tags: ["A83"]
 priority: P2
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1428. Built-in module icons resolve through ModuleIcon by id
@@ -29,18 +31,18 @@ ADR-133 (`docs/00_ADR.md:2307`) owns the icon contract. The downstream `bootstra
 
 ### Requirements
 
-- [ ] R1. `WebModule.icon` becomes optional (`apps/web/src/modules/types.ts:7`), and the discovery guard (`discover.ts:49-50`) accepts a module with no `icon`, or with a string one.
-- [ ] R2. The nine built-in descriptors (designs, features, history, observability, plans, projects, search, settings, tasks) drop their `icon:` emoji.
-- [ ] R3. `ModuleIcon` resolves a vector icon by id for all nine built-in ids, adding `search` (Lucide `Search`). It renders a raw emoji `<span>` only when `icon` is set and matches neither a built-in id nor a known emoji.
-- [ ] R4. sr-only text for `size="lg"` comes from an id → **label** map ("Search", "Tasks", …) instead of an emoji, because a screen reader announcing "📡" is noise. The `fallbackEmojiMap` is deleted.
-- [ ] R5. A downstream declaration with `icon: '📡'` still renders `Radio`. A downstream declaration with any other string still renders that string. `bootstrap.modules[].icon` validation is unchanged.
+- [x] R1. `WebModule.icon` becomes optional (`apps/web/src/modules/types.ts:7`), and the discovery guard (`discover.ts:49-50`) accepts a module with no `icon`, or with a string one.
+- [x] R2. The nine built-in descriptors (designs, features, history, observability, plans, projects, search, settings, tasks) drop their `icon:` emoji.
+- [x] R3. `ModuleIcon` resolves a vector icon by id for all nine built-in ids, adding `search` (Lucide `Search`). It renders a raw emoji `<span>` only when `icon` is set and matches neither a built-in id nor a known emoji.
+- [x] R4. sr-only text for `size="lg"` comes from an id → **label** map ("Search", "Tasks", …) instead of an emoji, because a screen reader announcing "📡" is noise. The `fallbackEmojiMap` is deleted.
+- [x] R5. A downstream declaration with `icon: '📡'` still renders `Radio`. A downstream declaration with any other string still renders that string. `bootstrap.modules[].icon` validation is unchanged.
 
 Out of scope: changing the config schema, adding icon names (e.g. `icon: 'radio'`) to downstream config, and new Lucide icons for downstream modules.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Built-in module icons resolve through ModuleIcon by module id
-- [ ] AC2 — Downstream module icon declarations keep working unchanged
+- [x] AC1 — Built-in module icons resolve through ModuleIcon by module id
+- [x] AC2 — Downstream module icon declarations keep working unchanged
 
 ### Q&A
 
@@ -82,15 +84,49 @@ Premises (verified 2026-11-21):
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `apps/web/src/components/ModuleIcon.tsx` | one `BUILTIN` table (id → Lucide icon, screen-reader label, legacy emoji aliases); resolution id → emoji alias → declared literal → `Layers`; `fallbackEmojiMap` and the if-chain deleted | R3/R4: every built-in resolves by id, `search` gains `Search`, and the sr-only text is a NAME instead of a glyph |
+| `apps/web/src/modules/types.ts:6-11` | `WebModule.icon` optional | R1: built-ins declare no glyph; downstream still sets one from config |
+| `apps/web/src/modules/discover.ts:46-52` | guard accepts a missing `icon` or a string | R1: a built-in without a glyph is still discovered |
+| the nine `apps/web/src/modules/*/index.tsx` descriptors | `icon:` removed (also `integrations`, which follows the same rule) | R2 |
+| `apps/web/tests/components/module-icon.test.tsx` | every built-in id renders an `svg` + no glyph text; `search` ≠ fallback; downstream `📡` → vector; unknown glyph verbatim; no entry → vector | R3/R4/R5 failing-first |
+| `apps/web/tests/modules/{observability,discover,history/history-module}.test.ts` | the emoji assertions become "no declared icon" | The contract changed on purpose; those three tests asserted the old literal |
+
+Notes
+- The sr-only label map lives in the same table as the icon, so a new built-in cannot get an icon without a name.
+- Downstream compatibility is the emoji ALIAS list, not a special case per module: `🏷`/`🏷️`/`🎯` all still resolve to `Tag`, `⚙`/`⚙️` to `Settings`, `🔎` to `Search`.
+- `integrations` (added in A82) carried `🔌`; it is not in the nine, so it now falls back to `Layers` until a table entry is added — recorded as a review finding rather than silently inventing a mapping.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 `WebModule.icon` optional; the discovery guard accepts a missing icon or a string | MET | `apps/web/src/modules/types.ts:6-11`, `apps/web/src/modules/discover.ts:46-52` — `apps/web/tests/modules/discover.test.ts` ("every discovered module is WebModule-shaped" now allows absent) |
+| R2 the nine built-in descriptors drop their emoji | MET | `apps/web/src/modules/{designs,features,history,observability,plans,projects,search,settings,task-kanban}/index.tsx` (no `icon:`), plus `integrations` — `apps/web/tests/modules/{observability,history/history-module}.test.ts` assert `icon` is undefined |
+| R3 `ModuleIcon` resolves a vector icon by id for all nine, adding `Search`; a raw glyph `<span>` only for an unmatched declared string | MET | `apps/web/src/components/ModuleIcon.tsx:26-44` (one `BUILTIN` table), `:66-84` (resolution order) — `apps/web/tests/components/module-icon.test.tsx`: every id renders an `svg`, `search` differs from the fallback, unknown glyph renders verbatim |
+| R4 sr-only text for `size="lg"` comes from the id → label map; `fallbackEmojiMap` deleted | MET | `ModuleIcon.tsx:38-42` (labels in the same table), `:79-86` — `module-icon.test.tsx` asserts no emoji code point in the `lg` text and that a non-empty name renders |
+| R5 downstream `icon: '📡'` still renders the Radio vector, any other string renders verbatim, config validation unchanged | MET | `ModuleIcon.tsx:47-56` (emoji alias lookup), no change to `packages/config/src/board-modules.ts` — `module-icon.test.tsx` ("a legacy emoji still renders its vector icon" asserts the sr label is `Observability`; "an unknown glyph renders verbatim") |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Built-in module icons resolve through ModuleIcon by module id | MET | test | `apps/web/tests/components/module-icon.test.tsx` (nine ids, svg + label) |
+| AC2 — Downstream module icon declarations keep working unchanged | MET | test | `module-icon.test.tsx` (legacy emoji alias, unknown glyph verbatim, no-entry fallback) + `packages/config` schema untouched |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -99,4 +135,7 @@ Premises (verified 2026-11-21):
 ### History
 
 - 2026-11-22T02:22:12.866Z backlog → todo (system)
+- 2026-11-22T07:41:44.509Z todo → wip (system)
+- 2026-11-22T07:42:02.629Z wip → testing (system)
+- 2026-11-22T07:42:04.800Z testing → done (system)
 

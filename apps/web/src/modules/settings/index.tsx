@@ -16,7 +16,6 @@ export { default as YamlViewer } from './YamlViewer';
 export const module: WebModule = {
     id: 'settings',
     name: 'Settings',
-    icon: '⚙️',
     route: 'settings',
     component: SettingsShell,
     sidebarLabel: 'Settings',

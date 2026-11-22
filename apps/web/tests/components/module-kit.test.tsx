@@ -54,6 +54,63 @@ describe('ModuleTabs (R4 — tab ARIA and controlled change)', () => {
         expect(first?.getAttribute('aria-controls')).toBe('shell-tab-panel-events');
     });
 
+    test('a tab badge renders after its label, and only when present (A83 1427)', () => {
+        const view = render(
+            <ModuleTabs
+                tabs={[
+                    { id: 'summary', label: 'Summary', badge: 12 },
+                    { id: 'sources', label: 'Sources', badge: null },
+                    { id: 'traces', label: 'Traces' },
+                ]}
+                value="summary"
+                onChange={() => {}}
+                label="Badge tabs"
+                idPrefix="history"
+            />,
+        );
+        const badge = view.getByTestId('history-badge-summary');
+        expect(badge.textContent).toBe('12');
+        // `null` and an absent field both render nothing — no empty badge shell.
+        expect(view.queryByTestId('history-badge-sources')).toBeNull();
+        expect(view.queryByTestId('history-badge-traces')).toBeNull();
+    });
+
+    test('ArrowLeft/ArrowRight move the selection and focus (A83 1426)', () => {
+        const picked: string[] = [];
+        const view = render(
+            <ModuleTabs
+                tabs={TABS}
+                value="events"
+                onChange={(id) => picked.push(id)}
+                label="Shell tabs"
+                idPrefix="shell-tab"
+            />,
+        );
+        const strip = view.getByRole('tablist', { name: 'Shell tabs' });
+        fireEvent.keyDown(strip, { key: 'ArrowRight' });
+        expect(picked).toEqual(['jobs']);
+        // An unrelated key is left to the browser.
+        fireEvent.keyDown(strip, { key: 'a' });
+        expect(picked).toHaveLength(1);
+    });
+
+    test('the arrow keys wrap in both directions', () => {
+        // From the LAST tab, Right wraps to the first; from the first, Left wraps to the last.
+        const forward: string[] = [];
+        const last = render(
+            <ModuleTabs tabs={TABS} value="jobs" onChange={(id) => forward.push(id)} label="L" idPrefix="l" />,
+        );
+        fireEvent.keyDown(last.getByRole('tablist', { name: 'L' }), { key: 'ArrowRight' });
+        expect(forward).toEqual(['events']);
+
+        const backward: string[] = [];
+        const first = render(
+            <ModuleTabs tabs={TABS} value="events" onChange={(id) => backward.push(id)} label="B" idPrefix="b" />,
+        );
+        fireEvent.keyDown(first.getByRole('tablist', { name: 'B' }), { key: 'ArrowLeft' });
+        expect(backward).toEqual(['jobs']);
+    });
+
     test('reports the clicked tab id and owns no state of its own', () => {
         const picked: string[] = [];
         const view = render(

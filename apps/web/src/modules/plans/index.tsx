@@ -12,7 +12,6 @@ import PlansShell from './PlansShell';
 export const module: WebModule = {
     id: 'plans',
     name: 'Plans',
-    icon: '🧭',
     route: 'plans',
     component: PlansShell,
     sidebarLabel: 'Plans',

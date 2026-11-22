@@ -32,7 +32,6 @@ export function TaskKanbanView() {
 export const module: WebModule = {
     id: 'tasks',
     name: 'Tasks',
-    icon: '📋',
     route: 'tasks',
     component: TasksShell,
     sidebarLabel: 'Tasks',

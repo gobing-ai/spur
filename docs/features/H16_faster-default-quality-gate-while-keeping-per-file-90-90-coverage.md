@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-11-10T07:34:39.168Z"
+updated_at: "2026-11-22T07:43:26.052Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -133,6 +133,8 @@ Operator instruction for the filed task: implement every 2026-10-09 gate-perform
 Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
 
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync H16`.
 
 ## History
 

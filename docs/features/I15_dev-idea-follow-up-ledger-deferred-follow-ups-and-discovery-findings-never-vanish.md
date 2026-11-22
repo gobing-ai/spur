@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-11-22T03:47:44.798Z"
-updated_at: "2026-11-22T05:40:08.007Z"
+updated_at: "2026-11-22T07:43:12.834Z"
 ---
 
 # I15: dev-idea follow-up ledger: deferred follow-ups and discovery findings never vanish
@@ -76,6 +76,8 @@ Feature: dev-idea follow-up ledger: deferred follow-ups and discovery findings n
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync I15`.
 
 ## History
 

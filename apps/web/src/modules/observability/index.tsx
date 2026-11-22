@@ -12,7 +12,6 @@ import ObservabilityShell from './ObservabilityShell';
 export const module: WebModule = {
     id: 'observability',
     name: 'Observabilities',
-    icon: '📡',
     route: 'observability',
     component: ObservabilityShell,
     sidebarLabel: 'Observabilities',

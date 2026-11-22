@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: []
 created_at: "2026-09-06T19:44:10.927Z"
-updated_at: "2026-10-21T18:35:06.782Z"
+updated_at: "2026-11-22T07:43:23.219Z"
 ---
 
 # F21: Consistent task creation and default implementation readiness
@@ -101,6 +101,8 @@ The linked creation/readiness tasks are complete. Planned/unimplemented statemen
 Delivery is scheduled after the D6 workflow repair batch ending at 0786. Two tasks only: 0787 fixes deterministic creation/check correctness including serialization and machine errors; 0788 delivers ready-by-default creation across CLI, batch and planning handoff. Tests, documentation and recovery stay in the owning task.
 
 Approved design: docs/design/task-creation-readiness.md; decision ADR-109. The operator approved the direction and design gate on 2026-09-06 and explicitly asked to avoid overly small tasks. This feature is planned, not implemented.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F21`.
 
 ## History
 

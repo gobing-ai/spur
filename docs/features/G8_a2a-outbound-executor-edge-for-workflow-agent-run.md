@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G8"
 name: Named-agent dispatch with A2A as a hidden transport
-status: active
+status: blocked
 priority: P2
 tags: []
 created_at: "2026-11-15T03:24:20.264Z"
-updated_at: "2026-11-15T05:38:15.900Z"
+updated_at: "2026-11-22T07:42:52.195Z"
 ---
 
 # G8: A2A outbound executor edge for workflow agent.run
@@ -146,4 +146,5 @@ Feature: Named-agent dispatch with A2A as a hidden transport
 ## History
 
 - 2026-11-15T05:38:15.900Z backlog → active (system)
+- 2026-11-22T07:42:52.195Z active → blocked (system)
 

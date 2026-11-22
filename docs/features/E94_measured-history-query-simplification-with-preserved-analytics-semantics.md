@@ -6,7 +6,7 @@ status: active
 priority: P3
 tags: []
 created_at: "2026-11-05T19:58:30.307Z"
-updated_at: "2026-11-06T08:05:21.759Z"
+updated_at: "2026-11-22T07:43:19.086Z"
 ---
 
 # E94: Measured history query simplification with preserved analytics semantics
@@ -55,6 +55,8 @@ Feature: Measured history query simplification with preserved analytics semantic
 Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
 
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Evidence: `docs/reports/2026-11-05-codebase-review.md`. Conditional: keep this feature and its implementation tasks in backlog until measurement and the go/no-go decision justify execution.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync E94`.
 
 ## History
 

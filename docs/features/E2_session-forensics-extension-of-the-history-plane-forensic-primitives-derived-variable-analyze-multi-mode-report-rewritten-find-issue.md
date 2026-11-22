@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-10T00:02:13.084Z"
-updated_at: "2026-10-09T16:51:45.916Z"
+updated_at: "2026-11-22T07:43:07.207Z"
 ---
 
 # E2: Session-forensics extension of the history plane: forensic primitives, derived-variable analyze, multi-mode report, rewritten find-issue
@@ -237,6 +237,8 @@ Consciously deferred past the destination (implementation-batch concerns, not ma
 - **A new `spur history forensics` verb.** The methodology doc proposes one (§"Proposed Enhancement");
   this map instead routes forensics through `report --mode forensics`, keeping the noun's verb count
   flat.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync E2`.
 
 ## History
 

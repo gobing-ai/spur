@@ -1,5 +1,5 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import ModuleIcon from '../../components/ModuleIcon';
+import { ModuleHeader, ModuleShell, ModuleTabs } from '../../components/module-kit';
 import { PROJECT_TABS } from './tabs';
 import type { OrchestratorState, ProjectFleetSnapshot } from './useProjectContext';
 import { useProjectContext } from './useProjectContext';
@@ -38,8 +38,9 @@ function headerState(context: {
 /**
  * Projects board module shell.
  *
- * Header displays standard module framing (matching Histories) with title,
- * description, and tabs placed in the top-right corner.
+ * Renders through the module kit (A81/A83 1426) — `ModuleShell` owns the rail, `ModuleHeader` the
+ * one `h1`, the degraded-state status node and the tab strip — so this module carries no header
+ * markup of its own. Tab ids and URLs stay owned by {@link useProjectTab}.
  */
 export default function ProjectsShell() {
     const project = useProjectContext();
@@ -48,70 +49,27 @@ export default function ProjectsShell() {
     const Active = active?.component;
     const stateAttr = headerState(project);
 
-    // R7 (0845): tabs are keyboard-navigable — ArrowLeft/ArrowRight move the
-    // active tab (wrapping) and move focus with it; Tab/Enter keep working via
-    // the native buttons.
-    const onTablistKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-        e.preventDefault();
-        const idx = PROJECT_TABS.findIndex((t) => t.id === activeTab);
-        const delta = e.key === 'ArrowRight' ? 1 : -1;
-        const next = PROJECT_TABS[(idx + delta + PROJECT_TABS.length) % PROJECT_TABS.length];
-        if (!next) return;
-        e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[PROJECT_TABS.indexOf(next)]?.focus();
-        selectTab(next.id);
-    };
-
     return (
-        <div
-            className="projects flex flex-col h-full gap-4 p-4 max-w-[1600px] mx-auto w-full overflow-hidden"
-            data-projects-shell
-        >
-            {/* Header & Tab Navigation Bar */}
-            <div
-                className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0"
-                data-projects-header
-                data-projects-state={stateAttr}
-            >
-                <div className="flex items-center gap-3">
-                    <ModuleIcon id="projects" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Projects</h1>
-                        <p className="text-xs text-base-content/60">Conversation and processes for this project</p>
-                    </div>
-                </div>
-
-                {/* Tab Strip */}
-                <div
-                    role="tablist"
-                    aria-label="Projects tabs"
-                    onKeyDown={onTablistKeyDown}
-                    className="flex items-center gap-1 bg-base-300 p-1 rounded-xl"
-                >
-                    {PROJECT_TABS.map((tab) => {
-                        const selected = tab.id === activeTab;
-                        return (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={selected}
-                                aria-controls={`projects-tab-panel-${tab.id}`}
-                                id={`projects-tab-${tab.id}`}
-                                onClick={() => selectTab(tab.id)}
-                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                                    selected
-                                        ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                        : 'text-base-content/70 hover:bg-base-content/10'
-                                }`}
-                                data-projects-tab={tab.id}
-                            >
-                                {tab.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
+        <ModuleShell className="projects h-full overflow-hidden" data-projects-shell>
+            <ModuleHeader
+                icon={<ModuleIcon id="projects" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                title="Projects"
+                subtitle="Fleet, inbox and database for this project"
+                status={
+                    <span role="status" className="sr-only" data-projects-state={stateAttr}>
+                        {stateAttr}
+                    </span>
+                }
+                tabs={
+                    <ModuleTabs
+                        tabs={PROJECT_TABS}
+                        value={activeTab}
+                        onChange={(id) => selectTab(id as typeof activeTab)}
+                        label="Projects tabs"
+                        idPrefix="projects-tab"
+                    />
+                }
+            />
 
             {/* Tab Panel */}
             <div
@@ -122,6 +80,6 @@ export default function ProjectsShell() {
             >
                 {Active ? <Active /> : null}
             </div>
-        </div>
+        </ModuleShell>
     );
 }

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A83"
 name: "Board maturity sweep: module-kit adoption, icon contract and stale module metadata"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-22T02:19:46.668Z"
-updated_at: "2026-11-22T07:09:13.873Z"
+updated_at: "2026-11-22T07:15:35.934Z"
 ---
 
 # A83: Board maturity sweep: module-kit adoption, icon contract and stale module metadata
@@ -80,7 +80,7 @@ Feature: Board maturity sweep: module-kit adoption, icon contract and stale modu
 | --- | ---- | ------ |
 | 1429 | Reconcile feature status drift through the feature tool | todo |
 | 1427 | Module-kit adoption for designs, features, history and plans | todo |
-| 1426 | Module-kit adoption for projects, runtime, settings, task-kanban and search | todo |
+| 1426 | Module-kit adoption for projects, runtime, settings, task-kanban and search | testing |
 | 1428 | Built-in module icons resolve through ModuleIcon by id | todo |
 | 1430 | Board maturity browser proof across every built-in module | todo |
 <!-- END AUTO-GENERATED -->
@@ -88,3 +88,6 @@ Feature: Board maturity sweep: module-kit adoption, icon contract and stale modu
 ## Notes
 
 ## History
+
+- 2026-11-22T07:15:35.934Z backlog → active (system)
+

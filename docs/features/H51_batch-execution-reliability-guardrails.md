@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-07-29T21:43:01.773Z"
-updated_at: "2026-11-07T08:05:53.539Z"
+updated_at: "2026-11-22T07:43:27.412Z"
 ---
 
 # H51: Batch execution reliability guardrails
@@ -88,6 +88,8 @@ Feature: Batch execution reliability guardrails
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync H51`.
 
 ## History
 

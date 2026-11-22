@@ -40,7 +40,7 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
     const active = INTEGRATIONS_TABS.find((tab) => tab.id === activeId) ?? INTEGRATIONS_TABS[0];
 
     return (
-        <ModuleShell>
+        <ModuleShell data-integrations-shell>
             <ModuleHeader
                 icon={<ModuleIcon id="integrations" size="lg" />}
                 title="Integrations"

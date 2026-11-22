@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { Button } from '@/ui';
 import DocumentMetadataModal from '../../components/DocumentMetadataModal';
 import ModuleIcon from '../../components/ModuleIcon';
+import { ModuleHeader, ModuleShell } from '../../components/module-kit';
 import { parseMarkdownFrontmatter } from '../../lib/frontmatter';
 import { loadPlanContent, loadPlanFiles, type PlanFileDetail, type PlanFileSummary } from '../../lib/plan-client';
 import PlanFileList from './PlanFileList';
@@ -129,89 +130,98 @@ export default function PlansShell() {
 
     if (error) {
         return (
-            <div className="p-4 text-sm text-error" role="alert">
-                Failed to load plan documents: {error}
-            </div>
+            <ModuleShell className="relative h-full overflow-hidden" data-plans-shell>
+                <ModuleHeader
+                    icon={<ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                    title="Plans"
+                    subtitle="Project roadmap, release commitments, and execution proposals"
+                />
+                <div className="p-4 text-sm text-error" role="alert">
+                    Failed to load plan documents: {error}
+                </div>
+            </ModuleShell>
         );
     }
 
     if (loadingFiles && files === null) {
         return (
-            <div className="flex items-center justify-center h-full text-spur-text-muted text-sm">
-                Loading plan documents…
-            </div>
+            <ModuleShell className="relative h-full overflow-hidden" data-plans-shell>
+                <ModuleHeader
+                    icon={<ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                    title="Plans"
+                    subtitle="Project roadmap, release commitments, and execution proposals"
+                />
+                <div className="flex items-center justify-center p-8 text-spur-text-muted text-sm">
+                    Loading plan documents…
+                </div>
+            </ModuleShell>
         );
     }
 
     return (
-        <div className="relative h-full w-full p-4 overflow-hidden" data-plans-shell>
+        <ModuleShell className="relative h-full overflow-hidden" data-plans-shell>
             {/* Central Workspace Container */}
             <div
                 className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"
                 data-plans-workspace
             >
                 {/* Module Header */}
-                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
-                    <div className="flex items-center gap-3">
-                        <ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                        <div>
-                            <h1 className="text-xl font-bold tracking-tight text-spur-text">Plans</h1>
-                            <p className="text-xs text-spur-text-muted">
-                                Project roadmap, release commitments, and execution proposals
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-1" data-plans-actions>
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            className="text-spur-text-muted hover:text-spur-accent"
-                            onClick={() => setIsListOpen((prev) => !prev)}
-                            aria-label={isListOpen ? 'Collapse plan file list' : 'Expand plan file list'}
-                            aria-expanded={isListOpen}
-                            aria-controls="plan-files-dock"
-                            title={isListOpen ? 'Collapse plan file list' : 'Expand plan file list'}
-                        >
-                            {isListOpen ? '◧' : '▶'}
-                        </Button>
-                        {selectedPath && activeDetail?.content && (
+                <ModuleHeader
+                    icon={<ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                    title="Plans"
+                    filters={
+                        <div className="flex items-center gap-1" data-plans-actions>
                             <Button
                                 variant="ghost"
                                 size="xs"
                                 className="text-spur-text-muted hover:text-spur-accent"
-                                onClick={() => setIsTocOpen((prev) => !prev)}
-                                aria-label={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
-                                aria-expanded={isTocOpen}
-                                aria-controls="plan-toc-dock"
-                                title={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
+                                onClick={() => setIsListOpen((prev) => !prev)}
+                                aria-label={isListOpen ? 'Collapse plan file list' : 'Expand plan file list'}
+                                aria-expanded={isListOpen}
+                                aria-controls="plan-files-dock"
+                                title={isListOpen ? 'Collapse plan file list' : 'Expand plan file list'}
                             >
-                                {isTocOpen ? '📑' : '📖'}
+                                {isListOpen ? '◧' : '▶'}
                             </Button>
-                        )}
-                        <Button
-                            variant="ghost"
-                            size="xs"
-                            className="text-spur-text-muted hover:text-spur-accent"
-                            onClick={() => {
-                                void (async () => {
-                                    await loadFiles();
-                                    if (selectedPath) {
-                                        setContentCache((prev) => {
-                                            const next = { ...prev };
-                                            delete next[selectedPath];
-                                            return next;
-                                        });
-                                        void loadContent(selectedPath);
-                                    }
-                                })();
-                            }}
-                            aria-label="Refresh plan documents"
-                            title="Refresh plan documents"
-                        >
-                            🔄
-                        </Button>
-                    </div>
-                </header>
+                            {selectedPath && activeDetail?.content && (
+                                <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    className="text-spur-text-muted hover:text-spur-accent"
+                                    onClick={() => setIsTocOpen((prev) => !prev)}
+                                    aria-label={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
+                                    aria-expanded={isTocOpen}
+                                    aria-controls="plan-toc-dock"
+                                    title={isTocOpen ? 'Collapse table of contents' : 'Expand table of contents'}
+                                >
+                                    {isTocOpen ? '📑' : '📖'}
+                                </Button>
+                            )}
+                            <Button
+                                variant="ghost"
+                                size="xs"
+                                className="text-spur-text-muted hover:text-spur-accent"
+                                onClick={() => {
+                                    void (async () => {
+                                        await loadFiles();
+                                        if (selectedPath) {
+                                            setContentCache((prev) => {
+                                                const next = { ...prev };
+                                                delete next[selectedPath];
+                                                return next;
+                                            });
+                                            void loadContent(selectedPath);
+                                        }
+                                    })();
+                                }}
+                                aria-label="Refresh plan documents"
+                                title="Refresh plan documents"
+                            >
+                                🔄
+                            </Button>
+                        </div>
+                    }
+                />
 
                 {/* Body Area — 3-zone adaptive layout on laptop (<3xl), floating outside on larger screens (3xl+) */}
                 <div
@@ -337,6 +347,6 @@ export default function PlansShell() {
                 frontmatterRaw={frontmatterRaw}
                 frontmatter={frontmatter}
             />
-        </div>
+        </ModuleShell>
     );
 }

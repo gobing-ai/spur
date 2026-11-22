@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.189Z"
-updated_at: "2026-10-21T18:35:10.687Z"
+updated_at: "2026-11-22T07:43:08.544Z"
 ---
 
 # G63: Projects board module and global input wiring
@@ -302,6 +302,8 @@ against the current tree; all are corrected in the tasks, not deferred.
   half in happy-dom and a geometric half in an untracked `.spur/run/g63-projects/browser-check.mjs`
   using the operator-local Playwright install, leaving `package.json` and harness-surface governance
   untouched.
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync G63`.
 
 ## History
 

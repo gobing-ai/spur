@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Badge, Button, Input, Loading, Select } from '@/ui';
 import ModuleIcon from '../../components/ModuleIcon';
+import { ModuleHeader, ModuleShell } from '../../components/module-kit';
 import { api } from '../../lib/rpc-client';
 import type { WebModule } from '../types';
 
@@ -192,22 +193,19 @@ function SearchShell() {
         : null;
 
     return (
-        <div className="flex flex-col gap-4 p-4 max-w-[1600px] mx-auto w-full" data-search-shell>
-            {/* Header Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0">
-                <div className="flex items-center gap-3">
-                    <ModuleIcon id="search" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Search</h1>
-                        <p className="text-xs text-base-content/60">Exact and semantic search over docs and code</p>
-                    </div>
-                </div>
-                {statusSummary ? (
-                    <span role="status" className="text-xs text-base-content/50 font-mono">
-                        {statusSummary}
-                    </span>
-                ) : null}
-            </div>
+        <ModuleShell className="search" data-search-shell>
+            <ModuleHeader
+                icon={<ModuleIcon id="search" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                title="Search"
+                subtitle="Exact and semantic search over docs and code"
+                status={
+                    statusSummary === null ? undefined : (
+                        <span role="status" className="text-xs text-base-content/50 font-mono">
+                            {statusSummary}
+                        </span>
+                    )
+                }
+            />
 
             {/* Query & Filter Bar */}
             <form
@@ -328,7 +326,7 @@ function SearchShell() {
                     ) : null}
                 </div>
             ) : null}
-        </div>
+        </ModuleShell>
     );
 }
 
@@ -336,7 +334,6 @@ function SearchShell() {
 export const module: WebModule = {
     id: 'search',
     name: 'Search',
-    icon: '🔎',
     route: 'search',
     component: SearchShell,
     sidebarLabel: 'Search',

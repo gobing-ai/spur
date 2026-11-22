@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-04T22:57:50.302Z"
-updated_at: "2026-11-04T23:53:45.506Z"
+updated_at: "2026-11-22T07:43:16.021Z"
 ---
 
 # I14: Grok Bot interop for spur and the sp plugin
@@ -63,6 +63,8 @@ Feature: Grok Bot interop for spur and the sp plugin
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+- Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync I14`.
 
 ## History
 

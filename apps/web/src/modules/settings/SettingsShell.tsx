@@ -1,84 +1,37 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import ModuleIcon from '../../components/ModuleIcon';
+import { ModuleHeader, ModuleShell, ModuleTabs } from '../../components/module-kit';
 import { SETTINGS_TABS } from './tabs';
 import { useSettingsTab } from './useSettingsTab';
 
 /**
  * Settings board module shell.
  *
- * Header displays standard module framing (matching Projects, Histories, Observabilities)
- * with title, description, and tabs placed in the top-right corner.
+ * Renders through the module kit (A81/A83 1426): `ModuleShell` owns the rail and padding,
+ * `ModuleHeader` the one `h1` + tab strip, so this module carries no header markup of its own.
+ * Tabs stay URL-driven through {@link useSettingsTab}; the kit strip keeps the arrow-key nav.
  */
 export default function SettingsShell() {
     const { activeTab, selectTab } = useSettingsTab();
     const active = SETTINGS_TABS.find((t) => t.id === activeTab) ?? SETTINGS_TABS[0];
     const Active = active?.component;
 
-    // Tabs are keyboard-navigable — ArrowLeft/ArrowRight move the active tab (wrapping)
-    const onTablistKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-        e.preventDefault();
-        const idx = SETTINGS_TABS.findIndex((t) => t.id === activeTab);
-        const delta = e.key === 'ArrowRight' ? 1 : -1;
-        const next = SETTINGS_TABS[(idx + delta + SETTINGS_TABS.length) % SETTINGS_TABS.length];
-        if (!next) return;
-        e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[SETTINGS_TABS.indexOf(next)]?.focus();
-        selectTab(next.id);
-    };
-
     return (
-        <div
-            className="settings flex flex-col h-full gap-4 p-4 max-w-[1600px] mx-auto w-full overflow-hidden"
-            data-settings-shell
-        >
-            {/* Header & Tab Navigation Bar */}
-            <div
-                className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0"
-                data-settings-header
-            >
-                <div className="flex items-center gap-3">
-                    <ModuleIcon id="settings" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Settings</h1>
-                        <p className="text-xs text-base-content/60">
-                            System configuration, agent executors, and workspace preferences
-                        </p>
-                    </div>
-                </div>
+        <ModuleShell className="settings h-full overflow-hidden" data-settings-shell>
+            <ModuleHeader
+                icon={<ModuleIcon id="settings" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
+                title="Settings"
+                subtitle="System configuration, agent executors, and workspace preferences"
+                tabs={
+                    <ModuleTabs
+                        tabs={SETTINGS_TABS}
+                        value={activeTab}
+                        onChange={(id) => selectTab(id as typeof activeTab)}
+                        label="Settings tabs"
+                        idPrefix="settings-tab"
+                    />
+                }
+            />
 
-                {/* Tab Strip */}
-                <div
-                    role="tablist"
-                    aria-label="Settings tabs"
-                    onKeyDown={onTablistKeyDown}
-                    className="flex items-center gap-1 bg-base-300 p-1 rounded-xl"
-                >
-                    {SETTINGS_TABS.map((tab) => {
-                        const selected = tab.id === activeTab;
-                        return (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={selected}
-                                aria-controls={`settings-tab-panel-${tab.id}`}
-                                id={`settings-tab-${tab.id}`}
-                                onClick={() => selectTab(tab.id)}
-                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                                    selected
-                                        ? 'bg-primary text-primary-content font-bold shadow-sm'
-                                        : 'text-base-content/70 hover:bg-base-content/10'
-                                }`}
-                                data-settings-tab={tab.id}
-                            >
-                                {tab.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Tab Panel */}
             <div
                 role="tabpanel"
                 id={`settings-tab-panel-${activeTab}`}
@@ -87,6 +40,6 @@ export default function SettingsShell() {
             >
                 {Active ? <Active /> : null}
             </div>
-        </div>
+        </ModuleShell>
     );
 }

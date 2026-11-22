@@ -10,7 +10,6 @@ import HistoryShell from './HistoryShell';
 export const module: WebModule = {
     id: 'history',
     name: 'History',
-    icon: '📊',
     route: 'history',
     component: HistoryShell,
     sidebarLabel: 'Histories',
