@@ -24,7 +24,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { type Subprocess, spawn } from 'bun';
 
@@ -226,10 +226,13 @@ function record(
     });
 }
 
-/** Drive the whole protocol leg and write the receipt. Returns the process exit code. */
+/**
+ * Drive the protocol leg and write the receipt. Automated browser runs can choose an untracked
+ * receipt path so feature verification does not change its own inputs. Returns the exit code.
+ */
 export async function runIntegrationsE2e(
     args: string[] = [],
-    board?: { webDistPath: string; verifyBoard: (root: string) => Promise<string> },
+    board?: { webDistPath: string; verifyBoard: (root: string) => Promise<string>; receiptPath?: string },
 ): Promise<number> {
     const keep = args.includes('--keep');
     const scratch = mkdtempSync(join(tmpdir(), 'spur-integrations-e2e-'));
@@ -545,10 +548,11 @@ export async function runIntegrationsE2e(
         failed,
         verdict: failed === 0 ? 'PASS' : 'FAIL',
     };
-    mkdirSync(join(REPO_ROOT, 'docs/reports'), { recursive: true });
-    writeFileSync(RECEIPT, `${JSON.stringify(receipt, null, 4)}\n`);
+    const receiptPath = board?.receiptPath ?? RECEIPT;
+    mkdirSync(dirname(receiptPath), { recursive: true });
+    writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 4)}\n`);
 
-    console.log(`integrations-e2e receipt: ${relative(REPO_ROOT, RECEIPT)}`);
+    console.log(`integrations-e2e receipt: ${relative(REPO_ROOT, receiptPath)}`);
     for (const row of rows) {
         console.log(
             `  ${row.status === 'passed' ? 'ok  ' : 'FAIL'} ${row.step} [${row.requirement}]: ${row.evidence.slice(0, 160)}`,

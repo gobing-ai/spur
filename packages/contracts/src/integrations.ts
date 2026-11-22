@@ -186,14 +186,17 @@ export const integrationsActivitySchema = z.object({
     lastCall: z.string().nullable(),
     authDenials: z.number(),
 });
+/** Inferred type for {@link integrationsActivitySchema}. */
 export type IntegrationsActivity = z.infer<typeof integrationsActivitySchema>;
 
+/** Gateway routing counters and optional MCP enablement and activity. */
 export const integrationsGatewayHealthSchema = z.object({
     counters: integrationsGatewayCountersSchema,
     mcp: z.object({ enabled: z.boolean(), auth: integrationsAuthSchema }).optional(),
     mcpActivity: integrationsActivitySchema.optional(),
 });
 
+/** Windowed usage, attribution and failures across the integration surfaces. */
 export const integrationsUsageSchema = z.object({
     tools: z.array(integrationsToolUsageSchema),
     resources: z.array(integrationsResourceUsageSchema),
