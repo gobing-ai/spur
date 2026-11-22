@@ -4,7 +4,7 @@ name: Reconcile feature status drift through the feature tool
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:33.159Z
-updated_at: "2026-11-22T08:20:24.304Z"
+updated_at: "2026-11-22T18:13:41.939Z"
 feature_id: A83
 
 tags: ["A83"]
@@ -130,6 +130,64 @@ Notes
 
 Corpus scope of this diff: 23 `docs/features/*.md` files (G8's status + a dated `## Notes` entry on each of the 19 receipt-pending features + A83's own AC repair from the preflight). No source file changed.
 
+#### Forced verification reconciliation — 2026-11-22
+
+The earlier `.spur/run/1429-before.json`, `1429-after.json` and `1429-notes.json` were not preserved in the merged checkout or the surviving runall worktree. Their old counts are historical claims, not fresh verification evidence. This pass captures a new frozen dry-run and records complete per-feature dispositions.
+
+Fresh before: 231 features present; 224 evaluated; 18 `from != to` proposals; 47 `receiptPending` rows. `spur feature sync G8 --json` confirms it is already blocked and requires no status override. Each of the 47 selected features now has a dated Notes disposition through `spur feature update --section Notes`, preserving its exact pre-write lifecycle status. Separate-feature certification is deferred with the valid follow-up `/sp-dev-verify --all --feature <id> --agent inline --auto --force --focus all --fix all`, then `spur feature sync <id>`. A83's Notes identifies this batch as the owner of its pending verification.
+
+| Feature | Actual receipt state at audit | Action | Before | After |
+| --- | --- | --- | --- | --- |
+| E5 | stale | dated Notes; certification deferred | verifying | verifying |
+| K3 | missing | dated Notes; certification deferred | verifying | verifying |
+| J5 | missing | dated Notes; certification deferred | verifying | verifying |
+| F31 | missing | dated Notes; certification deferred | verifying | verifying |
+| B6 | stale | dated Notes; certification deferred | active | active |
+| A34 | failed | dated Notes; certification deferred | verifying | verifying |
+| H21 | stale | dated Notes; certification deferred | verifying | verifying |
+| A83 | run | dated Notes; certification deferred | active | active |
+| I7 | stale | dated Notes; certification deferred | verifying | verifying |
+| R | failed | dated Notes; certification deferred | backlog | backlog |
+| H11 | missing | dated Notes; certification deferred | verifying | verifying |
+| G75 | stale | dated Notes; certification deferred | verifying | verifying |
+| E2 | missing | dated Notes; certification deferred | active | active |
+| J3 | missing | dated Notes; certification deferred | verifying | verifying |
+| G76 | stale | dated Notes; certification deferred | verifying | verifying |
+| G4 | missing | dated Notes; certification deferred | verifying | verifying |
+| G63 | missing | dated Notes; certification deferred | active | active |
+| L1 | stale | dated Notes; certification deferred | verifying | verifying |
+| F7 | run | dated Notes; certification deferred | active | active |
+| F42 | failed | dated Notes; certification deferred | verifying | verifying |
+| I4 | missing | dated Notes; certification deferred | verifying | verifying |
+| I | stale | dated Notes; certification deferred | verifying | verifying |
+| F43 | failed | dated Notes; certification deferred | active | active |
+| I15 | run | dated Notes; certification deferred | active | active |
+| G65 | missing | dated Notes; certification deferred | verifying | verifying |
+| I81 | stale | dated Notes; certification deferred | verifying | verifying |
+| F3 | missing | dated Notes; certification deferred | verifying | verifying |
+| J2 | missing | dated Notes; certification deferred | verifying | verifying |
+| F | missing | dated Notes; certification deferred | verifying | verifying |
+| F8 | missing | dated Notes; certification deferred | active | active |
+| I14 | missing | dated Notes; certification deferred | backlog | backlog |
+| E6 | stale | dated Notes; certification deferred | active | active |
+| E94 | missing | dated Notes; certification deferred | active | active |
+| F22 | missing | dated Notes; certification deferred | active | active |
+| J6 | missing | dated Notes; certification deferred | verifying | verifying |
+| J | missing | dated Notes; certification deferred | verifying | verifying |
+| D91 | missing | dated Notes; certification deferred | verifying | verifying |
+| K | missing | dated Notes; certification deferred | verifying | verifying |
+| G1 | missing | dated Notes; certification deferred | active | active |
+| A82 | failed | dated Notes; certification deferred | verifying | verifying |
+| F21 | missing | dated Notes; certification deferred | active | active |
+| K4 | stale | dated Notes; certification deferred | active | active |
+| G71 | stale | dated Notes; certification deferred | verifying | verifying |
+| F1 | missing | dated Notes; certification deferred | verifying | verifying |
+| H16 | stale | dated Notes; certification deferred | active | active |
+| H51 | missing | dated Notes; certification deferred | active | active |
+| F6 | missing | dated Notes; certification deferred | verifying | verifying |
+
+No PASS is claimed for deferred features. Source receipts: `.spur/run/A83-verifyall-20261122-status-before.json`, `-status-selected.json`, `-status-notes.json`, and `-G8-sync.json`. The final after-dry-run and A83's real feature verification are recorded at the batch boundary. No L4 gate, fingerprint input or public workflow was changed.
+
 ### Testing
 
 **Pipeline verify results**
@@ -138,14 +196,14 @@ Corpus scope of this diff: 23 `docs/features/*.md` files (G8's status + a dated 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 G8 `active → blocked` applied through the feature tool | MET | `spur feature sync G8` → `applied: true`, `appliedHops: ['blocked']`; `spur feature show G8` reads `blocked`; the after-dry-run no longer proposes `active → blocked` |
-| R2 each `receiptPending` feature got a dated `## Notes` deferral naming the follow-up (path b) | MET | `.spur/run/1429-notes.json` (19 features, `notesWritten: true` each) written via `spur feature update <id> --section Notes --from-file`; each entry names the observed state, the reason (no feature-scoped verification receipt for the current tree) and the follow-up (`/sp-dev-verify-all`, then `spur feature sync <id>`); `git status --short docs/features` shows the 23 touched files |
-| R3 no status set by `feature update <id> <status>` or a file edit to bypass the L4 gate | MET | only `feature sync` (G8, and the two hops the `--all` pass applied), `feature update --section Notes` and `feature update --section Solution` were used; no `feature update <id> <status>` call and no direct file write in the whole run |
-| R4 Solution records before/after dry-run counts, per-feature action, receipt verdict and resulting status | MET | `## Solution` table: 20 → 17 drift, 19 → 17 receiptPending; per-feature rows for G8/E5/K3 and the 19 Notes rows; evidence files `.spur/run/1429-{before,after,notes}.json` |
+| R1 | MET | @batch `.spur/run/A83-verifyall-20261122-G8-sync.json` line 1 confirms the idempotent feature-tool action and blocked result. The saved before/after dry-runs both report G8 blocked; no direct status write was made. |
+| R2 | MET | @batch `.spur/run/A83-verifyall-20261122-status-before.json` lines 1-2773 freezes all 47 receiptPending rows. @batch `.spur/run/A83-verifyall-20261122-status-notes.json` lines 1-425 records 47 dated Notes writes and rereads, each naming a valid scoped verify/sync follow-up; every before/after status is identical. This is the task's explicit R2(b) path. |
+| R3 | MET | `docs/tasks5/1429_reconcile-feature-status-drift-through-the-feature-tool.md:133` records the native CLI-only repair. The saved per-feature before captures and Notes verification show no lifecycle status override; G8 used feature sync and all 47 other actions used feature update --section Notes. |
+| R4 | MET | Fix-pass disclosure: @batch `.spur/run/1429-verify-answer.txt` lines 1-33 and `.spur/run/1429-verdict.json` lines 1-67 carry the recertified rows; raw before/after evidence remains under `.spur/run/A83-verifyall-20261122-`. @batch `.spur/run/A83-verifyall-20261122-status-after.json` lines 1-2773 reports 231 present/224 evaluated, 18 differing proposals and 47 pending receipts after dated deferrals. The appended Solution table lists all 47 actual receipt states, actions and before/after statuses; the lost earlier counts are explicitly labelled historical rather than re-certified. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Feature status drift is reconciled through the feature tool | MET | command | `spur feature sync G8`, `spur feature update --section Notes` ×19, `spur feature sync --all --dry-run` before/after — recorded in `## Solution` |
+| Feature status drift is reconciled through the feature tool | MET | command | `docs/tasks5/1429_reconcile-feature-status-drift-through-the-feature-tool.md:133`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-status-notes.json` line 1-425. This is corpus evidence; runtime tests are not required for these Notes dispositions. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

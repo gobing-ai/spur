@@ -4,7 +4,7 @@ name: Board maturity browser proof across every built-in module
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:33.670Z
-updated_at: "2026-11-22T08:28:16.233Z"
+updated_at: "2026-11-22T18:13:42.916Z"
 feature_id: A83
 
 tags: ["A83"]
@@ -40,7 +40,7 @@ Runs after the shells (1426, 1427) and icons (1428) land. Complements the A82 in
   - no `failedRequests()` entry outside `/api/` and `/rpc/` data paths;
   - no `logEntries()` entry of level `error` from an uncaught exception or CSP violation.
 - [x] R3. The sidebar check: every built-in nav entry renders an `<svg>`, and its text content contains no emoji code points (`/\p{Extended_Pictographic}/u`).
-- [x] R4. It writes `docs/reports/board-maturity-e2e-receipt.json`, with a stable name and overwritten each run. The receipt holds `{generatedAt, modules: [{id, route, shell, icon, errors: [], screenshot}]}`, plus one screenshot per module at `docs/reports/board-maturity-<id>.png` (light theme, 1280×800).
+- [x] R4. It writes the live `.spur/run/board-maturity-proof/board-maturity-e2e-receipt.json`, with a stable name and overwritten each run. The receipt holds `{generatedAt, modules: [{id, route, shell, icon, errors: [], screenshot}]}`, plus one light-theme 1280×800 screenshot per module in that directory. A successful preview is explicitly published to `docs/reports/board-maturity-e2e-receipt.json` and `docs/reports/board-maturity-<id>.png`; the verification pass does not rewrite tracked proof inputs.
 - [x] R5. With no browser binary (`availableBrowserBinary()` undefined) it skips with a reason, as the existing heavy tests do. Any assertion failure still writes the receipt, with the failing rows, before it fails.
 
 Out of scope: dark-mode or mobile screenshot matrices, data-path proofs (each module's own tests own these), and integrations protocol checks (1425).
@@ -90,6 +90,15 @@ Artifacts: `docs/reports/board-maturity-e2e-receipt.json` (`passed: 10`, `failed
 
 Measured: `(cd apps/web && bun test tests/modules/board-maturity-browser.heavy.test.ts)` → 1 pass, 1 skip (the no-browser row) in 8.8 s; `tests/modules` → 416 tests, 0 fail.
 
+#### Forced verification repairs — 2026-11-22
+
+- Before-fix browser probes reproduced missing panel associations, incorrect tab stops, the misplaced Tasks tab strip, capped wide Tasks layout, hidden failed assets and missing uncaught-exception capture. The screenshot check also proved the old browser default was 800x600 rather than the required 1280x800.
+- The proof now pins and checks 1280x800 PNG dimensions, counts all ten sidebar entries and SVGs, checks active panel associations, and exercises wide Tasks plus the Designs/Plans document layouts.
+- The existing CDP helper captures runtime exceptions and failed network connections; asset exclusions inspect URL pathnames rather than query strings. Failure probes run after the real module proof so their deliberate errors cannot contaminate the module receipt.
+- Evidence-publishing correction (goal-equivalent Design change): live artifacts use the existing A81 convention under `.spur/run/board-maturity-proof/`; the committed `docs/reports/` snapshot is refreshed explicitly from a passing run. Rewriting tracked screenshots/receipts inside the feature pass changes its inputs and invalidates its digest; no L4 rule or digest exclusion was changed.
+- The Integrations active tab panel now wraps loading/diagnostic states as well. Its shared heavy proof writes to `.spur/run/integrations-proof/` through an optional internal receipt destination; the standalone script's canonical docs/report default is preserved.
+- Receipt writing runs in teardown too, and missing module rows count as failures. The source owns its artifact directory before any screenshot write.
+
 ### Testing
 
 **Pipeline verify results**
@@ -98,16 +107,15 @@ Measured: `(cd apps/web && bun test tests/modules/board-maturity-browser.heavy.t
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 builds and serves the Board once, then visits `/board/<route>` for the frozen ten modules | MET | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:46-57` (frozen list), `:110-135` (one build, one server, one page) — run: 1 pass in 8.8 s |
-| R2 per module: exactly one `[data-<module>-shell]`, one kit header with an `<svg>` icon and the module title, no error-boundary fallback, no non-data asset failure, no uncaught/CSP error | MET | `board-maturity-browser.heavy.test.ts:137-186` (`shells`, `h1`, `iconSvg`, boundary text, `assetFailures()`, `pageErrors()`), receipt `docs/reports/board-maturity-e2e-receipt.json` → all ten rows `shell: true, icon: true, errors: []` |
-| R3 sidebar: every built-in nav entry renders an `<svg>` and no `Extended_Pictographic` text | MET | `board-maturity-browser.heavy.test.ts:189-198`; receipt `sidebar: {ent: 10, withSvg: 10, emoji: []}` (1428's vector table is what makes this pass) |
-| R4 receipt `docs/reports/board-maturity-e2e-receipt.json` (stable name, overwritten) with `{generatedAt, modules[]}` + one screenshot per module at `docs/reports/board-maturity-<id>.png` | MET | `:100-127` (`writeReceipt`), `:170-176` (screenshot per module); `ls docs/reports/board-maturity-*.png` → 10 files; receipt shows `passed: 10, failed: 0` |
-| R5 skips with a reason without a browser binary, and a failing run still writes the receipt first | MET | `:203-206` (`test.skipIf(!browserReady)`), receipt written before the assertions (`:167-178`) |
-| Findings fixed by the proof | MET | `apps/web/src/modules/{designs,features,plans}/*Shell.tsx` loading/error branches now render inside `ModuleShell` + `ModuleHeader` (they rendered a bare `<div>`: no shell, no header, no title while data was unreachable); `IntegrationsModule.tsx:43` gained `data-integrations-shell` |
+| R1 | MET | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:35` freezes ten ids/routes and builds/serves once. The browser-backed run passed all ten modules; the no-browser branch was the one skipped case because Chromium was available. |
+| R2 | MET | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:142` checks shell/header/title/vector, active panel labels, tab stops, module fallback and real asset/runtime errors. Explicit asset-query, network-failure and uncaught-exception probes now pass after first failing; the existing CDP helper captures both event families. |
+| R3 | MET | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:210` measures the sidebar, checks ten entries/ten vectors, compares the exact frozen id set and rejects glyph text. The fresh receipt reports all ten entries with no emoji. |
+| R4 | MET | `docs/reports/board-maturity-proof.md:1` documents live ignored output plus deliberate canonical publication. The fresh receipt and fourteen screenshots were published; each primary PNG was checked at exactly 1280x800. Live paths preserve stable basenames without changing the verifier's tracked inputs. |
+| R5 | MET | Fix-pass disclosure: @batch `.spur/run/1430-verify-answer.txt` lines 1-34 and `.spur/run/1430-verdict.json` lines 1-72 carry the recertified rows; raw before/after evidence remains under `.spur/run/A83-verifyall-20261122-`. `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:112` writes a receipt from teardown, including on failure; missing rows count as failures. The explicit browser-unavailable branch is skipped with its named reason when Chromium is present. Before-fix red runs retained their receipts; the final browser run passes. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A browser proof loads every built-in module and leaves an artifact | MET | command | `bun test tests/modules/board-maturity-browser.heavy.test.ts` → 1 pass; `docs/reports/board-maturity-e2e-receipt.json` + 10 PNGs |
+| A browser proof loads every built-in module and leaves an artifact | MET | test | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:142`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-browser-publish.log` line 1-16, plus @batch `.spur/run/A83-verifyall-20261122-web-final.log` lines 1-326 where applicable. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

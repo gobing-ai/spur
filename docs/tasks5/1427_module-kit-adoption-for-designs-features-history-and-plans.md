@@ -4,7 +4,7 @@ name: Module-kit adoption for designs, features, history and plans
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:32.204Z
-updated_at: "2026-11-22T07:36:47.785Z"
+updated_at: "2026-11-22T18:13:40.013Z"
 feature_id: A83
 
 tags: ["A83"]
@@ -93,6 +93,11 @@ Notes
 - History keeps its tab in local state (`useState('summary')`), so there is no URL contract to preserve there; its `onChange` is the only wiring the migration touches.
 - The three-pane layouts are untouched: the kit wraps, the workspace container still owns the 1200/1600 caps and the left/right docks.
 
+#### Forced verification repairs — 2026-11-22
+
+- History now renders the active panel id/label that the shared tab strip points to; badge ids, tab ids, state and content remain unchanged.
+- The shared browser proof additionally checks document panes with contract-shaped document responses at 1280px and 375px, separate from backend data-path validation.
+
 ### Testing
 
 **Pipeline verify results**
@@ -101,16 +106,15 @@ Notes
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 Designs/Plans/Features render `ModuleShell` > `ModuleHeader` with their controls in `filters`; History renders shell > header > `ModuleTabs` over `HISTORY_TABS` | MET | `apps/web/src/modules/history/HistoryShell.tsx:519-560`, `apps/web/src/modules/designs/DesignsShell.tsx:163-205`, `apps/web/src/modules/features/FeaturesShell.tsx:214-262`, `apps/web/src/modules/plans/PlansShell.tsx:148-190` — `apps/web/tests/modules/history/HistoryShell.test.tsx` (shell probe, single `h1`, kit strip) + the structural probe in `apps/web/tests/modules/module-kit-adoption.test.ts` |
-| R2 `ModuleTab.badge` renders after the label with `data-testid="<idPrefix>-badge-<id>"`; existing callers compile; kit test covers present and absent | MET | `apps/web/src/components/module-kit/ModuleTabs.tsx:2-12,58-72` — `apps/web/tests/components/module-kit.test.tsx` ("a tab badge renders after its label, and only when present": `badge: 12`, `badge: null`, absent) |
-| R3 History badge ids stay `history-badge-<id>`; tab ids, deep links, scrubber and filters behave as before | MET | `HistoryShell.tsx:546-553` (`idPrefix="history"`), badges passed as `tabsWithBadges` — `HistoryShell.test.tsx` ("tab badges keep their ids through the kit slot": every `[data-testid^="history-badge-"]` matches `history-badge-[a-z-]+`; "every tab is wired to the kit contract": `history-<id>` / `history-panel-<id>` pair) |
-| R4 the three-pane layout of Designs and Plans is unchanged | MET | `DesignsShell.tsx:150-157` and `PlansShell.tsx:148` keep `data-designs-workspace` / the dock structure inside `ModuleShell`; the workspace width caps (`3xl:max-w-[1200px] 4xl:max-w-[1600px]`) are untouched — `bun test tests/modules/{designs,plans}` green |
-| R5 no hand-built `<header>`/`<h1>`/tab strip in the four shells | MET | `apps/web/tests/modules/module-kit-adoption.test.ts` (the four 1427 sources added; asserts no `<h1`, no `role="tablist"`, kit import present) |
-| Aggregate-run correctness of the shell mounts | MET | `apps/web/tests/test-helpers/rpc-client-mock.ts` — default api surface widened and `buildFullRpcMock` merges overrides; `bun test tests/modules` → 427 pass, 0 fail (repeated) |
+| R1 | MET | `apps/web/src/modules/designs/DesignsShell.tsx:167`, `apps/web/src/modules/plans/PlansShell.tsx:162`, `apps/web/src/modules/features/FeaturesShell.tsx:226`, `apps/web/src/modules/history/HistoryShell.tsx:524` use the kit. The fresh real-browser sweep proves all ten routes; ready/loading/diagnostic branches retain their headers. |
+| R2 | MET | `apps/web/src/components/module-kit/ModuleTabs.tsx:4` retains optional string/number/null badges; `apps/web/tests/components/module-kit.test.tsx:58` proves present/null/absent behavior. Focused component tests pass. |
+| R3 | MET | `apps/web/src/modules/history/HistoryShell.tsx:448` maps unchanged HISTORY_TABS to badges; line 548 retains the history badge prefix and line 569 now supplies the labelled active panel. Tab bodies, filter handlers and scrubber code remain unchanged; the focused History tests pass. |
+| R4 | MET | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:235` serves real built UI with contract-shaped document fixtures: Designs and Plans each have three nonzero desktop panes and a readable 343px body after the existing 375px dock toggles. Four layout screenshots and document-layouts.json were produced. |
+| R5 | MET | Fix-pass disclosure: @batch `.spur/run/1427-verify-answer.txt` lines 1-34 and `.spur/run/1427-verdict.json` lines 1-72 carry the recertified rows; raw before/after evidence remains under `.spur/run/A83-verifyall-20261122-`. `apps/web/tests/modules/module-kit-adoption.test.ts:36` and the fresh four-source scan prove no hand-built header/h1/tab strip remains; all four shells use ModuleHeader. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Every built-in Board module renders through the module-kit shell | MET | test | `apps/web/tests/modules/module-kit-adoption.test.ts` now covers all eight migrated modules (1426's four + these four) |
+| Every built-in Board module renders through the module-kit shell | MET | test | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:235`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-browser-publish.log` line 1-16, plus @batch `.spur/run/A83-verifyall-20261122-web-final.log` lines 1-326 where applicable. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

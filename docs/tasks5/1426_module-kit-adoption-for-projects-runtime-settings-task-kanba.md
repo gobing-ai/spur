@@ -4,7 +4,7 @@ name: Module-kit adoption for projects, runtime, settings, task-kanban and searc
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:07.473Z
-updated_at: "2026-11-22T07:15:37.002Z"
+updated_at: "2026-11-22T18:13:39.055Z"
 feature_id: A83
 
 tags: ["A83"]
@@ -104,6 +104,11 @@ Notes
 - The Projects status node is `sr-only` when healthy: the old header printed the state attribute as a data hook only, so no visible text was added.
 - Body layout stays module-owned (`className="projects h-full overflow-hidden"` etc. on `ModuleShell`), including Tasks' full-bleed board under a centred header.
 
+#### Forced verification repairs — 2026-11-22
+
+- `ModuleTabs` now exposes exactly one sequential tab stop while keeping arrow-key selection and focus; the component regression failed before the correction.
+- Tasks puts its tab strip in the header tabs slot, labels the active panel, and retains its full-bleed body with a centered header. Real-browser checks reproduce the old tab/panel and wide-layout failures.
+
 ### Testing
 
 **Pipeline verify results**
@@ -112,17 +117,16 @@ Notes
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 Projects, Settings, Tasks render `ModuleShell` > `ModuleHeader` (ModuleIcon lg, title, status) > `ModuleTabs`; Search renders shell + header, no tabs | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:70-95`, `apps/web/src/modules/settings/SettingsShell.tsx:19-46`, `apps/web/src/modules/task-kanban/TasksShell.tsx:99-185`, `apps/web/src/modules/search/index.tsx:196-208` — `apps/web/tests/modules/{settings/SettingsShell,projects/ProjectsShell,task-kanban/TasksShell.kit,search/SearchShell}.test.tsx` (shell attribute, single `h1`, kit strip / no strip) |
-| R2 Tasks' strip gains real tab semantics; "+ New Task" moves to `filters` with unchanged behaviour | MET | `apps/web/src/modules/task-kanban/TasksShell.tsx:150-182` (`ModuleTabs` + the button inside `filters`) — `TasksShell.kit.test.tsx` ("a real tab strip" asserts `aria-selected` on every tab; "+ New Task" still offered) |
-| R3 tab ids, URLs, deep links and tab content unchanged; existing module tests green | MET | `useProjectTab` / `useSettingsTab` / `useTaskParams` untouched (`git diff` shows only shells + index.tsx + kit); `idPrefix` keeps `projects-tab-<id>` / `settings-tab-<id>`; `bun test tests/modules/{projects,settings,task-kanban,search}` → 155 pass, including the pre-existing suites |
-| R4 Projects description and comment match the tabs | MET | `apps/web/src/modules/projects/index.tsx:9-10` (comment names Fleet/Inbox/Database), `:24` (`description: 'Fleet, inbox and database for this project'`) — `ProjectsShell.test.tsx` ("the module description names the surfaces it has") |
-| R5 no migrated module keeps a hand-built `<h1>` or `role="tablist"` | MET | `apps/web/tests/modules/module-kit-adoption.test.ts` (source probe over the four sources: no `<h1`, no `role="tablist"`, kit import present) |
-| Kit arrow-key navigation preserved without per-module duplication | MET | `apps/web/src/components/module-kit/ModuleTabs.tsx:38-58` (roving Left/Right with wrapping, focus follows) — `apps/web/tests/components/module-kit.test.tsx` (two new tests) |
+| R1 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:53`, `apps/web/src/modules/settings/SettingsShell.tsx:19`, `apps/web/src/modules/task-kanban/TasksShell.tsx:99`, `apps/web/src/modules/search/index.tsx:196` render the shared shell/header. The ten-module browser sweep and 254 focused web tests passed. |
+| R2 | MET | `apps/web/src/components/module-kit/ModuleTabs.tsx:76` provides selected-only tab stops; Tasks keeps New Task in filters and its strip in the header tabs slot (`apps/web/src/modules/task-kanban/TasksShell.tsx:176`). Component and real-browser regressions failed before the fixes and now pass. |
+| R3 | MET | `apps/web/src/modules/projects/useProjectTab.ts:1`, `apps/web/src/modules/settings/useSettingsTab.ts:1`, `apps/web/src/modules/task-kanban/useTaskParams.ts:1` and the exported headerless `apps/web/src/modules/task-kanban/index.tsx:18` retain their contracts. Tab arrays and routing helpers were not changed; focused module tests and real browser navigation passed. |
+| R4 | MET | `apps/web/src/modules/projects/index.tsx:6` describes Fleet/Inbox/Database and preserves order 45; current descriptor copy at line 21 is exact. Obsolete module references were removed from descriptor/draft comments. |
+| R5 | MET | Fix-pass disclosure: @batch `.spur/run/1426-verify-answer.txt` lines 1-35 and `.spur/run/1426-verdict.json` lines 1-78 carry the recertified rows; raw before/after evidence remains under `.spur/run/A83-verifyall-20261122-`. `apps/web/tests/modules/module-kit-adoption.test.ts:36` passes the eight-source header/tablist probe; a fresh explicit source scan also found no local header/h1/tablist markup in the migrated files. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Every built-in Board module renders through the module-kit shell | MET | test | `apps/web/tests/modules/module-kit-adoption.test.ts` + the four shell suites (this task covers projects, settings, tasks, search; designs/features/history/plans are 1427's scope and stay out of this verdict) |
-| AC2 — Module descriptions and comments match current tabs and modules | MET | test | `ProjectsShell.test.tsx` description assertion + `projects/index.tsx:9-10,24` |
+| Every built-in Board module renders through the module-kit shell | MET | test | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:142`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-components-green.log` line 1-16, plus @batch `.spur/run/A83-verifyall-20261122-web-final.log` lines 1-326 where applicable. |
+| Module descriptions and comments match current tabs and modules | MET | test | `apps/web/tests/modules/board-maturity-browser.heavy.test.ts:142`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-components-green.log` line 1-16, plus @batch `.spur/run/A83-verifyall-20261122-web-final.log` lines 1-326 where applicable. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

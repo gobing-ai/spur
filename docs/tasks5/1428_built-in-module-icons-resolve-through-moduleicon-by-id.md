@@ -4,7 +4,7 @@ name: Built-in module icons resolve through ModuleIcon by id
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:32.650Z
-updated_at: "2026-11-22T07:42:04.804Z"
+updated_at: "2026-11-22T18:13:40.985Z"
 feature_id: A83
 
 tags: ["A83"]
@@ -98,6 +98,11 @@ Notes
 - Downstream compatibility is the emoji ALIAS list, not a special case per module: `🏷`/`🏷️`/`🎯` all still resolve to `Tag`, `⚙`/`⚙️` to `Settings`, `🔎` to `Search`.
 - `integrations` (added in A82) carried `🔌`; it is not in the nine, so it now falls back to `Layers` until a table entry is added — recorded as a review finding rather than silently inventing a mapping.
 
+#### Forced verification repairs — 2026-11-22
+
+- Registry lookup is own-property-only: downstream ids `constructor`, `toString` and `__proto__` use the literal/fallback paths instead of resolving inherited object properties. All three DOM regressions failed before the fix.
+- Integrations now has its own Plug vector and accessible name in the same built-in table. Its emoji alias list stays empty, preserving unknown downstream literals. This resolves the previously recorded generic-fallback finding without changing the downstream schema.
+
 ### Testing
 
 **Pipeline verify results**
@@ -106,16 +111,16 @@ Notes
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 `WebModule.icon` optional; the discovery guard accepts a missing icon or a string | MET | `apps/web/src/modules/types.ts:6-11`, `apps/web/src/modules/discover.ts:46-52` — `apps/web/tests/modules/discover.test.ts` ("every discovered module is WebModule-shaped" now allows absent) |
-| R2 the nine built-in descriptors drop their emoji | MET | `apps/web/src/modules/{designs,features,history,observability,plans,projects,search,settings,task-kanban}/index.tsx` (no `icon:`), plus `integrations` — `apps/web/tests/modules/{observability,history/history-module}.test.ts` assert `icon` is undefined |
-| R3 `ModuleIcon` resolves a vector icon by id for all nine, adding `Search`; a raw glyph `<span>` only for an unmatched declared string | MET | `apps/web/src/components/ModuleIcon.tsx:26-44` (one `BUILTIN` table), `:66-84` (resolution order) — `apps/web/tests/components/module-icon.test.tsx`: every id renders an `svg`, `search` differs from the fallback, unknown glyph renders verbatim |
-| R4 sr-only text for `size="lg"` comes from the id → label map; `fallbackEmojiMap` deleted | MET | `ModuleIcon.tsx:38-42` (labels in the same table), `:79-86` — `module-icon.test.tsx` asserts no emoji code point in the `lg` text and that a non-empty name renders |
-| R5 downstream `icon: '📡'` still renders the Radio vector, any other string renders verbatim, config validation unchanged | MET | `ModuleIcon.tsx:47-56` (emoji alias lookup), no change to `packages/config/src/board-modules.ts` — `module-icon.test.tsx` ("a legacy emoji still renders its vector icon" asserts the sr label is `Observability`; "an unknown glyph renders verbatim") |
+| R1 | MET | `apps/web/src/modules/types.ts:11` makes the descriptor icon optional; `apps/web/src/modules/discover.ts:51` accepts missing/undefined/string icons. Descriptor/discovery tests passed in the 254-case focused web suite. |
+| R2 | MET | `apps/web/src/modules/projects/index.tsx:15` and the other nine current built-in descriptors have no icon literal; the current source scan finds only descriptions. Runtime remains a build manifest rather than a discovered module. |
+| R3 | MET | `apps/web/src/components/ModuleIcon.tsx:42` owns id/vector/name/legacy aliases in one table, including Search and Integrations. The own-property lookup at line 57 handles inherited-key ids safely; three regressions failed before the repair. |
+| R4 | MET | `apps/web/src/components/ModuleIcon.tsx:42` stores accessible labels with vectors; the old fallbackEmojiMap is absent. Every built-in id renders an SVG plus a non-glyph large-label name in the focused component proof. |
+| R5 | MET | Fix-pass disclosure: @batch `.spur/run/1428-verify-answer.txt` lines 1-35 and `.spur/run/1428-verdict.json` lines 1-78 carry the recertified rows; raw before/after evidence remains under `.spur/run/A83-verifyall-20261122-`. `apps/web/tests/components/module-icon.test.tsx:66` covers legacy Radio compatibility, unknown literal glyphs, and fallback vectors, including reserved object-key ids. The downstream config schema was not changed; Integrations adds no new emoji alias. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Built-in module icons resolve through ModuleIcon by module id | MET | test | `apps/web/tests/components/module-icon.test.tsx` (nine ids, svg + label) |
-| AC2 — Downstream module icon declarations keep working unchanged | MET | test | `module-icon.test.tsx` (legacy emoji alias, unknown glyph verbatim, no-entry fallback) + `packages/config` schema untouched |
+| Built-in module icons resolve through ModuleIcon by module id | MET | test | `apps/web/tests/components/module-icon.test.tsx:35`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-components-green.log` line 1-16, plus @batch `.spur/run/A83-verifyall-20261122-web-final.log` lines 1-326 where applicable. |
+| Downstream module icon declarations keep working unchanged | MET | test | `apps/web/tests/components/module-icon.test.tsx:35`; fresh evidence @batch `.spur/run/A83-verifyall-20261122-components-green.log` line 1-16, plus @batch `.spur/run/A83-verifyall-20261122-web-final.log` lines 1-326 where applicable. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
