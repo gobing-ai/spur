@@ -440,7 +440,7 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                         <div
                             role="status"
                             data-testid="project-switcher-findings"
-                            className="mb-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-300"
+                            className="mb-1 max-h-40 overflow-y-auto space-y-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-snug text-amber-800 dark:text-amber-300 break-words [overflow-wrap:anywhere]"
                         >
                             {findings.map((message) => (
                                 <div key={message}>{message}</div>
