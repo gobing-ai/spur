@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "E2E proof: idea run files follow-ups and discovery findings"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T03:48:21.562Z
-updated_at: "2026-11-22T04:35:17.410Z"
+updated_at: "2026-11-22T06:04:47.078Z"
 feature_id: I15
 
 dependencies: ["1434"]
 tags: ["I15"]
 priority: P2
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1435. E2E proof: idea run files follow-ups and discovery findings
@@ -29,26 +31,26 @@ Builds on 1434 (handoff completeness check and report sections) and on the featu
 
 ### Requirements
 
-- [ ] R1. `apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts` runs the bundled `idea-pipeline.yaml` in a temp project with `executor: host`, `profile: auto`, `design: skip`, `idea_approved: true`, from start to the terminal `handoff` state. Each host work item is answered by writing its `expectFiles` plus a receipt.
-- [ ] R2. The scripted eval report's `## Requirement inventory` has:
+- [x] R1. `apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts` runs the bundled `idea-pipeline.yaml` in a temp project with `executor: host`, `profile: auto`, `design: skip`, `idea_approved: true`, from start to the terminal `handoff` state. Each host work item is answered by writing its `expectFiles` plus a receipt.
+- [x] R2. The scripted eval report's `## Requirement inventory` has:
   - I1 and I2 owing items (covered by the AC);
   - I3 `[deferred: follow-up — Preview export]`;
   - I4 `[deferred: excluded — operator ruled out]`;
   - I5 `(source: discovery — src/preview.ts:12) [deferred: follow-up — Preview cache invalidation]`.
 
   The scripted feature-create step creates the I3/I5 features with real `spur feature create` calls and writes the ledger.
-- [ ] R3. Assertions, from `--json` output and run-folder files only:
+- [x] R3. Assertions, from `--json` output and run-folder files only:
   - the run ends in `handoff`;
   - `spur feature show` resolves both follow-up ids;
   - the ledger has exactly I3 and I5;
   - no feature titled after I4 exists;
   - the handoff report has `## Follow-ups filed` with both ids and `/sp:dev-plan --feature <id>`, `## Excluded` with I4 and its reason, and exactly one `## Next command`.
-- [ ] R4. A negative leg: the same fixture with the I5 row removed from the ledger after feature-create makes `spur feature handoff` exit nonzero naming I5, with no handoff report written. Drive it directly against the run folder; no second full pipeline run is needed.
-- [ ] R5. It writes `docs/reports/idea-followup-ledger-e2e-receipt.json` (stable name, overwritten each run) with `{generatedAt, runId, finalState, ledger, followupsFiled, excluded, negativeLeg: {exitCode, message}}`.
+- [x] R4. A negative leg: the same fixture with the I5 row removed from the ledger after feature-create makes `spur feature handoff` exit nonzero naming I5, with no handoff report written. Drive it directly against the run folder; no second full pipeline run is needed.
+- [x] R5. It writes `docs/reports/idea-followup-ledger-e2e-receipt.json` (stable name, overwritten each run) with `{generatedAt, runId, finalState, ledger, followupsFiled, excluded, negativeLeg: {exitCode, message}}`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — An E2E idea run files follow-ups and discovery findings and leaves a receipt
+- [x] AC1 — An E2E idea run files follow-ups and discovery findings and leaves a receipt
 
 ### Q&A
 
@@ -82,13 +84,36 @@ Premises (verified 2026-11-21): host-executor E2E pattern `apps/cli/tests/workfl
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+- `apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts` — new heavy, subprocess-driven E2E (no in-process `main()`): runs the bundled `config/workflows/idea-pipeline.yaml` via real `spur` subprocesses (`runCli`) in a temp project with `executor:host`, `profile:auto`, `design:skip`, `idea_approved:true`; each host work-item pause is answered by writing its `expectFiles` after the pause appears (stage onEnter shells delete stale artifacts) plus a receipt at `.spur/run/<runId>/receipts/<state>.json` (shape per `packages/app/src/workflow/receipt.ts`) and `workflow continue --answer-text`; the scripted feature-create stage files I3/I5 through real `spur feature create --parent` + `feature update --section` calls and writes the follow-up ledger validated by the yaml shell gate; R2 fixture carries the exact inventory (I3/I5 deferred follow-ups, I4 excluded, I5 discovery-source prefix); asserts R3 terminal `handoff`, ledger exactly I3+I5 resolvable via `feature show`, no I4-titled feature, report sections `## Follow-ups filed` (both ids + `/sp:dev-plan --feature <id>`), `## Excluded` (I4 + reason), exactly one `## Next command`; R4 negative leg re-drives `feature handoff` against a fresh run id with the I5 ledger row removed and asserts nonzero exit naming I5 with no report written; writes the observed outcome to `docs/reports/idea-followup-ledger-e2e-receipt.json` (biome-cleaned via `bunx biome check --write`, 1309 parity-evidence pattern).
+
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test: apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts spawns real spur subprocesses, drives config/workflows/idea-pipeline.yaml host-executed to finalState handoff, answering every expectFiles pause with receipts (1/1 pass, ~25s) |
+| R2 | MET | test: same file — scripted eval report fixture carries I1/I2 covered, I3 follow-up, I4 excluded with reason, I5 discovery-prefixed follow-up; feature-create stage uses real spur feature create + ledger write of I3/I5 rows |
+| R3 | MET | test: same file asserts status done/finalState handoff, both ids resolve via feature show, ledger exactly I3+I5, no I4-titled feature, report sections Follow-ups filed (both ids + /sp:dev-plan --feature <id>), Excluded (I4 + reason), exactly one Next command |
+| R4 | MET | test: negative leg — ledger without I5 row -> spur feature handoff exit 1 naming "follow-up item I5 has no ledger row", no handoff report written |
+| R5 | MET | test: finally-block writes docs/reports/idea-followup-ledger-e2e-receipt.json with generatedAt/runId/finalState/ledger/followupsFiled/excluded/negativeLeg; command: bunx biome check on the artifact -> clean |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | command: bun test apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts 1/1 pass — full idea run files follow-ups (I3, I5 -> real features) and discovery findings, leaves docs/reports/idea-followup-ledger-e2e-receipt.json |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -97,4 +122,7 @@ Premises (verified 2026-11-21): host-executor E2E pattern `apps/cli/tests/workfl
 ### History
 
 - 2026-11-22T03:48:24.480Z backlog → todo (system)
+- 2026-11-22T06:03:02.112Z todo → wip (system)
+- 2026-11-22T06:04:45.045Z wip → testing (system)
+- 2026-11-22T06:04:47.073Z testing → done (system)
 

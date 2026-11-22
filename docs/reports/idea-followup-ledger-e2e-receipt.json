@@ -1,0 +1,28 @@
+{
+    "generatedAt": "2026-11-22T06:04:20.687Z",
+    "runId": "idea-followup-e2e",
+    "finalState": "handoff",
+    "ledger": [
+        {
+            "item": "I3",
+            "disposition": "filed",
+            "featureId": "A1",
+            "title": "Preview export"
+        },
+        {
+            "item": "I5",
+            "disposition": "filed",
+            "featureId": "A2",
+            "title": "Preview cache invalidation"
+        }
+    ],
+    "followupsFiled": [
+        "I3 → A1 (Preview export) — next: /sp:dev-plan --feature A1",
+        "I5 → A2 (Preview cache invalidation) — next: /sp:dev-plan --feature A2"
+    ],
+    "excluded": ["I4 — operator ruled out"],
+    "negativeLeg": {
+        "exitCode": 1,
+        "message": "idea-handoff: Follow-up ledger incomplete: follow-up ledger: follow-up item I5 has no ledger row"
+    }
+}
