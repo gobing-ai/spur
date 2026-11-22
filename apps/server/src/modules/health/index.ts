@@ -464,12 +464,16 @@ export const healthModule: ServerModule = {
 
             // Same derivation the CLI warns from: an ambiguous prefix or a path registered for two
             // hosts explains a route failure the Board would otherwise surface as a bare 502.
+            const registryFindings = findRegistryFindings(rawProjects);
+            // `findRegistrySuspects` also flags `duplicate-path`, which `findRegistryFindings`
+            // already surfaces with its host-selection remedy; skip pure `duplicate-path` suspects
+            // here so the Board does not show two warnings for the same duplicate path.
+            const suspects = findRegistrySuspects(rawProjects, { tmpdir: tmpdir() }).filter((s) =>
+                s.reasons.some((r) => r !== 'duplicate-path'),
+            );
             return c.json({
                 projects,
-                findings: [
-                    ...findRegistryFindings(rawProjects),
-                    ...findRegistrySuspects(rawProjects, { tmpdir: tmpdir() }),
-                ],
+                findings: [...registryFindings, ...suspects],
             });
         });
 

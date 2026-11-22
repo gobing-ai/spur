@@ -200,6 +200,23 @@ describe('healthModule', () => {
         // A single prefix claim is not a collision: only the local entry carries the prefix.
         expect(body.findings.some((f) => f.kind === 'prefix-collision')).toBe(false);
         expect(duplicate?.message).toContain(normalizeProjectPath(tempDir));
+        // `findRegistrySuspects` must not emit a second warning for a non-ephemeral `duplicate-path`.
+        const nonEphemeralPath = normalizeProjectPath(process.cwd());
+        const nonEphemeralRegistry = new ProjectRegistry(projectsFile);
+        await nonEphemeralRegistry.upsert({
+            name: 'shared',
+            path: nonEphemeralPath,
+            host: '192.168.87.27',
+            port: 3003,
+        });
+        await nonEphemeralRegistry.upsert({ name: 'shared', path: nonEphemeralPath, port: 0, prefix: '/shared' });
+        const res2 = await app.request('/api/projects');
+        const body2 = (await res2.json()) as {
+            findings: Array<{ kind?: string; message: string; path?: string }>;
+        };
+        const sharedFindings = body2.findings.filter((f) => f.message.includes(nonEphemeralPath));
+        expect(sharedFindings).toHaveLength(1);
+        expect(sharedFindings[0]?.kind).toBe('duplicate-path');
     });
 
     test('/api/projects returns empty projects list without ServerContext', async () => {
