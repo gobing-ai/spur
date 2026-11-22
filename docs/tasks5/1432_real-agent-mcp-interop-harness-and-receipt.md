@@ -4,7 +4,7 @@ name: Real-agent MCP interop harness and receipt
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:34.552Z
-updated_at: "2026-11-22T17:39:49.996Z"
+updated_at: "2026-11-22T19:03:00.890Z"
 feature_id: B93
 
 tags: ["B93"]
@@ -81,24 +81,20 @@ Premises (verified 2026-11-21): `spur agent list|run` exist (`spur agent --help`
 
 ### Solution
 
-| File | Change | Why |
-| --- | --- | --- |
-| `scripts/commands/mcp-agent-interop.ts` | the harness: temp project + `spur self serve` (MCP on, generated bearer) + an in-process recording proxy + per-agent HTTP and stdio cases, one classification per row, receipt after every case | R1/R2/R4 |
-| `scripts/spur-dev.ts:84,153` · `package.json:105` | `mcp-agent-interop` registered (COMMANDS, switch case, script) | one dispatcher entry point; its case labels are pinned by `a93-script-ownership` |
-| `docs/reports/mcp-agent-interop-receipt.json` | the artifact: `serverProtocolFloor: 2026-07-28` and 21 rows | R4 |
+Forced verification repairs — 2026-11-22
 
-How the requirements are met
-- **R1** one boot, one proxy (`Bun.serve` on an ephemeral port), two transports per agent: HTTP points the agent at the proxy URL; stdio points it at `bun apps/cli/src/index.ts mcp --url <proxy>/mcp`, with `SPUR_MCP_AUTH_ENV`/`SPUR_MCP_TOKEN` in the child env so the bridge forwards the bearer.
-- **R2** the row comes from the PROXY, never the agent's prose: `{method (Mcp-Method header or body.method), Mcp-Protocol-Version, status, error.code}`; `clientRevision` is the first revision the proxy saw; `toolsSeen` is "a `tools/list` request happened". The Authorization header and bodies are never logged.
-- **R3** classification is one of `pass` / `rejected-legacy-revision` (proxy saw `PROTOCOL_VERSION_UNSUPPORTED`) / `no-request` / `auth-failed` / `call-failed` / `not-installed` / `config-isolation-unavailable` / `agent-error`. A missing binary is `not-installed` (the version probe is guarded, so a missing executable cannot abort the run — it did on the first attempt with `antigravity`).
-- **R4** stable receipt name, overwritten; `generatedAt`, `serverProtocolFloor`, rows; per-case persistence so an interrupted run keeps its rows; `--agents=a,b` reruns a subset and merges by `(agent, transport)`. Exit 0 = every installed agent classified (a `pass` is not required).
-- **R5** every case writes only inside the temp project. `CLAUDE_CONFIG_DIR` is pointed at the temp tree (with the operator's `~/.claude.json` **copied** in, so the turn is authenticated as they are), `OPENCLAW_CONFIG_PATH`/`OPENCLAW_STATE_DIR` likewise, `pi`/`gemini`/`opencode` read project-local files, `omp` takes a `--config` overlay. The run hashes nine known global config paths before and after and exits 1 if one changed — that check fired on the first attempt (`~/.claude.json`), which is how the `CLAUDE_CONFIG_DIR` seeding was found.
+The interop fixture remains repository-only under ADR-130; no new public Spur command was added.
 
-Measured (this environment, 2026-11-22)
-- 20 rows, exit 0, no global config change: 2 `pass` (**omp over HTTP and over stdio**: `server/discover`, `tools/list`, `tools/call` all 200 at revision `2026-07-28`), 10 `no-request`, 3 `config-isolation-unavailable` (codex HTTP, grok), 4 `not-installed` (antigravity, hermes), 1 `call-failed` (claude over stdio: discover+tools/list 200, no `tools/call`).
-- `requests` is capped at 20 per row with `requestCount` carrying the true total: codex's first stdio attempt retried the bridge 4313 times (401s, no bearer in its scrubbed env), which is exactly why the cap exists.
-- Codex: **`-c mcp_servers.spur.command/args` is a verified stdio mechanism** (`codex -c … mcp list` accepts it), and its HTTP transport needs `codex mcp add --url`, which writes `~/.codex/config.toml` — hence `config-isolation-unavailable` for HTTP, with that reason recorded in the row.
-- The agent-side environment is the limit here, not the harness: claude is unauthenticated in this sandbox, gemini refuses the untrusted directory, opencode/pi did not see a `spur` server, openclaw's CLI rejected the invocation. Each is recorded with its own excerpt rather than smoothed over.
+- `scripts/commands/mcp-agent-interop.ts` boots a real MCP-enabled server in a temporary project, fronts `/mcp` with a recording proxy, and records two transports for each of the ten configured clients. Missing binaries are recorded without installation.
+- Repaired the HTTP target path, routing headers and HTTP method forwarding. The proxy decodes upstream compression without forwarding stale encoding/length headers, preserves the response type, and reads protocol errors from both JSON-RPC and bare envelopes.
+- Classification now requires a successful catalog and the actual read-only `sp_task_list` response. JSON-RPC errors, tool errors, another tool, or a prior version rejection cannot manufacture a pass. Tool counts come from the response catalog, not an agent answer.
+- Codex uses a unique TOML MCP entry, avoiding inherited stdio fields and invalid JSON-as-TOML env values. Its installed native app-server API creates an ephemeral read-only thread, lists the MCP catalog and calls the tool. This deliberately changes the design's model-selected Codex turn into a deterministic real-client operation; it still uses Codex's installed transport and the live server. Other clients receive the fixed prompt. Case budget is 120 seconds (stricter than the planned 180 seconds).
+- pi receives session-local trust for the generated fixture. Grok uses native project-scoped TOML, confirmed with its installed writer. OpenClaw uses `agent --local`, no channel delivery, an ephemeral session id, and a command/args stdio entry. Gemini and OpenCode account failures remain recorded rather than bypassed.
+- The stable receipt now includes per-row observation times, a completion flag, native request/body revision distinctions, real tool counts, and the global-config integrity result. Subset runs retain per-row observation times and drop obsolete harness-error rows; failed harness runs exit nonzero. Authorization and bodies are never recorded. Shared redaction helpers sanitize bounded excerpts.
+- All ten known global config paths are hashed before/after. Earlier eight-path runs also had a separate unchanged audit for the two additional native paths. The final complete run is the authoritative evidence; successful classification does not mean every agent's MCP call succeeded.
+- `apps/cli/tests/mcp-agent-interop.test.ts` contains failure-first proxy/config/client-driver regressions. The live A94 ownership inventory now includes this fixture and its callers; the frozen A93 report is unchanged.
+
+The latest receipt and its per-row failures are authoritative. No provider credentials, account funding, missing-agent installation or user global configuration was changed to improve the outcome.
 
 ### Testing
 
@@ -108,15 +104,15 @@ Measured (this environment, 2026-11-22)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 one boot + recording proxy; HTTP and stdio case per agent | MET | `scripts/commands/mcp-agent-interop.ts` (startProxy, runCase), registered at `scripts/spur-dev.ts:84,153` and `package.json:105` — receipt: 21 rows (`serverProtocolFloor: 2026-07-28`) |
-| R2 the row comes from the proxy log (method/revision/status/errorCode), not the agent's prose | MET | `startProxy` records `{method, revision, status, errorCode}` and never the Authorization header or bodies; `clientRevision` = first revision seen; `toolsSeen` = "a tools/list request happened". Verified by rows where the agent's text says it saw tools but the proxy shows none (e.g. `claude/http` excerpt names tools, `requests: []`) |
-| R3 classification vocabulary; a missing agent is `not-installed`, never a failure | MET | `classify()`; receipt spread: 11 `no-request`, 4 `not-installed` (antigravity, hermes), 4 `config-isolation-unavailable` (codex, grok), 1 `call-failed` (claude/stdio: discover+tools/list 200, no tools/call), 1 `agent-error`. The version probe is guarded — the first run aborted on the missing `antigravity` binary, which is why the guard exists |
-| R4 stable receipt, per-case persistence, `--agents` subset merge, exit 0 when every installed agent is classified | MET | `writeReceipt` after every case; merge keyed `(agent, transport)`; a subset rerun (`--agents=omp`) merged without dropping other rows; last run exit 0 with 17 classified rows for 9 installed agents |
-| R5 the operator's global agent config is byte-identical | MET | `globalConfigPaths()` + `hashPath` before/after; a change exits 1. This check **fired** on the first attempt (`~/.claude.json`), which is how `CLAUDE_CONFIG_DIR` seeding was found; subsequent runs report no change |
+| R1 | MET | `scripts/commands/mcp-agent-interop.ts:616` boots the temporary real server and one recording proxy, iterates ten declared clients and both transports, and uses the actual /mcp endpoint. The completed operator receipt contains twenty distinct supported-agent/transport rows; absent binaries are recorded without installation. |
+| R2 | MET | `scripts/commands/mcp-agent-interop.ts:344` preserves HTTP method/routing, decodes responses and records only metadata; line 443 drives the native Codex client, while other clients receive the fixed prompt. Client/body revisions, actual catalog count, named read-only call and protocol/tool errors come from proxy observations. Ten focused failure-sensitivity regressions pass. |
+| R3 | MET | `scripts/commands/mcp-agent-interop.ts:419` applies the declared classification vocabulary. A success requires a successful tools/list and sp_task_list response; no-request, missing client, auth/protocol/tool failures remain distinct. Receipt rows for missing binaries are not-installed, with installed false. |
+| R4 | MET | `docs/reports/mcp-agent-interop-receipt.json:1` is the stable twenty-row operator artifact. `scripts/commands/mcp-agent-interop.ts:616` persists after each case and on completion, tracks observation dates and completion/global-integrity flags, and exits nonzero on a harness/config-integrity failure. Successful classification is distinct from every client passing MCP. |
+| R5 | MET | Full code gate PASS: @batch `.spur/run/run_a806b2e2-63b3-42ed-b03b-28663631fa05-feature-verification.log` lines 1-786; 13,149 normal tests, 64 repository contract tests, 85 heavy tests passed, one inapplicable no-browser skip. Fix-pass artifacts: @batch `.spur/run/1432-verify-answer.txt` lines 1-34 and `.spur/run/1432-verdict.json` lines 1-62; raw proof under `.spur/run/B93-`. `scripts/commands/mcp-agent-interop.ts:297` hashes the ten known native config paths before and after; the completed receipt records unchanged true. Earlier eight-path cases and the two additional native-path audit also remained unchanged. Configuration files are written only inside the temporary project; diagnostics use existing shared redaction helpers. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Each installed agent's MCP handshake is exercised against a live server and recorded | MET | command | `bun run mcp-agent-interop` → 21 rows, exit 0; `docs/reports/mcp-agent-interop-receipt.json` |
+| R1 — Each installed agent's MCP handshake is exercised against a live server and recorded | MET | command | `docs/reports/mcp-agent-interop-receipt.json:1`; live operator run and independent @batch `.spur/run/B93-guide-check.json` comparison. Not-installed clients and actual per-agent failures remain explicitly classified. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

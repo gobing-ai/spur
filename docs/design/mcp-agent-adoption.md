@@ -1,38 +1,28 @@
-# MCP agent adoption matrix (feature B92, task 1393)
+# MCP agent adoption matrix (B92 / B93)
 
-Which of Spur's ten supported coding agents can consume the embedded MCP server, and over which
-transport. The verdict column is what 1394's guidance reads: an `mcp-http` agent is told to point at
-the server directly, an `mcp-stdio-bridge` agent goes through `spur mcp`, and a `cli-only` agent gets
-the CLI fallback. A `cli-only` verdict here means "not observed over MCP in the current receipt", so
-the guidance still offers `spur mcp` first and falls back to the CLI — it never claims the agent
-cannot use MCP.
+Transport verdicts come from the real-agent interoperability receipt. A classification describes this environment and client version; `cli-only` means no completed MCP tool call was observed, not that the agent can never support MCP.
 
-- **Checked:** 2026-11-22 (interop receipt `generatedAt` `2026-11-22T17:39:37.618Z`, floor `2026-07-28`).
-- **Server under test:** `spur self serve` with the B9 MCP adapter — stateless Streamable HTTP
-  `POST /mcp`, bearer auth, protocol `2026-07-28`, no session.
-- **Server-side observation (done in this task):** `POST /mcp` with `Mcp-Protocol-Version: 2026-07-28`
-  and `Authorization: Bearer <token>` answered `server/discover` with `protocolVersion: "2026-07-28"`
-  and the ten-tool catalog, with no `Mcp-Session-Id` in play. That is `observed` for the *server*;
-  the per-agent rows below say whether the *client* side was observed in 1432's receipt or not.
-
-Values: **yes** / **no** / **not observed**. A cell is only `observed` when the proxy log proves it
-(1432's receipt); a client that merely documents HTTP support is `yes` for the capability and
-`not observed` for the handshake. No verdict rests on documentation alone.
+- **Checked:** 2026-11-22; receipt `generatedAt` `2026-11-22T18:47:43.429Z`.
+- **Server policy:** Spur accepts stateless HTTP revisions at or above `2026-07-28`. Legacy clients use `spur mcp`; [ADR-152](../00_ADR.md) owns this Spur policy.
+- **Evidence:** ten agents × two transports. Each row has its own `observedAt`; subset reruns retain earlier observations instead of pretending they were rerun.
+- **Config integrity:** the final native guard checked ten global config paths and found no change. Earlier eight-path runs plus the additional native-path audit also found no change.
 
 ## 1. Matrix
 
-| Agent | HTTP client | stdio client | Highest revision claimed | Stateless `2026-07-28` works | Bearer header | Receipt (http / stdio) | Source |
+`clientRevision` is observed on the proxy wire: the initialize body revision when present, otherwise the version header. For stdio, that header is the **bridge upstream revision**, not evidence that the original client speaks the stateless revision.
+
+| Agent | HTTP client | stdio client | Highest revision claimed (observed wire) | Stateless HTTP works | Tools seen (HTTP / stdio) | Receipt outcomes (HTTP / stdio) | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Claude Code | yes | yes | 2026-07-28 (stdio) | partially observed (requests arrived; no tools/call) | yes (per the client's own config) | `no-request` / `call-failed` | <https://code.claude.com/docs/en/mcp> |
-| Codex CLI | yes | yes | not observed | not observed | yes (per the client's own config) | `config-isolation-unavailable` / `no-request` | <https://learn.chatgpt.com/docs/extend/mcp> |
-| Gemini CLI | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | <https://geminicli.com/docs/tools/mcp-server/> |
-| pi | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | <https://docs.pi.dev/latest/configuration> |
-| omp | yes | yes | 2026-07-28 (http) | **observed** (http) | yes (per the client's own config) | `pass` / `pass` | <https://omp.sh/docs/mcp> |
-| OpenCode | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | <https://opencode.ai/docs/mcp-servers/> |
-| Antigravity | not installed | not installed | not observed | not observed | yes (per the client's own config) | `not-installed` / `not-installed` | <https://antigravity.google/docs/mcp/> |
-| OpenClaw | yes | yes | not observed | not observed | yes (per the client's own config) | `no-request` / `no-request` | see re-check note |
-| Hermes | not installed | not installed | not observed | not observed | yes (per the client's own config) | `not-installed` / `not-installed` | <https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp> |
-| Grok | yes | yes | not observed | not observed | yes (per the client's own config) | `config-isolation-unavailable` / `config-isolation-unavailable` | <https://docs.x.ai/build/features/mcp-servers> |
+| Claude Code | observed | observed | HTTP: `2025-11-25`; bridge upstream: `2026-07-28` | rejected-legacy-revision | — / 10 | `rejected-legacy-revision` / `call-failed` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Codex CLI | observed | observed | HTTP: `2025-06-18`; bridge upstream: `2026-07-28` | rejected-legacy-revision | — / 10 | `rejected-legacy-revision` / `pass` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Gemini CLI | not observed | not observed | not observed | no-request | — / — | `no-request` / `no-request` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| pi | observed | observed | HTTP: `2025-11-25`; bridge upstream: `2026-07-28` | rejected-legacy-revision | 10 / 10 | `rejected-legacy-revision` / `pass` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| omp | observed | observed | HTTP: `2026-07-28`; bridge upstream: `2026-07-28` | pass | 10 / 10 | `pass` / `pass` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| OpenCode | not observed | not observed | not observed | no-request | — / — | `no-request` / `no-request` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Antigravity | not installed | not installed | not observed | not-installed | — / — | `not-installed` / `not-installed` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| OpenClaw | not observed | not observed | not observed | no-request | — / — | `no-request` / `no-request` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Hermes | not installed | not installed | not observed | not-installed | — / — | `not-installed` / `not-installed` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Grok | not observed | not observed | not observed | no-request | — / — | `no-request` / `no-request` | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
 
 ## 1a. Install route (task 1401)
 
@@ -54,49 +44,34 @@ and a local gateway.
 
 ## 2. Verdicts (consumed by 1394)
 
-Derived mechanically from `docs/reports/mcp-agent-interop-receipt.json` (`generatedAt`
-`2026-11-22T17:39:37.618Z`, floor `2026-07-28`): `mcp-http` iff the HTTP row is `pass`;
-otherwise `mcp-stdio-bridge` iff the stdio row is `pass`; otherwise `cli-only`. An agent with no
-installed binary is listed as `not-installed (unobserved)` and is never promoted from documentation.
+Rule: `mcp-http` iff HTTP is `pass`; otherwise `mcp-stdio-bridge` iff stdio is `pass`; otherwise `cli-only`. Missing binaries are listed as unobserved. A successful HTTP status alone is insufficient: the proxy requires a successful catalog and `sp_task_list` response, without a JSON-RPC or tool error. A legacy-initialize rejection prevents a later fallback request from promoting the native HTTP verdict.
 
-| Agent | Verdict |
-| --- | --- |
-| Claude Code | cli-only |
-| Codex CLI | cli-only |
-| Gemini CLI | cli-only |
-| pi | cli-only |
-| omp | mcp-http |
-| OpenCode | cli-only |
-| Antigravity | not-installed (unobserved) |
-| OpenClaw | cli-only |
-| Hermes | not-installed (unobserved) |
-| Grok | cli-only |
+| Agent | Verdict | Evidence |
+| --- | --- | --- |
+| Claude Code | cli-only | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Codex CLI | mcp-stdio-bridge | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Gemini CLI | cli-only | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| pi | mcp-stdio-bridge | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| omp | mcp-http | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| OpenCode | cli-only | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Antigravity | not-installed (unobserved) | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| OpenClaw | cli-only | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Hermes | not-installed (unobserved) | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
+| Grok | cli-only | [receipt](../reports/mcp-agent-interop-receipt.json), `2026-11-22T18:47:43.429Z` |
 
-Consequences for 1394's guidance: only **omp** is told to point at the HTTP endpoint (and it also
-works over the bridge); every other installed agent goes through `spur mcp`, and the two
-`config-isolation-unavailable` rows (codex HTTP, grok) mean their HTTP path is untested here — the
-bridge is the path their guidance names.
+**Guidance:** omp can use direct HTTP. Codex and pi use the stdio bridge (`spur mcp`, or the installed plugin’s gateway entry). Other installed agents use the CLI fallback for now, for example `spur task list --json`. The generic consumers link here and keep their tool-available → MCP, otherwise → CLI rule; no consumer should infer HTTP support from installation alone.
 
+## 3. Recorded causes and limits
 
-## 3. Gaps and honesty notes
+- **Codex:** 0.171.0 supports isolated HTTP TOML overrides. The previous configuration failure merged HTTP into an existing stdio entry; it was a harness defect. The corrected native client sends header-less `initialize` with revision `2025-06-18`; the proxy records `400 PROTOCOL_VERSION_UNSUPPORTED`. Its native app-server API lists ten tools and calls `sp_task_list` through the bridge, so the working path is proved by requests, not configuration alone.
+- **Claude Code and pi HTTP:** the receipt records legacy-initialize rejection. pi completes the stdio call. Claude discovers ten tools but does not complete the required call in this run, so it is not promoted.
+- **Gemini:** the account/client eligibility error occurs before a request reaches the proxy. **OpenCode:** insufficient model-provider balance prevents the attempt from reaching MCP. **OpenClaw:** the corrected local invocation and stdio config reach a missing-provider-authentication error. No account credentials were copied or changed to hide those outcomes.
+- **Grok:** project-scoped TOML is supported and was injected for both transports. The headless run exposes no Spur tools and sends no request to the recording proxy. This observation supports CLI fallback here; it is not a claim that Grok lacks MCP support.
+- **Antigravity and Hermes:** their configured binary names are absent. They remain `not-installed (unobserved)`; the harness does not install them.
+- Codex is exercised through its installed native app-server catalog/tool-call API in an ephemeral read-only thread; other installed clients receive the fixed prompt. The server and recording proxy are real in both cases. Proxy requests contain only method/revision/status/error metadata, tool name/count, and success state; authorization headers and bodies are not persisted.
 
-- **Protocol revision per agent is UNVERIFIED across the board.** None of the cited pages states a
-  supported MCP spec revision, and the server accepts only the `2026-07-28` line (ADR-152). An agent
-  whose client speaks an older revision will fail the version check at request time rather than at
-  configuration time — the failure is a protocol error, not a silent downgrade.
-- **No direct HTTP client `server/discover` round-trip is recorded here.** Nine of the ten CLIs are
-  installed, but proving a handshake per agent needs a tool call in each one's own session model,
-  which this task did not run (the Codex attempt above is the only one, and it was inconclusive).
-  A future pass should record `server/discover` per agent the way the server side was recorded here.
-- **OpenClaw has no primary source in hand.** Its row is `documented` on the strength of the CLI being
-  installed and the ecosystem documentation, but no official page was captured in this pass — re-check
-  before relying on it.
-- **Antigravity and Hermes are not installed** under those names in this environment (`agy` exists and
-  may be Antigravity's binary), so nothing about them was observed.
+## 4. Re-check
 
-## 4. Re-check note
+Run `bun run mcp-agent-interop` from this checkout to refresh all cases, or `bun run mcp-agent-interop --agents=codex` for a scoped repair. This is an operator proof, not a CI test: other clients can make billable model turns, with a 120-second case budget. Codex’s deterministic native-client case needs no model selection.
 
-Re-run this matrix when either side moves: a new B9 protocol line (ADR-152), or an agent major
-version. The method is cheap — start `spur self serve` with `SPUR_MCP_ENABLED=true` and a token
-variable, then `POST /mcp` with `server/discover` from the agent's own client, recording
-`protocolVersion` from the reply and whether a session id was issued.
+The stable receipt is overwritten after each case. `completed` and `globalConfigIntegrity.unchanged` must both be true before using a finished run. Regenerate this matrix from receipt fields after a change; never substitute documentation claims for an observed transport verdict.

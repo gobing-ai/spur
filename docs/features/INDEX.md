@@ -41,7 +41,7 @@
     └── [done] **B9**: Embedded MCP 2.0+ server in spur serve ([B9_embedded-mcp-2-0-server-in-spur-serve.md](./B9_embedded-mcp-2-0-server-in-spur-serve.md))
         ├── [done] **B91**: MCP plugin-namespaced tools and opt-in workflow tools ([B91_mcp-plugin-namespaced-tools-and-opt-in-workflow-tools.md](./B91_mcp-plugin-namespaced-tools-and-opt-in-workflow-tools.md))
         ├── [done] **B92**: MCP as the primary agent interface: guarded corpus write tools and adoption ([B92_mcp-as-the-primary-agent-interface-guarded-corpus-write-tools-and-adoption.md](./B92_mcp-as-the-primary-agent-interface-guarded-corpus-write-tools-and-adoption.md))
-        └── [active] **B93**: MCP real-agent interoperability: proven handshakes and protocol-revision compatibility ([B93_mcp-real-agent-interoperability-proven-handshakes-and-protocol-revision-compatibility.md](./B93_mcp-real-agent-interoperability-proven-handshakes-and-protocol-revision-compatibility.md))
+        └── [done] **B93**: MCP real-agent interoperability: proven handshakes and protocol-revision compatibility ([B93_mcp-real-agent-interoperability-proven-handshakes-and-protocol-revision-compatibility.md](./B93_mcp-real-agent-interoperability-proven-handshakes-and-protocol-revision-compatibility.md))
 [verifying] **C**: Rules ([C_rules.md](./C_rules.md))
     ├── [done] **C1**: Rule surface contract and catalog integrity ([C1_rule-surface-contract-and-catalog-integrity.md](./C1_rule-surface-contract-and-catalog-integrity.md))
     ├── [cancelled] **C2**: Lockstep dependency catalog integrity ([C2_lockstep-dependency-catalog-integrity.md](./C2_lockstep-dependency-catalog-integrity.md))

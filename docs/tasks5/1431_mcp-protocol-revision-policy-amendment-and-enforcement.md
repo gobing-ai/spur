@@ -4,7 +4,7 @@ name: MCP protocol-revision policy amendment and enforcement
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:21:34.123Z
-updated_at: "2026-11-22T17:21:01.623Z"
+updated_at: "2026-11-22T19:02:59.918Z"
 feature_id: B93
 
 tags: ["B93"]
@@ -101,6 +101,10 @@ Pre-existing repairs (not this task's scope, but the repo-wide post-check gate c
 `integrationsGatewayHealthSchema`, `integrationsUsageSchema`) were exported without TSDoc, all four
 introduced by main's `495d1b8f7` (A82 follow-up). Documentation only.
 
+#### Forced verification — 2026-11-22
+
+The policy and production version gate remain unchanged. Re-ran the protocol/module/live-server suites: 92 tests passed. Each of the four legacy-revision loop cases now explicitly asserts the `spur mcp` fallback as well as the floor. Floor/future acceptance and missing/malformed/header-less initialize refusal remain covered. ADR-152 explicitly labels the floor as Spur policy; this verification makes no new claim that the revision is a published external specification.
+
 ### Testing
 
 **Pipeline verify results**
@@ -109,15 +113,14 @@ introduced by main's `495d1b8f7` (A82 follow-up). Documentation only.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 ADR-152 amendment (dated, appended to the Amended list) states the accepted floor, the bridge-only support for pre-2.0, and the consequence for `mcp-http` verdicts, citing a source or labelled Spur policy | MET | `docs/00_ADR.md:2977` (Amended list), `:2982-2991` (the amendment: `≥ 2026-07-28` open-ended floor, pre-2.0 through `spur mcp` only, the `mcp-http` consequence, the shared legacy list, explicitly labelled **Spur policy** with the pointer to the transport adapter) |
-| R2 every `PROTOCOL_VERSION_UNSUPPORTED` message names the floor **and** the bridge; a header-less legacy `initialize` body gets that same actionable message | MET | `apps/server/src/modules/mcp/protocol.ts:150-165` (`versionError`), `:167-186` (`missingVersionDetail` via `req.clone()`), `:188-205` (all three sites) — `apps/server/tests/modules/mcp/protocol.test.ts` ("every rejection names the accepted floor AND the stdio bridge fallback", "a header-less legacy initialize body gets the same actionable message") |
-| R3 tests cover floor + later date accepted, each of the four legacy revisions rejected with `2026-07-28` and `spur mcp` in the message, header-less `initialize` rejected with the same message | MET | `apps/server/tests/modules/mcp/protocol.test.ts:66` (loop now includes `2025-06-18`), `:73-95` (the two new cases); pre-existing floor/future acceptance rows still green |
-| R4 `protocol.ts` legacy list matches the bridge's `LEGACY_VERSIONS` | MET | `apps/server/src/modules/mcp/protocol.ts:24-28` (comment now carries `2025-06-18` and names `spur mcp` as the shared vocabulary) vs `apps/cli/src/commands/mcp.ts:27` |
-| Frozen surface unchanged | MET | HTTP 400, `PROTOCOL_VERSION_UNSUPPORTED`, `-32000`, `MIN_MCP_PROTOCOL_VERSION` and bridge behaviour untouched — `bun test tests/modules/mcp/protocol.test.ts tests/modules/mcp-module.test.ts tests/mcp-e2e.test.ts` → 92 pass |
+| R1 | MET | `docs/00_ADR.md:2982` states the open-ended floor, bridge-only legacy support and HTTP verdict consequence, explicitly as Spur policy. No external-spec publication claim is needed for this requirement. |
+| R2 | MET | `apps/server/src/modules/mcp/protocol.ts:134` builds the one actionable floor/bridge refusal; lines 148 and 169 name header-less initialize via a cloned body and route missing/malformed/older headers through it. Fresh protocol regressions pass. |
+| R3 | MET | `apps/server/tests/modules/mcp/protocol.test.ts:66` checks all four legacy versions, each now naming the floor and bridge; the same suite covers floor/future acceptance, malformed/missing headers and header-less initialize. Fresh three-file server run: 92 pass, zero fail. |
+| R4 | MET | Full code gate PASS: @batch `.spur/run/run_a806b2e2-63b3-42ed-b03b-28663631fa05-feature-verification.log` lines 1-786; 13,149 normal tests, 64 repository contract tests, 85 heavy tests passed, one inapplicable no-browser skip. Fix-pass artifacts: @batch `.spur/run/1431-verify-answer.txt` lines 1-33 and `.spur/run/1431-verdict.json` lines 1-57; raw proof under `.spur/run/B93-`. `apps/server/src/modules/mcp/protocol.ts:15` and `apps/cli/src/commands/mcp.ts:27` carry the same four legacy versions. @batch `.spur/run/B93-legacy-vocabulary-check.json` lines 1-10 records the fresh comparison. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The server's MCP protocol-revision policy is explicit and tested | MET | test | `apps/server/tests/modules/mcp/protocol.test.ts` (version gate block) + `docs/00_ADR.md:2982` |
+| R3 — The server's MCP protocol-revision policy is explicit and tested | MET | command | `apps/server/tests/modules/mcp/protocol.test.ts:66`; fresh @batch `.spur/run/B93-protocol-final.log` lines 1-104 records 92 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
