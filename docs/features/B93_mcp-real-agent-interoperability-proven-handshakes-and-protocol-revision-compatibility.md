@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-22T02:19:46.961Z"
-updated_at: "2026-11-22T04:26:26.333Z"
+updated_at: "2026-11-22T17:17:27.676Z"
 ---
 
 # B93: MCP real-agent interoperability: proven handshakes and protocol-revision compatibility
@@ -29,11 +29,6 @@ Replace the documentation-based MCP adoption verdicts with evidence. Each suppor
 
 ## Acceptance Criteria
 
-- [ ] R1 — Each installed agent's MCP handshake is exercised against a live server and recorded
-- [ ] R2 — The Codex HTTP no-tools case is root-caused with a working path
-- [ ] R3 — The server's MCP protocol-revision policy is explicit and tested
-- [ ] R4 — Adoption verdicts are derived from the interop receipt
-
 ```gherkin
 Feature: MCP real-agent interoperability: proven handshakes and protocol-revision compatibility
 
@@ -49,18 +44,21 @@ Feature: MCP real-agent interoperability: proven handshakes and protocol-revisio
   Scenario: R2 — The Codex HTTP no-tools case is root-caused with a working path
     Given Codex is configured against the HTTP endpoint
     When Codex lists tools in a session
-    Then either the tools appear after a server-side fix with a regression check
-    Or the receipt names the client-side cause and Codex completes a tool call through the stdio bridge
+    Then the outcome is one of two recorded states
+    And either the tools appear after a server-side fix with a regression check
+    And or the receipt names the client-side cause and Codex completes a tool call through the stdio bridge
 
   Scenario: R3 — The server's MCP protocol-revision policy is explicit and tested
     Given an ADR-152 amendment states the accepted protocol revisions
     When a client calls server/discover with an accepted revision
     Then the handshake succeeds
-    When a client sends an unsupported revision or a legacy initialize handshake
-    Then the server answers with a protocol error naming the revisions it accepts and the stdio-bridge fallback
+    And an unsupported revision or a legacy initialize handshake is answered with a protocol error
+    And that error names the revisions the server accepts and the stdio-bridge fallback
 
   Scenario: R4 — Adoption verdicts are derived from the interop receipt
-    Then every agent row in mcp-agent-adoption.md cites the receipt outcome for HTTP and stdio
+    Given the interop receipt and the adoption guide
+    When a reader opens mcp-agent-adoption.md
+    Then every agent row cites the receipt outcome for HTTP and stdio
     And no row says "unproven" or rests only on documentation
 ```
 
