@@ -7,7 +7,7 @@
  * escapes the indexed-context directory.
  */
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MCP_BUILTIN_TOOL_NAMES } from '@gobing-ai/spur-app';
@@ -73,11 +73,12 @@ function makeRecorder(pausedRun: { runId: string } | null = { runId: 'r-paused' 
 
 /** A minimal ServerContext slice: cwd/fs/env, the boot config switch, and the stub services. */
 function makeHarness(
-    bootMcp: { enabled: boolean; authEnv: string | null } | undefined,
+    bootMcp: { enabled: boolean; authEnv: string | null; namespace?: string } | undefined,
     env: Record<string, string | undefined> = { SPUR_MCP_TOKEN: TOKEN },
     pausedRun: { runId: string } | null = { runId: 'r-paused' },
-): { app: Hono; recorder: Recorded } {
+): { app: Hono; recorder: Recorded; events: Array<{ name: string; payload: Record<string, unknown> }> } {
     const recorder = makeRecorder(pausedRun);
+    const events: Array<{ name: string; payload: Record<string, unknown> }> = [];
     const ctx = {
         cwd: tempDir,
         fs: createNodeFileSystem(),
@@ -87,10 +88,15 @@ function makeHarness(
         taskService: recorder.taskService,
         featureService: recorder.featureService,
         workflowService: recorder.workflowService,
+        eventBus: () => ({
+            emit: (name: string, payload: Record<string, unknown>) => {
+                events.push({ name, payload });
+            },
+        }),
     } as unknown as ServerContext;
     const app = new Hono();
     mcpModule.mount(app, ctx);
-    return { app, recorder };
+    return { app, recorder, events };
 }
 
 async function post(
@@ -519,5 +525,184 @@ describe('mcp built-in tool names (1381 R4)', () => {
     test('the app-layer reserved list matches the advertised descriptors', async () => {
         const { BUILTIN_TOOL_NAMES } = await import('../../src/modules/mcp/index');
         expect([...MCP_BUILTIN_TOOL_NAMES].sort()).toEqual([...BUILTIN_TOOL_NAMES].sort());
+    });
+});
+
+/**
+ * 1421 R1 — the failure classes an MCP client can cause by sending bad arguments must be ONE
+ * catalog code (`invalid_arguments`), not a growing set of message-shaped guesses. Before this, the
+ * emit site inferred the code from four message suffixes, so every new validator message silently
+ * degraded to `tool_error` and the Board's error split lied.
+ */
+describe('1421 R1 — argument-validation failures classify as invalid_arguments', () => {
+    const harness = () => makeHarness({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' });
+
+    /** Call one tool and return the failure event the ledger would group by `errorCode`. */
+    async function failureOf(
+        name: string,
+        args: Record<string, unknown>,
+    ): Promise<{ status: number; errorCode: unknown; message: string }> {
+        const { app, events } = harness();
+        const res = await post(app, {
+            token: TOKEN,
+            body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
+        });
+        const event = events.find((entry) => entry.name === 'mcp.tool.failed');
+        if (event === undefined) throw new Error(`expected an mcp.tool.failed event for ${name}`);
+        return { status: res.status, errorCode: event.payload.errorCode, message: String(event.payload.error) };
+    }
+
+    test('an unknown argument', async () => {
+        const failed = await failureOf('sp_task_update', { wbs: '1421', bogus: 'x' });
+        expect(failed.status).toBe(500);
+        expect(failed.errorCode).toBe('invalid_arguments');
+        expect(failed.message).toContain('unknown argument');
+    });
+
+    test('an enum violation', async () => {
+        const failed = await failureOf('sp_feature_check', { id: 'A82', as: 'nope' });
+        expect(failed.errorCode).toBe('invalid_arguments');
+        expect(failed.message).toContain('must be one of');
+    });
+
+    test('a string, boolean and array type violation', async () => {
+        expect((await failureOf('sp_workflow_status', { runId: 5 })).errorCode).toBe('invalid_arguments');
+        expect((await failureOf('sp_feature_check', { id: 'A82', strict: 'yes' })).errorCode).toBe('invalid_arguments');
+        expect((await failureOf('sp_task_update', { wbs: '1421', addTags: 'x' })).errorCode).toBe('invalid_arguments');
+    });
+
+    test('a missing required argument', async () => {
+        const failed = await failureOf('sp_task_show', {});
+        expect(failed.errorCode).toBe('invalid_arguments');
+        expect(failed.message).toContain('wbs is required');
+    });
+
+    test('a map-of-strings violation', async () => {
+        const failed = await failureOf('sp_workflow_run', { file: 'x.yaml', vars: { n: 3 } });
+        expect(failed.errorCode).toBe('invalid_arguments');
+        expect(failed.message).toContain('vars must be a map of strings');
+    });
+
+    test('a workflow tool refuses an argument it does not declare', async () => {
+        // A real project layer: the exposed workflow is what makes a non-built-in tool exist.
+        const root = mkdtempSync(join(tmpdir(), 'spur-mcp-wf-'));
+        mkdirSync(join(root, '.spur', 'workflows'), { recursive: true });
+        writeFileSync(
+            join(root, '.spur', 'workflows', 'daily-report.yaml'),
+            `name: daily-report
+kind: state-machine
+metadata:
+  mcp:
+    expose: true
+vars:
+  target: default
+initialState: start
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`,
+        );
+        const events: Array<{ name: string; payload: Record<string, unknown> }> = [];
+        const recorder = makeRecorder();
+        const app = new Hono();
+        mcpModule.mount(app, {
+            cwd: root,
+            fs: createNodeFileSystem(),
+            env: { SPUR_MCP_TOKEN: TOKEN },
+            logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+            bootConfig: () => ({ mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN', namespace: 'ops' } }),
+            taskService: recorder.taskService,
+            featureService: recorder.featureService,
+            workflowService: recorder.workflowService,
+            eventBus: () => ({
+                emit: (name: string, payload: Record<string, unknown>) => {
+                    events.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext);
+        try {
+            const res = await post(app, {
+                token: TOKEN,
+                body: {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'tools/call',
+                    params: { name: 'ops_daily_report', arguments: { bogus: 'x' } },
+                },
+            });
+            expect(res.status).toBe(500);
+            const event = events.find((entry) => entry.name === 'mcp.tool.failed');
+            expect(event?.payload.errorCode).toBe('invalid_arguments');
+            expect(String(event?.payload.error)).toContain('invalid_arguments:');
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('an unknown tool stays unknown_tool and a service throw stays tool_error', async () => {
+        expect((await failureOf('task_delete', {})).errorCode).toBe('unknown_tool');
+        // `sp_feature_check` with an id the service does not know is the service's own failure.
+        expect((await failureOf('sp_feature_check', { id: 'nope' })).errorCode).toBe('tool_error');
+    });
+});
+
+/**
+ * 1421 R2 — a client must be able to tell a read from a write without knowing Spur's tool names, so
+ * every advertised descriptor carries the three MCP annotations.
+ */
+describe('1421 R2 — tool descriptors declare read/write annotations', () => {
+    const harness = () => makeHarness({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' });
+
+    interface Annotations {
+        readOnlyHint: boolean;
+        destructiveHint: boolean;
+        idempotentHint: boolean;
+    }
+
+    async function annotated(): Promise<Map<string, Annotations>> {
+        const { app } = harness();
+        const result = (await envelopeResult(
+            await post(app, {
+                token: TOKEN,
+                body: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+            }),
+        )) as { tools: Array<{ name: string; annotations?: Annotations }> };
+        return new Map(result.tools.map((tool) => [tool.name, tool.annotations ?? ({} as Annotations)]));
+    }
+
+    test('the read tools are read-only and idempotent', async () => {
+        const tools = await annotated();
+        for (const name of ['sp_task_show', 'sp_task_list', 'sp_feature_check', 'sp_rule_run', 'sp_workflow_status']) {
+            expect(tools.get(name)).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true });
+        }
+    });
+
+    test('the write tools are neither read-only nor idempotent', async () => {
+        const tools = await annotated();
+        for (const name of [
+            'sp_task_create',
+            'sp_task_update',
+            'sp_task_transition',
+            'sp_workflow_run',
+            'sp_workflow_continue',
+        ]) {
+            expect(tools.get(name)).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
+        }
+    });
+
+    test('every advertised tool carries all three hints, and none is destructive', async () => {
+        const tools = await annotated();
+        expect(tools.size).toBe(10);
+        for (const [name, annotations] of tools) {
+            expect(typeof annotations.readOnlyHint, name).toBe('boolean');
+            expect(typeof annotations.idempotentHint, name).toBe('boolean');
+            expect(annotations.destructiveHint, name).toBe(false);
+        }
     });
 });

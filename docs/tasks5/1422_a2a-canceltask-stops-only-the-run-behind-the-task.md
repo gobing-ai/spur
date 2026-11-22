@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: A2A CancelTask stops only the run behind the task
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.288Z
-updated_at: "2026-11-22T03:59:47.081Z"
+updated_at: "2026-11-22T05:21:03.059Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
 
 dependencies: ["1421"]
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1422. A2A CancelTask stops only the run behind the task
@@ -30,17 +32,17 @@ Design satellite: docs/design/integrations-module.md §1.1. Today cancel calls s
 
 ### Requirements
 
-- [ ] R1. Cancel is accepted only when the task's newest coordination run is `running`. Otherwise it returns 400 `FAILED_PRECONDITION` / `TASK_NOT_CANCELABLE`, as today.
-- [ ] R2. Cancel aborts only that run's spawned child. The member loop keeps running and claims its next queued request.
-- [ ] R3. Cancel never calls `supervisor().stop`. If the run's coordination row does not leave `running` within 10s, the response and event report `runStopped: false`.
-- [ ] R4. The `a2a.task.cancelled` event carries `runId` beside its existing fields.
-- [ ] R5. Keyed runs with no cancel request, A2A and non-A2A alike, keep their current behavior and exit codes.
+- [x] R1. Cancel is accepted only when the task's newest coordination run is `running`. Otherwise it returns 400 `FAILED_PRECONDITION` / `TASK_NOT_CANCELABLE`, as today.
+- [x] R2. Cancel aborts only that run's spawned child. The member loop keeps running and claims its next queued request.
+- [x] R3. Cancel never calls `supervisor().stop`. If the run's coordination row does not leave `running` within 10s, the response and event report `runStopped: false`.
+- [x] R4. The `a2a.task.cancelled` event carries `runId` beside its existing fields.
+- [x] R5. Keyed runs with no cancel request, A2A and non-A2A alike, keep their current behavior and exit codes.
 
 Out of scope: aborting a warm turn (persistent worker, nothing spawned); see Q&A. Also out: cancelling queued tasks, and any supervisor stdin control line.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A2A CancelTask stops only the run behind that task
+- [x] AC1 — A2A CancelTask stops only the run behind that task
 
 ### Q&A
 
@@ -86,15 +88,48 @@ Out of scope: aborting a warm turn (persistent worker, nothing spawned); see Q&A
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `packages/app/src/services/agent-loop-service.ts:80-110` | `CANCEL_POLL_MS`, `cancelRequestedPath`, `startCancelPoll` | The per-run cancel marker and its 1s unref'd poll, frozen names per Design |
+| `packages/app/src/services/agent-loop-service.ts:635-650` | a keyed drain builds an `AbortController` and starts the poll for its own runId | R2: cancel targets THIS run; a fresh UUID per run means no stale file can abort a later drain |
+| `packages/app/src/services/agent-loop-service.ts:838-848` | `svc.run` receives `{...runDeps, signal}`; the poll stops in the same `finally` as the supervisor-run clear | The abort reaches the spawned process; the interval never outlives the drain |
+| `packages/app/src/services/agent-service.ts:53-59,524` | `AgentRunDeps.signal` forwarded onto `AgentExecutionOptions.signal` | Nothing new was needed below this: `agent-run-executor.ts:465` already turns an execution signal into `controller.abort()`, and ts-runtime's `signal` option is the process-group kill (Plan step 0 answered: the facade carries it) |
+| `apps/server/src/modules/a2a/index.ts:118-155` | `CANCEL_WAIT_MS`/`CANCEL_POLL_MS`, `cancelRequestPath`, `requestRunCancel` | R3: write the run-scoped request, then wait (bounded, 250ms) for that coordination row to leave `running`; never `supervisor().stop` |
+| `apps/server/src/modules/a2a/index.ts:352-383` | cancel handler: run must be `running`, writes both markers, reports `runStopped`, emits `runId` | R1/R3/R4 in one place; the member loop keeps draining |
+| `packages/app/src/services/event-names.ts:2062-2071` | `a2a.task.cancelled` fields gain `runId`, description corrected | The catalog is the Board's rendering authority; an undeclared field is invisible |
+| `packages/app/tests/services/agent-loop-service.test.ts` (`1422 cancel-a-run`) | abort-on-request test + no-request regression | Failing first: the loop must survive the abort and claim the next request |
+| `apps/server/tests/modules/a2a/routes.test.ts` | cancel writes the marker, no stop call, `runStopped` true/false, `runId` on the event | R1–R4 pinned; the 10s bound is exercised for real in the timeout row |
+| `docs/design/a2a-member-transport.md` (Cancel row) | new cancel contract | T3 |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 cancel accepted only when the newest coordination run is `running`, else 400 `FAILED_PRECONDITION`/`TASK_NOT_CANCELABLE` | MET | `apps/server/src/modules/a2a/index.ts:369-387` (state AND `run.status === 'running'` gate before any write) — `apps/server/tests/modules/a2a/routes.test.ts:528` (queued/terminal rows still 400 via the existing rows at `:545`, `:558`) |
+| R2 cancel aborts only that run's spawned child; the member loop keeps running and claims its next request | MET | `packages/app/src/services/agent-loop-service.ts:633-645` (per-run `AbortController` + `startCancelPoll`), `:735-742` (`signal` on the run deps), `packages/app/src/services/agent-service.ts:59,521` (forwarded to `AgentExecutionOptions.signal`, which `agent-run-executor.ts:465` turns into a process-group kill) — `packages/app/tests/services/agent-loop-service.test.ts:1123` asserts the child's signal aborts AND `drains === 2` (the loop claimed its next request) |
+| R3 cancel never calls `supervisor().stop`; a row that does not leave `running` within 10s reports `runStopped: false` | MET | `apps/server/src/modules/a2a/index.ts:106-140` (`CANCEL_WAIT_MS`/250ms poll), `:395` (`runStopped` from the row, never from a kill) — `apps/server/tests/modules/a2a/routes.test.ts:510` (`harness.stops` stays empty, marker written) and `:528` (real 10s bound → `runStopped:false`, still no stop) |
+| R4 `a2a.task.cancelled` carries `runId` beside its existing fields | MET | `apps/server/src/modules/a2a/index.ts:398-403`; catalog declaration `packages/app/src/services/event-names.ts:2062-2071` — `apps/server/tests/modules/a2a/routes.test.ts:528` asserts `data.runId` equals the seeded run id |
+| R5 keyed runs with no cancel request keep today's behavior and exit codes | MET | `apps/server/src/modules/a2a/index.ts:121-140` (returns immediately when no marker is written; nothing else changes), `packages/app/src/services/agent-loop-service.ts:738-742` (signal is only ever aborted by the marker) — `packages/app/tests/services/agent-loop-service.test.ts:1170` (signal present, `aborted === false`, exit 0) |
+| Design satellite updated in the same change | MET | static-ref `docs/design/a2a-member-transport.md` (Cancel row: run-scoped request, no `supervisor().stop`, `runStopped`/`runId`) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A2A CancelTask stops only the run behind that task | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:510` + `packages/app/tests/services/agent-loop-service.test.ts:1123` (server side requests, member side aborts, loop survives) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -103,4 +138,7 @@ Out of scope: aborting a warm turn (persistent worker, nothing spawned); see Q&A
 ### History
 
 - 2026-11-22T02:19:02.338Z feature_id S → A82 (system)
+- 2026-11-22T05:20:11.995Z todo → wip (system)
+- 2026-11-22T05:21:00.703Z wip → testing (system)
+- 2026-11-22T05:21:03.055Z testing → done (system)
 

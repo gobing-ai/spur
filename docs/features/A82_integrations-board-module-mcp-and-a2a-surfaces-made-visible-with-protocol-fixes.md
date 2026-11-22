@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A82"
 name: "Integrations Board module: MCP and A2A surfaces made visible, with protocol fixes"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-22T02:05:52.821Z"
-updated_at: "2026-11-22T04:46:50.215Z"
+updated_at: "2026-11-22T05:03:46.617Z"
 ---
 
 # A82: Integrations Board module: MCP and A2A surfaces made visible, with protocol fixes
@@ -186,7 +186,7 @@ Feature: Integrations Board module with MCP and A2A protocol fixes
 | 1423 | Integrations status and usage oRPC contract | todo |
 | 1424 | Integrations Board module on the module-kit shell | todo |
 | 1425 | Integrations E2E proof with a repeatable receipt | todo |
-| 1421 | MCP error codes, MCP tool annotations, and A2A public card, card skills and lane branch | todo |
+| 1421 | MCP error codes, MCP tool annotations, and A2A public card, card skills and lane branch | testing |
 | 1422 | A2A CancelTask stops only the run behind the task | todo |
 <!-- END AUTO-GENERATED -->
 
@@ -195,4 +195,5 @@ Feature: Integrations Board module with MCP and A2A protocol fixes
 ## History
 
 - 2026-11-22T02:19:02.338Z moved S → A82 (system)
+- 2026-11-22T05:03:46.617Z backlog → active (system)
 

@@ -116,6 +116,22 @@ one resolver (`packages/app/src/services/mcp-workflow-tools.ts`), so a name is n
 while validate rejects it: no project namespace, a collision with a built-in name, or two
 definitions deriving the same name omit the tool and fail validate with the reason and remedy.
 
+**Tool annotations (task 1421 R2).** Every advertised descriptor — the ten built-ins and every
+exposed workflow tool — carries the three MCP hints. Reads (`sp_task_show`, `sp_task_list`,
+`sp_feature_check`, `sp_rule_run`, `sp_workflow_status`) are `{readOnlyHint: true, destructiveHint:
+false, idempotentHint: true}`; writes (`sp_task_create`, `sp_task_update`, `sp_task_transition`,
+`sp_workflow_run`, `sp_workflow_continue`) and workflow-derived tools are `{false, false, false}`.
+No tool deletes, so `destructiveHint` is always `false` but always present — a client renderer never
+has to guess a missing hint.
+
+**Error codes (task 1421 R1).** The `mcp.tool.failed` event carries one of three codes. Every
+argument-validation failure is `invalid_arguments`, and the classification is a CLASS, not a message
+shape: the validators, `requiredString`, the map-of-strings and array checks, the declared-schema
+violation and the workflow-tool argument checks all throw `InvalidArgumentsError`
+(`apps/server/src/modules/mcp/index.ts`), and the emit site maps `instanceof` to the code. A new
+validator message therefore cannot silently degrade to `tool_error`. An unknown or renamed tool name
+stays `unknown_tool`, and a service's own failure stays `tool_error`.
+
 ## 5. `spur mcp` stdio bridge
 
 `spur mcp [--cwd <path>] [--url <mcpUrl> | --gateway]` reads NDJSON from stdin and writes JSON-RPC

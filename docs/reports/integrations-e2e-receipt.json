@@ -1,0 +1,94 @@
+{
+    "artifact": "integrations-e2e",
+    "generatedAt": "2026-11-22T06:37:12.320Z",
+    "context": {
+        "port": 64568,
+        "scratch": "(removed)",
+        "member": "spur-integrations-e2e-AsbQUO-coder"
+    },
+    "steps": [
+        {
+            "step": "serve-ready",
+            "requirement": "R1",
+            "command": "spur self serve (MCP + A2A enabled)",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "/api/health answers 200",
+            "evidence": "health ok"
+        },
+        {
+            "step": "mcp-invalid-arguments",
+            "requirement": "R2 / F1",
+            "command": "POST /mcp tools/call sp_task_update {bogus}",
+            "httpStatus": 500,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "http 500 and mcp.tool.failed errorCode=invalid_arguments",
+            "evidence": "http 500 errorCode=invalid_arguments"
+        },
+        {
+            "step": "mcp-annotations",
+            "requirement": "R2 / F2",
+            "command": "POST /mcp tools/list",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "every tool declares readOnlyHint, and at least one is a read",
+            "evidence": "10 tools, 10 annotated, reads=sp_feature_check,sp_rule_run,sp_task_list,sp_task_show,sp_workflow_status"
+        },
+        {
+            "step": "a2a-card-public",
+            "requirement": "R2 / F3, F4",
+            "command": "GET http://127.0.0.1:64568/a2a/members/spur-integrations-e2e-AsbQUO-coder/.well-known/agent-card.json (no bearer token)",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "http 200 with a non-empty skills array",
+            "evidence": "http 200 skills=general protocol=1.0"
+        },
+        {
+            "step": "a2a-send-refused",
+            "requirement": "R2 / F3",
+            "command": "POST /a2a/members/<member>/message:send (no bearer token)",
+            "httpStatus": 401,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "http 401 and an auth.denied event for surface a2a",
+            "evidence": "http 401 auth.denied surface=a2a"
+        },
+        {
+            "step": "a2a-cancel-run",
+            "requirement": "R2 / F6",
+            "command": "POST /a2a/members/<member>/tasks/:cancel",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "the run row reads running, cancel answers 200, state CANCELED and runStopped=true",
+            "evidence": "accepted=true http 200 state=TASK_STATE_CANCELED runStopped=true reason="
+        },
+        {
+            "step": "a2a-member-survives",
+            "requirement": "R2 / F6",
+            "command": "POST message:send (second task) + GET /api/inbox/messages?member=<member> (in)",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "the member loop is still alive and claims the next request",
+            "evidence": "loopAlive=true http 200 claimed=working"
+        },
+        {
+            "step": "integrations-status",
+            "requirement": "R2 / R7",
+            "command": "GET /api/integrations/status",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "http 200, both surfaces enabled, the auth env NAME present and no token value",
+            "evidence": "http 200 mcp=true env=SPUR_MCP_TOKEN tokenPresent=true a2a=true gatewayServed=true"
+        }
+    ],
+    "passed": 8,
+    "failed": 0,
+    "verdict": "PASS"
+}

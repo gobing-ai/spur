@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Integrations status and usage oRPC contract
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.288Z
-updated_at: "2026-11-22T04:01:13.394Z"
+updated_at: "2026-11-22T05:44:08.808Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
 
 dependencies: ["1421"]
 estimate_hours: 6
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1423. Integrations status and usage oRPC contract
@@ -31,21 +33,21 @@ Design satellite: docs/design/integrations-module.md §2 and §2.1. Reuses I61 p
 
 ### Requirements
 
-- [ ] R1. `integrations.status` is always mounted, whether MCP or A2A is on or off: the contract is in `packages/contracts/src/integrations.ts`, the logic in `packages/app` `IntegrationsService`, and the handler in `apps/server/src/modules/integrations/`.
-- [ ] R2. For each surface it reports `enabled`, path/URL, the auth env **name** and `tokenPresent`. A serialized response never contains the token value.
-- [ ] R3. The MCP catalog (tools with `origin: 'built-in' | 'workflow'` plus `annotations` from 1421, and resource templates) comes from the same `listTools()` / resource list that `tools/list` and `resources/list` use.
-- [ ] R4. A2A inbound members (`member`, `role`, card URL, `writeFenced`) and outbound members (`kind: 'a2a' | 'project'`, `target`) are listed from the fleet declaration.
-- [ ] R5. Under the gateway (an `x-forwarded-prefix` request header is present) it reports `namespace`, `rootMcpUrl` and the gateway `counters`. A failed read gives `counters: null` plus a `diagnostic`, and the procedure still succeeds. Standalone it reports `served: false`.
-- [ ] R6. `integrations.usage { since }` returns `protocolUsageSummary(db, { since })` for the window.
+- [x] R1. `integrations.status` is always mounted, whether MCP or A2A is on or off: the contract is in `packages/contracts/src/integrations.ts`, the logic in `packages/app` `IntegrationsService`, and the handler in `apps/server/src/modules/integrations/`.
+- [x] R2. For each surface it reports `enabled`, path/URL, the auth env **name** and `tokenPresent`. A serialized response never contains the token value.
+- [x] R3. The MCP catalog (tools with `origin: 'built-in' | 'workflow'` plus `annotations` from 1421, and resource templates) comes from the same `listTools()` / resource list that `tools/list` and `resources/list` use.
+- [x] R4. A2A inbound members (`member`, `role`, card URL, `writeFenced`) and outbound members (`kind: 'a2a' | 'project'`, `target`) are listed from the fleet declaration.
+- [x] R5. Under the gateway (an `x-forwarded-prefix` request header is present) it reports `namespace`, `rootMcpUrl` and the gateway `counters`. A failed read gives `counters: null` plus a `diagnostic`, and the procedure still succeeds. Standalone it reports `served: false`.
+- [x] R6. `integrations.usage { since }` returns `protocolUsageSummary(db, { since })` for the window.
 - [ ] R7. `/api/events/history?prefix=mcp|a2a|auth` returns 200 with only that family (a regression lock; no code change).
 
 Out of scope: a new events endpoint, a new activity table, live SSE counters, per-client identity, and the Board UI (1424).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The integrations status contract reports each surface without leaking tokens
-- [ ] AC2 — The integrations status contract carries catalogs, members and gateway counters
-- [ ] AC3 — Integrations activity reads protocol events from the event history ledger
+- [x] AC1 — The integrations status contract reports each surface without leaking tokens
+- [x] AC2 — The integrations status contract carries catalogs, members and gateway counters
+- [x] AC3 — Integrations activity reads protocol events from the event history ledger
 
 ### Q&A
 
@@ -84,15 +86,56 @@ Out of scope: a new events endpoint, a new activity table, live SSE counters, pe
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `packages/contracts/src/integrations.ts` | DTOs + `integrationsContract` (`status`, `usage`) | The wire contract lives in contracts (ADR-021); no token field exists in any schema |
+| `packages/contracts/src/index.ts:20,55,70` | wired into `contract` + re-exported | One root contract, one client surface |
+| `packages/app/src/services/integrations-service.ts` | `IntegrationsService`, `IntegrationsSources`, `IntegrationsStatus/Usage` assembly | The logic half; the server owns the catalog, so it arrives through the port and never as an import |
+| `packages/app/src/index.ts:487-497` | exported the service and its port types | Consumers import from the package facade, never a deep path |
+| `apps/server/src/modules/mcp/index.ts:200,571-583` | `RESOURCE_DESCRIPTORS` exported; `readMcpCatalog()` added over the existing dispatcher | R3: the status catalog is the SAME `listTools()`/`listResources()` the protocol serves |
+| `apps/server/src/modules/integrations/handlers.ts` | `createIntegrationsHandlers` — fills the port (mcp/a2a settings, `bearerEnv` + token presence, gateway probe), calls the service | Thin transport; the token value never enters `packages/app` |
+| `apps/server/src/modules/integrations/index.ts` | `integrationsModule` (mount is a no-op; procedures route through the global router) | R1: registered unconditionally, so "off" is answerable |
+| `apps/server/src/router.ts:9,47` | `integrations` handler subtree added | oRPC composition point |
+| `apps/server/src/modules/registry.ts:11,46` | module registered unconditionally | Same as any other built-in |
+| `apps/server/src/bootstrap.ts:41-45` | the inbound `Request` rides the oRPC context | The status read builds caller-visible URLs and reads the gateway's forwarded pair (R5); the transport previously passed no request |
+| `packages/app/tests/services/integrations-service.test.ts` | surfaces on/off, catalog origin+annotations, members, token leak, gateway served/standalone/unreadable, usage window | Failing-first behaviour for R2–R6 |
+| `apps/server/tests/modules/integrations.test.ts` | both surfaces off, token leak by raw body, gateway block over a real HTTP call, `prefix=mcp|a2a|auth` 200 and `mcp.` 400 | R1/R2/R5/R7 end to end |
+
+Notes
+- R7 needed no code: the catalog prefixes are already dot-less; the test is the regression lock the task asked for.
+- `writeFenced` is an attestation of the member's RESOLVED executor, so it costs one `fleet.resolve()` and degrades to `false` when the declaration cannot resolve.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 `integrations.status` always mounted; contract in contracts, logic in `packages/app` `IntegrationsService`, handler in `apps/server/src/modules/integrations/` | MET | `packages/contracts/src/integrations.ts:245-270` + wired at `packages/contracts/src/index.ts:41`, `packages/app/src/services/integrations-service.ts:119-141`, `apps/server/src/modules/integrations/handlers.ts:100-160`, module registered unconditionally at `apps/server/src/modules/registry.ts:46`, router at `apps/server/src/router.ts:47` — `apps/server/tests/modules/integrations/handlers.test.ts` ("it answers with both surfaces off", "both procedures exist on the router") |
+| R2 per surface: `enabled`, path/URL, auth env NAME, `tokenPresent`; no token value in any serialized response | MET | `packages/app/src/services/integrations-service.ts:126-139,145-165` (builds from names + booleans), `apps/server/src/modules/integrations/handlers.ts:37-41,96-99` (`tokenPresent()` discards the value) — `packages/app/tests/services/integrations-service.test.ts` ("no serialized field contains the token value"), `apps/server/tests/modules/integrations/handlers.test.ts` (raw body check with a real token in `ctx.env`) |
+| R3 MCP catalog (tools with `origin` + `annotations`, resource templates) comes from the same `listTools()`/resource list | MET | `apps/server/src/modules/mcp/index.ts:603-610` (`readMcpCatalog` over the live dispatcher), `apps/server/src/modules/integrations/handlers.ts:115` (single source), `packages/app/src/services/integrations-service.ts:146-160` — `apps/server/tests/modules/integrations/handlers.test.ts` ("the catalog comes from the same descriptors tools/list serves": 10 tools, built-in origin, annotations present) |
+| R4 A2A inbound members (`member`, `role`, card URL, `writeFenced`) and outbound (`kind: 'a2a' | 'project'`, `target`) from the fleet declaration | MET | `packages/app/src/services/integrations-service.ts:166-212` — `packages/app/tests/services/integrations-service.test.ts` ("inbound and outbound members come from the fleet declaration", "a member whose executor cannot attest write capability is not advertised as fenced") |
+| R5 under a gateway (`x-forwarded-prefix`) report `namespace`, `rootMcpUrl`, gateway `counters`; a failed read gives `counters: null` + `diagnostic` and still succeeds; standalone `served: false` | MET | `packages/app/src/services/integrations-service.ts:44-60,224-236`, `apps/server/src/modules/integrations/handlers.ts:44-80`, request on the oRPC context at `apps/server/src/bootstrap.ts:41-50` — `packages/app/tests/services/integrations-service.test.ts` (served/failed-probe/standalone), `apps/server/tests/modules/integrations/handlers.test.ts` (real HTTP call: counters via the injected seam; unreadable probe → null + diagnostic) |
+| R6 `integrations.usage { since }` returns `protocolUsageSummary(db, { since })` | MET | `packages/app/src/services/integrations-service.ts:140-143` — `packages/app/tests/services/integrations-service.test.ts` ("reads the real event ledger over a bounded window" over seeded `mcp.*`/`a2a.*`/`auth.denied` rows; "an unbounded read includes every protocol row") |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The integrations status contract reports each surface without leaking tokens | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts` (raw-body token check + both surfaces off) |
+| AC2 — The integrations status contract carries catalogs, members and gateway counters | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts` + `packages/app/tests/services/integrations-service.test.ts` |
+| AC3 — Integrations activity reads protocol events from the event history ledger | MET | test | `packages/app/tests/services/integrations-service.test.ts` (usage fold) + `apps/server/tests/modules/integrations/handlers.test.ts` (history prefixes) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -101,4 +144,7 @@ Out of scope: a new events endpoint, a new activity table, live SSE counters, pe
 ### History
 
 - 2026-11-22T02:19:02.338Z feature_id S → A82 (system)
+- 2026-11-22T05:43:42.530Z todo → wip (system)
+- 2026-11-22T05:44:06.865Z wip → testing (system)
+- 2026-11-22T05:44:08.804Z testing → done (system)
 

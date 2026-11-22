@@ -7,7 +7,7 @@
  * state held in memory that dies with the process, and a token that leaks into a response.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerSystemEventTap } from '@gobing-ai/spur-app';
@@ -51,7 +51,16 @@ let harness: Harness;
  * the supervisor stop path, and the boot config carrying the a2a switch + token.
  */
 async function makeHarness(
-    options: { enabled?: boolean; members?: string[]; tokenVarUnset?: boolean } = {},
+    options: {
+        enabled?: boolean;
+        members?: string[];
+        tokenVarUnset?: boolean;
+        /** 1421 R4: the member's declared role and purpose, which the card projects as a skill. */
+        role?: string;
+        purpose?: string;
+        /** 1421 R5: lane mode is on, which is what `agent.fleet.maxWriters` presence means. */
+        laneMode?: boolean;
+    } = {},
 ): Promise<Harness> {
     const db = await createMigratedDb({ url: ':memory:' });
     const inbox = await makeInbox(async () => db);
@@ -79,7 +88,14 @@ async function makeHarness(
         coordination: () => ({ listAgentSpecs: async () => memberIds.map((id) => ({ id, name: id })) }),
         fleetService: () => ({
             memberAddresses: async () =>
-                memberIds.map((instanceId) => ({ instanceId, executor: 'claude', enabled: true })),
+                memberIds.map((instanceId) => ({
+                    instanceId,
+                    executor: 'claude',
+                    enabled: true,
+                    ...(options.role === undefined ? {} : { role: options.role }),
+                    ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
+                })),
+            ...(options.laneMode === true ? { load: async () => ({ maxWriters: 2 }) } : {}),
         }),
         env: options.tokenVarUnset === true ? {} : { SPUR_A2A_TOKEN: TOKEN },
         // 1376 R4 / 1377 R1-R3: the module emits onto the canonical bus; the recording handler
@@ -230,19 +246,38 @@ describe('a2a module — authentication (R5/R6)', () => {
         expect(JSON.stringify(denied.payload)).not.toContain(TOKEN);
     });
 
-    test('a wrong bearer token is rejected on every route', async () => {
+    test('a wrong bearer token is rejected on every bearer-only route', async () => {
         for (const [url, init] of [
-            [cardUrl(), {}],
             [memberUrl('tasks/msg_1'), {}],
+            [memberUrl('message:send'), { method: 'POST', body: '{}' }],
         ] as [string, RequestInit][]) {
             const res = await harness.app.request(url, { ...init, headers: { Authorization: 'Bearer wrong' } });
             expect(res.status).toBe(401);
         }
     });
 
+    test('the Agent Card needs no bearer token while every other route does (R3)', async () => {
+        const card = await harness.app.request(cardUrl());
+        expect(card.status).toBe(200);
+        const body = (await card.json()) as { name: string };
+        expect(body.name).toBe(MEMBER);
+        // The same unauthenticated caller is refused on the write and the read routes, and the
+        // refusal is observable (R3's second half).
+        for (const [url, init] of [
+            [memberUrl('message:send'), { method: 'POST', body: '{}' }],
+            [memberUrl('tasks/msg_1'), {}],
+        ] as [string, RequestInit][]) {
+            const res = await harness.app.request(url, init);
+            expect(res.status).toBe(401);
+        }
+        expect(harness.events.filter((event) => event.name === 'auth.denied')).toHaveLength(2);
+    });
+
     test('enabled with an unreadable token variable refuses loudly instead of faking a 404', async () => {
         harness = await makeHarness({ tokenVarUnset: true });
-        const res = await harness.app.request(cardUrl(), { headers: { Authorization: 'Bearer anything' } });
+        const res = await harness.app.request(memberUrl('tasks/msg_1'), {
+            headers: { Authorization: 'Bearer anything' },
+        });
         expect(res.status).toBe(500);
         const body = (await res.json()) as { error: { message: string } };
         expect(body.error.message).toContain('server.a2a.authEnv');
@@ -278,6 +313,18 @@ describe('a2a module — agent card (R2)', () => {
     test('an unknown member has no card', async () => {
         const res = await harness.app.request(cardUrl('nobody'), authed());
         expect(res.status).toBe(404);
+    });
+
+    test('the card carries one skill derived from the member declaration (1421 R4)', async () => {
+        harness = await makeHarness({ role: 'implementer', purpose: 'lands the feature tasks' });
+        const res = await harness.app.request(cardUrl());
+        expect(res.status).toBe(200);
+        const card = (await res.json()) as {
+            skills: Array<{ id: string; name: string; description: string; tags: string[] }>;
+        };
+        expect(card.skills).toEqual([
+            { id: 'implementer', name: 'implementer', description: 'lands the feature tasks', tags: ['implementer'] },
+        ]);
     });
 });
 
@@ -388,6 +435,21 @@ describe('a2a module — GetTask reads the receipt (R4)', () => {
         expect(task.metadata?.remoteBranch).toBe('sp/remote-e2e');
     });
 
+    test('a completed task in lane mode reports the project tree branch (1421 R5)', async () => {
+        // Lane mode on, and an A2A request key (`a2a:<member>:<messageId>`) that never matches the
+        // fleet task-key pattern — so the drain tree is the project tree, exactly as in the loop.
+        harness = await makeHarness({ laneMode: true });
+        const init = Bun.spawnSync({ cmd: ['git', 'init', '-b', 'main'], cwd: tempDir });
+        expect(init.exitCode).toBe(0);
+        const sent = (await (await sendMessage('m-lane')).json()) as { task: { id: string } };
+        await seedRun(sent.task.id, 'exited');
+        await harness.inbox.reply(sent.task.id, MEMBER, 'lane work completed');
+        const task = (await (await harness.app.request(memberUrl(`tasks/${sent.task.id}`), authed())).json()) as {
+            metadata?: { remoteBranch?: string };
+        };
+        expect(task.metadata?.remoteBranch).toBe('main');
+    });
+
     test('an errored receipt is failed with the reason', async () => {
         const sent = (await (await sendMessage('m-f')).json()) as { task: { id: string } };
         await seedRun(sent.task.id, 'errored');
@@ -427,20 +489,55 @@ describe('a2a module — GetTask reads the receipt (R4)', () => {
 });
 
 describe('a2a module — CancelTask stops the run (R5)', () => {
-    test('canceling a working task stops the run and reports canceled', async () => {
-        const sent = (await (await sendMessage('m-cancel')).json()) as { task: { id: string } };
-        await seedRun(sent.task.id, 'running');
-        const res = await harness.app.request(
-            memberUrl(`tasks/${sent.task.id}:cancel`),
+    /** Cancel one task the way the A2A CLI does (empty JSON body, bearer token). */
+    async function cancel(taskId: string): Promise<Response> {
+        return harness.app.request(
+            memberUrl(`tasks/${taskId}:cancel`),
             authed({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
         );
+    }
+
+    /** Close the coordination row a live run would leave behind when its child dies. */
+    async function settleRun(messageId: string, status: 'exited' | 'errored'): Promise<void> {
+        const { CoordinationRunDao } = await import('@gobing-ai/spur-domain');
+        const runs = new CoordinationRunDao(harness.db as never);
+        await runs.updateExit(`run-${messageId}`, status, new Date().toISOString(), '[]', {
+            messageIds: [messageId],
+            outcome: status === 'exited' ? 'run-exit-only' : 'errored',
+        });
+    }
+
+    test('canceling a working task requests the cancel and reports canceled (1422 R2/R3)', async () => {
+        const sent = (await (await sendMessage('m-cancel')).json()) as { task: { id: string } };
+        const runId = await seedRun(sent.task.id, 'running');
+        // The member loop is what settles the row once its child is aborted; stand in for it.
+        const settle = setTimeout(() => void settleRun(sent.task.id, 'errored'), 300);
+        const res = await cancel(sent.task.id);
+        clearTimeout(settle);
         expect(res.status).toBe(200);
-        expect(harness.stops).toEqual([MEMBER]);
+        // 1422 R3: the member loop is never stopped — only the run behind this task.
+        expect(harness.stops).toEqual([]);
+        // The request is a durable per-run marker the drain polls (never a fire-and-forget kill).
+        expect(existsSync(join(tempDir, '.spur', 'run', runId, 'cancel-requested'))).toBe(true);
         const task = (await (await harness.app.request(memberUrl(`tasks/${sent.task.id}`), authed())).json()) as {
             status: { state: string };
         };
         expect(task.status.state).toBe('TASK_STATE_CANCELED');
-    });
+    }, 20_000);
+
+    test('a run that never clears reports runStopped false and still never stops the member (1422 R3)', async () => {
+        const sent = (await (await sendMessage('m-cancel-timeout')).json()) as { task: { id: string } };
+        const runId = await seedRun(sent.task.id, 'running');
+        const res = await cancel(sent.task.id);
+        expect(res.status).toBe(200);
+        expect(harness.stops).toEqual([]);
+        expect(existsSync(join(tempDir, '.spur', 'run', runId, 'cancel-requested'))).toBe(true);
+        const row = await harness.rows('a2a.task.cancelled');
+        const cancelled = row.find((entry) => entry.data.taskId === sent.task.id);
+        if (cancelled === undefined) throw new Error('expected an a2a.task.cancelled row');
+        expect(cancelled.data.runStopped).toBe(false);
+        expect(cancelled.data.runId).toBe(runId);
+    }, 30_000);
 
     test('canceling a task with no run in progress is refused, never faked', async () => {
         const sent = (await (await sendMessage('m-queued')).json()) as { task: { id: string } };
@@ -521,15 +618,31 @@ describe('a2a module — intake and cancellation events (1377)', () => {
     test('an accepted cancel emits a2a.task.cancelled with runStopped (R3)', async () => {
         const first = (await (await sendMessage('ev-cancel')).json()) as { task: { id: string } };
         await seedRun(first.task.id, 'running');
+        // The drain settles its own row once its child is aborted (1422); stand in for it here.
+        const settle = setTimeout(() => {
+            void (async () => {
+                const { CoordinationRunDao } = await import('@gobing-ai/spur-domain');
+                await new CoordinationRunDao(harness.db as never).updateExit(
+                    `run-${first.task.id}`,
+                    'errored',
+                    new Date().toISOString(),
+                    '[]',
+                    { messageIds: [first.task.id], outcome: 'errored' },
+                );
+            })();
+        }, 300);
         const res = await harness.app.request(
             memberUrl(`tasks/${first.task.id}:cancel`),
             authed({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }),
         );
+        clearTimeout(settle);
         expect(res.status).toBe(200);
         const row = (await harness.rows('a2a.task.cancelled'))[0];
         if (row === undefined) throw new Error('expected an a2a.task.cancelled row');
         expect(row.data.member).toBe(MEMBER);
         expect(row.data.taskId).toBe(first.task.id);
+        expect(row.data.runId).toEqual(expect.any(String));
+        // The row cleared inside the wait bound, so the child was really stopped (1422 R3).
         expect(row.data.runStopped).toBe(true);
         expect(row.raw).not.toContain('deploy the docs site');
     });

@@ -104,6 +104,8 @@ describe('singleton registry instance', () => {
     test('enabled modules are the surviving modules plus settings, in declared order', () => {
         expect(getEnabledModules()).toEqual([
             'observability',
+            // A82 1424: the Integrations module (order 12) sits between observability and search.
+            'integrations',
             'search',
             'history',
             'plans',

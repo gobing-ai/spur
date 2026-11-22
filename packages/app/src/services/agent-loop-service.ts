@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import {
     CLAIM_TTL_MS,
     CoordinationRunDao,
@@ -68,6 +69,47 @@ export function createWriteSlotHeartbeat(input: {
 
 /** Backstop drain cadence when `--poll` is absent or malformed. */
 export const DEFAULT_LOOP_POLL_MS = 2000;
+
+/**
+ * 1422: how often a live keyed drain stats its own `cancel-requested` file. One stat per second
+ * only while the drain runs, and the run id names the directory, so a stale file cannot abort a
+ * later run. Frozen because the server's 10s wait is sized against it.
+ */
+export const CANCEL_POLL_MS = 1_000;
+
+/** The per-run cancel-requested marker the server writes and this loop polls (1422). */
+export function cancelRequestedPath(projectPath: string, runId: string): string {
+    return join(projectPath, '.spur', 'run', runId, 'cancel-requested');
+}
+
+/**
+ * Watch one run's cancel marker and abort its child when it appears (1422 R2). Returns the stop
+ * function; the poll is unref'd so it can never hold the process open after the drain settles.
+ */
+export function startCancelPoll(input: {
+    projectPath: string;
+    runId: string;
+    controller: AbortController;
+    /** Called once, when the request is seen — before the abort lands. */
+    onRequested?: () => void;
+    pollMs?: number;
+}): () => void {
+    const file = cancelRequestedPath(input.projectPath, input.runId);
+    const fs = createNodeFileSystem(input.projectPath);
+    const timer = setInterval(() => {
+        try {
+            // `exists` is the sync stat on this facade; the interval is the async boundary.
+            if (fs.exists(file) === true) {
+                input.onRequested?.();
+                input.controller.abort();
+            }
+        } catch {
+            /* a file removed between the stat and the read is simply not a cancel */
+        }
+    }, input.pollMs ?? CANCEL_POLL_MS);
+    (timer as { unref?: () => void }).unref?.();
+    return () => clearInterval(timer);
+}
 
 /**
  * G71 R4 / decision D2: the orchestrator answers its inbox in prose and leaves dispatch to the
@@ -517,6 +559,10 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
             const ledger = await deps.attachLedger(bus);
             let drainFailed: boolean;
             let stopHeartbeat: (() => void) | undefined;
+            let stopCancelPoll: (() => void) | undefined;
+            // A requested cancel is a DELIVERED run (1422 R5): it must settle `accepted`, or the
+            // release would redeliver it ahead of the member's next queued request.
+            let cancelRequested: boolean = false;
             try {
                 if (memberSpec?.type === 'a2a') {
                     if (deps.a2aTurn === undefined) {
@@ -592,6 +638,20 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                     // same id for as long as the run is live.
                     const runId = keyed ? randomUUID() : undefined;
                     if (runId !== undefined) deps.setSupervisorRun?.(recipient, runId);
+                    // 1422 R2: a keyed run watches its OWN cancel marker. Aborting the controller is
+                    // the whole cancel mechanism — the executor turns it into a process-group kill
+                    // (ts-runtime), so the member loop, the slot heartbeat and the next claim survive.
+                    const cancelController = runId === undefined ? undefined : new AbortController();
+                    if (runId !== undefined && cancelController !== undefined) {
+                        stopCancelPoll = startCancelPoll({
+                            projectPath,
+                            runId,
+                            controller: cancelController,
+                            onRequested: () => {
+                                cancelRequested = true;
+                            },
+                        });
+                    }
                     // Task 1273: one execution identity per keyed run — every phase mark
                     // (claim → lifecycle → contract) joins by the same (runId, executionId).
                     const executionId = keyed ? randomUUID() : undefined;
@@ -686,11 +746,11 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                         } else {
                             let exitCode: number | undefined;
                             try {
-                                exitCode = await svc.run(
-                                    body,
-                                    drainFlags,
-                                    turn !== undefined ? { ...runDeps, dispatchTurn: turn.dispatchTurn } : runDeps,
-                                );
+                                exitCode = await svc.run(body, drainFlags, {
+                                    ...runDeps,
+                                    ...(turn !== undefined ? { dispatchTurn: turn.dispatchTurn } : {}),
+                                    ...(cancelController !== undefined ? { signal: cancelController.signal } : {}),
+                                });
                             } finally {
                                 // Same turn receipt a work-item drain records (fleet-work-item.ts), so a
                                 // plain keyed task turn is provably warm or names its fallback.
@@ -711,6 +771,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                             drainFailed = exitCode !== 0 || !invocationStarted;
                         }
                     } finally {
+                        stopCancelPoll?.();
                         if (runId !== undefined) deps.setSupervisorRun?.(recipient, undefined);
                     }
                 }
@@ -718,7 +779,9 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                 stopHeartbeat?.();
                 // 0831 R4: settle even on abort; the loop keeps iterating either
                 // way — a released row redelivers on the next drain.
-                await deps.settle(claimed, invocationStarted ? 'accepted' : 'not-started');
+                // A cancel request settles the row delivered: the member was told to stop this run,
+                // not to lose it — releasing it would replay the work ahead of the next request.
+                await deps.settle(claimed, invocationStarted || cancelRequested ? 'accepted' : 'not-started');
                 await ledger.flush();
                 ledger.unsubscribe();
             }

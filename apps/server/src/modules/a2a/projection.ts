@@ -57,6 +57,10 @@ export interface AgentCardInput {
     executor: string;
     /** Absolute origin the caller reached, so the advertised interface URL matches it. */
     origin: string;
+    /** Layer-1 role id from the member declaration; absent yields the default `general` skill (1421 R4). */
+    role?: string;
+    /** The member's human description (`purpose` in the fleet declaration), used as the skill text. */
+    purpose?: string;
 }
 
 /**
@@ -76,9 +80,13 @@ export function cardOrigin(forwarded: { host?: string | null; prefix?: string | 
 
 /** Build the card: protocol 1.0, HTTP+JSON only, streaming and push declared false. */
 export function agentCard(input: AgentCardInput): Record<string, unknown> {
+    const description = `Spur fleet member ${input.instanceId}${input.executor === '' ? '' : ` (${input.executor})`}`;
+    // 1421 R4: an A2A caller selects work by skill, so the card advertises the member's declared
+    // role — and a member with no role still offers one skill rather than an empty array.
+    const skill = input.role ?? 'general';
     return {
         name: input.instanceId,
-        description: `Spur fleet member ${input.instanceId}${input.executor === '' ? '' : ` (${input.executor})`}`,
+        description,
         version: '1.0.0',
         supportedInterfaces: [
             {
@@ -94,7 +102,14 @@ export function agentCard(input: AgentCardInput): Record<string, unknown> {
         },
         defaultInputModes: ['text/plain'],
         defaultOutputModes: ['text/plain'],
-        skills: [],
+        skills: [
+            {
+                id: skill,
+                name: skill,
+                description: input.purpose ?? description,
+                tags: [skill],
+            },
+        ],
     };
 }
 

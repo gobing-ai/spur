@@ -6,9 +6,9 @@
  * ownership loss.
  */
 import { describe, expect, test, vi } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { InboxClaim } from '@gobing-ai/spur-domain';
 import {
     CoordinationRunDao,
@@ -1072,6 +1072,126 @@ describe('G71 R1/R2/R3 — member drain, keyed run path, slot heartbeat, resume 
         await runAgentLoopCore(deps, { recipient: 'member-1', pollMs: 10, flags: {}, runtime: { maxIterations: 1 } });
         const resets = await new SystemEventDao(db).query({ names: ['fleet.member-session-reset'] });
         expect(resets).toHaveLength(0);
+    });
+});
+
+/**
+ * 1422 — CancelTask stops ONE run, not the member loop.
+ *
+ * The failure modes: a cancel that kills the loop (today's `supervisor().stop`), a cancel the
+ * running child never sees, a cancel file that aborts a LATER run, and a poll that keeps ticking
+ * after the drain settles.
+ */
+describe('1422 cancel-a-run', () => {
+    function keyedDeps(db: DbAdapter, cwd: string, overrides: Record<string, unknown> = {}): AgentLoopDeps {
+        return memberDeps(db, {
+            cwd,
+            fleet: {
+                load: async () => ({ enabled: true }),
+                resolveOrchestrator: async () => null,
+                assertLaunchGroundTruth: async () => {},
+            } as unknown as FleetService,
+            drain: async () => ({
+                prompt: 'dispatch: run the task',
+                flags: {},
+                claimed: [{ id: 'm-cancel', attempts: 1 }],
+                requestKeys: ['0001'],
+            }),
+            ...overrides,
+        });
+    }
+
+    /** A persistent-process double: the keyed path must never reach this stdin send. */
+    const fakeProcess = (send: (message: string) => Promise<{ ok: boolean }>) => ({
+        start: async () => {},
+        stop: async () => {},
+        send,
+        getStatus: () => 'running' as const,
+        getExitCode: () => null,
+    });
+
+    const memberSessionStub = (db: DbAdapter) =>
+        ({
+            executors: [{ name: 'e1', agent: 'pi' }],
+            env: {},
+            getDb: async () => db,
+            warn: () => {},
+            processFactory: () => fakeProcess(async () => ({ ok: true })),
+            sessionCapability: () => ({ mode: 'persistent', supportsSessionDir: false }) as never,
+        }) as never;
+
+    test('a cancel request aborts only that run child, and the loop keeps draining', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-cancel-'));
+        const settled: string[] = [];
+        let signal: AbortSignal | undefined;
+        let drains = 0;
+        const deps = keyedDeps(db, cwd, {
+            agentService: (bus: { emit: (name: string, payload: unknown) => void }) => ({
+                run: async (_input: string, flags: Record<string, unknown>, runDeps?: { signal?: AbortSignal }) => {
+                    drains += 1;
+                    signal = runDeps?.signal;
+                    const runId = String(flags['run-id']);
+                    expect(runId).not.toBe('');
+                    // The drain announces its own start, as a real one does (0831 accepted).
+                    bus.emit('agent.invoke.start', { operation: 'prompt' });
+                    // The server writes this file; the member's 1s poll is what must see it.
+                    const requested = join(cwd, '.spur', 'run', runId, 'cancel-requested');
+                    mkdirSync(dirname(requested), { recursive: true });
+                    writeFileSync(requested, new Date().toISOString());
+                    const deadline = Date.now() + 5_000;
+                    while (runDeps?.signal?.aborted !== true && Date.now() < deadline) {
+                        await new Promise((resolve) => setTimeout(resolve, 50));
+                    }
+                    expect(runDeps?.signal?.aborted).toBe(true);
+                    return 3; // a killed child, reported by the runner's signal
+                },
+                runTraced: async () => ({}),
+            }),
+            settle: async (claimed: InboxClaim[], outcome: string) => {
+                settled.push(`${claimed.map((claim) => claim.id).join(',')}:${outcome}`);
+            },
+            memberSession: memberSessionStub(db),
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            // The poll interval is a frozen 1s constant; maxIterations 2 proves the loop survives.
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 2 },
+        });
+        expect(code).toBe(0);
+        expect(signal).toBeDefined();
+        // One abort, then the loop claimed its next request instead of dying with the child.
+        expect(drains).toBe(2);
+        // A cancelled run settles DELIVERED — releasing it would replay the cancelled work ahead
+        // of the member's next queued request (observed: the next task starved behind a redelivery).
+        expect(settled[0]).toBe('m-cancel:accepted');
+    });
+
+    test('a keyed drain with no cancel request runs to completion, untruncated', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-no-cancel-'));
+        let signal: AbortSignal | undefined;
+        const deps = keyedDeps(db, cwd, {
+            agentService: (bus: { emit: (name: string, payload: unknown) => void }) => ({
+                run: async (_input: string, _flags: Record<string, unknown>, runDeps?: { signal?: AbortSignal }) => {
+                    signal = runDeps?.signal;
+                    bus.emit('agent.invoke.start', { operation: 'prompt' });
+                    return 0;
+                },
+                runTraced: async () => ({}),
+            }),
+            memberSession: memberSessionStub(db),
+        });
+        const code = await runAgentLoopCore(deps, {
+            recipient: 'member-1',
+            pollMs: 10,
+            flags: {},
+            runtime: { maxIterations: 1 },
+        });
+        expect(code).toBe(0);
+        expect(signal?.aborted).toBe(false);
     });
 });
 

@@ -1,5 +1,12 @@
 import { join } from 'node:path';
-import { FleetService, type InboxMessage, type InboxService, RequestKeyConflictError } from '@gobing-ai/spur-app';
+import {
+    FleetService,
+    type InboxMessage,
+    type InboxService,
+    laneForRequestKey,
+    RequestKeyConflictError,
+} from '@gobing-ai/spur-app';
+import type { AgentFleet } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type CoordinationRunRow } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
@@ -31,7 +38,11 @@ const CANCEL_SUFFIX = ':cancel';
 
 /** The fleet seam the inbox module uses: an injected `fleetService()` wins, else resolve locally. */
 interface FleetSeams {
-    memberAddresses(projectPath: string): Promise<{ instanceId: string; executor: string; enabled: boolean }[]>;
+    memberAddresses(
+        projectPath: string,
+    ): Promise<{ instanceId: string; executor: string; enabled: boolean; role?: string; purpose?: string }[]>;
+    /** The declaration `laneForRequestKey` reads its lane switch from; injected doubles may omit it. */
+    load?(projectPath: string): Promise<Pick<AgentFleet, 'maxWriters' | 'laneRoot'> | null>;
 }
 
 function fleetOver(ctx: ServerContext): FleetSeams {
@@ -86,9 +97,43 @@ async function answerText(inbox: InboxService, messageId: string): Promise<strin
     return reply === undefined ? null : reply.body;
 }
 
-/** A cancel intent, written before the stop so a restart still reads `canceled` (R4/R5). */
+/** A cancel intent, written before the request so a restart still reads `canceled` (R4/R5). */
 function cancelMarkerPath(ctx: ServerContext, messageId: string): string {
     return join(ctx.runDir, `a2a-canceled-${messageId}`);
+}
+
+/** How long the cancel response waits for the run row to leave `running` (1422 R3). */
+const CANCEL_WAIT_MS = 10_000;
+
+/** How often that wait re-reads the coordination row (1422 R3; the member polls at 1s). */
+const CANCEL_POLL_MS = 250;
+
+/** The per-run marker a live drain polls; the run id makes it impossible to abort a later run. */
+function cancelRequestPath(ctx: ServerContext, runId: string): string {
+    return join(ctx.runDir, runId, 'cancel-requested');
+}
+
+/**
+ * Ask ONE run to stop (1422 R2/R3): write its `cancel-requested` marker, then wait — bounded — for
+ * its coordination row to leave `running`. Nothing here touches the member process, so the loop
+ * keeps running and claims its next request; `false` means the row did not clear in time.
+ */
+async function requestRunCancel(ctx: ServerContext, runId: string, messageId: string): Promise<boolean> {
+    try {
+        const marker = cancelRequestPath(ctx, runId);
+        await ctx.fs.ensureDir(join(ctx.runDir, runId));
+        await ctx.fs.writeFile(marker, `${new Date().toISOString()}\n`);
+    } catch (error) {
+        ctx.logger.warn('a2a cancel: cannot write the per-run cancel marker', { runId, error: String(error) });
+        return false;
+    }
+    const deadline = Date.now() + CANCEL_WAIT_MS;
+    while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, CANCEL_POLL_MS));
+        const row = await latestRun(ctx, messageId);
+        if (row === null || row.run_id !== runId || row.status !== 'running') return true;
+    }
+    return false;
 }
 
 async function readCanceled(ctx: ServerContext, messageId: string): Promise<boolean> {
@@ -99,13 +144,13 @@ async function readCanceled(ctx: ServerContext, messageId: string): Promise<bool
     }
 }
 
-/** The member's current working branch, exposed only on completed tasks (1337 R4). */
-async function remoteBranch(ctx: ServerContext): Promise<string | null> {
+/** The member's current working branch, exposed only on completed tasks (1337 R4, 1421 R5). */
+async function remoteBranch(ctx: ServerContext, requestKey: string | null): Promise<string | null> {
     try {
         const result = await new NodeProcessExecutor().run({
             command: 'git',
             args: ['branch', '--show-current'],
-            cwd: ctx.cwd,
+            cwd: await drainTree(ctx, requestKey),
             timeout: 5_000,
             rejectOnError: false,
         });
@@ -114,6 +159,24 @@ async function remoteBranch(ctx: ServerContext): Promise<string | null> {
         return branch === '' ? null : branch;
     } catch {
         return null;
+    }
+}
+
+/**
+ * The tree a task's drain ran in (1421 R5). The agent loop resolves a keyed attempt's directory
+ * with `laneForRequestKey(...) ?? projectPath`, so this reuses that ONE rule instead of forking a
+ * second one. An A2A request key (`a2a:<member>:<messageId>`) never matches the fleet task-key
+ * pattern, so today this is always the project tree — which is exactly what the loop does too.
+ */
+async function drainTree(ctx: ServerContext, requestKey: string | null): Promise<string> {
+    if (requestKey === null || requestKey === '') return ctx.cwd;
+    try {
+        const declaration = (await fleetOver(ctx).load?.(ctx.cwd)) ?? null;
+        const lane = laneForRequestKey(ctx.cwd, declaration, requestKey);
+        // A lane directory that does not exist is not a tree to read a branch from.
+        return lane !== null && (await ctx.fs.exists(lane)) === true ? lane : ctx.cwd;
+    } catch {
+        return ctx.cwd;
     }
 }
 
@@ -139,7 +202,7 @@ async function projectTask(ctx: ServerContext, inbox: InboxService, message: Inb
         if (typeof timestamp === 'string') status.timestamp = timestamp;
     }
     const answer = state === 'TASK_STATE_COMPLETED' ? await answerText(inbox, message.id) : null;
-    const branch = state === 'TASK_STATE_COMPLETED' ? await remoteBranch(ctx) : null;
+    const branch = state === 'TASK_STATE_COMPLETED' ? await remoteBranch(ctx, message.requestKey ?? null) : null;
     return {
         id: message.id,
         contextId: message.threadId,
@@ -171,9 +234,11 @@ export const a2aModule: ServerModule = {
         const settings = a2aSettings(ctx);
         // R1: off by default. No route, no handler, no path — the surface does not exist.
         if (!settings.enabled) return;
-        // R6: everything below the card is bearer-only, and the check precedes any write — the
+        // R6: every route below the card is bearer-only, and the check precedes any write — the
         // shared guard (task 1375) carries the a2a realm and envelope; this module keeps the
-        // mount-time warning and the per-route call.
+        // mount-time warning and the per-route call. 1421 R3: the Agent Card is the ONE public
+        // route, because a client must discover a member before it holds a token; nothing else
+        // may skip `authorize`.
         const guard = bearerGuard({
             realm: 'spur-a2a',
             authEnv: settings.authEnv,
@@ -203,8 +268,8 @@ export const a2aModule: ServerModule = {
         const inbox = ctx.inbox();
 
         app.get(`/a2a/members/:member/${CARD_SUFFIX}`, async (c) => {
-            const denied = authorize(c);
-            if (denied !== null) return denied;
+            // 1421 R3: public by design (the one route with no `authorize`). It exposes only
+            // declared identity — never a token value, a run state or a message body.
             const member = await resolveMember(ctx, c.req.param('member'));
             if (member === null) return notFoundMember(c.req.param('member'));
             return c.json(
@@ -218,6 +283,8 @@ export const a2aModule: ServerModule = {
                         },
                         new URL(c.req.url).origin,
                     ),
+                    ...(member.role === undefined ? {} : { role: member.role }),
+                    ...(member.purpose === undefined ? {} : { purpose: member.purpose }),
                 }),
             );
         });
@@ -298,10 +365,11 @@ export const a2aModule: ServerModule = {
             const message = await inbox.get(taskId);
             if (message === null || message.toId !== member.instanceId) return notFoundTask(taskId);
             const before = await projectTask(ctx, inbox, message);
-            // Only a RUN can be stopped (AC4). A queued request has no process to signal, and the
-            // member loop owns claiming it — recording a cancel intent would promise a stop we
-            // cannot deliver, so it is refused instead of faked.
-            if (before.status.state !== 'TASK_STATE_WORKING') {
+            const run = await latestRun(ctx, taskId);
+            // Only a RUNNING run can be stopped (1422 R1). A queued request has no child to signal,
+            // and the member loop owns claiming it — recording a cancel intent would promise a stop
+            // we cannot deliver, so it is refused instead of faked.
+            if (before.status.state !== 'TASK_STATE_WORKING' || run === null || run.status !== 'running') {
                 return c.json(
                     a2aError(
                         400,
@@ -315,7 +383,7 @@ export const a2aModule: ServerModule = {
                     400,
                 );
             }
-            // Intent first (durable, survives a restart), then the existing stop path (R5).
+            // Intent first (durable, survives a restart), then the per-run request (R2).
             const marker = cancelMarkerPath(ctx, taskId);
             try {
                 await ctx.fs.ensureDir(ctx.runDir);
@@ -323,21 +391,16 @@ export const a2aModule: ServerModule = {
             } catch (error) {
                 return c.json(a2aError(500, 'INTERNAL', `cannot record the cancel: ${String(error)}`), 500);
             }
-            let runStopped = true;
-            try {
-                await ctx.supervisor().stop(member.instanceId);
-            } catch (error) {
-                runStopped = false;
-                // Not supervised (a queued request, or a member with no live process): the intent
-                // is recorded and the state reads canceled; there is no process to signal.
-                ctx.logger.warn('a2a cancel: no supervised run stopped', {
-                    member: member.instanceId,
-                    taskId,
-                    error: String(error),
-                });
-            }
-            // 1377 R3: `runStopped` keeps "intent recorded" distinct from "process actually stopped".
-            ctx.eventBus().emit('a2a.task.cancelled', { member: member.instanceId, taskId, runStopped });
+            // 1422 R2/R3: only this run's child is aborted; the member loop is never stopped.
+            const runStopped = await requestRunCancel(ctx, run.run_id, taskId);
+            // 1377 R3 / 1422 R4: `runStopped` separates "intent recorded" from "child actually
+            // stopped", and `runId` names the run the Board has to look up.
+            ctx.eventBus().emit('a2a.task.cancelled', {
+                member: member.instanceId,
+                taskId,
+                runId: run.run_id,
+                runStopped,
+            });
             return c.json(await projectTask(ctx, inbox, (await inbox.get(taskId)) ?? message));
         });
     },

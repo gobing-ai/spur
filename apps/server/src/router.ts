@@ -6,6 +6,7 @@ import type { ServerContext } from './context';
 import { createFeatureHandlers } from './modules/feature';
 import { createHistoryHandlers } from './modules/history';
 import { createInboxHandlers } from './modules/inbox/handlers';
+import { createIntegrationsHandlers } from './modules/integrations';
 import { createPlanningDocumentHandlers } from './modules/planning-documents';
 import { createSearchHandlers } from './modules/search';
 import { createTaskHandlers } from './modules/task';
@@ -42,6 +43,8 @@ export function createRouter(ctx?: ServerContext) {
         feature: createFeatureHandlers(ctx ?? stubCtx),
 
         history: createHistoryHandlers(ctx ?? stubCtx),
+
+        integrations: createIntegrationsHandlers(ctx ?? stubCtx),
 
         inbox: createInboxHandlers(ctx ?? stubCtx),
 

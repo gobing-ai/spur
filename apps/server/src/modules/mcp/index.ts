@@ -15,6 +15,7 @@ import {
     handleMcpHttpRequest,
     type McpHandlerRegistry,
     type McpResourceDescriptor,
+    type McpToolAnnotations,
     type McpToolDescriptor,
 } from './protocol';
 
@@ -27,10 +28,29 @@ import {
  * (`server.mcp.authEnv` names the token variable; the value never rests in configuration).
  */
 
+/**
+ * Frozen annotation pair (1421 R2): reads are idempotent, writes are neither read-only nor
+ * idempotent (create, transition and workflow_run are not), and no Spur tool deletes.
+ */
+const READ_TOOL: McpToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
+const WRITE_TOOL: McpToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
+
+/**
+ * A tool call whose ARGUMENTS are wrong (1421 R1). The class is the code: the emit site reads
+ * `instanceof`, so a new validator message can never silently degrade to `tool_error`.
+ */
+export class InvalidArgumentsError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'InvalidArgumentsError';
+    }
+}
+
 /** The harness tools the embedded server advertises (built-ins live in the `sp` namespace, task 1379 R1). */
 export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     {
         name: 'sp_task_show',
+        annotations: READ_TOOL,
         description: 'Show one Spur task: metadata plus the full markdown content.',
         inputSchema: {
             type: 'object',
@@ -40,6 +60,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_task_create',
+        annotations: WRITE_TOOL,
         description:
             'Create one task from a title (optionally linked to a feature and parent). Never runs model-backed ready-prep; refine the task explicitly afterwards.',
         inputSchema: {
@@ -58,6 +79,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_task_update',
+        annotations: WRITE_TOOL,
         description:
             'Update one task: exactly one of a section body, a frontmatter field, or a tag add/remove. Status is refused — use sp_task_transition, which runs the guards.',
         inputSchema: {
@@ -81,6 +103,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_task_transition',
+        annotations: WRITE_TOOL,
         description:
             'Move one task to another status through the guarded transition seam (verdict and structural gates apply exactly as in the CLI).',
         inputSchema: {
@@ -95,6 +118,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_feature_check',
+        annotations: READ_TOOL,
         description: 'Run the feature structure/acceptance check. Read-only.',
         inputSchema: {
             type: 'object',
@@ -113,6 +137,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_rule_run',
+        annotations: READ_TOOL,
         description:
             'Evaluate a rule preset (default recommended-pre-check) over the project. Presets and rule ids only: no arbitrary file, no source-writing fix mode.',
         inputSchema: {
@@ -136,6 +161,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_task_list',
+        annotations: READ_TOOL,
         description: 'List Spur tasks, optionally filtered.',
         inputSchema: {
             type: 'object',
@@ -149,6 +175,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_workflow_status',
+        annotations: READ_TOOL,
         description: 'Inspect a workflow run (per-run timeline), or list recent runs without a runId.',
         inputSchema: {
             type: 'object',
@@ -157,6 +184,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_workflow_run',
+        annotations: WRITE_TOOL,
         description: 'Run a workflow YAML file through the existing task-pipeline engine.',
         inputSchema: {
             type: 'object',
@@ -170,6 +198,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
     },
     {
         name: 'sp_workflow_continue',
+        annotations: WRITE_TOOL,
         description: 'Resume a paused workflow run (HITL); runId defaults to the most recent paused run.',
         inputSchema: {
             type: 'object',
@@ -194,7 +223,7 @@ const RENAMED_TOOLS: Readonly<Record<string, string>> = {
 export const BUILTIN_TOOL_NAMES: readonly string[] = TOOL_DESCRIPTORS.map((tool) => tool.name);
 
 /** The `spur://` resources the embedded server advertises (frozen URIs, task 1372 R3). */
-const RESOURCE_DESCRIPTORS: McpResourceDescriptor[] = [
+export const RESOURCE_DESCRIPTORS: McpResourceDescriptor[] = [
     { uri: 'spur://tasks/{wbs}', name: 'Task by WBS', mimeType: 'text/markdown' },
     { uri: 'spur://features/{id}', name: 'Feature by id', mimeType: 'text/markdown' },
     { uri: 'spur://context/{name}', name: 'Indexed context file', mimeType: 'text/markdown' },
@@ -264,12 +293,14 @@ class McpDispatcher implements McpHandlerRegistry {
         const vars: Record<string, string> = {};
         for (const [key, value] of Object.entries(args)) {
             if (!(key in tool.vars)) {
-                throw new Error(
+                throw new InvalidArgumentsError(
                     `invalid_arguments: tool "${tool.tool}" accepts only ${accepted.length === 0 ? 'no arguments' : accepted.join(', ')}; got "${key}"`,
                 );
             }
             if (typeof value !== 'string') {
-                throw new Error(`invalid_arguments: tool "${tool.tool}" argument "${key}" must be a string`);
+                throw new InvalidArgumentsError(
+                    `invalid_arguments: tool "${tool.tool}" argument "${key}" must be a string`,
+                );
             }
             vars[key] = value;
         }
@@ -302,7 +333,7 @@ class McpDispatcher implements McpHandlerRegistry {
                 argKeys,
                 durationMs: Math.round(performance.now() - startedAt),
                 outcome: 'error',
-                errorCode: toolErrorCode(message),
+                errorCode: toolErrorCode(error),
                 // `redacted` payload policy: the message quotes the dispatcher, never an argument value.
                 error: message,
                 ...correlation(args, undefined),
@@ -333,7 +364,7 @@ class McpDispatcher implements McpHandlerRegistry {
         // travels through the caller's catch, which records it as `invalid_arguments` (1376 R2).
         const descriptor = TOOL_DESCRIPTORS.find((tool) => tool.name === name);
         const violation = descriptor === undefined ? null : validateToolArguments(descriptor, args);
-        if (violation !== null) throw new Error(violation);
+        if (violation !== null) throw new InvalidArgumentsError(violation);
         switch (name) {
             case 'sp_task_show':
                 return this.ctx.taskService().show(requiredString(args, 'wbs'));
@@ -390,13 +421,15 @@ class McpDispatcher implements McpHandlerRegistry {
                     addTags !== undefined || removeTags !== undefined,
                 ].filter(Boolean).length;
                 if (chosen !== 1) {
-                    throw new Error(
+                    throw new InvalidArgumentsError(
                         'sp_task_update takes exactly one of section+content, field+value, or addTags/removeTags',
                     );
                 }
                 if (field === 'status') {
                     // R5: a status write must go through the guarded transition seam, never here.
-                    throw new Error('sp_task_update refuses field "status": use sp_task_transition so the guards run');
+                    throw new InvalidArgumentsError(
+                        'sp_task_update refuses field "status": use sp_task_transition so the guards run',
+                    );
                 }
                 if (section !== undefined) {
                     const content = requiredString(args, 'content');
@@ -562,6 +595,19 @@ class McpDispatcher implements McpHandlerRegistry {
     }
 }
 
+/**
+ * The catalog `tools/list` and `resources/list` serve, for readers that report it rather than
+ * serve it (the Integrations status contract, 1423 R3). One dispatcher, one resolver: the Board can
+ * never advertise a tool the protocol refuses.
+ */
+export async function readMcpCatalog(ctx: ServerContext): Promise<{
+    tools: McpToolDescriptor[];
+    resources: McpResourceDescriptor[];
+}> {
+    const dispatcher = new McpDispatcher(ctx);
+    return { tools: await dispatcher.listTools(), resources: await dispatcher.listResources() };
+}
+
 /** Serve an embedded MCP handler over the injected dispatcher (`createMcpDispatcher`). */
 export function createMcpHandler(ctx: ServerContext): (req: Request) => Promise<Response> {
     const dispatcher = new McpDispatcher(ctx);
@@ -631,9 +677,9 @@ function withServiceCode(error: unknown): Error {
 function stringArray(args: Record<string, unknown>, key: string): string[] | undefined {
     const value = args[key];
     if (value === undefined) return undefined;
-    if (!Array.isArray(value)) throw new Error(`${key} must be an array of strings`);
+    if (!Array.isArray(value)) throw new InvalidArgumentsError(`${key} must be an array of strings`);
     return value.map((entry) => {
-        if (typeof entry !== 'string') throw new Error(`${key} must be an array of strings`);
+        if (typeof entry !== 'string') throw new InvalidArgumentsError(`${key} must be an array of strings`);
         return entry;
     });
 }
@@ -658,18 +704,20 @@ function correlation(args: Record<string, unknown>, result: unknown): { runId?: 
 }
 
 /** The three catalog error codes, derived at the emit site from the dispatcher's own throws (1376 R2). */
-function toolErrorCode(message: string): 'unknown_tool' | 'invalid_arguments' | 'tool_error' {
+function toolErrorCode(error: unknown): 'unknown_tool' | 'invalid_arguments' | 'tool_error' {
+    // 1421 R1: argument validation is a CLASS, not a message shape — every validator site throws
+    // `InvalidArgumentsError`, so a new message can never be misfiled as a service failure.
+    if (error instanceof InvalidArgumentsError) return 'invalid_arguments';
+    const message = error instanceof Error ? error.message : String(error);
     // A legacy name that 1379/1380 renamed is not a tool failure — the client sent a name this
     // surface no longer accepts, which is the same signal as an unknown one.
     if (message.startsWith('unknown tool') || message.includes('was renamed to')) return 'unknown_tool';
-    // The argument validators are the only throws ending in these two suffixes.
-    if (/ is required$| must be a map of strings$/.test(message)) return 'invalid_arguments';
     return 'tool_error';
 }
 
 function requiredString(args: Record<string, unknown>, key: string): string {
     const value = optionalString(args, key);
-    if (value === undefined) throw new Error(`${key} is required`);
+    if (value === undefined) throw new InvalidArgumentsError(`${key} is required`);
     return value;
 }
 
@@ -696,11 +744,11 @@ function stringRecord(args: Record<string, unknown>, key: string): Record<string
     const value = args[key];
     if (value === undefined) return undefined;
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        throw new Error(`${key} must be a map of strings`);
+        throw new InvalidArgumentsError(`${key} must be a map of strings`);
     }
     const record: Record<string, string> = {};
     for (const [name, entry] of Object.entries(value)) {
-        if (typeof entry !== 'string') throw new Error(`${key} must be a map of strings`);
+        if (typeof entry !== 'string') throw new InvalidArgumentsError(`${key} must be a map of strings`);
         record[name] = entry;
     }
     return record;

@@ -193,5 +193,8 @@ export function workflowToolDescriptor(tool: ExposedWorkflowTool) {
             ),
             additionalProperties: false,
         },
+        // 1421 R2: a workflow tool starts work, so it is a write and not idempotent — the same
+        // frozen values every write-shaped tool carries.
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     };
 }

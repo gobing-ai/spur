@@ -176,10 +176,10 @@ The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a 
 | --- | --- |
 | Switch | `server.a2a.enabled` (`SPUR_A2A_ENABLED`, default `false`); **off mounts no route at all**, so every path below answers 404 like any unknown path |
 | Credential | `server.a2a.authEnv` (`SPUR_A2A_AUTH_ENV`) names the environment variable holding the bearer token. `enabled` without `authEnv` fails the config load (an enabled endpoint with no token can only reject everyone). Only the NAME is configuration; the value is read at mount and never persisted, echoed, or logged |
-| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false`, and `capabilities.extensions` carrying `urn:spur:write-fencing:v1` (the member fences its own tree). The advertised origin is `http://<x-forwarded-host><x-forwarded-prefix>` when BOTH headers are present, else `new URL(c.req.url).origin` — the gateway rewrites `host` to the upstream loopback authority, so without this the card advertises an ephemeral serve port that dies on the next restart (1395 R4). The upstream binds loopback only, so these headers can come from a local process, and they affect the advertised URL alone, never auth |
+| Card | `GET /a2a/members/<member>/.well-known/agent-card.json` — **the one public route**: it answers without a bearer token, because a sender must discover a member before it can hold or present a credential (1421 R3). Every other route on this table still calls `authorize` first and answers `401` + `auth.denied` without a token. The card carries protocol version `1.0`, `HTTP+JSON` as the only interface, `streaming: false`, `pushNotifications: false`, `capabilities.extensions` carrying `urn:spur:write-fencing:v1` (the member fences its own tree), and one `skills` entry derived from the member's declaration: `{id: role ?? 'general', name: role ?? 'general', description: purpose ?? <the card description>, tags: [role ?? 'general']}` — a member with no declared role still offers the `general` skill rather than an empty array (1421 R4). The advertised origin is `http://<x-forwarded-host><x-forwarded-prefix>` when BOTH headers are present, else `new URL(c.req.url).origin` — the gateway rewrites `host` to the upstream loopback authority, so without this the card advertises an ephemeral serve port that dies on the next restart (1395 R4). The upstream binds loopback only, so these headers can come from a local process, and they affect the advertised URL alone, never auth |
 | Send | `POST /a2a/members/<member>/message:send` — `{message:{messageId, role, parts:[{text}]}}` → `{task}`. One inbox request, `kind: 'request'`, request key `a2a:<member>:<messageId>`; a repeated `messageId` with the same work replays the same task id, a different body is `409 ALREADY_EXISTS` |
 | Get | `GET /a2a/members/<member>/tasks/<id>` — the task id IS the inbox message id; state comes from the run receipt |
-| Cancel | `POST /a2a/members/<member>/tasks/<id>:cancel` — stops the member's run through the supervisor's existing stop path and records the intent first, so the state survives a restart. A task with no run in progress, or a terminal one, is `400 FAILED_PRECONDITION` (`TASK_NOT_CANCELABLE`) — a queued request is never reported canceled |
+| Cancel | `POST /a2a/members/<member>/tasks/<id>:cancel` — records the cancel intent (`a2a-canceled-<messageId>`, so the state survives a restart), then writes a RUN-scoped request `.spur/run/<runId>/cancel-requested` and waits up to 10s for that run's coordination row to leave `running` (1422). The member's keyed drain polls the file once a second and aborts its own spawned child through ts-runtime's process-group kill; **the member loop is never stopped** (`supervisor().stop` is not called), so it claims its next queued request. `runStopped` reports whether the row actually cleared, and `a2a.task.cancelled` names the `runId` beside `member`/`taskId`/`runStopped`. A task whose newest run is not `running` — queued or terminal — is `400 FAILED_PRECONDITION` (`TASK_NOT_CANCELABLE`); a warm turn spawns nothing, so it answers `runStopped: false` rather than pretending |
 | Errors | A2A envelope `{error:{code,status,message,details:[{@type:"type.googleapis.com/google.rpc.ErrorInfo",domain:"a2a-protocol.org",reason,metadata}]}}`; missing/wrong token is `401` with `WWW-Authenticate: Bearer` and **writes nothing** |
 | member id | the member's inbox address `<projectSlug>-<memberLocalId>`; `FleetService.memberAddresses` resolves it from the declaration alone, so a member whose executor is globally disabled still has an address (its launch is a separate failure) |
 | Forwarded identity | the gateway's `proxy` sets `x-forwarded-host` (the authority the client dialed) and `x-forwarded-prefix` (the matched project prefix) on every upstream request, and strips any inbound copy first (1395 R3) |
@@ -189,11 +189,16 @@ receipt (a stopped run exits `errored`, and the caller must still read `canceled
 `exited` → `COMPLETED`, `errored` → `FAILED` (with the reason as the status message), `running` →
 `WORKING`; with no run row, inbox `claimed` → `WORKING`, `failed` → `FAILED`, else `SUBMITTED`.
 `COMPLETED` carries the member's newest inbox reply on the thread as one text artifact and, when the
-member works in a Git tree, `metadata.remoteBranch` naming that branch.
+member works in a Git tree, `metadata.remoteBranch` naming that branch — the branch of the tree the
+drain ran in, resolved with the agent loop's own rule `laneForRequestKey(...) ?? projectPath`
+(`packages/app/src/services/worktree-lane-service.ts`), so with lane mode on an A2A task still
+reports the project tree's branch because an A2A request key (`a2a:<member>:<messageId>`) is not a
+fleet task key (1421 R5).
 
 **CSRF exemption.** `/a2a/*` is exempt from the server's CSRF guard
-(`apps/server/src/middleware/pipeline.ts`). Every A2A route is bearer-authenticated — a header a
-cross-site simple request cannot set — so the rule protects nothing there, and it actively breaks
+(`apps/server/src/middleware/pipeline.ts`). Every A2A route carries a bearer check except the public
+Agent Card — which is a read-only projection of declared identity — so the rule protects nothing
+there, and it actively breaks
 the client: the unmodified `a2a` CLI sends no `Content-Type` on `task cancel`, which is exactly the
 shape `csrf()` rejects.
 
@@ -258,7 +263,8 @@ defaults and are not needed for manual dispatch.
    environment and is redacted from receipts, traces and logs.
 5. **Completed tasks return artifact text and the remote branch.** The member writes its answer as
    an inbox reply, so `GetTask` returns it as an artifact. On completion, `Task.metadata.remoteBranch`
-   names the member's current working branch; the sender records it but never fetches or merges it.
+   names the branch of the tree the drain ran in (the agent loop's `laneForRequestKey(...) ??
+   projectPath` rule, 1421 R5); the sender records it but never fetches or merges it.
    The same field reaches the named-member result, the workflow receipt and the `spur agent run --json`
    envelope.
 6. **Warm turns are untouched.** A live local member behaves exactly as today.

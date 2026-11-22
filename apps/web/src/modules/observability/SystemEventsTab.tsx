@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loading } from '@/ui';
 import { subscribePlanningConnection, subscribePlanningEvents } from '../../lib/planning-events';
-import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { fetchWithTimeout } from '../../lib/rpc-client';
 import ColumnCustomizer, {
     ALL_COLUMNS,
     DEFAULT_VISIBLE_COLUMNS,
@@ -10,6 +10,7 @@ import ColumnCustomizer, {
     loadVisibleColumns,
     saveVisibleColumns,
 } from './ColumnCustomizer';
+import { HISTORY_LIMIT, historyUrl } from './events-history';
 import ObservabilityFilters, {
     type ObservabilityFilterValues,
     TIME_RANGE_MS,
@@ -114,40 +115,6 @@ interface SseEnvelope {
     sequence?: number | null;
 }
 
-const HISTORY_LIMIT = 100;
-
-/**
- * Build a history URL with server-side filter params + opaque cursor.
- *
- * `prefix` (single selected prefix or omitted), `names` (search-when-scope=name,
- * comma-joined), `actor` (search-when-scope=actor), `runId`, `since` (time-window),
- * `limit` (page size), and `cursor` (opaque, from `nextCursor`).
- *
- * Tier has no direct server param - it is a client-side post-filter on the returned
- * page only, since the catalog tier is metadata, not a SQL column.
- */
-export function historyUrl(params: {
-    prefix?: string;
-    names?: string;
-    actor?: string;
-    runId?: string;
-    since?: string;
-    limit?: number;
-    cursor?: string;
-}): string {
-    const base = `${resolveApiUrl()}/events/history`;
-    const qs: string[] = [];
-    const limit = params.limit ?? HISTORY_LIMIT;
-    qs.push(`limit=${limit}`);
-    if (params.prefix) qs.push(`prefix=${encodeURIComponent(params.prefix)}`);
-    if (params.names) qs.push(`names=${encodeURIComponent(params.names)}`);
-    if (params.actor) qs.push(`actor=${encodeURIComponent(params.actor)}`);
-    if (params.runId) qs.push(`runId=${encodeURIComponent(params.runId)}`);
-    if (params.since) qs.push(`since=${encodeURIComponent(params.since)}`);
-    if (params.cursor) qs.push(`cursor=${encodeURIComponent(params.cursor)}`);
-    return `${base}?${qs.join('&')}`;
-}
-
 /**
  * Stable prefix -> tailwind text-color mapping (task 0223 R4). Hand-curated so
  * the color is deterministic across renders (not a hash of the event name) -
@@ -168,6 +135,9 @@ const PREFIX_COLOR_MAP: Record<string, string> = {
     api: 'text-teal-400',
 };
 const FALLBACK_COLOR = 'text-spur-text-muted';
+
+/** The history URL builder, extracted for other modules (A82 1424) and re-exported here unchanged. */
+export { eventsHistoryUrl, HISTORY_LIMIT, historyUrl } from './events-history';
 
 function getPrefixColor(prefix: string | undefined): string {
     if (!prefix) return FALLBACK_COLOR;

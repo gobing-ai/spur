@@ -2061,8 +2061,13 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
     },
     'a2a.task.cancelled': {
         description:
-            'An accepted A2A CancelTask recorded its cancel intent, naming whether a supervised run actually stopped.',
-        fields: [field('member', 'Member'), field('taskId', 'Task id'), field('runStopped', 'Run stopped')],
+            'An accepted A2A CancelTask recorded its cancel intent, naming the run it targeted and whether that run actually stopped.',
+        fields: [
+            field('member', 'Member'),
+            field('taskId', 'Task id'),
+            field('runId', 'Run id'),
+            field('runStopped', 'Run stopped'),
+        ],
         summary: ({ data }) => {
             const member = s(data, 'member');
             const taskId = s(data, 'taskId');

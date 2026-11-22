@@ -462,7 +462,9 @@ export class FleetService {
      * Same slug and same `memberLocalId` allocator as `resolve`, so the address a caller sees is
      * the address the member loop claims.
      */
-    async memberAddresses(projectPath: string): Promise<{ instanceId: string; executor: string; enabled: boolean }[]> {
+    async memberAddresses(
+        projectPath: string,
+    ): Promise<{ instanceId: string; executor: string; enabled: boolean; role?: string; purpose?: string }[]> {
         const normalized = normalizeProjectPath(projectPath);
         const declaration = await this.load(normalized);
         if (declaration === null) return [];
@@ -471,6 +473,10 @@ export class FleetService {
             instanceId: `${slug}-${memberLocalId(member, declaration.members, index)}`,
             executor: member.executor ?? '',
             enabled: member.enabled !== false,
+            // 1421 R4: the A2A card's skill derives from the declaration, so the address carries
+            // the declared role and purpose the card projects.
+            ...(member.role === undefined ? {} : { role: member.role }),
+            ...(member.purpose === undefined ? {} : { purpose: member.purpose }),
         }));
     }
 

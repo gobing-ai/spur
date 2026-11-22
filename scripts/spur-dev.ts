@@ -54,6 +54,7 @@ import { runA2aServeE2e } from './commands/a2a-serve-e2e';
 import { runA2aTwoInstallE2e } from './commands/a2a-two-install-e2e';
 import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { runFleetE2e } from './commands/fleet-e2e';
+import { runIntegrationsE2e } from './commands/integrations-e2e';
 
 /**
  * L2–L4 modules that own their own argv parsing and exit code (A92 R5). They run as a child
@@ -74,7 +75,14 @@ const DELEGATED: Record<string, string> = {
  * `repo-wide-tests/a93-script-ownership.test.ts` pins it to the switch's own `case` labels, so a
  * registration cannot drift out of the usage list (task 1409 R3).
  */
-const COMMANDS = ['fleet-e2e', 'a2a-serve-e2e', 'a2a-member-e2e', 'a2a-two-install-e2e', 'delegate-workflow-e2e'];
+const COMMANDS = [
+    'fleet-e2e',
+    'a2a-serve-e2e',
+    'a2a-member-e2e',
+    'a2a-two-install-e2e',
+    'delegate-workflow-e2e',
+    'integrations-e2e',
+];
 
 /**
  * Retired dispatcher names mapped to the spur command that replaced them (A94 waves add entries as
@@ -141,6 +149,9 @@ try {
             break;
         case 'delegate-workflow-e2e':
             process.exit(await runDelegateWorkflowE2e(args));
+            break;
+        case 'integrations-e2e':
+            process.exit(await runIntegrationsE2e(args));
             break;
         default: {
             const module = command === undefined ? undefined : DELEGATED[command];

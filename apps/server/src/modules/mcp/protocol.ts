@@ -27,6 +27,21 @@ export interface McpToolDescriptor {
     description?: string;
     /** Input schema, passed through opaquely. */
     inputSchema?: unknown;
+    /**
+     * MCP behaviour hints (1421 R2): a client must be able to tell a read from a write without
+     * knowing Spur's tool names. Frozen per tool — the Board renders its badge from these.
+     */
+    annotations?: McpToolAnnotations;
+}
+
+/** MCP tool annotations as the specification defines them (`tools/list` descriptors). */
+export interface McpToolAnnotations {
+    /** The tool does not modify state. */
+    readOnlyHint: boolean;
+    /** The tool may perform destructive updates (no Spur tool does; kept explicit, never defaulted). */
+    destructiveHint: boolean;
+    /** Calling twice with the same arguments has the same effect as calling once. */
+    idempotentHint: boolean;
 }
 
 /** One readable resource advertised by the embedded server (e.g. `spur://tasks/{wbs}`). */

@@ -28,8 +28,19 @@ export default function ObservabilityShell() {
     );
     const [timeRange, setTimeRange] = useState<ObservabilityTimeRange>('4h');
     // Last cross-tab intent. Kept until the user picks a tab themselves, so the
-    // target tab can apply it on mount (feature E72 R6).
-    const [navIntent, setNavIntent] = useState<ObservabilityNavIntent | null>(null);
+    // target tab can apply it on mount (feature E72 R6). 1424 R6: a deep link that names
+    // `eventName`/`runId` seeds it here, so another module can land on a filtered view.
+    const [navIntent, setNavIntent] = useState<ObservabilityNavIntent | null>(() => {
+        if (requestedTab !== 'system-events') return null;
+        const eventName = params.get('eventName');
+        const runId = params.get('runId');
+        if (eventName === null && runId === null) return null;
+        return {
+            tab: 'system-events',
+            ...(eventName === null ? {} : { eventName }),
+            ...(runId === null ? {} : { runId }),
+        };
+    });
     const [liveness, setLiveness] = useState<ObservabilityLiveness>({
         status: 'connecting',
         rate: 0,

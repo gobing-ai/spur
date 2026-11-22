@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: MCP error codes, MCP tool annotations, and A2A public card, card skills and lane branch
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.285Z
-updated_at: "2026-11-22T04:04:11.734Z"
+updated_at: "2026-11-22T05:03:47.501Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
 
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1421. MCP error codes, MCP tool annotations, and A2A public card, card skills and lane branch
@@ -29,21 +31,21 @@ Design satellite: docs/design/integrations-module.md §1 (F1–F5). ADR-148 amen
 
 ### Requirements
 
-- [ ] R1. Every MCP argument-validation failure (unknown argument, enum, type, missing, map-of-strings, and callWorkflowTool `invalid_arguments:` messages) returns errorCode `invalid_arguments`. Unknown-tool and renamed-tool stay `unknown_tool`; service throws stay `tool_error`.
-- [ ] R2. All 10 built-in MCP tool descriptors, and every workflow-derived tool, declare `annotations: { readOnlyHint, destructiveHint, idempotentHint }` in `tools/list`.
-- [ ] R3. `GET /a2a/members/:member/.well-known/agent-card.json` answers without a bearer token. Every other `/a2a` route still returns 401 without one and emits `auth.denied`.
-- [ ] R4. The Agent Card `skills` array has one skill derived from the member's `role` and `purpose`, or one default `general` skill when the member has no role.
-- [ ] R5. A completed A2A task's `metadata.remoteBranch` is the branch of the tree its drain ran in. The drain tree is resolved by the same `laneForRequestKey(…) ?? project` rule the agent loop uses, so A2A tasks report the project tree's branch even with lane mode on.
+- [x] R1. Every MCP argument-validation failure (unknown argument, enum, type, missing, map-of-strings, and callWorkflowTool `invalid_arguments:` messages) returns errorCode `invalid_arguments`. Unknown-tool and renamed-tool stay `unknown_tool`; service throws stay `tool_error`.
+- [x] R2. All 10 built-in MCP tool descriptors, and every workflow-derived tool, declare `annotations: { readOnlyHint, destructiveHint, idempotentHint }` in `tools/list`.
+- [x] R3. `GET /a2a/members/:member/.well-known/agent-card.json` answers without a bearer token. Every other `/a2a` route still returns 401 without one and emits `auth.denied`.
+- [x] R4. The Agent Card `skills` array has one skill derived from the member's `role` and `purpose`, or one default `general` skill when the member has no role.
+- [x] R5. A completed A2A task's `metadata.remoteBranch` is the branch of the tree its drain ran in. The drain tree is resolved by the same `laneForRequestKey(…) ?? project` rule the agent loop uses, so A2A tasks report the project tree's branch even with lane mode on.
 
 Out of scope: lane routing for A2A requests, per-run cancel (1422), the Board status contract (1423), and any token value in a card or error body.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — MCP argument-validation failures classify as invalid_arguments
-- [ ] AC2 — MCP tool descriptors declare read and write annotations
-- [ ] AC3 — The A2A Agent Card is public while other A2A routes stay bearer-only
-- [ ] AC4 — The A2A Agent Card lists skills from the member declaration
-- [ ] AC5 — A2A remoteBranch reports the member's own working-tree branch
+- [x] AC1 — MCP argument-validation failures classify as invalid_arguments
+- [x] AC2 — MCP tool descriptors declare read and write annotations
+- [x] AC3 — The A2A Agent Card is public while other A2A routes stay bearer-only
+- [x] AC4 — The A2A Agent Card lists skills from the member declaration
+- [x] AC5 — A2A remoteBranch reports the member's own working-tree branch
 
 ### Q&A
 
@@ -84,15 +86,62 @@ Out of scope: lane routing for A2A requests, per-run cancel (1422), the Board st
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `apps/server/src/modules/mcp/index.ts:38-42` | `InvalidArgumentsError` exported | The failure class is the code; a new validator message can never be misfiled |
+| `apps/server/src/modules/mcp/index.ts:330` | `dispatchTool` throws `InvalidArgumentsError` for a declared-schema violation | R1 unknown/enum/type families |
+| `apps/server/src/modules/mcp/index.ts:262,266` | `callWorkflowTool` argument checks throw it (messages unchanged) | R1 workflow-tool family keeps its `invalid_arguments:` text |
+| `apps/server/src/modules/mcp/index.ts:325-327` | `sp_task_update` argument-rule refusals throw it | Same class of failure, same code |
+| `apps/server/src/modules/mcp/index.ts:660,699-707,718-728` | `toolErrorCode(error)` reads `instanceof` and the suffix regex is deleted; `requiredString`, map-of-strings and array checks throw it | One classification site instead of four message shapes |
+| `apps/server/src/modules/mcp/index.ts:44-49` | `READ_TOOL` / `WRITE_TOOL` frozen annotation pairs | R2's frozen values in one place |
+| `apps/server/src/modules/mcp/index.ts:52-200` | every built-in descriptor carries `annotations` | R2: `tools/list` advertises hints, not a client-side name table |
+| `apps/server/src/modules/mcp/protocol.ts:30-56` | `McpToolDescriptor.annotations` + `McpToolAnnotations` | The protocol type carries what the wire carries |
+| `packages/app/src/services/mcp-workflow-tools.ts:186` | workflow-derived descriptors carry the write hints | R2 covers every advertised tool, not only the built-ins |
+| `apps/server/src/modules/a2a/index.ts:44-52` | `FleetSeams.load` (optional) | The lane switch lives in the declaration the agent loop already reads |
+| `apps/server/src/modules/a2a/index.ts:112-145` | `drainTree()` + `remoteBranch(ctx, requestKey)` | R5: one `laneForRequestKey(...) ?? projectPath` rule, no A2A lane routing |
+| `apps/server/src/modules/a2a/index.ts:157` | `projectTask` passes `message.requestKey` | The key is what the rule needs |
+| `apps/server/src/modules/a2a/index.ts:207-215` | comment states the card is the only public route | R3's route discipline is documented where it is enforced |
+| `apps/server/src/modules/a2a/index.ts:216-235` | card route drops `authorize` and forwards `role`/`purpose` | R3 public card, R4 skill source |
+| `apps/server/src/modules/a2a/projection.ts:53-64,80-105` | `AgentCardInput.role/purpose`, one `skills` entry (`general` when no role) | R4 |
+| `packages/app/src/services/fleet-service.ts:465-480` | `memberAddresses` returns `role`/`purpose` | The card can only project what the address carries |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:27-35` | test-local `Action.options` gains `expectFiles` | Pre-existing repo-wide typecheck failure (base tree), repaired so the gate can judge this task |
+| `apps/server/tests/modules/mcp-module.test.ts` | R1 families + R2 annotations | Failing first; every family asserts the emitted `errorCode` |
+| `apps/server/tests/modules/a2a/{routes,projection}.test.ts` | public card, 401 elsewhere, skills, lane-mode branch | R3/R4/R5 |
+| `docs/design/embedded-mcp-server.md`, `docs/design/a2a-member-transport.md` | annotations, typed error code, public card, skills, drain tree | T3: the design satellite moves with the surface |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 every MCP argument-validation failure returns `invalid_arguments`; unknown/renamed tool stays `unknown_tool`; service throws stay `tool_error` | MET | `apps/server/src/modules/mcp/index.ts:42` (`InvalidArgumentsError`), `:367` (declared-schema violation), `:293,298` (workflow-tool args), `:421,427` (`sp_task_update` argument rules), `:694` (instanceof classification; the suffix regex is deleted), `:711,734,738,667,670` (`requiredString`, map-of-strings, array checks) — pinned by `apps/server/tests/modules/mcp-module.test.ts:537` (unknown argument, enum, string/boolean/array, missing, map-of-strings, workflow tool) plus the `unknown_tool`/`tool_error` regression rows |
+| R2 all built-ins and every workflow-derived descriptor declare `readOnlyHint`/`destructiveHint`/`idempotentHint` | MET | `apps/server/src/modules/mcp/protocol.ts:33` (`McpToolAnnotations`), `apps/server/src/modules/mcp/index.ts:35-36` (frozen read/write pairs), `:53,63,82,106,121,140,164,178,187,201` (all ten), `packages/app/src/services/mcp-workflow-tools.ts:198` (workflow tools) — `apps/server/tests/modules/mcp-module.test.ts:659` |
+| R3 card route answers without a bearer token; every other `/a2a` route stays 401 + `auth.denied` | MET | `apps/server/src/modules/a2a/index.ts:236-256` (card route with no `authorize`, comment states the rule), lone `authorize` callers remain on send/get/cancel — `apps/server/tests/modules/a2a/routes.test.ts:259` (public card 200, send + get 401, two `auth.denied` events) |
+| R4 card `skills` derives from `role`/`purpose`, else one `general` skill | MET | `apps/server/src/modules/a2a/projection.ts:57-64` (input), `:83,105-112` (skill projection), `packages/app/src/services/fleet-service.ts:467` (`role`/`purpose` on the address), `apps/server/src/modules/a2a/index.ts:252-253` (route passes them) — `apps/server/tests/modules/a2a/projection.test.ts:53,66` and `apps/server/tests/modules/a2a/routes.test.ts:318` |
+| R5 completed A2A task reports the drain tree's branch via the shared `laneForRequestKey(...) ?? projectPath` rule | MET | `apps/server/src/modules/a2a/index.ts:137-148` (`drainTree`, reuses `laneForRequestKey` from `packages/app/src/services/worktree-lane-service.ts:42`), `:114` (`remoteBranch` reads that cwd), `:171` (`projectTask` passes `message.requestKey`) — `apps/server/tests/modules/a2a/routes.test.ts:438` (lane mode on, A2A key, project branch) |
+| Design satellites updated in the same change | MET | static-ref `docs/design/embedded-mcp-server.md` (annotations, typed error codes), `docs/design/a2a-member-transport.md` (public card, skills, drain tree, CSRF note) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — MCP argument-validation failures classify as invalid_arguments | MET | test | `apps/server/tests/modules/mcp-module.test.ts:537` (`bun test tests/modules/mcp-module.test.ts` → 39 pass) |
+| AC2 — MCP tool descriptors declare read and write annotations | MET | test | `apps/server/tests/modules/mcp-module.test.ts:659` |
+| AC3 — The A2A Agent Card is public while other A2A routes stay bearer-only | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:259` |
+| AC4 — The A2A Agent Card lists skills from the member declaration | MET | test | `apps/server/tests/modules/a2a/projection.test.ts:53`, `apps/server/tests/modules/a2a/routes.test.ts:318` |
+| AC5 — A2A remoteBranch reports the member's own working-tree branch | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:438` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -101,4 +150,7 @@ Out of scope: lane routing for A2A requests, per-run cancel (1422), the Board st
 ### History
 
 - 2026-11-22T02:19:02.338Z feature_id S → A82 (system)
+- 2026-11-22T05:02:58.053Z todo → wip (system)
+- 2026-11-22T05:03:45.342Z wip → testing (system)
+- 2026-11-22T05:03:47.496Z testing → done (system)
 

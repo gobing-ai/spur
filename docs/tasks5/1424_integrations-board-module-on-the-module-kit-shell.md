@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Integrations Board module on the module-kit shell
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.289Z
-updated_at: "2026-11-22T04:02:57.380Z"
+updated_at: "2026-11-22T06:20:06.958Z"
 feature_id: A82
 priority: P2
 tags: ["integrations", "A82"]
 
 dependencies: ["1423"]
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1424. Integrations Board module on the module-kit shell
@@ -31,35 +33,35 @@ Design satellite: docs/design/integrations-module.md §3. Follows DESIGN.md "Pro
 
 ### Requirements
 
-- [ ] R1. An auto-discovered module `apps/web/src/modules/integrations/` (id `integrations`, label `Integrations`), picked up by `apps/web/src/modules/discover.ts`. It renders through `ModuleShell`, `ModuleHeader` (status chip + `TimeRangePresets` for the usage window) and `ModuleTabs`.
-- [ ] R2. Tabs come from an append-only `tabs.ts` in the order Summary, MCP, A2A.
-- [ ] R3. Summary has one row per surface (project MCP, gateway MCP, A2A inbound, A2A outbound):
+- [x] R1. An auto-discovered module `apps/web/src/modules/integrations/` (id `integrations`, label `Integrations`), picked up by `apps/web/src/modules/discover.ts`. It renders through `ModuleShell`, `ModuleHeader` (status chip + `TimeRangePresets` for the usage window) and `ModuleTabs`.
+- [x] R2. Tabs come from an append-only `tabs.ts` in the order Summary, MCP, A2A.
+- [x] R3. Summary has one row per surface (project MCP, gateway MCP, A2A inbound, A2A outbound):
   - state `off` / `on` / `on · token unset` (error tone);
   - URL, auth env name and whether it is set;
   - calls, error rate, last call and auth denials in the selected window, from `integrations.usage`;
   - a gateway counters strip when `gateway.served`, and a "counters unavailable" note when `counters` is `null`.
-- [ ] R4. The MCP tab has:
+- [x] R4. The MCP tab has:
   - a tool table with origin and read/write badges (from `annotations.readOnlyHint`) and a schema drawer;
   - a resource list;
   - recent calls (events with `prefix=mcp`) showing tool, duration, outcome and errorCode;
   - a copyable client config snippet with a `${ENV_NAME}` placeholder. It never contains a token.
-- [ ] R5. The A2A tab has:
+- [x] R5. The A2A tab has:
   - inbound member cards with the card URL and a write-fenced badge;
   - A2A tasks (`inbox.requests` rows with `requestKey` starting `a2a:`) with run state, linking to `/board/projects/inbox`;
   - outbound receipts per outbound member;
   - recent `a2a`/`auth` events linking to `/board/observability?tab=system-events&eventName=<name>&runId=<runId>`.
-- [ ] R6. Observability applies `eventName`/`runId` from the URL as the initial System Events intent when `tab=system-events`.
-- [ ] R7. A loading skeleton; `EmptyState` when every surface is off, naming the config keys; `Diagnostic` with retry when `integrations.status` fails. Semantic tokens only, no hex.
+- [x] R6. Observability applies `eventName`/`runId` from the URL as the initial System Events intent when `tab=system-events`.
+- [x] R7. A loading skeleton; `EmptyState` when every surface is off, naming the config keys; `Diagnostic` with retry when `integrations.status` fails. Semantic tokens only, no hex.
 
 Out of scope: the ADR-133 icon cleanup (A83 1428), live SSE, and editing integration config from the Board.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The Board shows an Integrations module built on the module-kit shell
-- [ ] AC2 — The Summary tab shows one health row per surface
-- [ ] AC3 — The MCP tab shows the catalog, recent calls and a client config snippet
-- [ ] AC4 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links
-- [ ] AC5 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable
+- [x] AC1 — The Board shows an Integrations module built on the module-kit shell
+- [x] AC2 — The Summary tab shows one health row per surface
+- [x] AC3 — The MCP tab shows the catalog, recent calls and a client config snippet
+- [x] AC4 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links
+- [x] AC5 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable
 
 ### Q&A
 
@@ -111,15 +113,62 @@ Premises (verified 2026-11-21):
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `apps/web/src/modules/integrations/index.tsx` | `WebModule` id `integrations`, route `integrations`, order 12 | R1: auto-discovered by `discover.ts`, so `/board/integrations` exists without a routing edit |
+| `apps/web/src/modules/integrations/tabs.ts` | append-only `INTEGRATIONS_TABS` (summary, mcp, a2a) | R2: contract order, stable ids |
+| `apps/web/src/modules/integrations/IntegrationsModule.tsx` | `ModuleShell` > `ModuleHeader` (chip + `TimeRangePresets`) > `ModuleTabs` > panel | R1/R7: one status chip, one window control, loading / empty / diagnostic / tab states |
+| `apps/web/src/modules/integrations/helpers.ts` | `surfaceState`, `clientSnippet`, `a2aRequests`, `systemEventLink`, `eventsHistoryUrl` consumers, `projectProtocolEvent` | The rules the task pins, testable without a tree: the frozen `off/on/on · token unset` vocabulary, the `${ENV_NAME}` snippet, the `a2a:` request-key family |
+| `apps/web/src/modules/integrations/useIntegrations.ts` | one hook: status + usage + two event families + inbox receipts, retry counter | R3/R4/R5 data; every read is an existing procedure or the existing history endpoint |
+| `apps/web/src/modules/integrations/SummaryTab.tsx` | four rows (`integrations-row-<surface>`), gateway strip, counters-unavailable note | R3: state/URL/auth/calls/error-rate/last-call/denials per surface |
+| `apps/web/src/modules/integrations/McpTab.tsx` | tool table (origin + read/write badges, schema drawer), resources, recent calls, copyable snippet | R4 |
+| `apps/web/src/modules/integrations/A2aTab.tsx` | member cards, A2A tasks → `/board/projects/inbox`, outbound receipts, event links → observability URL | R5 |
+| `apps/web/src/modules/observability/events-history.ts` | `historyUrl`/`HISTORY_LIMIT` extracted; `eventsHistoryUrl` exported | R5/Plan: one builder shared with System Events — no copied URL string, and importing the whole tab for one function is avoided |
+| `apps/web/src/modules/observability/SystemEventsTab.tsx` | re-exports the moved builder; local import for its own use | Zero behavior change for existing consumers (`JobDetailDrawer`, tests) |
+| `apps/web/src/modules/observability/ObservabilityShell.tsx:28-40` | `?tab=system-events&eventName=&runId=` seeds `navIntent` | R6 |
+| `apps/web/tests/modules/integrations/integrations-module.test.tsx` | 16 tests: identity, tab order, chips, activity columns, gateway counters, catalog badges, snippet, no token in DOM, A2A rows/links, empty, diagnostic+retry | The task's R1–R7 behaviours |
+| `apps/web/tests/modules/observability/url-seed.test.ts` | the URL seed is a lazy initializer, and System Events still reads `navIntent` | R6 |
+| `apps/web/tests/modules/registry.test.ts` | enabled order gains `integrations` | Discovery is real: the new module is in the singleton registry |
+
+Notes
+- Error rate is failures over total attempts (`failures / (calls + failures)`) so 3 calls + 1 failure reads 25%, not 33%.
+- The state chip vocabulary is exactly three values; an unreadable gateway counter set does NOT become `on · token unset` — that spelling is reserved for a missing bearer token, and the counters strip carries the failure.
+- Not covered in this task: the heavy browser proof (`apps/web/tests/*.heavy.test.ts`) belongs to 1425's E2E leg; the module was exercised through the DOM suite here.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 auto-discovered module on `ModuleShell`/`ModuleHeader` (status chip + `TimeRangePresets`)/`ModuleTabs` | MET | `apps/web/src/modules/integrations/index.tsx:9-19` (id `integrations`, route `integrations`, order 12 → `/board/integrations`), `apps/web/src/modules/integrations/IntegrationsModule.tsx:47-78` (kit header, chip, window presets, tabs) — `apps/web/tests/modules/integrations/integrations-module.test.tsx` ("the module is auto-discoverable…", "the shell renders the kit header, the status chip and the tab strip"), and the singleton registry order now includes it (`apps/web/tests/modules/registry.test.ts`) |
+| R2 tabs from an append-only `tabs.ts` in the order Summary, MCP, A2A | MET | `apps/web/src/modules/integrations/tabs.ts:6-10` — `apps/web/tests/modules/integrations/tabs.test.ts` + the rendered strip test |
+| R3 Summary: one row per surface (`off`/`on`/`on · token unset`), URL, auth env name, window calls/error rate/last call/denials, gateway strip, counters-unavailable note | MET | `apps/web/src/modules/integrations/SummaryTab.tsx:56-130` (four rows, `failures/(calls+failures)` rate), `:196-235` (gateway strip + `gateway-counters-unavailable`) — `integrations-module.test.tsx` ("one row per surface with the three state chips", "the activity columns come from the usage window", "the gateway strip reports unreadable counters instead of inventing them"), vocabulary pinned in `helpers.test.ts` |
+| R4 MCP tab: tool table with origin + read/write badges and a schema drawer, resources, recent calls (tool/duration/outcome/errorCode), copyable snippet with `${ENV_NAME}` | MET | `apps/web/src/modules/integrations/McpTab.tsx:12-145` — `integrations-module.test.tsx` ("lists the catalog with origin and read/write badges…", "recent calls show tool, duration and outcome", "the rendered module contains no token value") + `helpers.test.ts` (snippet) |
+| R5 A2A tab: inbound member cards (card URL + write-fenced), A2A tasks (`a2a:` request keys) → Projects › Inbox, outbound receipts, event rows → Observability URL | MET | `apps/web/src/modules/integrations/A2aTab.tsx:12-160`, `helpers.ts:74-95` (`a2aRequests`, `inboxLink`, `systemEventLink`) — `integrations-module.test.tsx` asserts the three hrefs and that only `m-a2a` (not `m-fleet`) is listed; `helpers.test.ts` pins both link shapes |
+| R6 Observability applies `eventName`/`runId` from the URL as the initial System Events intent | MET | `apps/web/src/modules/observability/ObservabilityShell.tsx:31-44` (lazy `useState` initializer) — `apps/web/tests/modules/observability/url-seed.test.ts` |
+| R7 loading skeleton, `EmptyState` naming config keys, `Diagnostic` with retry, semantic tokens only | MET | `IntegrationsModule.tsx:80-125` (loading / diagnostic + retry / empty / panel), token classes only (`bg-base-300`, `text-base-content/70`, `badge-success |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The Board shows an Integrations module built on the module-kit shell | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx` (identity + kit header + tabs) |
+| AC2 — The Summary tab shows one health row per surface | MET | test | `integrations-module.test.tsx` (state chips + activity columns + gateway strip) |
+| AC3 — The MCP tab shows the catalog, recent calls and a client config snippet | MET | test | `integrations-module.test.tsx` + `helpers.test.ts` |
+| AC4 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links | MET | test | `integrations-module.test.tsx` (member card, tasks link, outbound, event link) |
+| AC5 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable | MET | test | `integrations-module.test.tsx` (empty state + diagnostic with retry) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -128,4 +177,7 @@ Premises (verified 2026-11-21):
 ### History
 
 - 2026-11-22T02:19:02.338Z feature_id S → A82 (system)
+- 2026-11-22T06:19:39.086Z todo → wip (system)
+- 2026-11-22T06:20:05.331Z wip → testing (system)
+- 2026-11-22T06:20:06.954Z testing → done (system)
 

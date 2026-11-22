@@ -8,6 +8,7 @@ import { eventsModule } from './events';
 import { featureModule } from './feature';
 import { healthModule } from './health';
 import { historyModule } from './history';
+import { integrationsModule } from './integrations';
 import { jobsModule } from './jobs';
 import { mcpModule } from './mcp';
 import { observabilityModule } from './observability';
@@ -41,6 +42,8 @@ const builtins: ServerModule[] = [
     historyModule,
     commandsModule,
     databaseModule,
+    // Integrations status/usage (feature A82): registered unconditionally, because "off" is an answer.
+    integrationsModule,
     // A2A listener (feature G9): mounts nothing unless `server.a2a.enabled` is on (R1).
     a2aModule,
     // Embedded MCP endpoint (feature B9): mounts nothing unless `server.mcp.enabled` is on.

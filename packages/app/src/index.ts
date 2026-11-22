@@ -606,6 +606,16 @@ export {
     SPUR_INBOX_ID,
 } from './services/inbox-service';
 export { type InlineRunProjectDb, openInlineRunProjectDb } from './services/inline-run-attribution';
+// Integrations status/usage assembly (A82 1423)
+export {
+    type IntegrationsA2aSource,
+    type IntegrationsGatewayProbe,
+    type IntegrationsMcpSource,
+    type IntegrationsRequestContext,
+    IntegrationsService,
+    type IntegrationsServiceDeps,
+    type IntegrationsSources,
+} from './services/integrations-service';
 export {
     acquireExclusiveJob,
     getExclusiveJobOwner,

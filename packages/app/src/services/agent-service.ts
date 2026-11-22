@@ -52,6 +52,11 @@ export interface AgentRunDeps {
     dispatchTurn?: (context: WarmTurnContext) => Promise<WarmTurnDispatch>;
     detector?: AgentDetector;
     doctorRunner?: DoctorRunner;
+    /**
+     * Cancellation seam (1422 R2): a loop drain that owns a cancellable run passes the signal
+     * here, and the executor forwards it to the spawned process group. Absent → today's path.
+     */
+    signal?: AbortSignal;
     /** Test seam (B4/0683 Q1): filesystem for the detection cache; defaults to the context cwd. */
     fileSystem?: FileSystem;
     /** Test seam (B4/0683 Q1): clock for cache TTL; defaults to Date.now. */
@@ -513,6 +518,7 @@ export class AgentService {
             execution: {
                 ...this.defaultExecutionOptions(flags),
                 ...(deps?.dispatchTurn !== undefined ? { dispatchTurn: deps.dispatchTurn } : {}),
+                ...(deps?.signal !== undefined ? { signal: deps.signal } : {}),
             },
         });
         // agent.ts restores Commander's tri-state value under `jsonEnvelope` after the

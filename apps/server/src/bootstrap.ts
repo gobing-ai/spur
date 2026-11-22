@@ -57,7 +57,12 @@ export function createApp(appRt?: ApplicationRuntime, opts?: { fs?: FileSystem; 
         if (ctx) c.set('ctx', ctx);
         const { matched, response } = await oapiHandler.handle(c.req.raw, {
             prefix: '/api',
-            context: appRt ? { logger: appRt.logger, events: appRt.events, db: appRt.db } : {},
+            // `request` is for procedures whose answer depends on how the caller reached the server
+            // (the Integrations status read builds absolute URLs and reads the gateway's forwarded
+            // pair, 1423 R5). It is the inbound request, never a forwarded one.
+            context: appRt
+                ? { logger: appRt.logger, events: appRt.events, db: appRt.db, request: c.req.raw }
+                : { request: c.req.raw },
         });
         if (matched) return c.newResponse(response.body, response);
         return next();

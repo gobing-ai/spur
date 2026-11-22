@@ -49,6 +49,30 @@ describe('A2A card', () => {
         };
         expect(card.description).toBe('Spur fleet member proj-coder');
     });
+
+    test('a declared role and purpose become the card skill (1421 R4)', () => {
+        const card = agentCard({
+            instanceId: 'proj-dev',
+            executor: 'claude',
+            origin: 'http://x',
+            role: 'implementer',
+            purpose: 'lands the feature tasks',
+        }) as { skills: Array<{ id: string; name: string; description: string; tags: string[] }> };
+        expect(card.skills).toEqual([
+            { id: 'implementer', name: 'implementer', description: 'lands the feature tasks', tags: ['implementer'] },
+        ]);
+    });
+
+    test('a member with no role still offers one general skill (1421 R4)', () => {
+        const card = agentCard({ instanceId: 'proj-dev', executor: 'claude', origin: 'http://x' }) as {
+            skills: Array<{ id: string; tags: string[] }>;
+            description: string;
+        };
+        expect(card.skills).toHaveLength(1);
+        expect(card.skills[0]?.id).toBe('general');
+        expect(card.skills[0]?.tags).toEqual(['general']);
+        expect(card.skills[0]).toMatchObject({ description: card.description });
+    });
 });
 
 describe('A2A state projection', () => {
