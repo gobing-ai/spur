@@ -1,15 +1,21 @@
 {
     "artifact": "mcp-agent-interop",
-    "generatedAt": "2026-11-22T17:39:37.618Z",
+    "generatedAt": "2026-11-22T18:47:43.429Z",
     "serverProtocolFloor": "2026-07-28",
+    "completed": true,
+    "globalConfigIntegrity": {
+        "checkedPaths": 10,
+        "unchanged": true
+    },
     "context": {
-        "port": 64881,
+        "port": 57988,
         "project": "(removed)"
     },
     "rows": [
         {
             "agent": "antigravity",
             "version": "",
+            "observedAt": "2026-11-22T18:47:43.422Z",
             "transport": "http",
             "installed": false,
             "configMethod": null,
@@ -25,6 +31,7 @@
         {
             "agent": "antigravity",
             "version": "",
+            "observedAt": "2026-11-22T18:47:43.422Z",
             "transport": "stdio",
             "installed": false,
             "configMethod": null,
@@ -40,21 +47,54 @@
         {
             "agent": "claude",
             "version": "2.1.330 (Claude Code)",
+            "observedAt": "2026-11-22T18:43:46.597Z",
             "transport": "http",
             "installed": true,
             "configMethod": "per-invocation --mcp-config + --strict-mcp-config, CLAUDE_CONFIG_DIR into the temp project",
             "configSource": "claude --help (--mcp-config, --strict-mcp-config, --allowedTools; verified 2026-11-22, 2.1.330)",
-            "clientRevision": null,
-            "requests": [],
-            "requestCount": 0,
+            "clientRevision": "2025-11-25",
+            "requests": [
+                {
+                    "method": "server/discover",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
+                },
+                {
+                    "method": "initialize",
+                    "revision": null,
+                    "requestedRevision": "2025-11-25",
+                    "status": 400,
+                    "errorCode": "PROTOCOL_VERSION_UNSUPPORTED",
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                },
+                {
+                    "method": "",
+                    "revision": null,
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                }
+            ],
+            "requestCount": 3,
             "toolsSeen": null,
             "callOutcome": "not-attempted",
-            "classification": "no-request",
-            "errorExcerpt": "Not logged in · Please run /login\n"
+            "classification": "rejected-legacy-revision",
+            "errorExcerpt": "Not logged in · Please run /login"
         },
         {
             "agent": "claude",
             "version": "2.1.330 (Claude Code)",
+            "observedAt": "2026-11-22T18:43:47.461Z",
             "transport": "stdio",
             "installed": true,
             "configMethod": "per-invocation --mcp-config + --strict-mcp-config, CLAUDE_CONFIG_DIR into the temp project",
@@ -64,61 +104,138 @@
                 {
                     "method": "server/discover",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
                 },
                 {
                     "method": "server/discover",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
                 },
                 {
                     "method": "tools/list",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
                 }
             ],
             "requestCount": 3,
-            "toolsSeen": 1,
+            "toolsSeen": 10,
             "callOutcome": "fail",
             "classification": "call-failed",
-            "errorExcerpt": "Not logged in · Please run /login\n"
+            "errorExcerpt": "Not logged in · Please run /login"
         },
         {
             "agent": "codex",
             "version": "codex-cli 0.171.0",
+            "observedAt": "2026-11-22T18:44:57.501Z",
             "transport": "http",
             "installed": true,
-            "configMethod": null,
-            "configSource": null,
-            "clientRevision": null,
-            "requests": [],
-            "requestCount": 0,
+            "configMethod": "per-invocation TOML override; native app-server ephemeral thread catalog and tool-call APIs",
+            "configSource": "codex-cli 0.171.0: mcp get --json, app-server generate-ts (mcpServerStatus/list, mcpServer/tool/call)",
+            "clientRevision": "2025-06-18",
+            "requests": [
+                {
+                    "method": "initialize",
+                    "revision": null,
+                    "requestedRevision": "2025-06-18",
+                    "status": 400,
+                    "errorCode": "PROTOCOL_VERSION_UNSUPPORTED",
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                }
+            ],
+            "requestCount": 1,
             "toolsSeen": null,
             "callOutcome": "not-attempted",
-            "classification": "config-isolation-unavailable",
-            "errorExcerpt": "codex-cli 0.171.0 reaches HTTP only through `codex mcp add --url` (writes ~/.codex/config.toml); the -c override is rejected with \"url is not supported for stdio\""
+            "classification": "rejected-legacy-revision",
+            "errorExcerpt": "MCP startup failed: handshaking with MCP server failed: Send message error Transport [codex_rmcp_client::tool_list_changes::ToolListChanges<codex_rmcp_client::event_notification_transport::EventNotificationTransport<rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClientAdapter>>>>] error: unexpected server response: HTTP 400: {\"error\":{\"code\":\"PROTOCOL_VERSION_UNSUPPORTED\",\"message\":\"legacy initialize handshake (protocolVersion 2025-06-18, no Mcp-Protocol-Version header); this ser\nponse: HTTP 400: {\"error\":{\"code\":\"PROTOCOL_VERSION_UNSUPPORTED\",\"message\":\"legacy initialize handshake (protocolVersion 2025-06-18, no Mcp-Protocol-Version header); this server accepts 2026-07-28 or newer — pre-2.0 clients connect through the stdio bridge (spur mcp)\"}}, when send initialize request"
         },
         {
             "agent": "codex",
             "version": "codex-cli 0.171.0",
+            "observedAt": "2026-11-22T18:44:57.878Z",
             "transport": "stdio",
             "installed": true,
-            "configMethod": "per-invocation -c mcp_servers.spur.command/args overrides (stdio)",
-            "configSource": "verified 2026-11-22 against codex-cli 0.171.0 (`codex -c … mcp list`)",
-            "clientRevision": null,
-            "requests": [],
-            "requestCount": 0,
-            "toolsSeen": null,
-            "callOutcome": "not-attempted",
-            "classification": "no-request",
-            "errorExcerpt": "Error loading config.toml: invalid type: string \"{\\\"SPUR_MCP_AUTH_ENV\\\":\\\"SPUR_MCP_TOKEN\\\",\\\"SPUR_MCP_TOKEN\\\":\\\"interop-137a42ca7a3b7b3a14262cd4\\\"}\", expected a map\nin `mcp_servers.spur.env`\n\n"
+            "configMethod": "per-invocation TOML override; native app-server ephemeral thread catalog and tool-call APIs",
+            "configSource": "codex-cli 0.171.0: mcp get --json, app-server generate-ts (mcpServerStatus/list, mcpServer/tool/call)",
+            "clientRevision": "2026-07-28",
+            "requests": [
+                {
+                    "method": "server/discover",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
+                },
+                {
+                    "method": "tools/list",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
+                },
+                {
+                    "method": "resources/templates/list",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 404,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                },
+                {
+                    "method": "resources/list",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
+                },
+                {
+                    "method": "tools/call",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": "sp_task_list",
+                    "toolCount": null,
+                    "responseOk": true
+                }
+            ],
+            "requestCount": 5,
+            "toolsSeen": 10,
+            "callOutcome": "pass",
+            "classification": "pass",
+            "errorExcerpt": "Codex app-server listed 10 tools and called sp_task_list"
         },
         {
             "agent": "gemini",
             "version": "0.46.0",
+            "observedAt": "2026-11-22T18:44:59.636Z",
             "transport": "http",
             "installed": true,
             "configMethod": "project-local .gemini/settings.json",
@@ -129,11 +246,12 @@
             "toolsSeen": null,
             "callOutcome": "not-attempted",
             "classification": "no-request",
-            "errorExcerpt": "ib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307474:11)\n    at _doSetupUser (file:///opt/homebrew/Cellar/gemini-cli/0.46.0/libexec/lib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307463:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n"
+            "errorExcerpt": "Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google\n    at throwIneligibleOrProjectIdError (file:///opt/homebrew/Cellar/gemini-cli/0.46.0/libexec/lib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307474:11)\nMCP issues detected. Run /mcp list for status.\nAn unexpected critical error occurred:IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, ple\nib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307474:11)\n    at _doSetupUser (file:///opt/homebrew/Cellar/gemini-cli/0.46.0/libexec/lib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307463:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
         },
         {
             "agent": "gemini",
             "version": "0.46.0",
+            "observedAt": "2026-11-22T18:45:05.413Z",
             "transport": "stdio",
             "installed": true,
             "configMethod": "project-local .gemini/settings.json",
@@ -144,41 +262,44 @@
             "toolsSeen": null,
             "callOutcome": "not-attempted",
             "classification": "no-request",
-            "errorExcerpt": "ib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307474:11)\n    at _doSetupUser (file:///opt/homebrew/Cellar/gemini-cli/0.46.0/libexec/lib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307463:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n"
+            "errorExcerpt": "Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google\n    at throwIneligibleOrProjectIdError (file:///opt/homebrew/Cellar/gemini-cli/0.46.0/libexec/lib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307474:11)\nMCP issues detected. Run /mcp list for status.\nAn unexpected critical error occurred:IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, ple\nib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307474:11)\n    at _doSetupUser (file:///opt/homebrew/Cellar/gemini-cli/0.46.0/libexec/lib/node_modules/@google/gemini-cli/bundle/chunk-RCJSF5RP.js:307463:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
         },
         {
             "agent": "grok",
             "version": "grok 1.0.88 (2fe3608f7398) [stable]",
+            "observedAt": "2026-11-22T18:45:48.091Z",
             "transport": "http",
             "installed": true,
-            "configMethod": null,
-            "configSource": null,
+            "configMethod": "project-local .grok/config.toml",
+            "configSource": "grok mcp add --help (--scope project); native writer output verified for HTTP and stdio",
             "clientRevision": null,
             "requests": [],
             "requestCount": 0,
             "toolsSeen": null,
             "callOutcome": "not-attempted",
-            "classification": "config-isolation-unavailable",
-            "errorExcerpt": "grok mcp add writes its own config store; no per-invocation or project-local path was verified"
+            "classification": "no-request",
+            "errorExcerpt": "I'll look up the MCP tools whose names start with `sp_`, then call `sp_task_list` with no arguments.\nNo MCP tools whose names start with `sp_` are available in this session.\nrguments.\n\nThe first search returned nothing. I'll try the task-list name and a broader spur keyword.\n\nSearch did not return a `sp_` prefix match. I'll check this workspace and search the tool catalog for the spur task tools.\n\nNo MCP tools whose names start with `sp_` are available in this session."
         },
         {
             "agent": "grok",
             "version": "grok 1.0.88 (2fe3608f7398) [stable]",
+            "observedAt": "2026-11-22T18:46:53.158Z",
             "transport": "stdio",
             "installed": true,
-            "configMethod": null,
-            "configSource": null,
+            "configMethod": "project-local .grok/config.toml",
+            "configSource": "grok mcp add --help (--scope project); native writer output verified for HTTP and stdio",
             "clientRevision": null,
             "requests": [],
             "requestCount": 0,
             "toolsSeen": null,
             "callOutcome": "not-attempted",
-            "classification": "config-isolation-unavailable",
-            "errorExcerpt": "grok mcp add writes its own config store; no per-invocation or project-local path was verified"
+            "classification": "no-request",
+            "errorExcerpt": "I'll look up the MCP tools whose names start with `sp_`, then call `sp_task_list` with no arguments.\nNo MCP tools whose names start with `sp_` were listed, and `sp_task_list` is not available.\ne MCP tools whose names start with `sp_`, then call `sp_task_list` with no arguments.\n\nThe catalog search did not surface any `sp_` tools. I'll look up `sp_task_list` directly and call it with no arguments.\n\nNo MCP tools whose names start with `sp_` were listed, and `sp_task_list` is not available."
         },
         {
             "agent": "hermes",
             "version": "",
+            "observedAt": "2026-11-22T18:47:43.423Z",
             "transport": "http",
             "installed": false,
             "configMethod": null,
@@ -194,6 +315,7 @@
         {
             "agent": "hermes",
             "version": "",
+            "observedAt": "2026-11-22T18:47:43.423Z",
             "transport": "stdio",
             "installed": false,
             "configMethod": null,
@@ -209,6 +331,7 @@
         {
             "agent": "omp",
             "version": "omp/19.0.1",
+            "observedAt": "2026-11-22T18:45:11.745Z",
             "transport": "http",
             "installed": true,
             "configMethod": "per-run --config overlay",
@@ -218,31 +341,44 @@
                 {
                     "method": "server/discover",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
                 },
                 {
                     "method": "tools/list",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
                 },
                 {
                     "method": "tools/call",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": "sp_task_list",
+                    "toolCount": null,
+                    "responseOk": true
                 }
             ],
             "requestCount": 3,
-            "toolsSeen": 1,
+            "toolsSeen": 10,
             "callOutcome": "pass",
             "classification": "pass",
-            "errorExcerpt": "ers/robin/.omp/agent/models.yml: providers.opencode.models.6.compat.requiresReasoningContentOnAssistantMessages (configuration still loaded).\nWarning: MCP server \"context-mode\" failed to connect: MCP subprocess exited with code 1 before responding; its tools are unavailable for this run.\nWorking...\n"
+            "errorExcerpt": "Warning: MCP server \"context-mode\" failed to connect: MCP subprocess exited with code 1 before responding; its tools are unavailable for this run.\n key in ~/.omp/agent/models.yml: providers.opencode.models.6.compat.requiresReasoningContentOnAssistantMessages (configuration still loaded).\nWarning: MCP server \"context-mode\" failed to connect: MCP subprocess exited with code 1 before responding; its tools are unavailable for this run.\nWorking..."
         },
         {
             "agent": "omp",
             "version": "omp/19.0.1",
+            "observedAt": "2026-11-22T18:45:23.096Z",
             "transport": "stdio",
             "installed": true,
             "configMethod": "per-run --config overlay",
@@ -252,31 +388,44 @@
                 {
                     "method": "server/discover",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
                 },
                 {
                     "method": "tools/list",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
                 },
                 {
                     "method": "tools/call",
                     "revision": "2026-07-28",
+                    "requestedRevision": null,
                     "status": 200,
-                    "errorCode": null
+                    "errorCode": null,
+                    "toolName": "sp_task_list",
+                    "toolCount": null,
+                    "responseOk": true
                 }
             ],
             "requestCount": 3,
-            "toolsSeen": 1,
+            "toolsSeen": 10,
             "callOutcome": "pass",
             "classification": "pass",
-            "errorExcerpt": "ers/robin/.omp/agent/models.yml: providers.opencode.models.6.compat.requiresReasoningContentOnAssistantMessages (configuration still loaded).\nWarning: MCP server \"context-mode\" failed to connect: MCP subprocess exited with code 1 before responding; its tools are unavailable for this run.\nWorking...\n"
+            "errorExcerpt": "Warning: MCP server \"context-mode\" failed to connect: MCP subprocess exited with code 1 before responding; its tools are unavailable for this run.\n key in ~/.omp/agent/models.yml: providers.opencode.models.6.compat.requiresReasoningContentOnAssistantMessages (configuration still loaded).\nWarning: MCP server \"context-mode\" failed to connect: MCP subprocess exited with code 1 before responding; its tools are unavailable for this run.\nWorking..."
         },
         {
             "agent": "openclaw",
             "version": "OpenClaw 2026.6.11 (e085fa1)",
+            "observedAt": "2026-11-22T18:45:43.122Z",
             "transport": "http",
             "installed": true,
             "configMethod": "OPENCLAW_CONFIG_PATH + OPENCLAW_STATE_DIR into the temp project",
@@ -287,11 +436,12 @@
             "toolsSeen": null,
             "callOutcome": "not-attempted",
             "classification": "no-request",
-            "errorExcerpt": "[openclaw] Could not start the CLI.\n[openclaw] Reason: Unknown command: openclaw run. No built-in command or plugin CLI metadata owns \"run\".\n[openclaw] Debug: set OPENCLAW_DEBUG=1 to include the stack trace.\n[openclaw] Try: openclaw doctor\n[openclaw] Help: openclaw --help\n"
+            "errorExcerpt": "[diagnostic] lane task error: lane=main durationMs=500 error=\"ProviderAuthError: No API key found for provider \"openai\". Auth store: /var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/state/agents/main/agent/openclaw-agent.sqlite (agentDir: /var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/state/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy only portable static auth profiles from the main agentDir.\"\n[diagnostic] lane task error: lane=session:agent:main:explicit:cbd7600a-d4bf-4a99-8e97-2be8ede8c1fe durationMs=50\ne/agents/main/agent/openclaw-agent.sqlite (agentDir: /var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/state/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy only portable static auth profiles from the main agentDir. | missing-provider-auth"
         },
         {
             "agent": "openclaw",
             "version": "OpenClaw 2026.6.11 (e085fa1)",
+            "observedAt": "2026-11-22T18:45:45.866Z",
             "transport": "stdio",
             "installed": true,
             "configMethod": "OPENCLAW_CONFIG_PATH + OPENCLAW_STATE_DIR into the temp project",
@@ -302,11 +452,12 @@
             "toolsSeen": null,
             "callOutcome": "not-attempted",
             "classification": "no-request",
-            "errorExcerpt": "[openclaw] Could not start the CLI.\n[openclaw] Reason: Unknown command: openclaw run. No built-in command or plugin CLI metadata owns \"run\".\n[openclaw] Debug: set OPENCLAW_DEBUG=1 to include the stack trace.\n[openclaw] Try: openclaw doctor\n[openclaw] Help: openclaw --help\n"
+            "errorExcerpt": "[diagnostic] lane task error: lane=main durationMs=397 error=\"ProviderAuthError: No API key found for provider \"openai\". Auth store: /var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/state/agents/main/agent/openclaw-agent.sqlite (agentDir: /var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/state/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy only portable static auth profiles from the main agentDir.\"\n[diagnostic] lane task error: lane=session:agent:main:explicit:8de6b8ab-acba-4696-a555-5ffed8310f6d durationMs=40\ne/agents/main/agent/openclaw-agent.sqlite (agentDir: /var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/state/agents/main/agent). Configure auth for this agent (openclaw agents add <id>) or copy only portable static auth profiles from the main agentDir. | missing-provider-auth"
         },
         {
             "agent": "opencode",
             "version": "opencode v2.0.32",
+            "observedAt": "2026-11-22T18:45:10.299Z",
             "transport": "http",
             "installed": true,
             "configMethod": "project-local opencode.json",
@@ -317,11 +468,12 @@
             "toolsSeen": null,
             "callOutcome": "not-attempted",
             "classification": "no-request",
-            "errorExcerpt": "ha-free\n\u001b[93m\u001b[1m! \u001b[0mpermission requested: shell (spur task list --json); auto-rejecting\n\u001b[0m✗ \u001b[0mspur task list --json failed\n\u001b[91m\u001b[1mError: \u001b[0mThis non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action.\n> build · tidepool-alpha-free\n"
+            "errorExcerpt": "\u001b[91m\u001b[1mError: \u001b[0mInsufficient balance. This request is pay-as-you-go, billed to OpenCode Models credits. Top up at https://opencode.ai/console/wrk_01KEBQXTBG1PRQXJ8DFFPYME45/billing?credits=1. OpenCode Go covers only requests to the OpenCode Go provider.\n\u001b[0m\n> build · gemini-4-neon\n\u001b[91m\u001b[1mError: \u001b[0mInsufficient balance. This request is pay-as-you-go, billed to OpenCode Models credits. Top up at https://opencode.ai/console/wrk_01KEBQXTBG1PRQXJ8DFFPYME45/billing?credits=1. OpenCode Go covers only requests to the OpenCode Go provider."
         },
         {
             "agent": "opencode",
             "version": "opencode v2.0.32",
+            "observedAt": "2026-11-22T18:45:11.007Z",
             "transport": "stdio",
             "installed": true,
             "configMethod": "project-local opencode.json",
@@ -332,37 +484,151 @@
             "toolsSeen": null,
             "callOutcome": "not-attempted",
             "classification": "no-request",
-            "errorExcerpt": "ha-free\n\u001b[93m\u001b[1m! \u001b[0mpermission requested: shell (spur task list --json); auto-rejecting\n\u001b[0m✗ \u001b[0mspur task list --json failed\n\u001b[91m\u001b[1mError: \u001b[0mThis non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action.\n> build · tidepool-alpha-free\n"
+            "errorExcerpt": "\u001b[91m\u001b[1mError: \u001b[0mInsufficient balance. This request is pay-as-you-go, billed to OpenCode Models credits. Top up at https://opencode.ai/console/wrk_01KEBQXTBG1PRQXJ8DFFPYME45/billing?credits=1. OpenCode Go covers only requests to the OpenCode Go provider.\n\u001b[0m\n> build · gemini-4-neon\n\u001b[91m\u001b[1mError: \u001b[0mInsufficient balance. This request is pay-as-you-go, billed to OpenCode Models credits. Top up at https://opencode.ai/console/wrk_01KEBQXTBG1PRQXJ8DFFPYME45/billing?credits=1. OpenCode Go covers only requests to the OpenCode Go provider."
         },
         {
             "agent": "pi",
             "version": "1.6.0",
+            "observedAt": "2026-11-22T18:43:49.041Z",
             "transport": "http",
             "installed": true,
             "configMethod": "project-local .pi/mcp.json",
             "configSource": "pi mcp --help (\"Reads ~/.pi/agent/mcp.json and, in trusted projects, .pi/mcp.json\")",
-            "clientRevision": null,
-            "requests": [],
-            "requestCount": 0,
-            "toolsSeen": null,
+            "clientRevision": "2025-11-25",
+            "requests": [
+                {
+                    "method": "initialize",
+                    "revision": null,
+                    "requestedRevision": "2025-11-25",
+                    "status": 400,
+                    "errorCode": "PROTOCOL_VERSION_UNSUPPORTED",
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                },
+                {
+                    "method": "",
+                    "revision": null,
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                },
+                {
+                    "method": "initialize",
+                    "revision": null,
+                    "requestedRevision": "2025-06-18",
+                    "status": 400,
+                    "errorCode": "PROTOCOL_VERSION_UNSUPPORTED",
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                },
+                {
+                    "method": "initialize",
+                    "revision": "2026-07-28",
+                    "requestedRevision": "2026-07-28",
+                    "status": 404,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": false
+                },
+                {
+                    "method": "tools/list",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
+                },
+                {
+                    "method": "tools/list",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
+                },
+                {
+                    "method": "server/discover",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
+                },
+                {
+                    "method": "tools/call",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": "sp_task_list",
+                    "toolCount": null,
+                    "responseOk": true
+                }
+            ],
+            "requestCount": 8,
+            "toolsSeen": 10,
             "callOutcome": "not-attempted",
-            "classification": "no-request",
-            "errorExcerpt": "st_plugins, start_run, get_run, cancel_run, list_agents}`.\n\nSkipped: did not call any open_design tool (nothing asked that maps to it); risk is that `sp_task_list` may live in a plugin/host not loaded here, so MCP config would need checking.\n\u001b]777;notify;oh-pi;Done after 3 turn(s). Ready for input.\u0007"
+            "classification": "rejected-legacy-revision",
+            "errorExcerpt": "`/private/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T/spur-mcp-interop-nlfNId/.pi/mcp.json:1` (spur MCP registered) + server error from `POST http://127.0.0.1:57989/mcp` with `protocolVersion 2025-06-18`: `PROTOCOL_VERSION_UNSUPPORTED: ... pre-2.0 clients connect through the stdio bridge`.\nTED: ... pre-2.0 clients connect through the stdio bridge`.\nUNVERIFIED: that Pi's client uses the legacy 2025-06-18 handshake (inferred from that rejection; not read from Pi source).\n\u001b]777;notify;oh-pi;Done after 16 turn(s). Ready for input.\u0007\u001b]777;notify;oh-pi;Done after 1 turn(s). Ready for input.\u0007"
         },
         {
             "agent": "pi",
             "version": "1.6.0",
+            "observedAt": "2026-11-22T18:44:47.285Z",
             "transport": "stdio",
             "installed": true,
             "configMethod": "project-local .pi/mcp.json",
             "configSource": "pi mcp --help (\"Reads ~/.pi/agent/mcp.json and, in trusted projects, .pi/mcp.json\")",
-            "clientRevision": null,
-            "requests": [],
-            "requestCount": 0,
-            "toolsSeen": null,
-            "callOutcome": "not-attempted",
-            "classification": "no-request",
-            "errorExcerpt": "design__*` tools like `list_projects`, `get_file`, `start_run`), so `sp_task_list` couldn't be called.\n\nSkipped: didn't probe other MCP servers or spur CLI (`spur task list`) — say the word and I'll try that as the fallback for task listing.\n\u001b]777;notify;oh-pi;Done after 3 turn(s). Ready for input.\u0007"
+            "clientRevision": "2026-07-28",
+            "requests": [
+                {
+                    "method": "server/discover",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": null,
+                    "responseOk": true
+                },
+                {
+                    "method": "tools/list",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": null,
+                    "toolCount": 10,
+                    "responseOk": true
+                },
+                {
+                    "method": "tools/call",
+                    "revision": "2026-07-28",
+                    "requestedRevision": null,
+                    "status": 200,
+                    "errorCode": null,
+                    "toolName": "sp_task_list",
+                    "toolCount": null,
+                    "responseOk": true
+                }
+            ],
+            "requestCount": 3,
+            "toolsSeen": 10,
+            "callOutcome": "pass",
+            "classification": "pass",
+            "errorExcerpt": "ask_transition`, `sp_feature_check`, `sp_rule_run`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue`.\n\nSkipped: nothing else in this project was inspected — the empty list may just mean the cwd has no Spur project initialized.\n\u001b]777;notify;oh-pi;Done after 3 turn(s). Ready for input.\u0007"
         }
     ]
 }

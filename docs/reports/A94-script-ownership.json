@@ -318,6 +318,15 @@
             "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo\u2019s suite policy"
         },
         {
+            "path": "scripts/commands/mcp-agent-interop.ts",
+            "responsibility": "Operator-run real-agent MCP transport interoperability fixture with a recording proxy and receipt",
+            "tests": ["apps/cli/tests/mcp-agent-interop.test.ts"],
+            "callers": [{ "path": "package.json", "line": 105 }, { "path": "scripts/spur-dev.ts", "line": 159 }],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: installed-agent authentication and protocol scenario fixture for Spur, not reusable downstream runtime behavior"
+        },
+        {
             "path": "scripts/commands/script-contract-check.test.ts",
             "responsibility": "Companion tests for the ADR-130 script and hook placement contract",
             "tests": [],
