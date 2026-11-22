@@ -70,6 +70,7 @@ describe('protocol version gate (R3 / AC1)', () => {
             const error = errorOf(await jsonOf(res));
             expect(error.code).toBe('PROTOCOL_VERSION_UNSUPPORTED');
             expect(error.message).toContain(VERSION);
+            expect(error.message).toContain('spur mcp');
         });
     }
 
