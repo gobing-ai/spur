@@ -1,7 +1,11 @@
-calls  max_bytes  body_used
------  ---------  ---------
-    0
---- (worktree db empty; measured on invoking tree db) ---
-calls  max_bytes  body_used
------  ---------  ---------
-   86       2085         83
+Observed 2026-11-22T19:22:31.467063+00:00 (read-only main database)
+failure_class_rows=86
+max_input_json_characters=2085
+max_input_json_utf8_bytes=2115
+historical_body_already_used_errors=83
+
+Provider default context: 64k tokens per request, 32k tokens per question.
+Source: https://docs.typesafe.ai/models#context-length
+Byte counts are not token counts and describe stored decision input, not an exact full-wire token measurement.
+The fresh default and pinned-model calls were accepted without adding a long-context header.
+Historical log errors remain in the read-only database; the fresh isolated database has two accepted rows and zero Body already used errors.

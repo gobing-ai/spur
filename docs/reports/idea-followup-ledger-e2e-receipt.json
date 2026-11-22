@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-11-22T06:04:20.687Z",
+    "generatedAt": "2026-11-22T19:17:54.405Z",
     "runId": "idea-followup-e2e",
     "finalState": "handoff",
     "ledger": [
@@ -17,10 +17,10 @@
         }
     ],
     "followupsFiled": [
-        "I3 → A1 (Preview export) — next: /sp:dev-plan --feature A1",
-        "I5 → A2 (Preview cache invalidation) — next: /sp:dev-plan --feature A2"
+        "I3 \u2192 A1 (Preview export) \u2014 next: /sp:dev-plan --feature A1",
+        "I5 \u2192 A2 (Preview cache invalidation) \u2014 next: /sp:dev-plan --feature A2"
     ],
-    "excluded": ["I4 — operator ruled out"],
+    "excluded": ["I4 \u2014 operator ruled out"],
     "negativeLeg": {
         "exitCode": 1,
         "message": "idea-handoff: Follow-up ledger incomplete: follow-up ledger: follow-up item I5 has no ledger row"

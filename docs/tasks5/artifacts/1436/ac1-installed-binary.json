@@ -1,14 +1,14 @@
 {
     "id": "failure-class",
-    "confidence": 0.9,
+    "confidence": 0.88,
     "source": "model",
     "reason": "accepted",
     "maker": "typesafe",
-    "durationMs": 212,
+    "durationMs": 226,
     "type": "choice",
     "value": "stop",
     "makerSource": "flag",
-    "invocationId": "fd338540-5c80-4ad6-b565-f54a150d8842",
+    "invocationId": "e21c6d77-d1ad-4231-aa63-dd803e2bb01f",
     "evidenceDigest": null,
     "confidenceLevel": "HIGH"
 }

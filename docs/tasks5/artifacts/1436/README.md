@@ -6,26 +6,28 @@ Repeatable proof that the bundled CLI built against `@gobing-ai/ts-ai-decision` 
 Reproduce from the repo root (requires `TYPESAFE_API_KEY` in the environment):
 
 ```bash
-bun run --filter @gobing-ai/spur build:bundle      # apps/cli/spur.js
-(cd apps/cli && bun link)                          # installed `spur` -> this bundle
-grep -c streamBackedFetch apps/cli/spur.js         # >= 1: the 0.8.4 driver fix is in the bundle
-
-export DATABASE_URL="$TMPDIR/t1436.db"             # never the project db
-spur decision run failure-class --param wbs=1436 --maker typesafe --json   # -> ac1-installed-binary.json
-sqlite3 "$DATABASE_URL" "select decision_id, maker_name, outcome, source, reason, error from decision_logs;"
-
-TYPESAFE_DEFAULT_MODEL=jev-1.13.0 spur decision run failure-class --param wbs=1436 --maker typesafe --json
+bun run --filter @gobing-ai/spur build:bundle
+(cd apps/cli && bun link)
+task1436_dir="$(mktemp -d "${TMPDIR:-/tmp}/spur-1436.XXXXXX")"
+env -u TYPESAFE_DEFAULT_MODEL DATABASE_URL="$task1436_dir/proof.db" spur decision run failure-class --param wbs=1436 --maker typesafe --json
+TYPESAFE_DEFAULT_MODEL=jev-1.13.0 DATABASE_URL="$task1436_dir/proof.db" spur decision run failure-class --param wbs=1436 --maker typesafe --json
+sqlite3 -readonly "$task1436_dir/proof.db" "select decision_id,maker_name,source,reason,error from decision_logs;"
 ```
 
 | File | Proves |
 | --- | --- |
-| `ac1-decision-run.json` | AC1 on the freshly built `apps/cli/spur.js`: `source: model`, `reason: accepted`, no `error` |
-| `ac2-decision-logs.txt` | AC2: zero `Body already used` rows in the temp `decision_logs` |
-| `ac1-installed-binary.json` | AC1 through the installed `spur` symlink after `bun link` |
-| `ac1-installed-binary-logs.txt` | AC2 on that second temp database |
-| `ac3-model-pin.json` | AC3: `TYPESAFE_DEFAULT_MODEL=jev-1.13.0` still accepts (confidence 0.96) |
-| `ac3-decision-logs.txt` | AC3 log rows, still no error |
-| `ac4-input-size.txt` | R7 evidence: 86 recorded `failure-class` calls, largest input 2085 B vs a 64k per-request limit |
+| `verification-receipt.json` | Current binary path/SHA-256, both actual command results, isolated database and its log rows |
+| `ac1-decision-run.json`, `ac1-installed-binary.json` | Default SDK model path accepted through the rebuilt, installed bundle |
+| `ac2-decision-logs.txt`, `ac1-installed-binary-logs.txt` | Both fresh calls accepted, zero `Body already used` errors in the isolated database |
+| `ac3-model-pin.json`, `ac3-decision-logs.txt` | `TYPESAFE_DEFAULT_MODEL=jev-1.13.0` accepted; no per-call catalog model pin |
+| `ac4-input-size.txt` | Read-only historical input-size observation, with characters/UTF-8 bytes distinguished from token limits |
 
-Expected result shape: `{"source":"model","reason":"accepted","maker":"typesafe","value":"stop"}`
-with exit 0. A regression shows `source: "fallback"` plus `error: "TypeError: Body already used"`.
+The expected command result has `source: model`, `reason: accepted`, and no `error`; exit 0 alone
+is insufficient because backend failures deliberately fall back. The proof database is temporary,
+not the project's live database. Historical `Body already used` rows remain historical records.
+
+Spec: [TypeSafe OpenAPI v0.2.0](https://api.typesafe.ai/openapi.json). Context limits are **tokens**:
+[models and long context](https://docs.typesafe.ai/models#context-length) documents 64k per request
+and 32k per question. Stored JSON byte counts are diagnostic, not exact wire-token measurements.
+The live default and pinned calls accepted without adding a long-context header. Actual served-model
+metadata logging remains the separately filed feature S; acceptance does not claim that metadata.

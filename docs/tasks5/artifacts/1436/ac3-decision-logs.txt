@@ -1,4 +1,2 @@
- decision_id   maker_name  outcome   source   reason   err
--------------  ----------  --------  ------  --------  ---
-failure-class  typesafe    accepted  model   accepted  -
-failure-class  typesafe    accepted  model   accepted  -
+maker|source|reason|rows|body_already_used_errors
+typesafe|model|accepted|2|0

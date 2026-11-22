@@ -1,5 +1,2 @@
---- installed-binary run, DATABASE_URL=/var/folders/2g/398pfv8j1tj_zt78g_ty2r740000gn/T//t1436-installed.db ---
- decision_id   maker_name  outcome   source   reason   err
--------------  ----------  --------  ------  --------  ---
-failure-class  typesafe    accepted  model   accepted  -
-body-already-used rows: 0
+maker|source|reason|rows|body_already_used_errors
+typesafe|model|accepted|2|0

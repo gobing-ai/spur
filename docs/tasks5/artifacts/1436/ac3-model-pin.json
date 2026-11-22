@@ -4,11 +4,11 @@
     "source": "model",
     "reason": "accepted",
     "maker": "typesafe",
-    "durationMs": 432,
+    "durationMs": 237,
     "type": "choice",
     "value": "stop",
     "makerSource": "flag",
-    "invocationId": "e5b78486-d44a-4faf-bfee-545fabc7367d",
+    "invocationId": "dc9db1a7-657b-4192-bd08-5c713d2682df",
     "evidenceDigest": null,
     "confidenceLevel": "HIGH"
 }
