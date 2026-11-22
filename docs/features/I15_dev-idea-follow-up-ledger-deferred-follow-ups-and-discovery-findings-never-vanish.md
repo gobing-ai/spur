@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-22T03:47:44.798Z"
-updated_at: "2026-11-22T03:48:04.784Z"
+updated_at: "2026-11-22T04:49:13.061Z"
 ---
 
 # I15: dev-idea follow-up ledger: deferred follow-ups and discovery findings never vanish
@@ -28,12 +28,6 @@ Make an idea-pipeline run account for everything the idea and its discovery prod
   - Changing AC-coverage semantics: deferred items stay exempt from this feature's AC coverage.
 
 ## Acceptance Criteria
-
-- [ ] R1 — Every follow-up inventory item has exactly one resolvable ledger row
-- [ ] R2 — Excluded inventory items are never filed and are reported with their reason
-- [ ] R3 — Handoff finalization fails closed on an incomplete follow-up ledger
-- [ ] R4 — The handoff report lists filed follow-ups and excluded items
-- [ ] R5 — An E2E idea run files follow-ups and discovery findings and leaves a receipt
 
 ```gherkin
 Feature: dev-idea follow-up ledger: deferred follow-ups and discovery findings never vanish
