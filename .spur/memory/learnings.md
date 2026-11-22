@@ -7542,3 +7542,84 @@ Skipped: the pre-existing `changelog-confidence` red (already recorded for the G
 - Task gate receipts are tree-hash bound: any test-fixture edit after `spur task gate light` forces a
   recheck.
 
+Drift repaired in one file — `docs/design/decision-catalog.md` (the only write I made; the `docs/tasks5/*`, `docs/reports/*`, `apps/web/*`, `scripts/commands/*` changes were already in the tree from the A82 batch and are untouched).
+
+| Doc | Check run | Finding | Repair |
+| --- | --- | --- | --- |
+| `docs/design/decision-catalog.md` §2 | `rg "@gobing-ai/ts-ai-decision@0.5.16"` vs `package.json:33` | Doc said 0.5.16 "not yet installed or imported"; installed and imported everywhere | Dropped the stale version/install claim, kept the API list |
+| same §3.7 | `rg TYPESAFE` vs `packages/app/src/decision/decision-service.ts:459`, SDK `dist/index.mjs:552` | Maker contract lacked the typesafe model seam (lived only in `cli-contracts.md:1220`) | Added one bullet: env-only `TYPESAFE_API_KEY`/`TYPESAFE_DEFAULT_MODEL`, and why a catalog `model:` is wrong |
+| same §5 | `rg "bump pending\|not yet released"` vs `typesafe-driver.js:47` (`state: state ?? ''`) | Claimed the parameterless-`state` fix was unreleased "until the `^0.5.23` bump" | Corrected to released/past the pin; kept date and history |
+| `docs/00_ADR.md` | ADR grep, §6.1 admission test | 1436 is a bugfix restoring a contract → no ADR; all version strings are historical citations or `≥` minimums | none |
+| `docs/03_ARCHITECTURE.md` | version-string grep, §27/§28 read | `≥0.5.0`/`≥0.4.57` minimums still true at 0.8.4; DecisionMaker seam statement unchanged | none |
+| `docs/04_DESIGN.md` | `comm` index ↔ `docs/design/*` | Only `spur-team-mode-design.md` unindexed — `status: superseded` (ADR-116), row removed by `600dda990` | none (intentional, not re-added) |
+
+Frontmatter `updated_at` bumped on the edited satellite only; the index pointer and its indexed facts did not change (§4.5).
+
+# Working Learnings — 2026-11-21
+
+## 2026-11-21 — 1436 · typesafe decision maker "Body already used"
+
+**Conventions**
+
+- Upstream-seam bugs get no ADR. Task 1436 restored an existing contract (`@gobing-ai/ts-ai-decision`
+  0.8.4), so `docs/00_ADR.md` stayed untouched per constitution §6.1 ("Bug fixes that restore an
+  existing contract need no ADR"). Adoption + configuration only; no Spur-side fetch wrapper,
+  because `ts-ai-decision` `registry.ts:162` rejects duplicate maker names, so the built-in
+  `typesafe` maker cannot be overridden locally.
+- Every task proving a model/runtime behavior writes a repeatable artifact directory
+  `docs/tasks5/artifacts/<wbs>/` (`README.md` reproduce block + one file per AC). The README's
+  command sequence *is* the proof: build bundle → `bun link` → `grep -c streamBackedFetch` →
+  run with a temp `DATABASE_URL` → inspect `decision_logs`.
+- Model selection for a hosted maker is an SDK environment decision, never project config:
+  `TYPESAFE_API_KEY` + `TYPESAFE_DEFAULT_MODEL` (`@typesafe-ai/sdk` `dist/index.mjs:552`).
+  Document the variable beside the maker (`config/config.global.yaml:168`) *and* beside the
+  credential from the consumer side (`docs/design/cli-contracts.md:1220`).
+- Proof artifacts and temp databases: point `DATABASE_URL` at `$TMPDIR/...` so the operator's real
+  decision log never collects test rows. Same discipline as the `tests/setup.ts` env scrub
+  (`delete env.TYPESAFE_API_KEY`).
+
+**Errors and fixes**
+
+- `TypeError: Body already used` on every typesafe call. Root cause: SDK 0.7.0 `bufferResponse`
+  (`dist/index.mjs:821`) drains `response.clone()` *and* takes/releases a reader on the original
+  body; `parseBody` (`:1111`) then calls `res.text()` on it. On Bun 1.4.3 a body that is already
+  buffered (a real fetch reply often is) stays marked used, so successes, 400s and 401s all threw —
+  HTTP error typing was lost too. Fix (0.8.4) is `streamBackedFetch`: buffer the bytes, return a
+  fresh stream-backed `Response`.
+- Do **not** pin the served model with a catalog `model:` field. The hub forwards it to whichever
+  maker runs (`packages/app/src/decision/decision-service.ts:459`), and `ts-decision-clef` treats a
+  per-call `model` as its own selector (`decision-clef/src/driver.ts:224`). Verified in the
+  installed driver: `client.systemOne({ state: state ?? '', questions, model })`.
+- A catalog bump alone does not fix the installed CLI. The bundle is generated, so
+  `bun run --filter @gobing-ai/spur build:bundle` then `(cd apps/cli && bun link)` is required;
+  the pre-bump binary kept failing until rebuilt (`grep -c streamBackedFetch apps/cli/spur.js` → 2).
+
+**Patterns**
+
+- Buffered-vs-streamed response bodies are the fault line for SDK fetch fixtures: the upstream suite
+  was all stream-backed (`tests/helpers/sdk-fetch.ts`), which is exactly why the bug shipped. Any
+  fake-fetch fixture should cover `new Response(jsonString)` as well as a `ReadableStream` payload.
+- Long-context protocol headers are evidence-gated, not defaulted: `TypeSafe-Danger-Zone-Long-Context`
+  was declined because the largest recorded `failure-class` input was 2085 B against a 64k
+  per-request limit (`ac4-input-size.txt`). Record the measurement in the Solution even when the
+  answer is "no code change".
+
+**Gotchas**
+
+- `spur task show <wbs> --json` mangles some long lines (a heading split as `Root C` / `ause`, a
+  table cell broken mid-value). Read the raw file when a paragraph or table cell looks truncated.
+- When a dependency is delivered upstream, the repo's live-behavior claims decay silently:
+  `docs/design/decision-catalog.md` still said the parameterless-`state` fix was "not yet released,
+  so this repository keeps the behaviour until the `^0.5.23` catalog bump" long after 0.8.4 landed.
+  Grep `bump pending|not yet released|not yet installed` in `docs/design/` at wrap time; the installed
+  driver now maps `state ?? ''`, so the claim was false. Same doc still described the upstream pin as
+  `0.5.16 … not yet installed or imported` after it was imported and used everywhere.
+- `spur rule run --file docs/design/<x>.md --json` fails with "Source contains multiple documents"
+  (pre-existing: it parses the file as YAML), so the sourced-claims rule cannot self-check a doc edit.
+  Validate added `path:line` / URL anchors by hand and keep citations on the same line as the version.
+- `docs/04_DESIGN.md` deliberately omits rows for superseded satellites. A mechanical
+  index-vs-`docs/design/*` diff surfaces `spur-team-mode-design.md` as "missing"; its frontmatter says
+  `status: superseded` (ADR-116) and the row was removed on purpose (commit `600dda990`). Check the
+  satellite's status before re-adding a row.
+
+Skipped: no repo-wide gate (`spur-check-feature`/`bun run check`) — docs-only change; `spur rule run` could not self-check the edited file (frontmatter YAML parse). Risk: the `dist/index.mjs:552` and `decision-service.ts:459` anchors are verified against the installed 0.8.4 artifacts, so they drift again on the next SDK bump.

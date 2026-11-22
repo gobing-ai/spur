@@ -3,7 +3,7 @@ kind: design
 title: Decision catalogs and the `spur decision` noun
 status: implemented
 created_at: 2026-10-06
-updated_at: 2026-10-19
+updated_at: 2026-11-21
 related: [ADR-134, ADR-125, ADR-113, feature P, feature P1, workflow-catalogue-refactor.md]
 tags: [decision, workflow, cli, config]
 ---
@@ -49,8 +49,7 @@ decision point (§3.5).
 
 ## 2. Context and constraints
 
-- **Upstream:** `@gobing-ai/ts-ai-decision@0.5.16` is pinned in the root catalog but is not yet
-  installed or imported. Its API:
+- **Upstream:** `@gobing-ai/ts-ai-decision`, pinned in the root catalog, supplies the API:
   - `createDecisionHub` and `DecisionHub`, with `list`, `describe`, `decide` and `loadFile`.
   - `DecisionMakerRegistry`, with built-in makers `typesafe`, `fm-local` and `laya-local`.
   - `loadDecisionCatalog` and `renderQuestion`.
@@ -260,6 +259,13 @@ Cloudflare Workers AI backend from `@gobing-ai/ts-decision-clef`, wrapped as
   clef` exits 1 before any backend call (§3.6).
 - **Model:** the driver defaults to `clef-flash`; a catalog `model` (or an `ask({ model })` call)
   selects `clef` instead. Per-decision model selection in config stays out of scope (§1).
+- **`typesafe`** (built-in, the shipped default) reads its key from `TYPESAFE_API_KEY` and the model
+  it serves from the SDK's `TYPESAFE_DEFAULT_MODEL` (absent, `jev-latest`;
+  `node_modules/@typesafe-ai/sdk/dist/index.mjs:552`) — both process env, never config. Do not pin it
+  with a catalog `model:` field: the hub forwards that field to whichever maker runs as the per-call
+  `model` (`packages/app/src/decision/decision-service.ts:459`), and `ts-decision-clef` would read it
+  as its own selector. Activation and redaction:
+  [CLI contracts](cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions) (task 1436).
 - **`gemini` and `openai`** follow the same gated pattern over `@gobing-ai/ts-decision-gemini` and
   `@gobing-ai/ts-decision-openai`: each registers only when its key is set (non-empty) —
   `GEMINI_API_KEY` / `OPENAI_API_KEY` — and the value is passed explicitly as the driver's `apiKey`.
@@ -304,15 +310,16 @@ Cloudflare Workers AI backend from `@gobing-ai/ts-decision-clef`, wrapped as
 
 ### Risks and open questions
 
-- **Parameterless decisions on the `typesafe` backend (found 2026-10-11, fixed upstream, bump pending).**
+- **Parameterless decisions on the `typesafe` backend (found 2026-10-11, fixed upstream, released).**
   The hub sends `state: null` when a decision declares no parameter beside `instructions`, the SDK drops
   the null field, and TypeSafe answers `422 state: Field required` — which the hub maps to reason
   `error`, so `maker-liveness`, `needs-design` and `idea-recommendation` silently fell back on the
   **shipped default maker** (`config/config.global.yaml: decisions.maker: typesafe`). Fixed in
-  `ts-libs` (`typesafe-driver`: the same null→`''` mapping the laya and fm drivers already apply) but
-  not yet released, so this repository keeps the behaviour until the `^0.5.23` catalog bump. HITL gates
-  are unaffected: they always pass a non-null state (`{actions,node}`, the evidence payload, or
-  `gate-evidence`'s prompt+evidence+node). Verify after the bump with
+  `ts-libs` (`typesafe-driver`: the same null→`''` mapping the laya and fm drivers already apply) and
+  released well before the current catalog pin (`package.json:33` — `0.8.4`, past the `^0.5.23`
+  release that carried it), so this repository no longer carries the behaviour. HITL gates were
+  unaffected: they always pass a non-null state (`{actions,node}`, the evidence payload, or
+  `gate-evidence`'s prompt+evidence+node). Re-check with
   `spur decision run needs-design --maker typesafe --json` → `source: model`.
 
 - **Bundle size:** `ts-laya-mlx` and `ts-decision-fm` may pull native or large dependencies into

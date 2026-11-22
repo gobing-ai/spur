@@ -4,7 +4,7 @@ name: "Fix typesafe decision maker failing every call with TypeError: Body alrea
 status: done
 template: issue
 created_at: 2026-11-22T05:35:46.158Z
-updated_at: "2026-11-22T07:41:30.571Z"
+updated_at: "2026-11-22T07:45:18.078Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -63,6 +63,11 @@ Scenario: AC4 — spec alignment recorded (req: R7)
 - Q: Where does the fix live? A: Upstream in ts-libs, released as 0.8.4 by the operator on 2026-11-21. Spur only adopts it; no Spur source change is needed for the bug itself.
 - Q: Log the model that actually served each decision (old R6 part 2)? A: Deferred. The driver drops `SystemOneResult.model` on purpose (ts-libs task 0072 R8), so this needs a ts-libs answer-metadata API change plus a `decision_logs` column. That is feature-sized and cross-repo, so it is out of scope here; file it as a follow-up idea.
 - Q: Long-context Danger-Zone header? A: Not needed now (R7 evidence). Revisit only if `failure-class` starts carrying unbounded gate output.
+
+#### Q&A entry — 2026-11-22T07:45:18.077Z
+
+- Q: Was the deferred served-model logging filed? A: Yes, as backlog feature S ("Record the TypeSafe model that served each decision", `docs/features/S_record-the-typesafe-model-that-served-each-decision.md`). 1436 stays unlinked to a feature: it is a standalone upstream-adoption fix.
+- Re-verify 2026-11-22: upstream R3 test re-run in ts-libs `packages/ai-decision` (`bun test tests/typesafe-driver.test.ts` → 16 pass, 0 fail).
 
 ### Design
 
