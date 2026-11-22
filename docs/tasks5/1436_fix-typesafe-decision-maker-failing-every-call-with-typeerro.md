@@ -4,7 +4,7 @@ name: "Fix typesafe decision maker failing every call with TypeError: Body alrea
 status: done
 template: issue
 created_at: 2026-11-22T05:35:46.158Z
-updated_at: "2026-11-22T07:15:20.887Z"
+updated_at: "2026-11-22T07:41:30.571Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -121,20 +121,20 @@ column).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Root cause recorded in the task's Root Cause section; the failure signature is reproducible from the decision log (`83` of `86` `failure-class` rows carry `Body already used`, `docs/tasks5/artifacts/1436/ac4-input-size.txt`). |
-| R2 | MET | Catalog pins `@gobing-ai/ts-ai-decision` 0.8.4 (`package.json:33`) plus `ts-ai-runner`/`ts-decision-fm` 0.8.4 (`package.json:32,35`), resolved in `bun.lock:478`. No SDK fork: `@typesafe-ai/sdk` stays 0.7.0 in that lock entry. |
-| R3 | MET | Upstream regression test lives in ts-libs (`packages/ai-decision/tests/typesafe-driver.test.ts`, "buffered (non-stream) fetch bodies are answered"); the fix it guards is present in the installed artifact — `grep -c streamBackedFetch apps/cli/spur.js` → 2. |
-| R4 | MET | Bundle rebuilt against 0.8.4 and linked (`(cd apps/cli && bun link)`); the installed `spur` resolves to the rebuilt bundle and answers instead of falling back (`docs/tasks5/artifacts/1436/ac1-installed-binary.json`). |
-| R5 | MET | `spur decision run failure-class --param wbs=1436 --maker typesafe --json` on a temporary `DATABASE_URL` returns `source: model`, `reason: accepted`, no `error` (`docs/tasks5/artifacts/1436/ac1-decision-run.json`, `:ac1-installed-binary.json`); `decision_logs` has zero `Body already used` rows (`:ac2-decision-logs.txt`, `:ac1-installed-binary-logs.txt`). |
-| R6 | MET | `TYPESAFE_DEFAULT_MODEL` documented beside the maker (`config/config.global.yaml:168-171`) and beside `TYPESAFE_API_KEY` (`docs/design/cli-contracts.md:1220-1226`), with the reason a catalog `model:` field is wrong. |
-| R7 | MET | Spec disposition recorded in the task's Solution: no driver change, no `TypeSafe-Danger-Zone-Long-Context` header, largest recorded input 2085 B against a 64k limit (`docs/tasks5/artifacts/1436/ac4-input-size.txt`). |
+| R1 | MET | Root Cause section of the task; signature in `docs/tasks5/artifacts/1436/ac4-input-size.txt` (failure-class rows in `.spur/spur.db`, re-queried this run: 86 rows) |
+| R2 | MET | `package.json:32-35` pins ts-ai-* 0.8.4; `bun.lock:478` resolves `@gobing-ai/ts-ai-decision@0.8.4` with `@typesafe-ai/sdk` 0.7.0 (no fork, `bun.lock:1064`) |
+| R3 | MET | Upstream test @gobing-ai/ts-ai-decision `tests/typesafe-driver.test.ts` ("buffered (non-stream) fetch bodies are answered"); fix present in the installed bundle: `grep -c streamBackedFetch apps/cli/spur.js` → 2 (re-run this verify) |
+| R4 | MET | Installed `spur` resolves to `apps/cli/spur.js` (contains `streamBackedFetch`); live re-run this verify returned `source: model`, `reason: accepted` |
+| R5 | MET | Re-run this verify: `DATABASE_URL=$TMPDIR/v1436.db spur decision run failure-class --param wbs=1436 --maker typesafe --json` → exit 0, source model, reason accepted, value stop, error null; committed receipt `docs/tasks5/artifacts/1436/ac1-decision-run.json` |
+| R6 | MET | `config/config.global.yaml:166-169` and `docs/design/cli-contracts.md:1220-1226` document `TYPESAFE_DEFAULT_MODEL` and why a catalog `model:` field is wrong |
+| R7 | MET | Solution "R7 disposition" paragraph; re-queried `.spur/spur.db` failure-class max input 2085 B (86 rows) vs 64k limit (`docs/tasks5/artifacts/1436/ac4-input-size.txt`) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `docs/tasks5/artifacts/1436/ac1-decision-run.json` and `:ac1-installed-binary.json` — `source: model`, `reason: accepted`, no `error` |
-| AC2 | MET | command | `docs/tasks5/artifacts/1436/ac2-decision-logs.txt`, `:ac1-installed-binary-logs.txt` — `Body already used` count 0 |
-| AC3 | MET | command | `docs/tasks5/artifacts/1436/ac3-model-pin.json` (accepted, 0.96) plus the two doc anchors named in R6 |
-| AC4 | MET | command | `sqlite3 .spur/spur.db "select count(*), max(length(...)) from decision_logs where decision_id='failure-class'"` → `86\|2085` (`docs/tasks5/artifacts/1436/ac4-input-size.txt`, 2085 B vs the 64k limit) and `spur task show 1436 --json` returns a Solution carrying the R7 disposition ("R7 disposition", "Danger-Zone", "2085" all present) |
+| AC1 | MET | command | Re-run this verify on temp DB: exit 0, `source: model`, `reason: accepted`, no error; receipt `docs/tasks5/artifacts/1436/ac1-decision-run.json` |
+| AC2 | MET | command | `sqlite3 $TMPDIR/v1436.db "select maker_name,source,reason,count(*),sum(error like '%Body already used%') ..."` → `typesafe\|model\|accepted\|2\|0`; receipt `docs/tasks5/artifacts/1436/ac2-decision-logs.txt` |
+| AC3 | MET | command | `TYPESAFE_DEFAULT_MODEL=jev-1.13.0` re-run this verify → accepted, confidence 0.96; docs at `config/config.global.yaml:166-169`, `docs/design/cli-contracts.md:1220-1226` |
+| AC4 | MET | command | `sqlite3 .spur/spur.db "select count(*), max(length(input_json)) from decision_logs where decision_id='failure-class'"` → `86\|2085`; Solution carries "R7 disposition", "Danger-Zone", "2085" (`spur task show 1436 --json`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
