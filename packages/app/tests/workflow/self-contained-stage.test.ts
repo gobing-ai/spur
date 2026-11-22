@@ -283,9 +283,10 @@ describe('shipped workflows are self-contained (1241)', () => {
         const def = await load('idea-pipeline.yaml');
         delete agentRunOptions(def, 'feature-create').expectFiles;
         const v = collectSelfContainedStageViolations(def);
-        expect(v.length).toBe(2);
+        expect(v.length).toBe(3);
         expect(v.join('\n')).toContain('-idea-goal.md');
         expect(v.join('\n')).toContain('-idea-scope.md');
+        expect(v.join('\n')).toContain('-idea-followups.json');
     });
 
     test('wrapup-pipeline doc-sync fails without its declared task-list input', async () => {

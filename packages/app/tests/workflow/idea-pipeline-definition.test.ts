@@ -186,6 +186,7 @@ describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () =>
             'idea-feature-id.txt',
             'idea-goal.md',
             'idea-scope.md',
+            'idea-followups.json',
             'idea-design-review.md',
             'idea-ac-retry-count',
             'idea-ac-content.md',
@@ -255,6 +256,19 @@ describe('idea-pipeline definition — Goal/Scope intent artifacts (0515 R1)', (
         expect(agent?.input).toContain('never task breakdowns, checklists, or how-to steps');
         // Scope carries explicit in/out boundaries.
         expect(agent?.input).toContain('in-scope and out-of-scope boundary bullets');
+    });
+
+    // Lost-follow-up fix: a `[deferred: follow-up — …]` inventory item is filed at feature-create and
+    // recorded in a run-scoped ledger; the shell fails closed on a malformed ledger or a dangling id.
+    test('feature-create files deferred follow-ups into a fail-closed ledger', () => {
+        const agent = (featureCreate?.onEnter ?? []).find((a) => a.kind === 'agent.run');
+        const shell = actions.find((a) => a.kind === 'shell' && a.command.includes('idea-followups.json'));
+
+        expect(agent?.options?.expectFiles).toContain(`.spur/run/\${vars.__runId}-idea-followups.json`);
+        expect(agent?.options?.input).toContain('[deferred: follow-up');
+        expect(agent?.options?.input).toContain('Never file `[deferred: excluded');
+        expect(shell?.command).toContain('jq -e \'type == "array"');
+        expect(shell?.command).toContain('$spurBin feature show "$id" --json >/dev/null || exit 1');
     });
 
     test('Goal/Scope are persisted through spur feature update and required non-empty', () => {

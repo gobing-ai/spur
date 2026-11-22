@@ -201,7 +201,9 @@ When brainstorm runs under `idea-pipeline` discovery, it MUST also emit a filled
 - **Requirement inventory** — mandatory `## Requirement inventory` section: numbered `I<n>` items
   quoting or paraphrasing the source lines from the run's verbatim idea artifact
   (`.spur/run/<run-id>-idea-input.md`, 0887 R1/R3), with `[unclear: ...]` markers where the ask is
-  ambiguous and `[deferred: <reason>]` markers for explicit out-of-scope items
+  ambiguous and `[deferred: excluded — <reason>]` or `[deferred: follow-up — <title>]` markers for
+  out-of-scope items; gaps discovery finds outside the ask are inventory items too (see the
+  template's deferral dispositions — no deferral or finding may vanish)
 - Urgency and necessity scores (0–5) with one-line rationales
 - Premises, pros, cons, better alternatives (if any)
 - Recommendation (`proceed` | `reshape` | `drop`) + stakes

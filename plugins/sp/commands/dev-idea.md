@@ -53,6 +53,11 @@ runs `spur feature check` and routes on the recorded result (a FAIL retries the 
 and `batch-create-run` runs `spur task batch-create` and routes on its own recorded result.
 Neither ever pauses, under any profile.
 
+Deferred follow-ups never vanish: feature-create files every `[deferred: follow-up — …]` inventory
+item as its own backlog feature (or links an existing one) and records it in
+`.spur/run/<runId>-idea-followups.json`. Operator-excluded items (`[deferred: excluded — …]`) are
+not filed. Plan each filed follow-up afterwards with `/sp:dev-plan --feature <id>`.
+
 The rescue decisions and the gate answers are catalog decision points; their rows and switches
 are in [decision points](../skills/spur-dev/references/decision-points.md). With both switches off
 (the default) no model is called and a `--auto` run with no parseable recommendation stops at

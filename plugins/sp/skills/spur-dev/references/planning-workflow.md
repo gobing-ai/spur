@@ -243,6 +243,14 @@ spur feature update <id> --section Scope --from-file .spur/run/<runId>-idea-scop
   checklists, and how-to steps **never** enter Goal.
 - **Scope carries explicit boundaries** — in-scope and out-of-scope bullets.
 
+**Follow-up ledger (feature-create).** Every inventory item marked `[deferred: follow-up — <title>]`
+(a bare `[deferred: <reason>]` counts as follow-up) is filed in the same stage, with
+`spur feature create --parent` plus Goal/Scope, or linked to an existing feature. It is recorded in
+`.spur/run/<runId>-idea-followups.json` (`[{item, disposition: filed|existing, featureId, title}]`,
+`[]` when none). `[deferred: excluded — <reason>]` items are never filed. The stage fails closed on a
+malformed ledger or a featureId that does not resolve, so a follow-up the idea names cannot be lost
+when a later stage fails. Each filed follow-up gets its AC and tasks from `/sp:dev-plan --feature <id>`.
+
 **Design review artifact (system-design / design-approval).** One run-scoped file,
 `.spur/run/<runId>-idea-design-review.md`, with fixed headings `## Proposed design`,
 `## Operator feedback`, and `## Reconciliation`:

@@ -36,7 +36,9 @@ before any processing); the `## Requirement inventory` items trace back to it.
 <mandatory — the coverage gate (`feature check --inventory`) parses this section, so keep the exact `- I<n> — ` item form>
 - I1 — <requirement stated as an ask, quoting or paraphrasing the source line from the run's idea-input artifact> (source: "<quoted fragment from the operator's idea>")
 - I2 — <next requirement>
-- I<n> — <optional: a requirement explicitly out of scope> [deferred: <reason>]
+- I<n> — <optional: something the operator ruled out> [deferred: excluded — <reason>]
+- I<n> — <optional: work the idea calls for that belongs in its own feature> [deferred: follow-up — <feature title>]
+- I<n> — <optional: a gap discovery found outside the ask> (source: discovery — <path:line evidence>) [deferred: follow-up — <feature title>]
 - I<n> — <optional: an ambiguous ask> [unclear: <why it is ambiguous>] — an unclear marker does not exempt the item; it still needs coverage or an explicit deferral
 
 ## Scores
@@ -77,6 +79,21 @@ Stakes: <plain-English cost of proceeding vs not; reversibility; blast radius>
 **Approve** this evaluation to continue to feature-create.
 **Reject** to cancel the run (no feature created).
 ```
+
+**Deferral dispositions (follow-up ledger).** A `[deferred:]` marker exempts an item from *this*
+feature's AC coverage. It does not let the item vanish. Every deferral names one of two
+dispositions:
+
+- `excluded — <reason>`: the operator ruled it out. It is never filed. The handoff report lists it
+  with its reason.
+- `follow-up — <title>`: the work is real but belongs in another feature. feature-create files it
+  (or links an existing feature) and records it in the run's follow-up ledger.
+
+A bare `[deferred: <reason>]` with neither prefix is treated as `follow-up`, so a missing
+disposition files a feature rather than silently dropping work. Discovery findings that fall outside
+the ask (a gap found while verifying premises, a stale doc, an unproven claim) are inventory items
+too, sourced `(source: discovery — <path:line>)`. Give each one a disposition; never leave a finding
+only in prose.
 
 ## Pipeline contract
 

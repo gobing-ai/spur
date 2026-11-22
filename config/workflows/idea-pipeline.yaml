@@ -96,7 +96,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: "The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md — idea persisted verbatim at start; authoritative, read it first (${vars.idea} is a convenience echo). Run sp:brainstorm. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) plus the design summary per its `Design Approval Gate` / `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per the `sp:spur-dev` skill's `idea-evaluation` reference (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation, plus mandatory `## Requirement inventory`: numbered I<n> items quoting/paraphrasing idea-input lines; `[unclear: ...]` marks ambiguity, `[deferred: <reason>]` marks out-of-scope). End with this exact footer: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339>\\n---` (omit if run_id is empty)."
+          input: "The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md — idea persisted verbatim at start; authoritative, read it first (${vars.idea} is a convenience echo). Run sp:brainstorm. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) plus the design summary per its `Design Approval Gate` / `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per the `sp:spur-dev` skill's `idea-evaluation` reference (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation, plus mandatory `## Requirement inventory`: numbered I<n> items quoting/paraphrasing idea-input lines; `[unclear: ...]` marks ambiguity, `[deferred: excluded — <reason>]` marks operator-ruled-out items, `[deferred: follow-up — <feature title>]` marks real work for another feature; gaps you find outside the ask become inventory items sourced `(source: discovery — <path:line>)` with one of those dispositions — see the template's deferral dispositions). End with this exact footer: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339>\\n---` (omit if run_id is empty)."
           # Declared Layer-1 role (0538 R2) + declared fresh policy (B7 R6 / 0894).
           role: planner
           session: fresh
@@ -174,12 +174,12 @@ states:
           var: __hitlAnswer
 
   - id: feature-create
-    description: "Create a feature via `spur feature create` (or select an existing id). The agent writes the feature id plus body-only Goal/Scope intent artifacts; the shell persists both sections through `spur feature update --from-file` and fails closed on an empty artifact. Goal carries intent only — task breakdowns and checklists never enter it. The operator's verbatim ask of record stays .spur/run/${vars.__runId}-idea-input.md."
+    description: "Create a feature via `spur feature create` (or select an existing id). The agent writes the feature id plus body-only Goal/Scope intent artifacts; the shell persists both sections through `spur feature update --from-file` and fails closed on an empty artifact. Goal carries intent only — task breakdowns and checklists never enter it. The operator's verbatim ask of record stays .spur/run/${vars.__runId}-idea-input.md. Every deferred follow-up inventory item is filed (or linked) here and recorded in .spur/run/${vars.__runId}-idea-followups.json; the shell fails closed on a malformed ledger or an unresolvable featureId."
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: 'Create a feature for the idea. The operator''s ask of record is .spur/run/${vars.__runId}-idea-input.md — the idea argument persisted verbatim at start; treat it as the authoritative ask. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use ''spur feature create "<name>" --json'' to create it; with --json the feature id is returned under the .ref.id envelope (n), not a top-level .id — read it from there. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets.'
+          input: 'Create a feature for the idea. The operator''s ask of record is .spur/run/${vars.__runId}-idea-input.md — the idea argument persisted verbatim at start; treat it as the authoritative ask. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use ''spur feature create "<name>" --json'' to create it; with --json the feature id is returned under the .ref.id envelope (n), not a top-level .id — read it from there. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets. Follow-up ledger: for every inventory item marked `[deferred: follow-up — <title>]` (or a bare `[deferred: <reason>]`, which counts as follow-up) file it now so it cannot be lost later in the run — either create it with ''spur feature create "<title>" --parent <best-fit parent> --json'' and write its Goal and Scope sections through ''spur feature update <id> --section Goal|Scope --from-file'' (AC and tasks come later from `/sp:dev-plan --feature <id>`), or link an existing feature that already owns the work. Never file `[deferred: excluded — …]` items. Write .spur/run/${vars.__runId}-idea-followups.json as a JSON array of {"item":"I<n>","disposition":"filed"|"existing","featureId":"<id>","title":"<title>"} — `[]` when there are no follow-ups.'
           role: planner
           session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
@@ -188,6 +188,7 @@ states:
           expectFiles:
             - .spur/run/${vars.__runId}-idea-goal.md
             - .spur/run/${vars.__runId}-idea-scope.md
+            - .spur/run/${vars.__runId}-idea-followups.json
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: file.read.into-var
         options:
@@ -195,6 +196,9 @@ states:
           var: featureId
       # 1007 R2: one shell persists both sections — they share the artifact precondition, so the two
       # update shells merged (original commands in order, same && fail-fast semantics).
+      # Follow-up ledger (dev-idea lost-follow-up fix): the same shell fails closed on a malformed
+      # ledger or a featureId that does not resolve, so a deferred follow-up is filed or the run stops.
+      # Completeness against the inventory is checked in TS (finalizeIdeaHandoff), not here.
       - kind: shell
         options:
           command: >-
@@ -202,7 +206,9 @@ states:
             test -s .spur/run/$__runId-idea-goal.md &&
             $spurBin feature update "$featureId" --section Goal --from-file .spur/run/$__runId-idea-goal.md &&
             test -s .spur/run/$__runId-idea-scope.md &&
-            $spurBin feature update "$featureId" --section Scope --from-file .spur/run/$__runId-idea-scope.md
+            $spurBin feature update "$featureId" --section Scope --from-file .spur/run/$__runId-idea-scope.md &&
+            jq -e 'type == "array" and all(.[]; (.item | test("^I[0-9]+$")) and (.disposition == "filed" or .disposition == "existing") and (.featureId | type == "string" and length > 0) and (.title | type == "string"))' .spur/run/$__runId-idea-followups.json >/dev/null &&
+            for id in $(jq -r ".[].featureId" .spur/run/$__runId-idea-followups.json); do $spurBin feature show "$id" --json >/dev/null || exit 1; done
 
   - id: ac-generate
     description: "Author R-numbered BDD scenarios tied to the requirement inventory and persist them through `spur feature update --section \"Acceptance Criteria\" --from-file`. AC quality and requirement coverage are MEASURED once at this boundary by the `idea-ac-check` command.gate (0769; 1004 R2 folds coverage in via --inventory): a FAIL is recorded, never a run abort, so the capped retry edges can route it."
