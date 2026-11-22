@@ -1,10 +1,22 @@
 {
     "artifact": "board-maturity-e2e",
-    "generatedAt": "2026-11-22T08:28:12.853Z",
+    "generatedAt": "2026-11-22T17:36:21.060Z",
     "sidebar": {
         "entries": 10,
         "withSvg": 10,
-        "emoji": []
+        "emoji": [],
+        "ids": [
+            "observability",
+            "integrations",
+            "search",
+            "history",
+            "plans",
+            "designs",
+            "features",
+            "tasks",
+            "projects",
+            "settings"
+        ]
     },
     "modules": [
         {

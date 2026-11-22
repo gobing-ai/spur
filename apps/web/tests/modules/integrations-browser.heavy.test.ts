@@ -1,19 +1,21 @@
 import { expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runIntegrationsE2e } from '../../../../scripts/commands/integrations-e2e';
 import { buildBoardToTemp, removeBoardBuild, WEB_ROOT } from '../test-helpers/board-build';
 import { availableBrowserBinary, launchBrowser } from '../test-helpers/cdp';
 
-const reports = join(WEB_ROOT, '../../docs/reports');
+const reports = join(WEB_ROOT, '../../.spur/run/integrations-proof');
 
 test.skipIf(availableBrowserBinary() === undefined)(
     'A82 live protocol and Board proof writes a receipt and both screenshots',
     async () => {
         const build = await buildBoardToTemp();
+        mkdirSync(reports, { recursive: true });
         try {
             const code = await runIntegrationsE2e([], {
                 webDistPath: build,
+                receiptPath: join(reports, 'integrations-e2e-receipt.json'),
                 verifyBoard: async (root) => {
                     const browser = await launchBrowser();
                     try {

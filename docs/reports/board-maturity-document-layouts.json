@@ -1,0 +1,26 @@
+[
+    {
+        "module": "designs",
+        "width": 1280,
+        "panes": [288, 600, 288],
+        "screenshot": "board-maturity-designs-1280.png"
+    },
+    {
+        "module": "designs",
+        "width": 375,
+        "panes": [0, 343, 0],
+        "screenshot": "board-maturity-designs-375.png"
+    },
+    {
+        "module": "plans",
+        "width": 1280,
+        "panes": [288, 600, 288],
+        "screenshot": "board-maturity-plans-1280.png"
+    },
+    {
+        "module": "plans",
+        "width": 375,
+        "panes": [0, 343, 0],
+        "screenshot": "board-maturity-plans-375.png"
+    }
+]

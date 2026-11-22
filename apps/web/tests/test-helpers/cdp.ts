@@ -160,6 +160,16 @@ export async function launchBrowser(): Promise<BrowserSession> {
                 text: args.map((arg) => String(arg.value ?? arg.description ?? '')).join(' '),
             });
         }
+        if (message.method === 'Runtime.exceptionThrown') {
+            const details = message.params?.exceptionDetails as
+                | { text?: string; exception?: { description?: string } }
+                | undefined;
+            logs.push({
+                source: 'javascript',
+                level: 'error',
+                text: `${details?.text ?? 'Uncaught'} ${details?.exception?.description ?? ''}`.trim(),
+            });
+        }
         if (message.method === 'Network.requestWillBeSent') {
             const request = message.params?.request as { url?: string } | undefined;
             if (request?.url) requests.set(String(message.params?.requestId), request.url);
@@ -171,6 +181,10 @@ export async function launchBrowser(): Promise<BrowserSession> {
             const status = Number(params?.status ?? params?.response?.status ?? 0);
             const url = requests.get(String(params?.requestId));
             if (url && status >= 400) failures.push(`${status} ${url}`);
+        }
+        if (message.method === 'Network.loadingFailed') {
+            const url = requests.get(String(message.params?.requestId));
+            if (url) failures.push(url);
         }
         if (message.method === 'Runtime.executionContextCreated') {
             const context = message.params?.context as

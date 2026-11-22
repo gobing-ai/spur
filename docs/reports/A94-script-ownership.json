@@ -239,6 +239,19 @@
             "downstreamReason": "Retained: fleet E2E scenario fixture; only the host-probe arm moves (1414)"
         },
         {
+            "path": "scripts/commands/integrations-e2e.ts",
+            "responsibility": "Real-server MCP/A2A integration fixture and optional Board browser proof, writing a repeatable receipt",
+            "tests": ["apps/web/tests/modules/integrations-browser.heavy.test.ts"],
+            "callers": [
+                { "path": "package.json", "line": 104 },
+                { "path": "scripts/spur-dev.ts", "line": 154 },
+                { "path": "apps/web/tests/modules/integrations-browser.heavy.test.ts", "line": 16 }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: isolated Spur MCP/A2A and Board scenario fixture, not reusable downstream runtime behavior"
+        },
+        {
             "path": "scripts/commands/install-sh.test.ts",
             "responsibility": "Bootstrap fixture tests for checksum verification and atomic replacement",
             "tests": [],
