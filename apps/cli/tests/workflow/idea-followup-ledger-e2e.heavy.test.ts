@@ -14,13 +14,14 @@ import { createTempProject, runCli } from '../helpers';
  * feature-create step files I3/I5 with real `spur feature create` calls and writes the follow-up
  * ledger (shape per checkFollowupLedger, packages/app/src/workflow/idea-handoff.ts). The negative
  * leg removes the I5 row and proves `spur feature handoff` fails closed naming I5 with no report.
- * The observed outcome lands in docs/reports/idea-followup-ledger-e2e-receipt.json.
+ * The observed outcome lands in .spur/run/idea-followup-ledger-e2e-receipt.json; publish a
+ * successful preview to docs/reports deliberately, outside a feature verification run.
  */
 setDefaultTimeout(120_000);
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
 const IDEA_PIPELINE = join(REPO_ROOT, 'config', 'workflows', 'idea-pipeline.yaml');
-const RECEIPT_PATH = join(REPO_ROOT, 'docs', 'reports', 'idea-followup-ledger-e2e-receipt.json');
+const RECEIPT_PATH = join(REPO_ROOT, '.spur', 'run', 'idea-followup-ledger-e2e-receipt.json');
 
 const IDEA = 'Add a preview command with export and cache handling';
 const EXCLUDED_I4 = 'operator ruled out';
@@ -158,16 +159,6 @@ const TASK_BATCH = [
     ],
 ] as const;
 
-/** The receipt is a committed repo artifact; keep it biome-clean (1309/1311 parity-evidence pattern). */
-function formatReceipt(): void {
-    const result = Bun.spawnSync(['bunx', 'biome', 'check', '--write', RECEIPT_PATH], {
-        cwd: REPO_ROOT,
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    if (result.exitCode !== 0) throw new Error(`biome format failed for ${RECEIPT_PATH}: ${result.stderr.toString()}`);
-}
-
 async function createFeature(dir: string, name: string, parent?: string): Promise<string> {
     const args = parent === undefined ? ['feature', 'create', name] : ['feature', 'create', name, '--parent', parent];
     const res = await runCli([...args, '--json'], dir);
@@ -199,6 +190,7 @@ async function writeWorkItemReceipt(dir: string, runId: string, state: string, f
 }
 
 test('I15 1435: an idea run files follow-ups and discovery findings and leaves a receipt', async () => {
+    expect(RECEIPT_PATH).toStartWith(join(REPO_ROOT, '.spur', 'run'));
     const dir = await createTempProject();
     const runId = 'idea-followup-e2e';
     const negRunId = 'idea-followup-e2e-neg';
@@ -387,8 +379,8 @@ test('I15 1435: an idea run files follow-ups and discovery findings and leaves a
         expect(negReport).toBeNull();
     } finally {
         observed.generatedAt = new Date().toISOString();
+        await mkdir(join(REPO_ROOT, '.spur', 'run'), { recursive: true });
         await writeFile(RECEIPT_PATH, `${JSON.stringify(observed, null, 4)}\n`);
-        formatReceipt();
         await rm(dir, { recursive: true, force: true });
     }
 });
