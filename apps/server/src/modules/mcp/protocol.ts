@@ -19,6 +19,7 @@
 /** Oldest protocol version this adapter accepts; `YYYY-MM-DD` versions compare lexicographically. */
 export const MIN_MCP_PROTOCOL_VERSION = '2026-07-28';
 
+/** Marks invalid tool arguments for the protocol's invalid-params response. */
 export class InvalidArgumentsError extends Error {
     override name = 'InvalidArgumentsError';
 }
