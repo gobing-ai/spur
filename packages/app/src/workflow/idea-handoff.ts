@@ -262,7 +262,16 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                     forceBuffered: true,
                     rejectOnError: false,
                 });
-                if (showRes.exitCode === 0) resolvable.add(id);
+                if (showRes.exitCode === 0) {
+                    try {
+                        const feature: unknown = JSON.parse(showRes.stdout);
+                        if (typeof feature === 'object' && feature !== null && 'id' in feature && feature.id === id) {
+                            resolvable.add(id);
+                        }
+                    } catch {
+                        // Help text or other non-JSON output does not prove feature identity.
+                    }
+                }
             }
             const ledgerCheck = checkFollowupLedger(await fs.readFile(evalReportPath), ledgerRows, resolvable);
             followupFiled = ledgerCheck.filed;

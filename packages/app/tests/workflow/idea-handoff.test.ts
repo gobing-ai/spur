@@ -55,6 +55,17 @@ describe('finalizeIdeaHandoff', () => {
         return {
             run: async (opts) => {
                 const args = opts.args ?? [];
+                if (args.includes('feature') && args.includes('show')) {
+                    const id = args[args.indexOf('show') + 1] ?? '';
+                    return {
+                        command: opts.command,
+                        args,
+                        durationMs: 1,
+                        exitCode: 0,
+                        stdout: JSON.stringify({ id }),
+                        stderr: '',
+                    };
+                }
                 if (args.includes('path')) {
                     const wbs = args[args.indexOf('path') + 1] ?? '';
                     return {
@@ -1040,6 +1051,51 @@ describe('finalizeIdeaHandoff', () => {
             `${runDir}/${runId}-idea-task-order.json`,
         ]);
     });
+
+    for (const [label, stdout] of [
+        ['help output', 'Usage: spur feature show [options] <id>'],
+        ['wrong feature', JSON.stringify({ id: 'F10' })],
+        ['missing identity', JSON.stringify({ name: 'Follow-up feature' })],
+    ] as const) {
+        test(`1434: exit-zero ${label} cannot resolve a ledger feature id`, async () => {
+            const runId = `test-idea-ledger-show-${label.replaceAll(' ', '-')}`;
+            const reportPath = `.spur/run/${runId}-idea-handoff.md`;
+            if (await fs.exists(reportPath)) await fs.deleteFile(reportPath);
+            const paths = await writeLedgerFixture(runId, '0601', {
+                ledger: [{ item: 'I3', disposition: 'filed', featureId: 'F9', title: 'Follow-up feature' }],
+            });
+            const executed: string[][] = [];
+            const base = evidenceAwareExecutor(paths);
+            const executor: ProcessExecutor = {
+                run: async (opts) => {
+                    executed.push(opts.args ?? []);
+                    if (opts.args?.includes('feature') && opts.args.includes('show')) {
+                        return {
+                            command: opts.command,
+                            args: opts.args,
+                            durationMs: 1,
+                            exitCode: 0,
+                            stdout,
+                            stderr: '',
+                        };
+                    }
+                    return base.run(opts);
+                },
+                runStreaming: () => ({}) as unknown as PipeProcess,
+            };
+            const result = await finalizeIdeaHandoff({ runId, featureId: 'D5', processExecutor: executor });
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('F9');
+            expect(await fs.exists(result.reportPath)).toBe(false);
+            expect(executed.some((args) => args.includes('deps'))).toBe(false);
+            await cleanupLedgerRun(runId, [
+                `.spur/run/${runId}-idea-task-batch.json`,
+                `.spur/run/${runId}-idea-batch-create-result.json`,
+                `.spur/run/${runId}-idea-task-order.json`,
+                result.reportPath,
+            ]);
+        });
+    }
 
     test('1434: a ledger featureId that no longer resolves fails closed as dangling', async () => {
         const runId = 'test-idea-run-ledger-dangling';
