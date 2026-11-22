@@ -139,6 +139,9 @@ function startServe(dir: string, port: number, enabled: boolean): Subprocess<'ig
         stderr: 'pipe',
         env: {
             ...getEnvVars(),
+            // Keep throwaway e2e serve roots out of the operator's real ~/.config/spur/projects.json.
+            SPUR_PROJECTS_FILE: join(dir, 'projects.json'),
+            SPUR_SLASH_COMMANDS_FILE: join(dir, 'slash_commands.json'),
             ...(enabled
                 ? { SPUR_A2A_ENABLED: '1', SPUR_A2A_AUTH_ENV: AUTH_ENV, [AUTH_ENV]: TOKEN }
                 : { SPUR_A2A_ENABLED: '0' }),

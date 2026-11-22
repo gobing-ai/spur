@@ -114,6 +114,9 @@ function startServe(root: string, port: number) {
         stderr: 'pipe',
         env: {
             ...getEnvVars(),
+            // Keep throwaway e2e serve roots out of the operator's real ~/.config/spur/projects.json.
+            SPUR_PROJECTS_FILE: join(root, 'projects.json'),
+            SPUR_SLASH_COMMANDS_FILE: join(root, 'slash_commands.json'),
             SPUR_A2A_ENABLED: '1',
             SPUR_A2A_AUTH_ENV: LISTENER_ENV,
             [TOKEN_ENV]: TOKEN,

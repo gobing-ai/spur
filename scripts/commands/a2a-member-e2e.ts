@@ -253,7 +253,13 @@ export async function runA2aMemberE2e(args: string[]): Promise<number> {
                 cwd: scratch,
                 stdout: 'pipe',
                 stderr: 'pipe',
-                env: { ...getEnvVars(), [TOKEN_ENV]: TOKEN },
+                env: {
+                    ...getEnvVars(),
+                    // Keep throwaway e2e serve roots out of the operator's real ~/.config/spur/projects.json.
+                    SPUR_PROJECTS_FILE: join(scratch, 'projects.json'),
+                    SPUR_SLASH_COMMANDS_FILE: join(scratch, 'slash_commands.json'),
+                    [TOKEN_ENV]: TOKEN,
+                },
             },
         );
         const memberId = `${scratch.split('/').pop()}-remote`;
