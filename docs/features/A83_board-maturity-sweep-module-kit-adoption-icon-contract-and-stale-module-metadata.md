@@ -1,0 +1,96 @@
+---
+schema_version: 1
+id: "A83"
+name: "Board maturity sweep: module-kit adoption, icon contract and stale module metadata"
+status: backlog
+priority: P2
+tags: []
+created_at: "2026-11-22T02:19:46.668Z"
+updated_at: "2026-11-22T04:13:46.479Z"
+---
+
+# A83: Board maturity sweep: module-kit adoption, icon contract and stale module metadata
+
+## Goal
+
+Bring every built-in Spur Board module onto one shell and one metadata contract, so that the module-kit in DESIGN.md "Product UI — Module Shell" (A81) is how every built-in module is built, not only Observability and Integrations; module descriptors describe what the modules actually show; and the feature corpus statuses match the evidence.
+
+## Scope
+
+- In:
+  - Move the eight hand-rolled built-in module shells (designs, features, history, plans, projects, search, settings, tasks; `runtime/` is a build manifest, not a module) onto `ModuleShell` / `ModuleHeader` / `ModuleTabs`. Tab ids, URLs, nav intents and tab content stay the same.
+  - Built-in module icons come from `ModuleIcon` by module id (ADR-133). Built-in descriptors stop carrying emoji. The emoji fallback in `ModuleIcon` keeps only what downstream modules need.
+  - Fix module descriptions and comments that have drifted: Projects says "Conversation and processes" but its tabs are Fleet / Inbox / Database, and some comments still name deleted modules.
+  - Reconcile the feature-status drift that `spur feature sync --all --dry-run` reports (19 on 2026-11-21: 18 waiting on a receipt, plus G8 active → blocked; the count moves as receipts land, so work from a fresh dry-run). Each one either records a verification pass through `spur feature verify`/`sync` or carries a recorded reason it stays put.
+  - One browser proof that loads every built-in module and leaves a repeatable artifact.
+- Out:
+  - The downstream `bootstrap.modules[].icon` config field and the A8 embedded-module contract stay as they are. No breaking config change.
+  - Visual redesign, new tabs, or new module features.
+  - The Integrations module itself (A82), which is built on the kit from the start.
+  - Hand-editing feature statuses around the L4 receipt gate.
+
+## Acceptance Criteria
+
+- [ ] R1 — Every built-in Board module renders through the module-kit shell
+- [ ] R2 — Built-in module icons resolve through ModuleIcon by module id
+- [ ] R3 — Downstream module icon declarations keep working unchanged
+- [ ] R4 — Module descriptions and comments match current tabs and modules
+- [ ] R5 — Feature status drift is reconciled through the feature tool
+- [ ] R6 — A browser proof loads every built-in module and leaves an artifact
+
+```gherkin
+Feature: Board maturity sweep: module-kit adoption, icon contract and stale module metadata
+
+  @core
+  Scenario: R1 — Every built-in Board module renders through the module-kit shell
+    Given the Board is served with every built-in module enabled
+    When the user opens designs, features, history, integrations, observability, plans, projects, search, settings and tasks in turn
+    Then each module renders inside ModuleShell with a ModuleHeader and, when it has tabs, ModuleTabs
+    And no built-in module source hand-builds its own header or tab strip
+    And every existing tab id, URL and navigation intent still resolves to the same content
+
+  @core
+  Scenario: R2 — Built-in module icons resolve through ModuleIcon by module id
+    Given the built-in module descriptors
+    When the sidebar and module headers render
+    Then each built-in module shows its ModuleIcon vector icon chosen by module id
+    And no built-in descriptor declares an emoji icon
+
+  Scenario: R3 — Downstream module icon declarations keep working unchanged
+    Given a project declares a bootstrap module with an icon value
+    When the Board composes its module catalog
+    Then the downstream module renders with an icon and the config validates exactly as before
+
+  Scenario: R4 — Module descriptions and comments match current tabs and modules
+    Given the Projects module exposes the Fleet, Inbox and Database tabs
+    Then its description names those surfaces rather than "Conversation and processes"
+    And no built-in module source comment refers to a module that no longer exists
+
+  Scenario: R5 — Feature status drift is reconciled through the feature tool
+    Given spur feature sync --all --dry-run reports features whose status disagrees with their tasks or receipts
+    When the sweep runs
+    Then each reported feature either moves through spur feature verify or sync to the status its evidence supports, or has a recorded reason in its Notes
+    And G8, with a blocked task, is no longer reported as active
+    And no feature status is changed by editing its file directly
+
+  Scenario: R6 — A browser proof loads every built-in module and leaves an artifact
+    When the sweep's E2E script runs against a served Board
+    Then it visits every built-in module, checks for the module-kit shell and a console free of errors
+    And it writes a stable-named receipt with one screenshot per module
+```
+
+## Tasks
+
+<!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 1429 | Reconcile feature status drift through the feature tool | todo |
+| 1427 | Module-kit adoption for designs, features, history and plans | todo |
+| 1426 | Module-kit adoption for projects, runtime, settings, task-kanban and search | todo |
+| 1428 | Built-in module icons resolve through ModuleIcon by id | todo |
+| 1430 | Board maturity browser proof across every built-in module | todo |
+<!-- END AUTO-GENERATED -->
+
+## Notes
+
+## History

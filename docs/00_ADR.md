@@ -2867,6 +2867,13 @@ re-import pressure this entry already records).
   card before enqueue and before send, preserving the read-only refusal for every card without it. A
   completed task returns its answer through the inbox and carries `metadata.remoteBranch`; the
   sender records the branch but never fetches or merges it.
+- **Amendment (2026-11-21 · feature A82):** the Agent Card route is **public**; every other `/a2a`
+  route stays bearer-only. A card holds only discovery data drawn from the user-level config
+  (name, role, skills, card URL, the write-fencing extension), never a token, and the A2A
+  discovery convention expects cards to be fetchable without credentials. Access control in front
+  of public cards belongs to the deployment edge (Cloudflare Zero Trust), not to Spur.
+  CancelTask stops only the run behind that task: the member loop keeps running and claims its
+  next request. `metadata.remoteBranch` is read from the member's lane tree when lane mode is on.
 - **Detail:** [A2A member transport](design/a2a-member-transport.md).
 
 ## ADR-149: The Fleet Runtime Is the One Orchestration Kernel; Write Dispatch Is Worktree-Isolated and Lands Through a Gated Queue
