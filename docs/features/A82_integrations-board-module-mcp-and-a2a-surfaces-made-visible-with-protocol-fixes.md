@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-22T02:05:52.821Z"
-updated_at: "2026-11-22T02:19:02.338Z"
+updated_at: "2026-11-22T04:46:50.215Z"
 ---
 
 # A82: Integrations Board module: MCP and A2A surfaces made visible, with protocol fixes
@@ -32,22 +32,6 @@ Give Spur Board users one native place — the **Integrations** module — to se
 - Migrating other Board modules to module-kit and wider Board cleanup (separate "Board maturity sweep" feature).
 
 ## Acceptance Criteria
-
-- [ ] R1 — MCP argument-validation failures classify as invalid_arguments
-- [ ] R2 — MCP tool descriptors declare read and write annotations
-- [ ] R3 — The A2A Agent Card is public while other A2A routes stay bearer-only
-- [ ] R4 — The A2A Agent Card lists skills from the member declaration
-- [ ] R5 — A2A remoteBranch reports the member's own working-tree branch
-- [ ] R6 — A2A CancelTask stops only the run behind that task
-- [ ] R7 — The integrations status contract reports each surface without leaking tokens
-- [ ] R8 — The integrations status contract carries catalogs, members and gateway counters
-- [ ] R9 — Integrations activity reads protocol events from the event history ledger
-- [ ] R10 — The Board shows an Integrations module built on the module-kit shell
-- [ ] R11 — The Summary tab shows one health row per surface
-- [ ] R12 — The MCP tab shows the catalog, recent calls and a client config snippet
-- [ ] R13 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links
-- [ ] R14 — An E2E proof exercises the protocol fixes and the module and leaves an artifact
-- [ ] R15 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable
 
 ```gherkin
 Feature: Integrations Board module with MCP and A2A protocol fixes
@@ -77,7 +61,7 @@ Feature: Integrations Board module with MCP and A2A protocol fixes
     Given the A2A listener is enabled and member "dev" is declared
     When an unauthenticated client GETs "/a2a/members/dev/.well-known/agent-card.json"
     Then the response is 200 with the member's Agent Card
-    When an unauthenticated client POSTs "/a2a/members/dev/message:send"
+    And an unauthenticated client POSTs "/a2a/members/dev/message:send"
     Then the response is 401 and an "auth.denied" event with surface "a2a" is recorded
     And the route comment in the A2A module states that only the card is public
 
@@ -124,7 +108,7 @@ Feature: Integrations Board module with MCP and A2A protocol fixes
     Then the MCP entry lists every tool with its annotations and origin (built-in or workflow), every spur:// resource template, and the gateway namespace
     And the A2A entry lists inbound members with card URLs and outbound a2a and cross-project members
     And the gateway entry reports the counters exposed by /api/health
-    When the project is served standalone
+    And with the project served standalone
     Then the gateway entry reports not served under a gateway
 
   @core
@@ -190,7 +174,7 @@ Feature: Integrations Board module with MCP and A2A protocol fixes
     Given MCP and A2A are both disabled
     When the user opens Integrations › Summary
     Then an empty state explains how to enable each surface
-    When the status procedure fails
+    And with the status procedure failing
     Then a Diagnostic panel shows the error and a retry action
 ```
 
