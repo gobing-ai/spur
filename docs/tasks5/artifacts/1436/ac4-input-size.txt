@@ -1,0 +1,7 @@
+calls  max_bytes  body_used
+-----  ---------  ---------
+    0
+--- (worktree db empty; measured on invoking tree db) ---
+calls  max_bytes  body_used
+-----  ---------  ---------
+   86       2085         83

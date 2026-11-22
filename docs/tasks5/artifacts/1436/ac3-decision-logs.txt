@@ -1,0 +1,4 @@
+ decision_id   maker_name  outcome   source   reason   err
+-------------  ----------  --------  ------  --------  ---
+failure-class  typesafe    accepted  model   accepted  -
+failure-class  typesafe    accepted  model   accepted  -

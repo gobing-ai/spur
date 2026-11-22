@@ -1,0 +1,7 @@
+--- all decision_logs (typesafe) ---
+ decision_id   maker_name  outcome   source   reason   confidence  err
+-------------  ----------  --------  ------  --------  ----------  ---
+failure-class  typesafe    accepted  model   accepted         0.9  -
+
+--- rows whose error mentions 'Body already used' ---
+0

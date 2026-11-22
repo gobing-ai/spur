@@ -165,6 +165,10 @@ workflows:
 # the shipped catalog's maker applies (see `status`).
 decisions:
     paths: []
+    # The hosted `typesafe` maker reads its key from TYPESAFE_API_KEY and its served model from
+    # TYPESAFE_DEFAULT_MODEL (falls back to `jev-latest`) — both process env, never config. Do not
+    # pin the model through a catalog `model:` field: the hub forwards it to every maker, and
+    # `ts-decision-clef` treats a per-call model as its own selector (task 1436 R6).
     maker: typesafe
     # makers:
     #     failure-class: laya-local

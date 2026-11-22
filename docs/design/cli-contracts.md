@@ -1218,7 +1218,11 @@ secret values are redacted before transmission. Enabling the switch therefore au
 these selected workflow outputs and the question/options to the configured A2 provider.
 
 The default provider uses `TYPESAFE_API_KEY` from the process environment (never project config),
-a 15-second request timeout and zero retries. Deploy with an upstream `ts-ai-runner` release that
+a 15-second request timeout and zero retries. The served model comes from the SDK's own
+`TYPESAFE_DEFAULT_MODEL` environment variable (absent, it falls back to `jev-latest`), also never
+project config: the hub forwards a catalog `model:` field to whichever maker runs, and
+`ts-decision-clef` would treat a per-call `model` as its own selector, so the model stays an
+environment decision (task 1436 R6). Deploy with an upstream `ts-ai-runner` release that
 contains A2: the previously installed 0.5.0 artifact predates these exports, despite the local
 upstream source version also being 0.5.0. An unavailable API/export/key, missing evidence, malformed
 answer, explicit defer, or confidence/selected probability below 0.9 falls back to the same original
