@@ -74,9 +74,11 @@ const USAGE: IntegrationsUsage = {
     ],
     resources: [],
     byActor: [],
-    a2a: [{ member: 'proj-coder', received: 2, replayed: 0, conflict: 0, cancelled: 1 }],
+    a2a: [{ member: 'proj-coder', received: 2, replayed: 1, conflict: 1, cancelled: 1 }],
     authDenied: [{ surface: 'mcp', reason: 'missing', count: 2 }],
     failureClusters: [],
+    gatewayMcpActivity: { calls: 5, failures: 2, authDenials: 1, lastCall: '2026-11-22T01:30:00.000Z' },
+    outboundActivity: { calls: 3, failures: 1, authDenials: 1, lastCall: '2026-11-22T01:40:00.000Z' },
 };
 
 const REQUESTS: Array<{
@@ -136,6 +138,13 @@ const A2A_EVENTS = [
         occurredAt: '2026-11-22T02:00:00.000Z',
         runId: 'run-1',
         payload: { data: { member: 'proj-coder', taskId: 't1', runStopped: true } },
+    },
+    {
+        id: 'e3',
+        eventName: 'a2a.message.received',
+        occurredAt: '2026-11-22T01:30:00.000Z',
+        runId: null,
+        payload: { data: { member: 'proj-coder', outcome: 'accepted' } },
     },
 ];
 
@@ -223,6 +232,10 @@ describe('1424 — Summary (R3)', () => {
         expect(row).toContain('3'); // three calls
         expect(row).toContain('25%'); // one failure of four
         expect(row).toContain('SPUR_MCP_TOKEN');
+        const a2aCells = view.getByTestId('integrations-row-a2a-inbound').querySelectorAll('td');
+        expect(a2aCells[4]?.textContent).toBe('4');
+        expect(a2aCells[5]?.textContent).toBe('25%');
+        expect(a2aCells[6]?.textContent).toBe(new Date('2026-11-22T01:30:00.000Z').toLocaleString());
     });
 
     test('the gateway strip reports unreadable counters instead of inventing them', async () => {
@@ -233,12 +246,21 @@ describe('1424 — Summary (R3)', () => {
                 namespace: '/tslibs',
                 rootMcpUrl: 'http://localhost:3000/mcp',
                 counters: null,
+                mcp: { enabled: true, auth: { envName: 'GATEWAY_TOKEN', tokenPresent: true } },
                 diagnostic: 'connect ECONNREFUSED',
             },
         });
         const view = render(<IntegrationsModule seams={makeSeams()} />);
         await waitFor(() => expect(view.getByTestId('gateway-counters-unavailable')).toBeTruthy());
         expect(view.getByTestId('gateway-counters-unavailable').textContent).toContain('ECONNREFUSED');
+        const gateway = view.getByTestId('integrations-row-gateway-mcp').querySelectorAll('td');
+        expect(gateway[3]?.textContent).toBe('GATEWAY_TOKEN');
+        expect(gateway[4]?.textContent).toBe('5');
+        expect(gateway[5]?.textContent).toBe('40%');
+        const outbound = view.getByTestId('integrations-row-a2a-outbound').querySelectorAll('td');
+        expect(outbound[4]?.textContent).toBe('3');
+        expect(outbound[5]?.textContent).toBe('33%');
+        expect(outbound[7]?.textContent).toBe('1');
     });
 });
 

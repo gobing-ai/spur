@@ -182,28 +182,34 @@ describe('1423 — the gateway block (R5)', () => {
     });
 });
 
-describe('1423 — history prefixes are dot-less (R7 regression lock)', () => {
-    for (const prefix of ['mcp', 'a2a', 'auth']) {
-        test(`prefix=${prefix} is a cataloged family`, async () => {
+describe('1423 — history supports both spellings of protocol prefixes (R7)', () => {
+    const protocolEvents = { mcp: 'mcp.tool.called', a2a: 'a2a.message.received', auth: 'auth.denied' };
+    for (const [prefix, event] of Object.entries(protocolEvents)) {
+        test(`prefix=${prefix} and prefix=${prefix}. read the same cataloged family`, async () => {
             const { ctx, close } = await makeCtx();
             try {
-                const res = (await appFor(ctx).fetch(
-                    new Request(`http://127.0.0.1:3007/api/events/history?prefix=${prefix}`),
-                )) as Response;
-                expect(res.status).toBe(200);
-                const body = (await res.json()) as { events: Array<{ prefix: string }> };
-                expect(body.events.every((row) => row.prefix === prefix)).toBe(true);
+                const dao = await ctx.systemEventDao();
+                for (const name of Object.values(protocolEvents)) {
+                    await dao.insert({ id: name, event_name: name, occurred_at: '2026-07-03T23:59:59.000Z' });
+                }
+                const app = appFor(ctx);
+                for (const filter of [prefix, `${prefix}.`]) {
+                    const res = await app.request(`/api/events/history?prefix=${filter}`);
+                    expect(res.status).toBe(200);
+                    const body = (await res.json()) as { events: Array<{ id: string; prefix: string }> };
+                    expect(body.events.map((row) => [row.id, row.prefix])).toEqual([[event, prefix]]);
+                }
             } finally {
                 await close();
             }
         });
     }
 
-    test('a dotted prefix is refused as uncataloged', async () => {
+    test('an unknown dotted prefix is still refused', async () => {
         const { ctx, close } = await makeCtx();
         try {
             const res = (await appFor(ctx).fetch(
-                new Request('http://127.0.0.1:3007/api/events/history?prefix=mcp.'),
+                new Request('http://127.0.0.1:3007/api/events/history?prefix=unknown.'),
             )) as Response;
             expect(res.status).toBe(400);
         } finally {

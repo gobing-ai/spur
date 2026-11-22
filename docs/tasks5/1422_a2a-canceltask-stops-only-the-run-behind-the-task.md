@@ -4,7 +4,7 @@ name: A2A CancelTask stops only the run behind the task
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.288Z
-updated_at: "2026-11-22T05:21:03.059Z"
+updated_at: "2026-11-22T07:13:32.648Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
@@ -109,16 +109,15 @@ Out of scope: aborting a warm turn (persistent worker, nothing spawned); see Q&A
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 cancel accepted only when the newest coordination run is `running`, else 400 `FAILED_PRECONDITION`/`TASK_NOT_CANCELABLE` | MET | `apps/server/src/modules/a2a/index.ts:369-387` (state AND `run.status === 'running'` gate before any write) — `apps/server/tests/modules/a2a/routes.test.ts:528` (queued/terminal rows still 400 via the existing rows at `:545`, `:558`) |
-| R2 cancel aborts only that run's spawned child; the member loop keeps running and claims its next request | MET | `packages/app/src/services/agent-loop-service.ts:633-645` (per-run `AbortController` + `startCancelPoll`), `:735-742` (`signal` on the run deps), `packages/app/src/services/agent-service.ts:59,521` (forwarded to `AgentExecutionOptions.signal`, which `agent-run-executor.ts:465` turns into a process-group kill) — `packages/app/tests/services/agent-loop-service.test.ts:1123` asserts the child's signal aborts AND `drains === 2` (the loop claimed its next request) |
-| R3 cancel never calls `supervisor().stop`; a row that does not leave `running` within 10s reports `runStopped: false` | MET | `apps/server/src/modules/a2a/index.ts:106-140` (`CANCEL_WAIT_MS`/250ms poll), `:395` (`runStopped` from the row, never from a kill) — `apps/server/tests/modules/a2a/routes.test.ts:510` (`harness.stops` stays empty, marker written) and `:528` (real 10s bound → `runStopped:false`, still no stop) |
-| R4 `a2a.task.cancelled` carries `runId` beside its existing fields | MET | `apps/server/src/modules/a2a/index.ts:398-403`; catalog declaration `packages/app/src/services/event-names.ts:2062-2071` — `apps/server/tests/modules/a2a/routes.test.ts:528` asserts `data.runId` equals the seeded run id |
-| R5 keyed runs with no cancel request keep today's behavior and exit codes | MET | `apps/server/src/modules/a2a/index.ts:121-140` (returns immediately when no marker is written; nothing else changes), `packages/app/src/services/agent-loop-service.ts:738-742` (signal is only ever aborted by the marker) — `packages/app/tests/services/agent-loop-service.test.ts:1170` (signal present, `aborted === false`, exit 0) |
-| Design satellite updated in the same change | MET | static-ref `docs/design/a2a-member-transport.md` (Cancel row: run-scoped request, no `supervisor().stop`, `runStopped`/`runId`) |
+| R1 | MET | apps/server/tests/modules/a2a/routes.test.ts:510 and :545 cover working and queued cancel requests. Terminal requests are also refused. |
+| R2 | MET | packages/app/tests/services/agent-loop-service.test.ts:1123 proves the next queued request is drained. docs/reports/integrations-e2e-receipt.json:61 proves live child cancellation and continuation. |
+| R3 | MET | apps/server/tests/modules/a2a/routes.test.ts:528 verifies the 10-second timeout returns runStopped:false and does not stop the member. |
+| R4 | MET | apps/server/tests/modules/a2a/routes.test.ts:528 asserts the cancellation event runId. |
+| R5 | MET | packages/app/tests/services/agent-loop-service.test.ts:1172 verifies a keyed drain completes normally without a cancel request. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A2A CancelTask stops only the run behind that task | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:510` + `packages/app/tests/services/agent-loop-service.test.ts:1123` (server side requests, member side aborts, loop survives) |
+| R6 — A2A CancelTask stops only the run behind that task | MET | test | packages/app/tests/services/agent-loop-service.test.ts:1123 proves the next queued request is drained. docs/reports/integrations-e2e-receipt.json:61 proves live child cancellation and continuation. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

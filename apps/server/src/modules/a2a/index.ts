@@ -1,12 +1,5 @@
 import { join } from 'node:path';
-import {
-    FleetService,
-    type InboxMessage,
-    type InboxService,
-    laneForRequestKey,
-    RequestKeyConflictError,
-} from '@gobing-ai/spur-app';
-import type { AgentFleet } from '@gobing-ai/spur-config';
+import { FleetService, type InboxMessage, type InboxService, RequestKeyConflictError } from '@gobing-ai/spur-app';
 import { CoordinationRunDao, type CoordinationRunRow } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
@@ -40,9 +33,9 @@ const CANCEL_SUFFIX = ':cancel';
 interface FleetSeams {
     memberAddresses(
         projectPath: string,
-    ): Promise<{ instanceId: string; executor: string; enabled: boolean; role?: string; purpose?: string }[]>;
-    /** The declaration `laneForRequestKey` reads its lane switch from; injected doubles may omit it. */
-    load?(projectPath: string): Promise<Pick<AgentFleet, 'maxWriters' | 'laneRoot'> | null>;
+    ): Promise<
+        { instanceId: string; localId?: string; executor: string; enabled: boolean; role?: string; purpose?: string }[]
+    >;
 }
 
 function fleetOver(ctx: ServerContext): FleetSeams {
@@ -145,12 +138,19 @@ async function readCanceled(ctx: ServerContext, messageId: string): Promise<bool
 }
 
 /** The member's current working branch, exposed only on completed tasks (1337 R4, 1421 R5). */
-async function remoteBranch(ctx: ServerContext, requestKey: string | null): Promise<string | null> {
+async function remoteBranch(ctx: ServerContext, runId: string | undefined): Promise<string | null> {
     try {
+        if (runId !== undefined) {
+            const path = join(ctx.runDir, runId, 'a2a-branch');
+            if (await ctx.fs.exists(path)) {
+                const branch = (await ctx.fs.readFile(path)).trim();
+                if (branch !== '') return branch;
+            }
+        }
         const result = await new NodeProcessExecutor().run({
             command: 'git',
             args: ['branch', '--show-current'],
-            cwd: await drainTree(ctx, requestKey),
+            cwd: ctx.cwd,
             timeout: 5_000,
             rejectOnError: false,
         });
@@ -159,24 +159,6 @@ async function remoteBranch(ctx: ServerContext, requestKey: string | null): Prom
         return branch === '' ? null : branch;
     } catch {
         return null;
-    }
-}
-
-/**
- * The tree a task's drain ran in (1421 R5). The agent loop resolves a keyed attempt's directory
- * with `laneForRequestKey(...) ?? projectPath`, so this reuses that ONE rule instead of forking a
- * second one. An A2A request key (`a2a:<member>:<messageId>`) never matches the fleet task-key
- * pattern, so today this is always the project tree — which is exactly what the loop does too.
- */
-async function drainTree(ctx: ServerContext, requestKey: string | null): Promise<string> {
-    if (requestKey === null || requestKey === '') return ctx.cwd;
-    try {
-        const declaration = (await fleetOver(ctx).load?.(ctx.cwd)) ?? null;
-        const lane = laneForRequestKey(ctx.cwd, declaration, requestKey);
-        // A lane directory that does not exist is not a tree to read a branch from.
-        return lane !== null && (await ctx.fs.exists(lane)) === true ? lane : ctx.cwd;
-    } catch {
-        return ctx.cwd;
     }
 }
 
@@ -202,7 +184,7 @@ async function projectTask(ctx: ServerContext, inbox: InboxService, message: Inb
         if (typeof timestamp === 'string') status.timestamp = timestamp;
     }
     const answer = state === 'TASK_STATE_COMPLETED' ? await answerText(inbox, message.id) : null;
-    const branch = state === 'TASK_STATE_COMPLETED' ? await remoteBranch(ctx, message.requestKey ?? null) : null;
+    const branch = state === 'TASK_STATE_COMPLETED' ? await remoteBranch(ctx, run?.run_id) : null;
     return {
         id: message.id,
         contextId: message.threadId,

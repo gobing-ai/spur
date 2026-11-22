@@ -8,6 +8,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { createMigratedDb, type DbAdapter, SystemEventDao } from '@gobing-ai/spur-domain';
+import { InboxService } from '../../src/services/inbox-service';
 import type {
     IntegrationsA2aSource,
     IntegrationsGatewayProbe,
@@ -224,6 +225,31 @@ describe('1423 status — gateway block', () => {
 });
 
 describe('1423 usage — the ledger fold', () => {
+    test('aggregates attempted outbound requests and authentication refusals from the selected window', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const inbox = new InboxService({ getDb: async () => db });
+            const request = await inbox.send({ from: 'operator', to: 'proj-peer', kind: 'request', body: 'fixture' });
+            const claim = await inbox.claimById(request.message.id);
+            if (claim === null) throw new Error('fixture was not claimable');
+            await inbox.settle([claim], 'not-started', 'HTTP 401 Unauthorized');
+            const integrations = service({ getDb: async () => db });
+            expect((await integrations.usage({ since: '1970-01-01T00:00:00.000Z' })).outboundActivity).toEqual({
+                calls: 1,
+                failures: 1,
+                lastCall: expect.any(String),
+                authDenials: 1,
+            });
+            expect((await integrations.usage({ since: '2999-01-01T00:00:00.000Z' })).outboundActivity).toEqual({
+                calls: 0,
+                failures: 0,
+                lastCall: null,
+                authDenials: 0,
+            });
+        } finally {
+            await db.close();
+        }
+    });
     test('reads the real event ledger over a bounded window', async () => {
         const db = await createMigratedDb({ url: ':memory:' });
         const dao = new SystemEventDao(db);

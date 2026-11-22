@@ -4,7 +4,7 @@ name: Integrations E2E proof with a repeatable receipt
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.289Z
-updated_at: "2026-11-22T06:49:12.899Z"
+updated_at: "2026-11-22T07:14:58.432Z"
 feature_id: A82
 priority: P2
 tags: ["integrations", "A82"]
@@ -107,30 +107,29 @@ Measured
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 `scripts/commands/integrations-e2e.ts` boots `spur self serve` in a temp project with MCP + A2A on and one cold A2A member whose agent is a sleeping stub | MET | `scripts/commands/integrations-e2e.ts:226-260` (scratch + free port + serve), `:143-176` (the stub model on a controlled PATH, controls `executor stub-lane → agent claude`), `:181-200` (the member loop). Registered at `scripts/spur-dev.ts:54,84,153` and `package.json:104` — run: 8/8 passed |
-| R2 the five protocol assertions (invalid_arguments, annotations, public card with skills + 401 send, send→cancel with runStopped and a live loop that claims the next task, status without tokens) | MET | `scripts/commands/integrations-e2e.ts:290-448` — receipt `docs/reports/integrations-e2e-receipt.json`: `mcp-invalid-arguments` (http 500, errorCode `invalid_arguments`), `mcp-annotations` (10/10 annotated, 5 reads), `a2a-card-public` (200, skills=`general`), `a2a-send-refused` (401 + `auth.denied` surface a2a), `a2a-cancel-run` (accepted, CANCELED, `runStopped:true`), `a2a-member-survives` (loop alive, second task WORKING), `integrations-status` (both surfaces on, env name, no token) |
-| R3 writes `docs/reports/integrations-e2e-receipt.json`, one row per step with command/status/expected/observed, nonzero exit on any failure | MET | `scripts/commands/integrations-e2e.ts:455-500` (self-check for token leakage, `verdict`, exit code) — `docs/reports/integrations-e2e-receipt.json` (`verdict: PASS`, 8 steps); two consecutive runs produced identical `steps` |
-| R4 `apps/web/tests/modules/integrations-browser.heavy.test.ts` loads `/board/integrations`, asserts one `integrations-row-<surface>` per surface, writes `integrations-e2e-summary-{light,dark}.png`, skips without a browser | MET | `apps/web/tests/modules/integrations-browser.heavy.test.ts:130-215` — run: 2/2 passed; `docs/reports/integrations-e2e-summary-light.png` and `-dark.png` written (63 KB / 65 KB) |
-| Defect found and fixed while proving R2 | MET | `packages/app/src/services/agent-loop-service.ts:80-108` (`startCancelPoll.onRequested`), `:565,650,782-786` (a requested cancel settles `accepted`) — before the fix the aborted run settled `not-started`, was redelivered, and starved the next queued request (4 of 5 E2E runs failed `a2a-member-survives`); locked by `packages/app/tests/services/agent-loop-service.test.ts` (1422 cancel block) |
+| R1 | MET | scripts/commands/integrations-e2e.ts:228 boots a temporary project with both listeners and a real spawned stub member. |
+| R2 | MET | docs/reports/integrations-e2e-receipt.json:10 shows all eight protocol steps, including the invalid_arguments ledger event and live cancellation. |
+| R3 | MET | scripts/commands/integrations-e2e.ts:307 omits the ephemeral port and member from the step. Two post-fix runs yielded byte-identical steps, retained in .spur/run/verifyall-A82/protocol-first-steps.json:1 and .spur/run/verifyall-A82/protocol-second-steps.json:1. Updated verdict: .spur/run/1425-verdict.json:15-19. |
+| R4 | MET | apps/web/tests/modules/integrations-browser.heavy.test.ts:131 verifies four rows, writes light and dark screenshots, and skips when Chromium is unavailable. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — An E2E proof exercises the protocol fixes and the module and leaves an artifact | MET | command | `bun run integrations-e2e` → 8/8 PASS (`docs/reports/integrations-e2e-receipt.json`); `bun test tests/modules/integrations-browser.heavy.test.ts` → 2/2 PASS with `docs/reports/integrations-e2e-summary-{light,dark}.png` |
+| R14 — An E2E proof exercises the protocol fixes and the module and leaves an artifact | PARTIAL | command | Two protocol runs passed 8/8 with identical steps and Chromium passed 2/2. scripts/commands/integrations-e2e.ts:265 asserts the errorCode on the event, and apps/web/tests/modules/integrations-browser.heavy.test.ts:70 stubs status, so these legs do not prove all feature-level R1 and R11 assertions. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P2 | correctness | — | The browser proof injects an API fixture at apps/web/tests/modules/integrations-browser.heavy.test.ts:71. The live protocol leg verifies the event errorCode at scripts/commands/integrations-e2e.ts:265. The combined proof leaves the feature's response and live Board assertions open. |
 
 ### References
 

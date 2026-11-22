@@ -1,4 +1,5 @@
 import type {
+    IntegrationsActivity,
     IntegrationsAuth,
     IntegrationsGateway,
     IntegrationsGatewayCounters,
@@ -9,7 +10,7 @@ import type {
     IntegrationsStatus,
     IntegrationsUsage,
 } from '@gobing-ai/spur-contracts';
-import { type DbAdapter, protocolUsageSummary } from '@gobing-ai/spur-domain';
+import { type DbAdapter, InboxDao, protocolUsageSummary } from '@gobing-ai/spur-domain';
 import type { FleetService } from './fleet-service';
 
 /**
@@ -50,6 +51,8 @@ export interface IntegrationsA2aSource {
 /** What the gateway probe answered: its counters, or why they could not be read. */
 export interface IntegrationsGatewayProbe {
     counters: IntegrationsGatewayCounters | null;
+    mcp?: { enabled: boolean; auth: IntegrationsAuth };
+    mcpActivity?: IntegrationsActivity;
     diagnostic?: string;
 }
 
@@ -58,7 +61,7 @@ export interface IntegrationsSources {
     mcp(): Promise<IntegrationsMcpSource>;
     a2a(): Promise<IntegrationsA2aSource>;
     /** Called only when the request came through a gateway. */
-    gateway(): Promise<IntegrationsGatewayProbe>;
+    gateway(since?: string): Promise<IntegrationsGatewayProbe>;
 }
 
 /** Where the caller reached the server: what absolute URLs in the response must be built from. */
@@ -137,8 +140,40 @@ export class IntegrationsService {
     }
 
     /** The windowed usage aggregate: the SAME fold the history artifact renders (I61). */
-    async usage(input: { since?: string }): Promise<IntegrationsUsage> {
-        return protocolUsageSummary(await this.deps.getDb(), input.since === undefined ? {} : { since: input.since });
+    async usage(input: { since?: string }, request?: IntegrationsRequestContext): Promise<IntegrationsUsage> {
+        const db = await this.deps.getDb();
+        const underGateway = mountPrefix(request?.forwardedPrefix) !== '';
+        const [usage, outboundActivity, gateway] = await Promise.all([
+            protocolUsageSummary(db, input.since === undefined ? {} : { since: input.since }),
+            this.outboundActivity(db, input.since),
+            underGateway ? this.deps.sources.gateway(input.since) : null,
+        ]);
+        return { ...usage, outboundActivity, gatewayMcpActivity: gateway?.mcpActivity ?? null };
+    }
+
+    private async outboundActivity(db: DbAdapter, since?: string): Promise<IntegrationsActivity> {
+        const project = this.deps.projectPath;
+        const members = (await this.deps.fleet.load(project))?.members ?? [];
+        const activity: IntegrationsActivity = { calls: 0, failures: 0, lastCall: null, authDenials: 0 };
+        if (!members.some((member) => member.a2a !== undefined || member.project !== undefined)) return activity;
+        const addresses = await this.deps.fleet.memberAddresses(project);
+        const targets = addresses.flatMap(({ instanceId }, index) => {
+            const member = members[index];
+            return member?.a2a !== undefined || member?.project !== undefined ? [instanceId] : [];
+        });
+        const cutoff = Date.parse(since ?? '');
+        const rows = await new InboxDao(db).requests(targets, undefined, Number.isFinite(cutoff) ? cutoff : undefined);
+        let lastCall = 0;
+        for (const row of rows) {
+            if (row.attempts === 0) continue;
+            const denied = /\b(?:HTTP\s+401|UNAUTHENTICATED|needs-auth)\b/i.test(row.error ?? '');
+            activity.calls += 1;
+            if (row.status === 'failed' || row.runStatus === 'errored' || denied) activity.failures += 1;
+            if (denied) activity.authDenials += 1;
+            lastCall = Math.max(lastCall, row.claimedAt ?? row.deliveredAt ?? row.updatedAt);
+        }
+        activity.lastCall = activity.calls === 0 ? null : new Date(lastCall).toISOString();
+        return activity;
     }
 
     private mcpSurface(source: IntegrationsMcpSource, base: string): IntegrationsMcpSurface {
@@ -201,6 +236,7 @@ export class IntegrationsService {
         return {
             enabled: source.enabled,
             basePath: '/a2a',
+            url: source.enabled ? `${base}/a2a` : null,
             auth: authOf(source.authEnv, source.tokenPresent),
             inbound,
             outbound,
@@ -228,6 +264,7 @@ export class IntegrationsService {
             namespace: mountPrefix(prefix),
             rootMcpUrl: `${gatewayRoot(base, prefix)}/mcp`,
             counters: probe.counters,
+            ...(probe.mcp === undefined ? {} : { mcp: probe.mcp }),
             ...(probe.diagnostic === undefined ? {} : { diagnostic: probe.diagnostic }),
         };
     }

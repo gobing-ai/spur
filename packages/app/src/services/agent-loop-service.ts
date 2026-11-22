@@ -4,6 +4,7 @@ import {
     CLAIM_TTL_MS,
     CoordinationRunDao,
     type InboxClaim,
+    InboxDao,
     ProjectClaimDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
@@ -25,7 +26,7 @@ import type { StrategyRuntime } from './strategy-runtime';
 import { FOLLOW_POLL_INTERVAL_MS } from './system-event-follow';
 import type { SystemEventBus } from './system-event-tap';
 import { createWarmTurnDispatcher } from './warm-turn-dispatch';
-import { laneForRequestKey } from './worktree-lane-service';
+import { a2aMemberLane, laneForRequestKey } from './worktree-lane-service';
 import { WRITE_SLOT_TTL_MS } from './write-slot-service';
 
 /**
@@ -620,14 +621,31 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                     // G76 1341: lane mode runs the keyed attempt in its lane, derived from the
                     // request key — the write claim is keyed by the lane realpath.
                     const firstKey = requestKeys?.[0];
-                    const lane = keyed && firstKey ? laneForRequestKey(projectPath, declaration, firstKey) : null;
+                    const firstClaim = claimed[0];
+                    const isA2a =
+                        declaration?.maxWriters !== undefined &&
+                        firstKey?.startsWith(`a2a:${recipient}:`) === true &&
+                        firstClaim !== undefined &&
+                        (await new InboxDao(await deps.getDb()).get(firstClaim.id))?.fromId === 'a2a';
+                    const taskLane = keyed && firstKey ? laneForRequestKey(projectPath, declaration, firstKey) : null;
+                    const a2aLane =
+                        isA2a && declaration?.maxWriters !== undefined
+                            ? await a2aMemberLane(
+                                  projectPath,
+                                  declaration,
+                                  (await fleet.memberAddresses(projectPath)).find(
+                                      (member) => member.instanceId === recipient,
+                                  )?.localId,
+                              )
+                            : null;
+                    const lane = taskLane ?? a2aLane?.cwd ?? null;
                     const laneCwd =
                         lane !== null && (await createNodeFileSystem(lane).exists(lane))
                             ? normalizeProjectPath(lane)
                             : null;
                     if (keyed) {
                         stopHeartbeat = createWriteSlotHeartbeat({
-                            projectPath: laneCwd ?? projectPath,
+                            projectPath: isA2a ? projectPath : (laneCwd ?? projectPath),
                             recipient,
                             getDb: deps.getDb,
                         });
@@ -668,6 +686,12 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                         });
                     }
                     try {
+                        if (runId !== undefined && laneCwd !== null && a2aLane !== null) {
+                            const fs = createNodeFileSystem(projectPath);
+                            const receiptDir = join(projectPath, '.spur', 'run', runId);
+                            await fs.ensureDir(receiptDir);
+                            await fs.writeFile(join(receiptDir, 'a2a-branch'), `${a2aLane.branch}\n`);
+                        }
                         // G66 R1: resume mode re-opens the previous drain's session;
                         // one-shot keeps today's fresh process (R3's warning already
                         // fired once at loop start).
@@ -687,7 +711,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
                         // (1276), pi (1277) and codex (1278); any other agent still gets
                         // `unsupported-agent` from openTurnSession and every keyed run falls back by name.
                         const turn =
-                            runId !== undefined
+                            runId !== undefined && a2aLane === null
                                 ? createWarmTurnDispatcher({
                                       openSession: (agent, policy) => {
                                           // The CLI loop injects no run deps; a default runner is what the

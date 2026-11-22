@@ -6,7 +6,7 @@
  * ownership loss.
  */
 import { describe, expect, test, vi } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { InboxClaim } from '@gobing-ai/spur-domain';
@@ -31,8 +31,10 @@ import {
     waitForWake,
 } from '../../src/services/agent-loop-service';
 import type { FleetService } from '../../src/services/fleet-service';
+import { InboxService } from '../../src/services/inbox-service';
 import { normalizeProjectPath } from '../../src/services/project-registry';
 import type { StrategyRuntime } from '../../src/services/strategy-runtime';
+import { lanePath } from '../../src/services/worktree-lane-service';
 import { writeFleetWorkItem } from '../../src/workflow/fleet-work-item';
 
 async function memDb(): Promise<DbAdapter> {
@@ -1167,6 +1169,82 @@ describe('1422 cancel-a-run', () => {
         // A cancelled run settles DELIVERED — releasing it would replay the cancelled work ahead
         // of the member's next queued request (observed: the next task starved behind a redelivery).
         expect(settled[0]).toBe('m-cancel:accepted');
+    });
+
+    test('a named A2A member drains from its linked worktree and records the branch', async () => {
+        const db = await memDb();
+        const scratch = mkdtempSync(join(tmpdir(), 'loop-a2a-lane-'));
+        const cwd = join(scratch, 'project');
+        const laneRoot = join(scratch, 'lanes');
+        mkdirSync(cwd);
+        mkdirSync(laneRoot);
+        try {
+            const lane = lanePath(cwd, laneRoot, 'dev', 1);
+            const git = (...args: string[]) => {
+                const result = Bun.spawnSync({ cmd: ['git', ...args], cwd });
+                expect(result.exitCode).toBe(0);
+            };
+            git('init', '-b', 'main');
+            git(
+                '-c',
+                'user.name=Fixture',
+                '-c',
+                'user.email=fixture@example.test',
+                'commit',
+                '--allow-empty',
+                '-m',
+                'fixture',
+            );
+            git('worktree', 'add', '-b', 'lane/dev', lane);
+            const inbox = new InboxService({ getDb: async () => db });
+            const key = 'a2a:member-1:branch-proof';
+            const { message } = await inbox.send({
+                from: 'a2a',
+                to: 'member-1',
+                kind: 'request',
+                body: 'proof',
+                requestKey: key,
+            });
+            let runCwd: unknown;
+            let branch: string | undefined;
+            const deps = keyedDeps(db, cwd, {
+                fleet: {
+                    load: async () => ({ enabled: true, maxWriters: 1, laneRoot }),
+                    resolveOrchestrator: async () => null,
+                    memberAddresses: async () => [{ instanceId: 'member-1', localId: 'dev' }],
+                },
+                drain: async () => ({
+                    prompt: 'proof',
+                    flags: {},
+                    claimed: [{ id: message.id, attempts: 1 }],
+                    requestKeys: [key],
+                }),
+                agentService: (bus: { emit: (name: string, payload: unknown) => void }) => ({
+                    run: async (_input: string, flags: Record<string, unknown>) => {
+                        runCwd = flags.cwd;
+                        branch = readFileSync(
+                            join(cwd, '.spur/run', String(flags['run-id']), 'a2a-branch'),
+                            'utf8',
+                        ).trim();
+                        bus.emit('agent.invoke.start', { operation: 'prompt' });
+                        return 0;
+                    },
+                }),
+            });
+            expect(
+                await runAgentLoopCore(deps, {
+                    recipient: 'member-1',
+                    pollMs: 10,
+                    flags: {},
+                    runtime: { maxIterations: 1 },
+                }),
+            ).toBe(0);
+            expect(runCwd).toBe(lane);
+            expect(branch).toBe('lane/dev');
+        } finally {
+            await db.close();
+            rmSync(scratch, { recursive: true, force: true });
+        }
     });
 
     test('a keyed drain with no cancel request runs to completion, untruncated', async () => {

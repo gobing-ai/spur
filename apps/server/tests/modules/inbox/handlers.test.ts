@@ -109,6 +109,13 @@ afterEach(async () => {
 });
 
 describe('1267 R3 — GET procedures write nothing', () => {
+    test('the HTTP inbox reads accept a bounded integer query limit', async () => {
+        const app = createApp(undefined, { ctx: harness.ctx });
+        for (const path of ['/api/inbox/requests?limit=100', '/api/inbox/messages?member=proj-coder&limit=20']) {
+            expect((await app.request(path)).status).toBe(200);
+        }
+        expect((await app.request('/api/inbox/requests?limit=201')).status).toBe(400);
+    });
     test('list, thread, requests and members leave the inbox and ledger untouched', async () => {
         await call('send', { to: 'proj-coder', from: 'operator', body: 'hello' });
         const before = await counts();

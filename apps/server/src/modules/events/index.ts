@@ -345,7 +345,8 @@ export const eventsModule: ServerModule = {
             const nameParam = c.req.query('name');
             const sinceParam = c.req.query('since');
             const limitParam = c.req.query('limit');
-            const prefixParam = c.req.query('prefix');
+            const rawPrefix = c.req.query('prefix');
+            const prefixParam = rawPrefix?.replace(/(?<=.)\.$/, '');
             const runIdParam = c.req.query('runId');
             const actorParam = c.req.query('actor');
             const cursorParam = c.req.query('cursor');

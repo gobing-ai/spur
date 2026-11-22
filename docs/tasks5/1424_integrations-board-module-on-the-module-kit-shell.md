@@ -4,7 +4,7 @@ name: Integrations Board module on the module-kit shell
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.289Z
-updated_at: "2026-11-22T06:20:06.958Z"
+updated_at: "2026-11-22T07:14:56.525Z"
 feature_id: A82
 priority: P2
 tags: ["integrations", "A82"]
@@ -139,36 +139,36 @@ Notes
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 auto-discovered module on `ModuleShell`/`ModuleHeader` (status chip + `TimeRangePresets`)/`ModuleTabs` | MET | `apps/web/src/modules/integrations/index.tsx:9-19` (id `integrations`, route `integrations`, order 12 → `/board/integrations`), `apps/web/src/modules/integrations/IntegrationsModule.tsx:47-78` (kit header, chip, window presets, tabs) — `apps/web/tests/modules/integrations/integrations-module.test.tsx` ("the module is auto-discoverable…", "the shell renders the kit header, the status chip and the tab strip"), and the singleton registry order now includes it (`apps/web/tests/modules/registry.test.ts`) |
-| R2 tabs from an append-only `tabs.ts` in the order Summary, MCP, A2A | MET | `apps/web/src/modules/integrations/tabs.ts:6-10` — `apps/web/tests/modules/integrations/tabs.test.ts` + the rendered strip test |
-| R3 Summary: one row per surface (`off`/`on`/`on · token unset`), URL, auth env name, window calls/error rate/last call/denials, gateway strip, counters-unavailable note | MET | `apps/web/src/modules/integrations/SummaryTab.tsx:56-130` (four rows, `failures/(calls+failures)` rate), `:196-235` (gateway strip + `gateway-counters-unavailable`) — `integrations-module.test.tsx` ("one row per surface with the three state chips", "the activity columns come from the usage window", "the gateway strip reports unreadable counters instead of inventing them"), vocabulary pinned in `helpers.test.ts` |
-| R4 MCP tab: tool table with origin + read/write badges and a schema drawer, resources, recent calls (tool/duration/outcome/errorCode), copyable snippet with `${ENV_NAME}` | MET | `apps/web/src/modules/integrations/McpTab.tsx:12-145` — `integrations-module.test.tsx` ("lists the catalog with origin and read/write badges…", "recent calls show tool, duration and outcome", "the rendered module contains no token value") + `helpers.test.ts` (snippet) |
-| R5 A2A tab: inbound member cards (card URL + write-fenced), A2A tasks (`a2a:` request keys) → Projects › Inbox, outbound receipts, event rows → Observability URL | MET | `apps/web/src/modules/integrations/A2aTab.tsx:12-160`, `helpers.ts:74-95` (`a2aRequests`, `inboxLink`, `systemEventLink`) — `integrations-module.test.tsx` asserts the three hrefs and that only `m-a2a` (not `m-fleet`) is listed; `helpers.test.ts` pins both link shapes |
-| R6 Observability applies `eventName`/`runId` from the URL as the initial System Events intent | MET | `apps/web/src/modules/observability/ObservabilityShell.tsx:31-44` (lazy `useState` initializer) — `apps/web/tests/modules/observability/url-seed.test.ts` |
-| R7 loading skeleton, `EmptyState` naming config keys, `Diagnostic` with retry, semantic tokens only | MET | `IntegrationsModule.tsx:80-125` (loading / diagnostic + retry / empty / panel), token classes only (`bg-base-300`, `text-base-content/70`, `badge-success |
+| R1 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:182 and :195 prove discovery, routing, shell, header and tab rendering. |
+| R2 | MET | apps/web/tests/modules/integrations/tabs.test.ts:6 pins the order. |
+| R3 | PARTIAL | apps/web/tests/modules/integrations/integrations-module.test.tsx:225 now verifies 25% for one conflict in four attempts and observes the last intake rather than cancellation. apps/web/tests/modules/integrations/useIntegrations.test.ts:217 verifies the same window reaches usage and history. Gateway MCP and A2A outbound still lack windowed metrics at apps/web/src/modules/integrations/SummaryTab.tsx:83 and :109. Updated verdict: .spur/run/1424-verdict.json:15-19. |
+| R4 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:249 and :263 prove catalog, resources and activity; apps/web/src/modules/integrations/McpTab.tsx:12 supplies the schema drawer and placeholder snippet. |
+| R5 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:282 checks members, filtered task states and links. apps/web/tests/modules/integrations/useIntegrations.test.ts exercises outbound receipts. |
+| R6 | MET | apps/web/tests/modules/observability/url-seed.test.ts:20 verifies the URL intent is applied initially. |
+| R7 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:305 and :317 verify empty guidance and retry. apps/web/src/modules/integrations/IntegrationsModule.tsx:78 renders the loading state. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The Board shows an Integrations module built on the module-kit shell | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx` (identity + kit header + tabs) |
-| AC2 — The Summary tab shows one health row per surface | MET | test | `integrations-module.test.tsx` (state chips + activity columns + gateway strip) |
-| AC3 — The MCP tab shows the catalog, recent calls and a client config snippet | MET | test | `integrations-module.test.tsx` + `helpers.test.ts` |
-| AC4 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links | MET | test | `integrations-module.test.tsx` (member card, tasks link, outbound, event link) |
-| AC5 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable | MET | test | `integrations-module.test.tsx` (empty state + diagnostic with retry) |
+| R10 — The Board shows an Integrations module built on the module-kit shell | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:182 and :195 prove discovery, routing, shell, header and tab rendering. |
+| R11 — The Summary tab shows one health row per surface | PARTIAL | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:225 now verifies 25% for one conflict in four attempts and observes the last intake rather than cancellation. apps/web/tests/modules/integrations/useIntegrations.test.ts:217 verifies the same window reaches usage and history. Gateway MCP and A2A outbound still lack windowed metrics at apps/web/src/modules/integrations/SummaryTab.tsx:83 and :109. Updated verdict: .spur/run/1424-verdict.json:15-19. |
+| R12 — The MCP tab shows the catalog, recent calls and a client config snippet | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:249 and :263 prove catalog, resources and activity; apps/web/src/modules/integrations/McpTab.tsx:12 supplies the schema drawer and placeholder snippet. |
+| R13 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:282 checks members, filtered task states and links. apps/web/tests/modules/integrations/useIntegrations.test.ts exercises outbound receipts. |
+| R15 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:305 and :317 verify empty guidance and retry. apps/web/src/modules/integrations/IntegrationsModule.tsx:78 renders the loading state. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P2 | correctness | — | apps/web/src/modules/integrations/SummaryTab.tsx:83 and :109 lack selected-window gateway MCP and outbound activity. Gateway counters cover all gateway requests; outbound activity columns are unmeasured. |
 
 ### References
 

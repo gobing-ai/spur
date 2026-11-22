@@ -91,6 +91,7 @@ export type IntegrationsMcpSurface = z.infer<typeof integrationsMcpSurfaceSchema
 export const integrationsA2aSurfaceSchema = z.object({
     enabled: z.boolean(),
     basePath: z.literal('/a2a'),
+    url: z.string().nullable().optional(),
     auth: integrationsAuthSchema,
     inbound: z.array(integrationsInboundMemberSchema),
     outbound: z.array(integrationsOutboundMemberSchema),
@@ -110,6 +111,7 @@ export const integrationsGatewaySchema = z.discriminatedUnion('served', [
         namespace: z.string(),
         rootMcpUrl: z.string(),
         counters: integrationsGatewayCountersSchema.nullable(),
+        mcp: z.object({ enabled: z.boolean(), auth: integrationsAuthSchema }).optional(),
         diagnostic: z.string().optional(),
     }),
 ]);
@@ -178,6 +180,20 @@ export const integrationsFailureClusterSchema = z.object({
 });
 
 /** The windowed protocol-usage aggregate (I61 `protocolUsageSummary`). */
+export const integrationsActivitySchema = z.object({
+    calls: z.number(),
+    failures: z.number(),
+    lastCall: z.string().nullable(),
+    authDenials: z.number(),
+});
+export type IntegrationsActivity = z.infer<typeof integrationsActivitySchema>;
+
+export const integrationsGatewayHealthSchema = z.object({
+    counters: integrationsGatewayCountersSchema,
+    mcp: z.object({ enabled: z.boolean(), auth: integrationsAuthSchema }).optional(),
+    mcpActivity: integrationsActivitySchema.optional(),
+});
+
 export const integrationsUsageSchema = z.object({
     tools: z.array(integrationsToolUsageSchema),
     resources: z.array(integrationsResourceUsageSchema),
@@ -185,6 +201,8 @@ export const integrationsUsageSchema = z.object({
     a2a: z.array(integrationsA2aUsageSchema),
     authDenied: z.array(integrationsAuthDeniedUsageSchema),
     failureClusters: z.array(integrationsFailureClusterSchema),
+    gatewayMcpActivity: integrationsActivitySchema.nullable().optional(),
+    outboundActivity: integrationsActivitySchema.optional(),
 });
 /** Inferred type for {@link integrationsUsageSchema}. */
 export type IntegrationsUsage = z.infer<typeof integrationsUsageSchema>;

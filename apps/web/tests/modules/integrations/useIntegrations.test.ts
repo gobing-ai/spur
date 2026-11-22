@@ -67,11 +67,14 @@ function makeSeams(
         status?: () => Promise<IntegrationsStatus>;
         list?: () => Promise<{ messages: Array<Record<string, unknown>>; nextCursor: null }>;
         usageSince?: string[];
+        historySince?: string[];
     } = {},
 ): IntegrationsSeams {
     return {
         fetchHistory: async (request: Request) => {
-            const prefix = new URL(request.url).searchParams.get('prefix');
+            const query = new URL(request.url).searchParams;
+            const prefix = query.get('prefix');
+            options.historySince?.push(query.get('since') ?? '');
             // One row per family: `mcp` gets the tool call, `a2a` the intake, `auth` nothing.
             const events = prefix === 'mcp' ? [MCP_ROW] : prefix === 'a2a' ? [A2A_ROW] : [];
             return Response.json({ events });
@@ -213,14 +216,18 @@ describe('1424 — hook data assembly', () => {
 
     test('the usage window is sent to the procedure, and changing it refetches', async () => {
         const seen: string[] = [];
-        const seams = makeSeams({ usageSince: seen });
+        const history: string[] = [];
+        const seams = makeSeams({ usageSince: seen, historySince: history });
         const { result } = renderHook(() => useIntegrations(seams));
         await waitFor(() => expect(result.current.loading).toBe(false));
-        expect(seen[0]).not.toBe('');
+        const since = seen[0] ?? '';
+        expect(since).not.toBe('');
+        expect(history).toEqual([since, since, since]);
         act(() => result.current.setWindow('all'));
         await waitFor(() => expect(result.current.window).toBe('all'));
         // `all` is the unbounded read: no `since` is sent.
         expect(seen).toContain('');
+        expect(history.slice(3)).toEqual(['', '', '']);
     });
 
     test('a failed status read surfaces an error, and retry clears it', async () => {

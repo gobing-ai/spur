@@ -90,6 +90,10 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
     const projectTokenEnv = mcp.projectTokenEnv;
     return {
         ...deps,
+        mcpAuth: {
+            envName: mcp.authEnv ?? '',
+            tokenPresent: Boolean(mcp.authEnv && env[mcp.authEnv]),
+        },
         // Task 1383 R1/R3: the five `sp_*` descriptors and the upstream protocol version.
         builtinTools: () => TOOL_DESCRIPTORS,
         projectMcpNamespace: env[SPUR_ENV_VARS.mcpNamespace],

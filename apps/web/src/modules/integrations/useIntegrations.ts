@@ -51,8 +51,12 @@ export interface IntegrationsSeams {
 }
 
 /** Read one events-history page for a prefix family. */
-async function readEvents(prefix: string, seams: IntegrationsSeams, limit = 50): Promise<ProtocolEventRow[]> {
-    const url = eventsHistoryUrl({ prefix, limit });
+async function readEvents(
+    prefix: string,
+    since: string | undefined,
+    seams: IntegrationsSeams,
+): Promise<ProtocolEventRow[]> {
+    const url = eventsHistoryUrl({ prefix, since, limit: 50 });
     const res = await (seams.fetchHistory ?? apiFetchWithTimeout)(new Request(url));
     if (!res.ok) throw new Error(`events/history answered ${res.status}`);
     const body = (await res.json()) as { events?: unknown[] };
@@ -72,9 +76,9 @@ async function load(
     const [status, usage, mcpEvents, a2aEvents, authEvents, requestRows] = await Promise.all([
         client.integrations.status(),
         client.integrations.usage(since === undefined ? {} : { since }),
-        readEvents('mcp', seams),
-        readEvents('a2a', seams),
-        readEvents('auth', seams),
+        readEvents('mcp', since, seams),
+        readEvents('a2a', since, seams),
+        readEvents('auth', since, seams),
         client.inbox.requests({ limit: 100 }),
     ]);
     // One receipt page serves both the A2A task list and the per-member outbound receipts: the

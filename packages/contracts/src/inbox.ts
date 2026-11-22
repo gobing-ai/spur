@@ -66,7 +66,7 @@ export const inboxRequestSchema = z.object({
 const inboxListInputSchema = z.object({
     member: z.string().min(1),
     direction: z.enum(['in', 'out', 'both']).optional(),
-    limit: z.number().int().positive().max(500).optional(),
+    limit: z.coerce.number<number>().int().positive().max(500).optional(),
     /**
      * Keyset cursor: the `nextCursor` of the previous page. Absent = the newest page. A cursor is
      * stable under concurrent inserts, which an offset is not — a row written between two pages
@@ -131,7 +131,7 @@ const inboxReadResponseSchema = z.object({
 });
 
 const inboxRequestsInputSchema = z.object({
-    limit: z.number().int().positive().max(200).optional(),
+    limit: z.coerce.number<number>().int().positive().max(200).optional(),
     /** Exact receipt for a sent message, including chat and non-orchestrator recipients. */
     messageId: z.string().min(1).optional(),
 });

@@ -65,6 +65,33 @@ export function isProjectLane(
     );
 }
 
+/** A named A2A member uses its already-registered lane worktree when lane mode is enabled. */
+export async function a2aMemberLane(
+    projectPath: string,
+    fleetCfg: Pick<AgentFleet, 'maxWriters' | 'laneRoot'> | null | undefined,
+    localId: string | undefined,
+): Promise<{ cwd: string; branch: string } | null> {
+    if (fleetCfg?.maxWriters === undefined || localId === undefined) return null;
+    const result = await new NodeProcessExecutor().run({
+        command: 'git',
+        args: ['worktree', 'list', '--porcelain', '-z'],
+        cwd: projectPath,
+        timeout: 5_000,
+        rejectOnError: false,
+    });
+    if (result.exitCode !== 0) return null;
+    const branch = `lane/${localId}`;
+    for (const record of result.stdout.split('\0\0')) {
+        const fields = record.split('\0');
+        const path = fields[0]?.replace(/^worktree /, '');
+        if (path && fields.includes(`branch refs/heads/${branch}`) && isProjectLane(projectPath, fleetCfg, path)) {
+            if (await createNodeFileSystem(projectPath).exists(path))
+                return { cwd: normalizeProjectPath(path), branch };
+        }
+    }
+    return null;
+}
+
 /** One live lane, parsed from `git worktree list --porcelain`. */
 export interface Lane {
     path: string;

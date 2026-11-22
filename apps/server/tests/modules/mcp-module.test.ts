@@ -549,11 +549,15 @@ describe('1421 R1 — argument-validation failures classify as invalid_arguments
         });
         const event = events.find((entry) => entry.name === 'mcp.tool.failed');
         if (event === undefined) throw new Error(`expected an mcp.tool.failed event for ${name}`);
+        const body = (await res.json()) as { error?: { errorCode?: string } };
+        expect(body.error?.errorCode).toBe(
+            event.payload.errorCode === 'invalid_arguments' ? 'invalid_arguments' : undefined,
+        );
         return { status: res.status, errorCode: event.payload.errorCode, message: String(event.payload.error) };
     }
 
     test('an unknown argument', async () => {
-        const failed = await failureOf('sp_task_update', { wbs: '1421', bogus: 'x' });
+        const failed = await failureOf('sp_task_list', { bogus: 'x' });
         expect(failed.status).toBe(500);
         expect(failed.errorCode).toBe('invalid_arguments');
         expect(failed.message).toContain('unknown argument');
@@ -563,6 +567,9 @@ describe('1421 R1 — argument-validation failures classify as invalid_arguments
         const failed = await failureOf('sp_feature_check', { id: 'A82', as: 'nope' });
         expect(failed.errorCode).toBe('invalid_arguments');
         expect(failed.message).toContain('must be one of');
+        expect((await failureOf('sp_task_transition', { wbs: '1421', to: 'invalid' })).errorCode).toBe(
+            'invalid_arguments',
+        );
     });
 
     test('a string, boolean and array type violation', async () => {

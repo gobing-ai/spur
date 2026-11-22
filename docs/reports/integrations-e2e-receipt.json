@@ -1,10 +1,10 @@
 {
     "artifact": "integrations-e2e",
-    "generatedAt": "2026-11-22T06:37:12.320Z",
+    "generatedAt": "2026-11-22T07:33:11.348Z",
     "context": {
-        "port": 64568,
+        "port": 56553,
         "scratch": "(removed)",
-        "member": "spur-integrations-e2e-AsbQUO-coder"
+        "member": "spur-integrations-e2e-LmZOIh-coder"
     },
     "steps": [
         {
@@ -20,12 +20,12 @@
         {
             "step": "mcp-invalid-arguments",
             "requirement": "R2 / F1",
-            "command": "POST /mcp tools/call sp_task_update {bogus}",
+            "command": "POST /mcp tools/call with unknown argument, invalid status and non-string name",
             "httpStatus": 500,
             "exitCode": null,
             "status": "passed",
-            "expected": "http 500 and mcp.tool.failed errorCode=invalid_arguments",
-            "evidence": "http 500 errorCode=invalid_arguments"
+            "expected": "all three responses and the failure event classify as invalid_arguments",
+            "evidence": "3/3 responses classified; event errorCode=invalid_arguments"
         },
         {
             "step": "mcp-annotations",
@@ -40,7 +40,7 @@
         {
             "step": "a2a-card-public",
             "requirement": "R2 / F3, F4",
-            "command": "GET http://127.0.0.1:64568/a2a/members/spur-integrations-e2e-AsbQUO-coder/.well-known/agent-card.json (no bearer token)",
+            "command": "GET /a2a/members/<member>/.well-known/agent-card.json (no bearer token)",
             "httpStatus": 200,
             "exitCode": null,
             "status": "passed",
@@ -86,9 +86,19 @@
             "status": "passed",
             "expected": "http 200, both surfaces enabled, the auth env NAME present and no token value",
             "evidence": "http 200 mcp=true env=SPUR_MCP_TOKEN tokenPresent=true a2a=true gatewayServed=true"
+        },
+        {
+            "step": "harness",
+            "requirement": "—",
+            "command": "integrations-e2e",
+            "httpStatus": null,
+            "exitCode": 1,
+            "status": "failed",
+            "expected": "the harness completes every step",
+            "evidence": "/api/inbox/requests?limit=100 returned 400: {\"defined\":false,\"code\":\"BAD_REQUEST\",\"status\":400,\"message\":\"Input validation failed\",\"data\":{\"issues\":[{\"expected\":\"number\",\"code\":\"invalid_type\",\"path\":[\"limit\"],\"message\":\"Invalid input: expected number, received string\"}]}}"
         }
     ],
     "passed": 8,
-    "failed": 0,
-    "verdict": "PASS"
+    "failed": 1,
+    "verdict": "FAIL"
 }

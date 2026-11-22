@@ -464,13 +464,16 @@ export class FleetService {
      */
     async memberAddresses(
         projectPath: string,
-    ): Promise<{ instanceId: string; executor: string; enabled: boolean; role?: string; purpose?: string }[]> {
+    ): Promise<
+        { instanceId: string; localId?: string; executor: string; enabled: boolean; role?: string; purpose?: string }[]
+    > {
         const normalized = normalizeProjectPath(projectPath);
         const declaration = await this.load(normalized);
         if (declaration === null) return [];
         const slug = await this.projectSlug(normalized);
         return declaration.members.map((member, index) => ({
             instanceId: `${slug}-${memberLocalId(member, declaration.members, index)}`,
+            localId: memberLocalId(member, declaration.members, index),
             executor: member.executor ?? '',
             enabled: member.enabled !== false,
             // 1421 R4: the A2A card's skill derives from the declaration, so the address carries

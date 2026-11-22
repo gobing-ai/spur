@@ -1,6 +1,6 @@
 import { FleetService, type IntegrationsGatewayProbe, IntegrationsService } from '@gobing-ai/spur-app';
 import { SPUR_ENV_VARS } from '@gobing-ai/spur-config';
-import { contract, type IntegrationsGatewayCounters } from '@gobing-ai/spur-contracts';
+import { contract, integrationsGatewayHealthSchema } from '@gobing-ai/spur-contracts';
 import { implement } from '@orpc/server';
 import type { ServerContext } from '../../context';
 import { bearerEnv } from '../../middleware/bearer-guard';
@@ -68,15 +68,17 @@ function gatewayPort(env: Record<string, string | undefined>): number {
 }
 
 /** Gateway counters from the gateway's own `/api/health` over loopback; a failure is reported, not thrown. */
-async function probeGateway(port: number): Promise<IntegrationsGatewayProbe> {
+async function probeGateway(port: number, since?: string): Promise<IntegrationsGatewayProbe> {
     try {
-        const res = await (probeFetch ?? platformFetch)(`http://localhost:${port}/api/health`, {
+        const url = new URL(`http://localhost:${port}/api/health`);
+        if (since !== undefined) url.searchParams.set('mcpSince', since);
+        const res = await (probeFetch ?? platformFetch)(url.href, {
             signal: AbortSignal.timeout(2_000),
         });
         if (!res.ok) return { counters: null, diagnostic: `/api/health answered ${res.status}` };
-        const body = (await res.json()) as { counters?: IntegrationsGatewayCounters };
-        if (body.counters === undefined) return { counters: null, diagnostic: '/api/health carries no counters' };
-        return { counters: body.counters };
+        const body = integrationsGatewayHealthSchema.safeParse(await res.json());
+        if (!body.success) return { counters: null, diagnostic: '/api/health carries no valid counters' };
+        return { ...body.data, mcp: body.data.mcp ?? { enabled: false, auth: { envName: '', tokenPresent: false } } };
     } catch (error) {
         return { counters: null, diagnostic: error instanceof Error ? error.message : String(error) };
     }
@@ -115,7 +117,7 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                         tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv),
                     };
                 },
-                gateway: async () => probeGateway(gatewayPort(bearerEnv(ctx))),
+                gateway: async (since) => probeGateway(gatewayPort(bearerEnv(ctx)), since),
             },
         });
 
@@ -140,6 +142,8 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
     return {
         status: os.integrations.status.handler(async ({ context }) => service().status(requestContextOf(context))),
 
-        usage: os.integrations.usage.handler(async ({ input }) => service().usage(input)),
+        usage: os.integrations.usage.handler(async ({ input, context }) =>
+            service().usage(input, requestContextOf(context)),
+        ),
     };
 }

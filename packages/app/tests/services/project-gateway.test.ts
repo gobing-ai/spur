@@ -289,6 +289,28 @@ describe('gateway handler (K4 R3/R4/R5)', () => {
         expect(html).toContain('&#60;script&#62;');
     });
 
+    it('reports windowed root MCP activity independently of gateway traffic', async () => {
+        const handler = createGatewayHandler(
+            deps({
+                listProjects: async () => [],
+                ensureUpstream: async () => 0,
+                mcp: async (request) =>
+                    new Response(null, { status: request.headers.has('authorization') ? 200 : 401 }),
+            }),
+        );
+        await handler(new Request('http://gw.test/'));
+        await handler(new Request('http://gw.test/mcp', { method: 'POST' }));
+        await handler(new Request('http://gw.test/mcp', { method: 'POST', headers: { authorization: 'fixture' } }));
+        const health = await handler(new Request('http://gw.test/api/health?mcpSince=1970-01-01T00:00:00.000Z'));
+        expect(await health.json()).toMatchObject({
+            mcpActivity: { calls: 2, failures: 1, authDenials: 1, lastCall: expect.any(String) },
+        });
+        const future = await handler(new Request('http://gw.test/api/health?mcpSince=2999-01-01T00:00:00.000Z'));
+        expect(await future.json()).toMatchObject({
+            mcpActivity: { calls: 0, failures: 0, authDenials: 0, lastCall: null },
+        });
+    });
+
     it('removes a registered project on POST /api/projects/remove and validates input', async () => {
         const removed: Array<{ path: string; host?: string }> = [];
         const handler = createGatewayHandler(

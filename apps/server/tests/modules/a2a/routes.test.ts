@@ -7,10 +7,10 @@
  * state held in memory that dies with the process, and a token that leaks into a response.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { registerSystemEventTap } from '@gobing-ai/spur-app';
+import { lanePath, registerSystemEventTap, resolveLaneRoot } from '@gobing-ai/spur-app';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -90,6 +90,7 @@ async function makeHarness(
             memberAddresses: async () =>
                 memberIds.map((instanceId) => ({
                     instanceId,
+                    localId: 'coder',
                     executor: 'claude',
                     enabled: true,
                     ...(options.role === undefined ? {} : { role: options.role }),
@@ -435,19 +436,48 @@ describe('a2a module — GetTask reads the receipt (R4)', () => {
         expect(task.metadata?.remoteBranch).toBe('sp/remote-e2e');
     });
 
-    test('a completed task in lane mode reports the project tree branch (1421 R5)', async () => {
-        // Lane mode on, and an A2A request key (`a2a:<member>:<messageId>`) that never matches the
-        // fleet task-key pattern — so the drain tree is the project tree, exactly as in the loop.
+    test('a completed task in lane mode reports the member worktree branch (1421 R5)', async () => {
+        await harness.close();
         harness = await makeHarness({ laneMode: true });
         const init = Bun.spawnSync({ cmd: ['git', 'init', '-b', 'main'], cwd: tempDir });
         expect(init.exitCode).toBe(0);
-        const sent = (await (await sendMessage('m-lane')).json()) as { task: { id: string } };
-        await seedRun(sent.task.id, 'exited');
-        await harness.inbox.reply(sent.task.id, MEMBER, 'lane work completed');
-        const task = (await (await harness.app.request(memberUrl(`tasks/${sent.task.id}`), authed())).json()) as {
-            metadata?: { remoteBranch?: string };
-        };
-        expect(task.metadata?.remoteBranch).toBe('main');
+        const commit = Bun.spawnSync({
+            cmd: [
+                'git',
+                '-c',
+                'user.name=Fixture',
+                '-c',
+                'user.email=fixture@example.test',
+                'commit',
+                '--allow-empty',
+                '-m',
+                'fixture',
+            ],
+            cwd: tempDir,
+        });
+        expect(commit.exitCode).toBe(0);
+        const laneRoot = resolveLaneRoot(tempDir, undefined);
+        mkdirSync(laneRoot);
+        try {
+            const lane = lanePath(tempDir, undefined, 'coder', 1);
+            const add = Bun.spawnSync({ cmd: ['git', 'worktree', 'add', '-b', 'lane/coder', lane], cwd: tempDir });
+            expect(add.exitCode).toBe(0);
+            const sent = (await (await sendMessage('m-lane')).json()) as { task: { id: string } };
+            const runId = await seedRun(sent.task.id, 'exited');
+            const branch = Bun.spawnSync({ cmd: ['git', 'branch', '--show-current'], cwd: lane });
+            expect(branch.exitCode).toBe(0);
+            // The agent loop records the actual lane branch beside this run's receipt.
+            const receiptDir = join(tempDir, '.spur', 'run', runId);
+            mkdirSync(receiptDir, { recursive: true });
+            await Bun.write(join(receiptDir, 'a2a-branch'), branch.stdout);
+            await harness.inbox.reply(sent.task.id, MEMBER, 'lane work completed');
+            const task = (await (await harness.app.request(memberUrl(`tasks/${sent.task.id}`), authed())).json()) as {
+                metadata?: { remoteBranch?: string };
+            };
+            expect(task.metadata?.remoteBranch).toBe('lane/coder');
+        } finally {
+            rmSync(laneRoot, { recursive: true, force: true });
+        }
     });
 
     test('an errored receipt is failed with the reason', async () => {

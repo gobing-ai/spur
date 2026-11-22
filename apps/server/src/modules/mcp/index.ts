@@ -7,12 +7,14 @@ import {
     type WorkflowRunResult,
     workflowToolDescriptor,
 } from '@gobing-ai/spur-app';
+import { normalizeTaskStatus } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { bearerEnv, bearerGuard } from '../../middleware/bearer-guard';
 import type { ServerModule } from '../types';
 import {
     handleMcpHttpRequest,
+    InvalidArgumentsError,
     type McpHandlerRegistry,
     type McpResourceDescriptor,
     type McpToolAnnotations,
@@ -34,17 +36,6 @@ import {
  */
 const READ_TOOL: McpToolAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
 const WRITE_TOOL: McpToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
-
-/**
- * A tool call whose ARGUMENTS are wrong (1421 R1). The class is the code: the emit site reads
- * `instanceof`, so a new validator message can never silently degrade to `tool_error`.
- */
-export class InvalidArgumentsError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'InvalidArgumentsError';
-    }
-}
 
 /** The harness tools the embedded server advertises (built-ins live in the `sp` namespace, task 1379 R1). */
 export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
@@ -171,6 +162,7 @@ export const TOOL_DESCRIPTORS: McpToolDescriptor[] = [
                 parentWbs: { type: 'string' },
                 folder: { type: 'string' },
             },
+            additionalProperties: false,
         },
     },
     {
@@ -464,7 +456,13 @@ class McpDispatcher implements McpHandlerRegistry {
             }
             case 'sp_task_transition': {
                 const wbs = requiredString(args, 'wbs');
-                const to = requiredString(args, 'to');
+                const rawTarget = requiredString(args, 'to');
+                let to: string;
+                try {
+                    to = normalizeTaskStatus(rawTarget);
+                } catch (error) {
+                    throw new InvalidArgumentsError(error instanceof Error ? error.message : String(error));
+                }
                 try {
                     const transitioned = await this.ctx.transitionTask({ wbs, toStatus: to });
                     return { ...transitioned };

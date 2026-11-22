@@ -480,7 +480,7 @@ export class InboxDao extends BaseDao {
      * reconciler pass). The default feed includes only requests; an exact `messageId`
      * also serves chat delivery receipts without classifying chat as unresolved work.
      */
-    async requests(toIds?: readonly string[], messageId?: string): Promise<InboxRequestRow[]> {
+    async requests(toIds?: readonly string[], messageId?: string, since?: number): Promise<InboxRequestRow[]> {
         if (toIds !== undefined && toIds.length === 0) return [];
         const params: unknown[] = [];
         const conditions: string[] = [];
@@ -493,6 +493,10 @@ export class InboxDao extends BaseDao {
             const start = params.length + 1;
             params.push(...toIds);
             conditions.push(`m.to_id IN (${placeholders(toIds, start)})`);
+        }
+        if (since !== undefined) {
+            params.push(since);
+            conditions.push(`m.updated_at >= ?${params.length}`);
         }
         const scope = conditions.join(' AND ');
         const rows = await this.adapter.queryAll<InboxRequestDbRow>(

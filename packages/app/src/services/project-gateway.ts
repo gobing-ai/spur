@@ -41,6 +41,7 @@ export interface GatewayDeps {
      * registry is built here (it needs `ensureUpstream`'s de-duplication) and handed in (task 1383).
      */
     mcp?: (req: Request, registry: McpGatewayRegistry) => Promise<Response>;
+    mcpAuth?: { envName: string; tokenPresent: boolean };
     /** The five `sp_*` built-in descriptors, supplied by `apps/server` (task 1383 R1). */
     builtinTools?: () => McpGatewayTool[];
     /** Project bearer token for upstream calls; the gateway env holds one shared value (closed Q&A). */
@@ -449,6 +450,39 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         status5xx: 0,
         upstreamRestarts: {} as Record<string, number>,
     };
+    const mcpTimes = new Map<number, { calls: number; failures: number; authDenials: number; lastCall: number }>();
+    const mcpTotal = { calls: 0, failures: 0, authDenials: 0, lastCall: 0 };
+    const maxMcpWindowSeconds = 7 * 24 * 60 * 60;
+
+    function mcpActivity(since: string | null) {
+        const cutoff = since === null ? NaN : Date.parse(since);
+        const result = { calls: 0, failures: 0, authDenials: 0, lastCall: 0 };
+        for (const sample of Number.isFinite(cutoff) ? mcpTimes.values() : [mcpTotal]) {
+            if (Number.isFinite(cutoff) && sample.lastCall < cutoff) continue;
+            result.calls += sample.calls;
+            result.failures += sample.failures;
+            result.authDenials += sample.authDenials;
+            result.lastCall = Math.max(result.lastCall, sample.lastCall);
+        }
+        return { ...result, lastCall: result.calls === 0 ? null : new Date(result.lastCall).toISOString() };
+    }
+
+    function countMcp(status: number): void {
+        const now = Date.now();
+        const second = Math.floor(now / 1000);
+        const bucket = mcpTimes.get(second) ?? { calls: 0, failures: 0, authDenials: 0, lastCall: 0 };
+        for (const sample of [bucket, mcpTotal]) {
+            sample.calls += 1;
+            if (status >= 400) sample.failures += 1;
+            if (status === 401) sample.authDenials += 1;
+            sample.lastCall = now;
+        }
+        mcpTimes.set(second, bucket);
+        for (const oldest of mcpTimes.keys()) {
+            if (oldest >= second - maxMcpWindowSeconds) break;
+            mcpTimes.delete(oldest);
+        }
+    }
 
     /** Registry identity of an entry: path *and* host, so two hosts never share gateway state. */
     function identityKey(entry: ProjectEntry): string {
@@ -482,7 +516,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         });
     }
 
-    function health(known: Array<{ entry: ProjectEntry; prefix: string }>): Response {
+    function health(known: Array<{ entry: ProjectEntry; prefix: string }>, mcpSince: string | null): Response {
         return Response.json({
             ok: true,
             gateway: true,
@@ -494,6 +528,12 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             })),
             // 1385 R2: additive — `isGatewayAnswering`/`probeGatewayPort` read only `gateway`.
             counters: { ...counters, upstreamRestarts: { ...counters.upstreamRestarts } },
+            ...(deps.mcp === undefined
+                ? {}
+                : {
+                      mcp: { enabled: true, auth: deps.mcpAuth ?? { envName: '', tokenPresent: false } },
+                      mcpActivity: mcpActivity(mcpSince),
+                  }),
         });
     }
 
@@ -934,7 +974,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         }
         const known = await localEntries();
         if (url.pathname === '/api/health') {
-            return health(known);
+            return health(known, url.searchParams.get('mcpSince'));
         }
 
         const segments = url.pathname.split('/');
@@ -968,6 +1008,9 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
 
     return async (req: Request): Promise<Response> => {
         const response = await handle(req);
+        if (deps.mcp !== undefined && req.method === 'POST' && new URL(req.url).pathname === '/mcp') {
+            countMcp(response.status);
+        }
         counters.requests += 1;
         if (response.status >= 500) counters.status5xx += 1;
         else if (response.status >= 400) counters.status4xx += 1;

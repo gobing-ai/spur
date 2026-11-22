@@ -19,10 +19,10 @@ export interface SummaryRow {
     state: ReturnType<typeof surfaceState>;
     endpoint: string;
     envName: string;
-    calls: number;
+    calls: number | null;
     errorRate: number | null;
     lastCall: string | null;
-    authDenials: number;
+    authDenials: number | null;
 }
 
 /** Sum the MCP tool statistics. */
@@ -62,6 +62,8 @@ export function summaryRows(
     const mcp = mcpTotals(usage);
     const a2a = a2aTotals(usage);
     const gateway = status.gateway.served ? status.gateway : null;
+    const gatewayActivity = usage?.gatewayMcpActivity;
+    const outboundActivity = usage?.outboundActivity;
     // Error rate is failures over total attempts, so a tool with 3 successes and 1 failure reads 25%.
     const rate = (errors: number, calls: number): number | null =>
         calls + errors === 0 ? null : errors / (calls + errors);
@@ -80,41 +82,35 @@ export function summaryRows(
         {
             surface: 'gateway-mcp',
             label: 'Gateway MCP',
-            // A gateway with unreadable counters is still ON; the strip below carries the failure.
-            state: gateway === null ? 'off' : 'on',
+            state: gateway?.mcp === undefined ? 'off' : surfaceState(gateway.mcp),
             endpoint: gateway === null ? 'not served under a gateway' : gateway.rootMcpUrl,
-            envName: 'SPUR_GATEWAY_MCP_AUTH_ENV',
-            calls: gateway?.counters?.requests ?? 0,
-            errorRate:
-                gateway?.counters === null || gateway === null || gateway.counters === undefined
-                    ? null
-                    : gateway.counters.requests === 0
-                      ? null
-                      : (gateway.counters.status5xx + gateway.counters.status4xx) / gateway.counters.requests,
-            lastCall: null,
-            authDenials: denialsFor(usage, 'gateway'),
+            envName: gateway?.mcp?.auth.envName ?? '',
+            calls: gatewayActivity?.calls ?? null,
+            errorRate: gatewayActivity?.calls ? gatewayActivity.failures / gatewayActivity.calls : null,
+            lastCall: gatewayActivity?.lastCall ?? null,
+            authDenials: gatewayActivity?.authDenials ?? null,
         },
         {
             surface: 'a2a-inbound',
             label: 'A2A inbound',
             state: surfaceState(status.a2a),
-            endpoint: `${status.a2a.basePath} (${status.a2a.inbound.length} member${status.a2a.inbound.length === 1 ? '' : 's'})`,
+            endpoint: status.a2a.url ?? status.a2a.basePath,
             envName: status.a2a.auth.envName,
             calls: a2a.calls,
-            errorRate: rate(a2a.errors, a2a.calls),
-            lastCall: a2aEvents[0]?.occurredAt ?? null,
+            errorRate: a2a.calls === 0 ? null : a2a.errors / a2a.calls,
+            lastCall: a2aEvents.find((event) => event.eventName === 'a2a.message.received')?.occurredAt ?? null,
             authDenials: denialsFor(usage, 'a2a'),
         },
         {
             surface: 'a2a-outbound',
             label: 'A2A outbound',
             state: status.a2a.outbound.length === 0 ? 'off' : 'on',
-            endpoint: `${status.a2a.outbound.length} outbound member${status.a2a.outbound.length === 1 ? '' : 's'}`,
+            endpoint: status.a2a.outbound.map((member) => member.target).join(', '),
             envName: '',
-            calls: 0,
-            errorRate: null,
-            lastCall: null,
-            authDenials: 0,
+            calls: outboundActivity?.calls ?? null,
+            errorRate: outboundActivity?.calls ? outboundActivity.failures / outboundActivity.calls : null,
+            lastCall: outboundActivity?.lastCall ?? null,
+            authDenials: outboundActivity?.authDenials ?? null,
         },
     ];
 }
@@ -174,10 +170,10 @@ export function SummaryTab({
                                     </td>
                                     <td className="font-mono text-xs break-all">{row.endpoint}</td>
                                     <td className="font-mono text-xs">{row.envName === '' ? '—' : row.envName}</td>
-                                    <td>{row.calls}</td>
+                                    <td>{row.calls ?? '—'}</td>
                                     <td>{row.errorRate === null ? '—' : `${Math.round(row.errorRate * 100)}%`}</td>
                                     <td>{when(row.lastCall)}</td>
-                                    <td>{row.authDenials}</td>
+                                    <td>{row.authDenials ?? '—'}</td>
                                 </tr>
                             ))}
                         </tbody>

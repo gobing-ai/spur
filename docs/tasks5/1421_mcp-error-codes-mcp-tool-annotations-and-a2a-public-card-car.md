@@ -4,7 +4,7 @@ name: MCP error codes, MCP tool annotations, and A2A public card, card skills an
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.285Z
-updated_at: "2026-11-22T05:03:47.501Z"
+updated_at: "2026-11-22T07:14:53.692Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
@@ -113,35 +113,35 @@ Out of scope: lane routing for A2A requests, per-run cancel (1422), the Board st
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: FAIL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 every MCP argument-validation failure returns `invalid_arguments`; unknown/renamed tool stays `unknown_tool`; service throws stay `tool_error` | MET | `apps/server/src/modules/mcp/index.ts:42` (`InvalidArgumentsError`), `:367` (declared-schema violation), `:293,298` (workflow-tool args), `:421,427` (`sp_task_update` argument rules), `:694` (instanceof classification; the suffix regex is deleted), `:711,734,738,667,670` (`requiredString`, map-of-strings, array checks) — pinned by `apps/server/tests/modules/mcp-module.test.ts:537` (unknown argument, enum, string/boolean/array, missing, map-of-strings, workflow tool) plus the `unknown_tool`/`tool_error` regression rows |
-| R2 all built-ins and every workflow-derived descriptor declare `readOnlyHint`/`destructiveHint`/`idempotentHint` | MET | `apps/server/src/modules/mcp/protocol.ts:33` (`McpToolAnnotations`), `apps/server/src/modules/mcp/index.ts:35-36` (frozen read/write pairs), `:53,63,82,106,121,140,164,178,187,201` (all ten), `packages/app/src/services/mcp-workflow-tools.ts:198` (workflow tools) — `apps/server/tests/modules/mcp-module.test.ts:659` |
-| R3 card route answers without a bearer token; every other `/a2a` route stays 401 + `auth.denied` | MET | `apps/server/src/modules/a2a/index.ts:236-256` (card route with no `authorize`, comment states the rule), lone `authorize` callers remain on send/get/cancel — `apps/server/tests/modules/a2a/routes.test.ts:259` (public card 200, send + get 401, two `auth.denied` events) |
-| R4 card `skills` derives from `role`/`purpose`, else one `general` skill | MET | `apps/server/src/modules/a2a/projection.ts:57-64` (input), `:83,105-112` (skill projection), `packages/app/src/services/fleet-service.ts:467` (`role`/`purpose` on the address), `apps/server/src/modules/a2a/index.ts:252-253` (route passes them) — `apps/server/tests/modules/a2a/projection.test.ts:53,66` and `apps/server/tests/modules/a2a/routes.test.ts:318` |
-| R5 completed A2A task reports the drain tree's branch via the shared `laneForRequestKey(...) ?? projectPath` rule | MET | `apps/server/src/modules/a2a/index.ts:137-148` (`drainTree`, reuses `laneForRequestKey` from `packages/app/src/services/worktree-lane-service.ts:42`), `:114` (`remoteBranch` reads that cwd), `:171` (`projectTask` passes `message.requestKey`) — `apps/server/tests/modules/a2a/routes.test.ts:438` (lane mode on, A2A key, project branch) |
-| Design satellites updated in the same change | MET | static-ref `docs/design/embedded-mcp-server.md` (annotations, typed error codes), `docs/design/a2a-member-transport.md` (public card, skills, drain tree, CSRF note) |
+| R1 | PARTIAL | apps/server/tests/modules/mcp-module.test.ts:537 proves the event classification for validation failures and the unknown-tool and service-error controls. apps/server/src/modules/mcp/protocol.ts:249 emits no response errorCode. |
+| R2 | MET | apps/server/tests/modules/mcp-module.test.ts:659 verifies built-ins and workflow descriptors with all three hints. |
+| R3 | MET | apps/server/tests/modules/a2a/routes.test.ts:259 verifies the public card, protected routes and auth.denied. |
+| R4 | MET | apps/server/tests/modules/a2a/projection.test.ts:53 and :66 verify declared and default skills. |
+| R5 | MET | apps/server/src/modules/a2a/index.ts:148 and :171 use the drain tree. apps/server/tests/modules/a2a/routes.test.ts:438 proves the task's approved project-tree behavior in lane mode. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — MCP argument-validation failures classify as invalid_arguments | MET | test | `apps/server/tests/modules/mcp-module.test.ts:537` (`bun test tests/modules/mcp-module.test.ts` → 39 pass) |
-| AC2 — MCP tool descriptors declare read and write annotations | MET | test | `apps/server/tests/modules/mcp-module.test.ts:659` |
-| AC3 — The A2A Agent Card is public while other A2A routes stay bearer-only | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:259` |
-| AC4 — The A2A Agent Card lists skills from the member declaration | MET | test | `apps/server/tests/modules/a2a/projection.test.ts:53`, `apps/server/tests/modules/a2a/routes.test.ts:318` |
-| AC5 — A2A remoteBranch reports the member's own working-tree branch | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:438` |
+| R1 — MCP argument-validation failures classify as invalid_arguments | PARTIAL | test | apps/server/tests/modules/mcp-module.test.ts:537 proves the event classification for validation failures and the unknown-tool and service-error controls. apps/server/src/modules/mcp/protocol.ts:249 emits no response errorCode. |
+| R2 — MCP tool descriptors declare read and write annotations | MET | test | apps/server/tests/modules/mcp-module.test.ts:659 verifies built-ins and workflow descriptors with all three hints. |
+| R3 — The A2A Agent Card is public while other A2A routes stay bearer-only | MET | test | apps/server/tests/modules/a2a/routes.test.ts:259 verifies the public card, protected routes and auth.denied. |
+| R4 — The A2A Agent Card lists skills from the member declaration | MET | test | apps/server/tests/modules/a2a/projection.test.ts:53 and :66 verify declared and default skills. |
+| R5 — A2A remoteBranch reports the member's own working-tree branch | UNMET | test | apps/server/tests/modules/a2a/routes.test.ts:438 expects the project branch even in lane mode. The 1421 Q&A excludes routing A2A work to a lane, so the feature's lane/dev case remains unmet. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: FAIL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No findings (verify verdict PASS) |
+| P2 | correctness | — | Feature R1 requires a response errorCode. apps/server/src/modules/mcp/protocol.ts:249 serializes the JSON-RPC code and message while apps/server/src/modules/mcp/index.ts:336 emits the classification to the ledger. |
+| P1 | correctness | — | Feature R5 requires lane/dev. apps/server/tests/modules/a2a/routes.test.ts:438 verifies that A2A drains use the project branch in lane mode, in line with the task's recorded Q&A. |
 
 ### References
 

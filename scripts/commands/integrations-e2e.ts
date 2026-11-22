@@ -21,7 +21,7 @@
  * the CDP harness lives in `apps/web/tests`, and a script under `scripts/` must not import it.
  */
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
@@ -99,10 +99,14 @@ process.exit(0);
 }
 
 /** The scratch project: one declared member, planning folders, nothing autostarted. */
-function scaffold(dir: string): string {
+function scaffold(dir: string, webDistPath?: string): string {
     mkdirSync(join(dir, '.spur'), { recursive: true });
     mkdirSync(join(dir, 'docs/tasks'), { recursive: true });
     mkdirSync(join(dir, 'docs/features'), { recursive: true });
+    if (webDistPath !== undefined) {
+        mkdirSync(join(dir, 'dist'));
+        symlinkSync(webDistPath, join(dir, 'dist/web'), 'dir');
+    }
     writeFileSync(
         join(dir, '.spur/config.yaml'),
         [
@@ -145,7 +149,7 @@ function scaffold(dir: string): string {
 }
 
 /** `spur self serve` for the scratch project, with both protocol surfaces on. */
-function startServe(dir: string, port: number): Subprocess<'ignore', 'pipe', 'pipe'> {
+function startServe(dir: string, port: number, mcpToken = MCP_TOKEN): Subprocess<'ignore', 'pipe', 'pipe'> {
     return spawn({
         cmd: ['bun', CLI, 'self', 'serve', '--port', String(port), '--host', '127.0.0.1', '--no-open'],
         cwd: dir,
@@ -158,7 +162,7 @@ function startServe(dir: string, port: number): Subprocess<'ignore', 'pipe', 'pi
             SPUR_SLASH_COMMANDS_FILE: join(dir, 'slash_commands.json'),
             SPUR_MCP_ENABLED: '1',
             SPUR_MCP_AUTH_ENV: MCP_AUTH_ENV,
-            [MCP_AUTH_ENV]: MCP_TOKEN,
+            [MCP_AUTH_ENV]: mcpToken,
             SPUR_A2A_ENABLED: '1',
             SPUR_A2A_AUTH_ENV: A2A_AUTH_ENV,
             [A2A_AUTH_ENV]: A2A_TOKEN,
@@ -223,10 +227,13 @@ function record(
 }
 
 /** Drive the whole protocol leg and write the receipt. Returns the process exit code. */
-export async function runIntegrationsE2e(args: string[] = []): Promise<number> {
+export async function runIntegrationsE2e(
+    args: string[] = [],
+    board?: { webDistPath: string; verifyBoard: (root: string) => Promise<string> },
+): Promise<number> {
     const keep = args.includes('--keep');
     const scratch = mkdtempSync(join(tmpdir(), 'spur-integrations-e2e-'));
-    const binDir = scaffold(scratch);
+    const binDir = scaffold(scratch, board?.webDistPath);
     const port = await freePort();
     const root = `http://127.0.0.1:${port}`;
     const member = `${scratch.split('/').pop() ?? 'scratch'}-${MEMBER_LOCAL}`;
@@ -258,23 +265,28 @@ export async function runIntegrationsE2e(args: string[] = []): Promise<number> {
         if (healthy !== true) throw new Error('spur self serve never became healthy');
 
         // ── R2 / F1 — an argument-validation failure is `invalid_arguments` ──────────────
-        const badCall = await mcp(root, {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'tools/call',
-            params: { name: 'sp_task_update', arguments: { wbs: '0001', bogus: 'x' } },
-        });
+        const badCalls = await Promise.all(
+            [
+                { name: 'sp_task_list', arguments: { bogus: 'x' } },
+                { name: 'sp_task_transition', arguments: { wbs: '0001', to: 'invalid' } },
+                { name: 'sp_workflow_run', arguments: { name: 1 } },
+            ].map((params, index) => mcp(root, { jsonrpc: '2.0', id: index + 1, method: 'tools/call', params })),
+        );
         const failedEvent = await newestEvent(root, 'mcp.tool.failed');
         const errorCode = failedEvent?.errorCode;
+        const correct = badCalls.filter(({ status, json }) => {
+            const body = json as { error?: { errorCode?: string } } | null;
+            return status === 500 && body?.error?.errorCode === 'invalid_arguments';
+        }).length;
         record(rows, {
             step: 'mcp-invalid-arguments',
             requirement: 'R2 / F1',
-            command: 'POST /mcp tools/call sp_task_update {bogus}',
-            httpStatus: badCall.status,
+            command: 'POST /mcp tools/call with unknown argument, invalid status and non-string name',
+            httpStatus: badCalls[0]?.status ?? null,
             exitCode: null,
-            passed: badCall.status === 500 && errorCode === 'invalid_arguments',
-            expected: 'http 500 and mcp.tool.failed errorCode=invalid_arguments',
-            evidence: `http ${badCall.status} errorCode=${String(errorCode)}`,
+            passed: correct === badCalls.length && errorCode === 'invalid_arguments',
+            expected: 'all three responses and the failure event classify as invalid_arguments',
+            evidence: `${correct}/${badCalls.length} responses classified; event errorCode=${String(errorCode)}`,
         });
 
         // ── R2 / F2 — every advertised tool carries annotations ──────────────────────────
@@ -304,7 +316,7 @@ export async function runIntegrationsE2e(args: string[] = []): Promise<number> {
         record(rows, {
             step: 'a2a-card-public',
             requirement: 'R2 / F3, F4',
-            command: `GET ${cardPath} (no bearer token)`,
+            command: 'GET /a2a/members/<member>/.well-known/agent-card.json (no bearer token)',
             httpStatus: cardRes.status,
             exitCode: null,
             passed: cardRes.status === 200 && skillIds.length > 0,
@@ -447,6 +459,50 @@ export async function runIntegrationsE2e(args: string[] = []): Promise<number> {
                 status.a2a?.enabled,
             )} gatewayServed=${String(status.gateway?.served)}`,
         });
+        if (board !== undefined) {
+            // The server reads its bearer environment at startup. Keep the project and ledger.
+            serve.kill();
+            await serve.exited;
+            serve = startServe(scratch, port, '');
+            const ready = await pollUntil(async () => {
+                try {
+                    return (await fetch(`${root}/api/health`)).ok ? true : undefined;
+                } catch {
+                    return undefined;
+                }
+            }, 45_000);
+            if (!ready) throw new Error('Board serve never became healthy');
+            const boardReads = [
+                '/api/integrations/status',
+                '/api/integrations/usage',
+                '/api/events/history?prefix=mcp',
+                '/api/events/history?prefix=a2a',
+                '/api/events/history?prefix=auth',
+                '/api/inbox/requests?limit=100',
+            ];
+            await Promise.all(
+                boardReads.map(async (path) => {
+                    const response = await fetch(`${root}${path}`, { signal: AbortSignal.timeout(5_000) });
+                    if (!response.ok) {
+                        throw new Error(
+                            `${path} returned ${response.status}: ${(await response.text()).slice(0, 500)}`,
+                        );
+                    }
+                    await response.body?.cancel();
+                }),
+            );
+            const evidence = await board.verifyBoard(root);
+            record(rows, {
+                step: 'integrations-board',
+                requirement: 'R11 / R14',
+                command: 'Chromium GET /board/integrations against the live served project',
+                httpStatus: 200,
+                exitCode: null,
+                passed: true,
+                expected: 'four Summary rows, MCP token-unset error, A2A on and light/dark screenshots',
+                evidence,
+            });
+        }
     } catch (error) {
         record(rows, {
             step: 'harness',

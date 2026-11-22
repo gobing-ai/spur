@@ -19,6 +19,10 @@
 /** Oldest protocol version this adapter accepts; `YYYY-MM-DD` versions compare lexicographically. */
 export const MIN_MCP_PROTOCOL_VERSION = '2026-07-28';
 
+export class InvalidArgumentsError extends Error {
+    override name = 'InvalidArgumentsError';
+}
+
 /** One tool advertised by the embedded server (task 1372 wires the real harness tools). */
 export interface McpToolDescriptor {
     /** Tool name a client passes to `tools/call` (e.g. `sp_task_show`). */
@@ -86,6 +90,7 @@ class McpProtocolError extends Error {
         readonly code: string,
         readonly rpcCode: number,
         message: string,
+        readonly errorCode?: 'invalid_arguments',
     ) {
         super(message);
         this.name = 'McpProtocolError';
@@ -251,10 +256,15 @@ function errorResponse(
     call: McpCall | undefined,
     headers: Record<string, string> = {},
 ): Response {
+    const classification = error.errorCode === undefined ? {} : { errorCode: error.errorCode };
     const payload =
         call?.envelope === true
-            ? { jsonrpc: '2.0', id: call.id ?? null, error: { code: error.rpcCode, message: error.message } }
-            : { error: { code: error.code, message: error.message } };
+            ? {
+                  jsonrpc: '2.0',
+                  id: call.id ?? null,
+                  error: { code: error.rpcCode, message: error.message, ...classification },
+              }
+            : { error: { code: error.code, message: error.message, ...classification } };
     return jsonResponse(payload, error.status, headers);
 }
 
@@ -320,6 +330,18 @@ export async function handleMcpHttpRequest(req: Request, registry: McpHandlerReg
         const body = call.envelope ? { jsonrpc: '2.0', id: call.id ?? null, result: payload } : payload;
         return wantsSse(req) ? sseResponse(body) : jsonResponse(body, 200);
     } catch (error) {
+        if (error instanceof InvalidArgumentsError) {
+            return errorResponse(
+                new McpProtocolError(
+                    500,
+                    'INTERNAL_ERROR',
+                    -32603,
+                    `the handler failed: ${error.message}`,
+                    'invalid_arguments',
+                ),
+                call,
+            );
+        }
         const protocolError =
             error instanceof McpProtocolError
                 ? error
