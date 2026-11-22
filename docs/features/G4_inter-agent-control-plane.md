@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-13T04:47:58.316Z"
-updated_at: "2026-10-21T18:35:09.748Z"
+updated_at: "2026-11-22T17:30:51.878Z"
 ---
 
 # G4: Inter-agent control plane
@@ -123,6 +123,12 @@ Waves 1–2 (0529/0530) landed 2026-08-13. Wave 3 follow helper (`followSystemEv
 Wave 2 verbs landed under ADR-051 consent granted by ADR-057 / G4 (0529-0530).
 G3 (Board un-merge) is a sibling feature, not this one.
 Authority retained, not forked: G61–G64 (project agent fleet program) consume occupant identity, identity-pinned wait, and coordination run records — G61 extended `coordination_runs` rather than forking a receipt table, and spec ids stayed the mailbox identity across 0847's roster conversion (G64 reconciliation, task 0851, 2026-09-13).
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature G4 --agent inline --auto --force --focus all --fix all`, then `spur feature sync G4`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

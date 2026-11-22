@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-27T23:59:30.558Z"
-updated_at: "2026-09-09T19:24:39.216Z"
+updated_at: "2026-11-22T17:30:35.340Z"
 ---
 
 # F31: Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-featurechange
@@ -132,6 +132,12 @@ Ship a dogfood-ready restructure kit (audit map + hierarchy guide + `/sp:dev-fea
 | 0357 | Refine hierarchy design reference (seed: hierarchy-mece.md) | 0356 |
 | 0358 | Write docs/plans/feature-tree-restructure-map.md | 0356 |
 | 0359 | Author /sp:dev-feature-change | 0357 + 0358 |
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F31 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F31`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 - 2026-07-28T00:00:44.344Z backlog → active (system)

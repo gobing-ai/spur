@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: [group, rd3-migration]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-21T18:38:16.915Z"
+updated_at: "2026-11-22T17:31:07.770Z"
 ---
 
 # F: Planning
@@ -46,6 +46,12 @@ The planning layer now includes the task/feature API and Board capabilities deli
 
 The rd3-migration core. Children F1–F6 map to design waves W0–W2 + the migration tool.
 Authoritative design: `docs/design/rd3-migration-design.md` (Accepted 2026-06-12).
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F --agent inline --auto --force --focus all --fix all`, then `spur feature sync F`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

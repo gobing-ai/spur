@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.189Z"
-updated_at: "2026-11-22T07:43:08.544Z"
+updated_at: "2026-11-22T17:30:53.171Z"
 ---
 
 # G63: Projects board module and global input wiring
@@ -304,6 +304,12 @@ against the current tree; all are corrected in the tasks, not deferred.
   untouched.
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync G63`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature G63 --agent inline --auto --force --focus all --fix all`, then `spur feature sync G63`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-09T22:47:56.455Z"
-updated_at: "2026-07-28T00:31:32.943Z"
+updated_at: "2026-11-22T17:31:06.621Z"
 ---
 
 # L: System Events Payload and Wiring Enrichment
@@ -155,6 +155,12 @@ Feature: System Events Payload and Wiring Enrichment
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature J2 --agent inline --auto --force --focus all --fix all`, then `spur feature sync J2`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 - 2026-07-09T23:06:50.530Z backlog → active (system)

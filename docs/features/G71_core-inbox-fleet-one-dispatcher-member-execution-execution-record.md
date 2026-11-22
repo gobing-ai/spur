@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-04T20:29:21.149Z"
-updated_at: "2026-10-08T08:16:16.182Z"
+updated_at: "2026-11-22T17:31:27.516Z"
 ---
 
 # G71: Core inbox fleet: one dispatcher, member execution, execution record
@@ -82,6 +82,12 @@ Feature: Core inbox fleet: one dispatcher, member execution, execution record
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature G71 --agent inline --auto --force --focus all --fix all`, then `spur feature sync G71`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

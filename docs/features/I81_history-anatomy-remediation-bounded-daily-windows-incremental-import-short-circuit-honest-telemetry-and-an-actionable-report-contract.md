@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-26T05:33:47.266Z"
-updated_at: "2026-11-10T20:11:37.295Z"
+updated_at: "2026-11-22T17:31:04.341Z"
 ---
 
 # I81: History-anatomy remediation: bounded daily windows, incremental import short-circuit, honest telemetry, and an actionable report contract
@@ -233,6 +233,12 @@ Feature: History-anatomy remediation: bounded daily windows, incremental import 
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature I81 --agent inline --auto --force --focus all --fix all`, then `spur feature sync I81`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

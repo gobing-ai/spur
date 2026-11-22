@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: []
 created_at: "2026-09-06T19:44:10.927Z"
-updated_at: "2026-11-22T07:43:23.219Z"
+updated_at: "2026-11-22T17:31:24.291Z"
 ---
 
 # F21: Consistent task creation and default implementation readiness
@@ -103,6 +103,12 @@ Delivery is scheduled after the D6 workflow repair batch ending at 0786. Two tas
 Approved design: docs/design/task-creation-readiness.md; decision ADR-109. The operator approved the direction and design gate on 2026-09-06 and explicitly asked to avoid overly small tasks. This feature is planned, not implemented.
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F21`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F21 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F21`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

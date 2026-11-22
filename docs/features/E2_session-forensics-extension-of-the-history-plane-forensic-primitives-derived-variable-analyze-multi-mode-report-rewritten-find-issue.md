@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-08-10T00:02:13.084Z"
-updated_at: "2026-11-22T07:43:07.207Z"
+updated_at: "2026-11-22T17:30:47.918Z"
 ---
 
 # E2: Session-forensics extension of the history plane: forensic primitives, derived-variable analyze, multi-mode report, rewritten find-issue
@@ -239,6 +239,12 @@ Consciously deferred past the destination (implementation-batch concerns, not ma
   flat.
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync E2`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature E2 --agent inline --auto --force --focus all --fix all`, then `spur feature sync E2`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

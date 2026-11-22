@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-10T05:19:09.284Z"
-updated_at: "2026-11-22T07:43:26.052Z"
+updated_at: "2026-11-22T17:31:30.392Z"
 ---
 
 # H16: Faster default quality gate while keeping per-file 90/90 coverage
@@ -135,6 +135,12 @@ Robin approved this plan and requested feature updates/new features and implemen
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync H16`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature H16 --agent inline --auto --force --focus all --fix all`, then `spur feature sync H16`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

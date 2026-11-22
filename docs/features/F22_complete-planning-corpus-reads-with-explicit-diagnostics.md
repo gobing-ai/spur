@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: []
 created_at: "2026-11-05T19:58:26.056Z"
-updated_at: "2026-11-22T07:43:20.464Z"
+updated_at: "2026-11-22T17:31:14.402Z"
 ---
 
 # F22: Complete planning corpus reads with explicit diagnostics
@@ -58,6 +58,12 @@ Robin approved this plan and requested feature updates/new features and implemen
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Evidence: `docs/reports/2026-11-05-codebase-review.md`. No implementation is claimed by this planning campaign.
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F22`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F22 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F22`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

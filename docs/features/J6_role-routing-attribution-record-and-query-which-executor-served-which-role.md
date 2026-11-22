@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-14T00:18:07.003Z"
-updated_at: "2026-08-24T17:41:17.284Z"
+updated_at: "2026-11-22T17:31:15.615Z"
 ---
 
 # J6: Role routing attribution: record and query which executor served which role
@@ -129,6 +129,7 @@ Feature: Role routing attribution
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 ### Sequencing
 
 Blocked on feature B2 task 0536, which makes the routing decision explicit enough to record. Before
@@ -178,6 +179,13 @@ rows reads as *unmeasured*, never as zero tokens. Fixing ingestion is E1's job, 
 - Parallel fan-out attribution: whether each subagent dispatched by `sp:parallel-execution` carries
   its own role or inherits the parent's is still an open question in feature B2's fog, not an
   implementation. It needs deciding before it can be attributed.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature J6 --agent inline --auto --force --focus all --fix all`, then `spur feature sync J6`. No feature completion PASS or status override is asserted by this Notes entry.
+
 ## History
 - 2026-08-14T22:31:27.396Z backlog → active (system)
 - 2026-08-24T17:41:17.284Z active → verifying (system)

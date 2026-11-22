@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-22T06:44:57.242Z"
-updated_at: "2026-10-26T03:12:53.561Z"
+updated_at: "2026-11-22T17:30:46.531Z"
 ---
 
 # G75: Verified live-session fleet participation
@@ -90,6 +90,12 @@ Feature: Verified live-session fleet participation
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature G75 --agent inline --auto --force --focus all --fix all`, then `spur feature sync G75`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

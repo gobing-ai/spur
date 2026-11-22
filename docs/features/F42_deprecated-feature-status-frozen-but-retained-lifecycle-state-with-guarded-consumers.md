@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-12T05:18:10.497Z"
-updated_at: "2026-10-12T08:41:48.453Z"
+updated_at: "2026-11-22T17:30:57.243Z"
 ---
 
 # F42: Deprecated feature status: frozen-but-retained lifecycle state with guarded consumers
@@ -101,6 +101,12 @@ Feature: Deprecated feature status
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-failed`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F42 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F42`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

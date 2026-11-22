@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-10-13T16:46:48.295Z"
-updated_at: "2026-11-22T07:43:11.271Z"
+updated_at: "2026-11-22T17:31:00.880Z"
 ---
 
 # F43: Task-level deprecated status: frozen-but-retained task lifecycle state with guarded consumers
@@ -118,6 +118,12 @@ Feature: Task-level deprecated status
 ## Notes
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync F43`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-failed`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F43 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F43`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-15T05:09:07.437Z"
-updated_at: "2026-10-21T18:35:11.141Z"
+updated_at: "2026-11-22T17:31:03.193Z"
 ---
 
 # G65: Fleet declaration in spur config
@@ -131,6 +131,12 @@ Feature: Fleet declaration in spur config
 ### Current reading — 2026-10-21
 
 G72 supersedes spec materialization: FleetService.specs derives enabled fleet specs in memory, without writing .spur/agents. agent.fleet declaration, enabled gating and strategy reconciliation remain current.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature G65 --agent inline --auto --force --focus all --fix all`, then `spur feature sync G65`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

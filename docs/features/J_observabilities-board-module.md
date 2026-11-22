@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:28.509Z"
-updated_at: "2026-10-21T18:39:49.351Z"
+updated_at: "2026-11-22T17:31:16.826Z"
 ---
 
 # J: Observabilities board module
@@ -141,6 +141,12 @@ Feature: Observabilities board module
 ### Current reading — 2026-10-21
 
 G64 retired the standalone Inbox/Teams module composition; G11 owns Projects → Inbox and its typed message plane. Observability events, traces and job surfaces remain live; the original Inbox-tab scope below is historical.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature J --agent inline --auto --force --focus all --fix all`, then `spur feature sync J`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 - 2026-07-13T23:29:36.969Z backlog → active (system)

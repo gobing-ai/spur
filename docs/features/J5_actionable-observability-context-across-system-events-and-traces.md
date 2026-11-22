@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-12T13:20:43.346Z"
-updated_at: "2026-08-12T16:55:01.138Z"
+updated_at: "2026-11-22T17:30:34.146Z"
 ---
 
 # J5: Actionable observability context across System Events and traces
@@ -126,6 +126,12 @@ Scenario: R10 — Malformed or unknown event data fails safe
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature J5 --agent inline --auto --force --focus all --fix all`, then `spur feature sync J5`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 - 2026-08-12T13:25:01.024Z backlog → active (system)

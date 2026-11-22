@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-07-29T21:43:01.773Z"
-updated_at: "2026-11-22T07:43:27.412Z"
+updated_at: "2026-11-22T17:31:31.672Z"
 ---
 
 # H51: Batch execution reliability guardrails
@@ -90,6 +90,12 @@ Feature: Batch execution reliability guardrails
 ## Notes
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync H51`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `active`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature H51 --agent inline --auto --force --focus all --fix all`, then `spur feature sync H51`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

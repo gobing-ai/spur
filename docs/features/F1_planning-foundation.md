@@ -6,7 +6,7 @@ status: verifying
 priority: P0
 tags: [rd3-migration, wave-0]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-11-16T05:12:44.199Z"
+updated_at: "2026-11-22T17:31:29.001Z"
 ---
 
 # F1: Planning foundation
@@ -76,6 +76,12 @@ The planning substrate is implemented. Active-P0/manual-roster statements below 
 **The active P0 goal** (one-active-goal rule). Design: rd3-migration-design.md §2 (data), §3.3
 (BDD), §4.2 (locks), §13 (consolidation). Tasks table hand-seeded until `spur feature refresh`
 ships (W2); statuses shown are at creation time.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F1 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F1`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

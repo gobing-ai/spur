@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-22T17:57:17.763Z"
-updated_at: "2026-11-22T08:00:50.168Z"
+updated_at: "2026-11-22T17:30:32.898Z"
 ---
 
 # K3: Project registry freshness: purge non-existent projects, kill orphaned serve ports, and clean worktree leftovers
@@ -85,6 +85,12 @@ Scenario: R4 — Cleanup projects.json on worktree removal across plugins/sp
 ## Notes
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync K3`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature K3 --agent inline --auto --force --focus all --fix all`, then `spur feature sync K3`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

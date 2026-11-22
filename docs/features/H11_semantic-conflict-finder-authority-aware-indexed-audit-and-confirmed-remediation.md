@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-09T03:34:12.390Z"
-updated_at: "2026-08-24T17:40:58.172Z"
+updated_at: "2026-11-22T17:30:45.194Z"
 ---
 
 # H11: Semantic conflict finder: authority-aware indexed audit and confirmed remediation
@@ -126,6 +126,12 @@ None at map level; 0486 owns the remaining design and implementation details.
 - A fixed global `docs > features > tasks > code` precedence rule.
 - Cross-repository comparison.
 - Broad historical cleanup without evidence.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature H11 --agent inline --auto --force --focus all --fix all`, then `spur feature sync H11`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 - 2026-08-24T17:40:57.802Z backlog → active (system)

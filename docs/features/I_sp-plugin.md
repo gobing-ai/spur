@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: ["group"]
 created_at: "2026-08-11T21:13:55.867Z"
-updated_at: "2026-10-08T08:15:11.951Z"
+updated_at: "2026-11-22T17:30:59.767Z"
 ---
 
 # I: sp plugin
@@ -53,11 +53,19 @@ Feature: sp plugin capability ownership
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 Feature I is the active `sp` plugin umbrella. I1 records the completed hands-off lifecycle delivery;
 I11 records its narrower dev-idea taste gate; I2 owns the active spur-dev/spur-cli parity audit.
 
 Boundary approved 2026-08-11: B owns runtime agent execution, I owns the plugin harness, and H is
 frozen historical structure pending a separate child-by-child audit.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature I --agent inline --auto --force --focus all --fix all`, then `spur feature sync I`. No feature completion PASS or status override is asserted by this Notes entry.
+
 ## History
 
 - 2026-08-11T21:14:58.855Z backlog → active (system)

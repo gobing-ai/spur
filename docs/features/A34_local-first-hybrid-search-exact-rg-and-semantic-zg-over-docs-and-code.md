@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-11-03T16:48:14.451Z"
-updated_at: "2026-11-16T06:07:58.034Z"
+updated_at: "2026-11-22T17:30:37.877Z"
 ---
 
 # A34: Local-first hybrid search: exact (rg) and semantic (zg) over docs and code
@@ -189,6 +189,12 @@ Feature: Local-first hybrid search: exact (rg) and semantic (zg) over docs and c
 Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
 
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-failed`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature A34 --agent inline --auto --force --focus all --fix all`, then `spur feature sync A34`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

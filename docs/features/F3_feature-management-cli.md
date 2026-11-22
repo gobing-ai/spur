@@ -6,7 +6,7 @@ status: verifying
 priority: P1
 tags: [rd3-migration, wave-2]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-10-08T17:38:10.011Z"
+updated_at: "2026-11-22T17:31:05.477Z"
 ---
 
 # F3: Feature management CLI
@@ -71,6 +71,12 @@ Feature: Feature management CLI
 This very file tree (A–H groups + leaves) is the first corpus — created by hand pre-CLI, so W2
 verbs must accept it as already-valid input (dogfood check). `move` is a surface addition: sync
 delivery doc + 04_DESIGN when built (task 0061).
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature F3 --agent inline --auto --force --focus all --fix all`, then `spur feature sync F3`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

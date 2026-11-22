@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-14T00:47:16.086Z"
-updated_at: "2026-08-24T17:41:07.650Z"
+updated_at: "2026-11-22T17:30:58.523Z"
 ---
 
 # I4: Subagent role propagation across parallel fan-out
@@ -70,6 +70,7 @@ Feature: Subagent role propagation across parallel fan-out
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 ### The default is inherit, and that is a deliberate choice
 
 Declared-wins-over-inherited is the rule because the alternative fails in the expensive direction: a
@@ -89,6 +90,13 @@ visibility exists.
 
 Needs feature B2's `--agent <role>` (task 0536) to exist before a role can propagate, and pairs
 naturally with feature J6 task 0545, which records whatever this feature makes correct.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature I4 --agent inline --auto --force --focus all --fix all`, then `spur feature sync I4`. No feature completion PASS or status override is asserted by this Notes entry.
+
 ## History
 - 2026-08-24T17:41:07.309Z backlog → active (system)
 - 2026-08-24T17:41:07.650Z active → verifying (system)

@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-29T00:09:27.959Z"
-updated_at: "2026-10-21T18:39:49.685Z"
+updated_at: "2026-11-22T17:30:49.309Z"
 ---
 
 # J3: Observability data plane: event ingestion, retention, correlation, and run/team read APIs
@@ -284,6 +284,12 @@ Feature: Observability data plane
 ### Current reading — 2026-10-21
 
 G65/G72 retired team event/config/instance vocabulary while preserving event ingestion, retention, correlation and read APIs. The original team-specific promises below describe the former runtime.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature J3 --agent inline --auto --force --focus all --fix all`, then `spur feature sync J3`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 - 2026-07-29T03:47:01.587Z backlog → active (system)

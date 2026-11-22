@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-29T23:10:15.460Z"
-updated_at: "2026-08-12T07:52:15.566Z"
+updated_at: "2026-11-22T17:31:19.533Z"
 ---
 
 # K: Features module (Spur Board)
@@ -56,12 +56,20 @@ Scenario: R2 — Project switcher is a child of K
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 - **F8 relationship:** F8 ("Features board module") and F81/F82 already implement much of the
   Features tree UI under Planning (F). K is the product umbrella for Features *module* board work
   going forward; do not duplicate F8's Goal. Prefer `spur feature create --parent K` for new
   Features-module slices that are not natural F8 children; reparent later if MECE audit requires.
 - **K1** is multi-project board identity (sidebar switcher), not the Features tree UI itself.
 - Design: `docs/design/project-switcher.md` (K1); ADR-037.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-missing`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature K --agent inline --auto --force --focus all --fix all`, then `spur feature sync K`. No feature completion PASS or status override is asserted by this Notes entry.
+
 ## History
 - 2026-08-12T07:52:15.301Z backlog → active (system)
 - 2026-08-12T07:52:15.566Z active → verifying (system)

@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-14T01:03:25.438Z"
-updated_at: "2026-11-22T07:52:46.839Z"
+updated_at: "2026-11-22T17:30:31.425Z"
 ---
 
 # E5: Session forensics implementation: retention, derived variables, report modes, find-issue rewrite
@@ -202,6 +202,12 @@ not be replaced.
 - TTFT/generation split — deferred by 0491; the artifact carries no intra-call latency fields.
 
 - Deferred 2026-11-22: status drift not applied — tasks are all terminal but no feature-scoped verification receipt exists for the current tree. Follow-up: `/sp-dev-verify-all` (runs `spur feature verify` per feature), then `spur feature sync E5`.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature E5 --agent inline --auto --force --focus all --fix all`, then `spur feature sync E5`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-16T18:12:23.631Z"
-updated_at: "2026-10-17T00:40:56.315Z"
+updated_at: "2026-11-22T17:30:54.537Z"
 ---
 
 # L1: PR review and branch topology for daily use
@@ -176,6 +176,12 @@ Feature: PR review and branch topology for daily use
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature L1 --agent inline --auto --force --focus all --fix all`, then `spur feature sync L1`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 

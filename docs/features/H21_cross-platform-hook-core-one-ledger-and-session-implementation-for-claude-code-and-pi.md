@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-26T06:12:07.748Z"
-updated_at: "2026-10-11T00:34:15.061Z"
+updated_at: "2026-11-22T17:30:39.281Z"
 ---
 
 # H21: Cross-platform hook core: one ledger and session implementation for Claude Code and Pi
@@ -66,6 +66,12 @@ Feature: Cross-platform hook core: one ledger and session implementation for Cla
 
 - Origin: `/sp:dev-review plugins` 2026-09-25, architecture candidate "Pi extension duplicates the ledger/session core" (major, tight coupling + weak locality). Small findings from the same review were fixed directly in 2d430c7f5 and 3571e710a on `fix/plugins-review-minors`.
 - Implementation-ready task: see Tasks.
+
+### A83 forced-verification reconciliation — 2026-11-22
+
+Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-stale`; feature status was `verifying`. A valid completion receipt is not available for the current inputs. Running another feature’s full verification and repairing its implementation are outside this A83 corpus-reconciliation task; certification is explicitly deferred, not bypassed.
+
+Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature H21 --agent inline --auto --force --focus all --fix all`, then `spur feature sync H21`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
 
