@@ -8,6 +8,65 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.43] - 2026-11-22
+
+### Added
+- an idea run files every deferred follow-up as a feature and records the ledger, so discovery findings stop vanishing between planning and delivery (042b8a5a3)
+  <!-- src: config/workflows/idea-pipeline.yaml:182 · confidence: HIGH -->
+- a fail-closed follow-up-ledger completeness check in the idea handoff, so a dangling inventory id blocks the run instead of shipping silently (1b9070769)
+  <!-- src: packages/app/src/workflow/idea-handoff.ts:123 · confidence: HIGH -->
+- the Integrations Board module: an always-mounted status contract over the MCP and A2A surfaces, publicity and annotation fixes in both protocols, and an E2E proof with a repeatable receipt (9bb759349)
+  <!-- src: packages/contracts/src/integrations.ts:219, apps/server/src/modules/integrations/handlers.ts:88 · confidence: HIGH -->
+- an explicit MCP protocol-revision policy (accepted = any revision at or above `2026-07-28`; pre-2.0 only through `spur mcp`) and a real-agent interop harness that records what the proxy saw, per agent and transport (a765decc2)
+  <!-- src: apps/server/src/modules/mcp/protocol.ts:134, scripts/commands/mcp-agent-interop.ts:616 · confidence: HIGH -->
+- every built-in Board module renders through one module kit — shared shell, header, tabs with badge and roving arrow keys, and a single icon table keyed by module id — with a browser proof per module (c7b8f3556)
+  <!-- src: apps/web/src/components/module-kit/ModuleTabs.tsx:11, apps/web/src/components/ModuleIcon.tsx:45 · confidence: HIGH -->
+- interop rows carry the requested revision, the tool called, its count, the outcome and a timestamp, and agent output passes through the shared redaction and bounding helpers; the harness has its own suite (e81a0261e)
+  <!-- src: scripts/commands/mcp-agent-interop.ts:42, scripts/commands/mcp-agent-interop.ts:27 · confidence: HIGH -->
+
+### Fixed
+- adopt the typed `ts-ai-decision` 0.8.4 build so the decision maker stops failing every call with a body-reuse error (6b4db06b4)
+  <!-- src: package.json:33 · confidence: HIGH -->
+- the decision-maker verification records the rebuilt installed bundle and an isolated-database run instead of the earlier diagnosis counts (1d9cc2c69)
+  <!-- src: config/config.global.yaml:169 · confidence: HIGH -->
+- keep project-switcher registry warnings readable: the panel scrolls and wraps long paths (288fd4db4)
+  <!-- src: apps/web/src/components/ProjectSwitcher.tsx:443 · confidence: HIGH -->
+- A2A lane tasks report the branch their worktree recorded, the gateway health block carries MCP enablement, and MCP argument validation is one `invalid_arguments` class (495d1b8f7)
+  <!-- src: apps/server/src/modules/a2a/index.ts:144, apps/server/src/gateway.ts:93 · confidence: HIGH -->
+- stop the health module double-reporting a duplicate project path as both a suspect and a finding (bff78aef5)
+  <!-- src: apps/server/src/modules/health/index.ts:467 · confidence: HIGH -->
+- align the migrated Board shells: tabpanel wiring, a full-bleed task board, the loading state inside the shell, and `integrations` resolving to its own vector icon (c9614c38c)
+  <!-- src: apps/web/src/components/module-kit/ModuleTabs.tsx:76, apps/web/src/components/ModuleIcon.tsx:45 · confidence: HIGH -->
+- the integrations E2E accepts a receipt path, so an automated verification run stops rewriting its own tracked inputs (f0c966912)
+  <!-- src: scripts/commands/integrations-e2e.ts:235 · confidence: HIGH -->
+- a resolvable follow-up must be the feature that was asked for: the handoff reads the id back from `feature show` instead of trusting its exit code (f3d310a9a)
+  <!-- src: packages/app/src/workflow/idea-handoff.ts:267 · confidence: HIGH -->
+- the A82, A83 and B93 acceptance criteria are gherkin-only, so the strict feature check no longer reads the R checklist or out-of-order steps as defects (01e05a516)
+- the A82 acceptance criteria split their When-after-Then steps without renaming a scenario (5496a4350)
+- the B93 acceptance criteria drop the bare `Or`, the When-after-Then and the orphan Then step (c350c0e00)
+
+### Other
+- a heavy E2E proves an idea run files follow-ups and discovery findings and leaves a receipt (cbf6d6b07)
+  <!-- src: apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts:192 · confidence: HIGH -->
+- the board-maturity browser proof captures the 375px document panes and publishes its artifacts deliberately (c2d4995aa)
+  <!-- src: apps/web/tests/modules/board-maturity-browser.heavy.test.ts:235 · confidence: HIGH -->
+- the A2A and MCP E2E keep their serve roots out of the operator's project registry (bab5a8c89)
+- the 1436 decision records are re-verified against a fresh live typesafe run (92afd8581)
+- the 1436 installed-binary proof is recorded on the main tree (f47378592)
+- the interop receipt and the script-ownership report are regenerated (cb8ba930d)
+- the 1436 verification artifacts are refreshed (20a869149)
+- the idea-pipeline prompt budgets are tightened under `agent-run-chars` (1596fd32c)
+- `InvalidArgumentsError` gains the TSDoc the repo-wide post-check requires (ee0d9b459)
+- the adoption matrix and the B93 records follow the refreshed interop receipt (a81c6ac50)
+- the A83 task records carry their verification evidence (0179c8ac3)
+- A83 closes and A82 moves to verifying, with the drift deferrals in Notes (bd39418be)
+- I15 and the 1434-1436 records carry their verification evidence (835c69814)
+- the typesafe catalog claims for 0.8.4 are corrected (75a007840)
+- the integrations, board-maturity and MCP interop features are filed (7a1e70f48)
+- A82 moves to verifying after its five-task batch (8a6ca5a1b)
+- tasks for the three features are filed (cccd3cb5d)
+- the I15 acceptance criteria drop the checklist duplication the BDD validator rejects (df91656b5)
+
 ## [0.4.41] - 2026-11-20
 
 ### Added
