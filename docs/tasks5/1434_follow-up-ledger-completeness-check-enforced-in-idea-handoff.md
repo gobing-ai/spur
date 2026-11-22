@@ -4,7 +4,7 @@ name: Follow-up ledger completeness check enforced in idea handoff
 status: done
 template: feature-impl
 created_at: 2026-11-22T03:48:21.137Z
-updated_at: "2026-11-22T05:46:23.018Z"
+updated_at: "2026-11-22T19:46:38.766Z"
 feature_id: I15
 
 tags: ["I15"]
@@ -53,7 +53,7 @@ The prompt/doc contract and the feature-create shape and id gate landed 2026-11-
   - no ledger file and no follow-up items → pass, treated as an empty ledger;
   - no ledger file and follow-up items present → `unfiled` for each;
   - no eval report → skip the check, recorded as a line in the report. Pre-I15 runs have no report contract to enforce.
-- [ ] R5. The handoff report adds `## Follow-ups filed` (one line per row: `<item> → <featureId> (<title>) — next: /sp:dev-plan --feature <featureId>`, or "none") and `## Excluded` (`<item> — <reason>`, or "none"). Both go **before** `## Next command`. The single main-feature next command is unchanged.
+- [x] R5. The handoff report adds `## Follow-ups filed` (one line per row: `<item> → <featureId> (<title>) — next: /sp:dev-plan --feature <featureId>`, or "none") and `## Excluded` (`<item> — <reason>`, or "none"). Both go **before** `## Next command`. The single main-feature next command is unchanged.
 - [x] R6. Docs:
   - `planning-workflow.md` Step 5.6 names the two sections and the fail-closed check;
   - `idea-evaluation.md` uses the run-scoped report path in all three places.
@@ -128,6 +128,14 @@ Premises (verified 2026-11-21):
 | `packages/app/tests/workflow/idea-pipeline-definition.test.ts:29` | One-line test-local type fix (`expectFiles?: string[]`) unblocking `typecheck:packages/app` — pre-existing TS2551 from sibling task 1433's commit 042b8a5a3, no assertion changed. |
 | `apps/cli/tests/fixtures/script-absorption-pr5-golden.json:823` | Parity golden for `featureHandoff > handoff-success`: the empty-ledger report now renders the ledger skip line plus `## Follow-ups filed` / `## Excluded` ("none") before `## Next command` (1434 report sections). |
 
+#### Forced verification repairs — 2026-11-22
+
+The old verify table omitted R5 and misassigned several requirement ids; this verification re-maps all six requirements from their actual text.
+
+A concrete fail-closed defect was repaired in `packages/app/src/workflow/idea-handoff.ts`: an exit-zero `feature show` did not prove resolution (help text or another feature's JSON could be accepted). The handoff now parses the JSON and requires its id to equal the requested ledger feature id. Failure-first tests cover help output, wrong identity and missing identity, with no dependency mutation or report write. The existing successful executor fixture now returns native-shaped feature JSON. New cases clear their own prior red-run report before asserting absence.
+
+Focused inventory/handoff suites: 54 pass, zero fail. Real CLI parity plus idea E2E: 36 pass, zero fail. The E2E runs the tracked definition whose bytes equal the freshly bundled idea-pipeline definition; its missing-I5 negative leg fails closed. No workflow YAML, public CLI surface or inventory-coverage semantics were changed.
+
 ### Testing
 
 **Pipeline verify results**
@@ -136,18 +144,19 @@ Premises (verified 2026-11-21):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test: feature-inventory.test.ts 19/19 (10 new checkFollowupLedger tests); static-ref packages/app/src/services/feature-inventory.ts:28-31 |
-| R2 | MET | test: idea-handoff.test.ts 26/26 (7 new fail-closed wiring tests); static-ref packages/app/src/workflow/idea-handoff.ts:102 (check before deps/report; ok:false skips report) |
-| R3 | MET | test: idea-handoff.test.ts report-section assertions; static-ref packages/app/src/workflow/idea-handoff.ts:492 |
-| R4 | MET | test: feature-inventory.test.ts:190 asserts f.code === FINDING_CODES.FOLLOWUP_LEDGER; static-ref packages/config/src/finding-codes.ts:84,186 |
-| R6 | MET | static-ref plugins/sp/skills/spur-dev/references/idea-evaluation.md:5,19,102; plugins/sp/skills/spur-dev/references/planning-workflow.md:227-246 |
+| R1 | MET | `packages/app/src/services/feature-inventory.ts:28` and the shared private parser carry excluded/follow-up dispositions, including continuation markers and bare deferrals. Existing coverage semantics remain unchanged; the focused inventory fixtures pass. |
+| R2 | MET | `packages/app/src/services/feature-inventory.ts:169` returns the pure filed/excluded/finding result with all required unfiled, duplicate, filed-excluded, dangling and unknown-item cases. `packages/config/src/finding-codes.ts:84` and line 186 register FOLLOWUP_LEDGER; failure-mode tests pass. |
+| R3 | MET | `packages/app/src/workflow/idea-handoff.ts:141` reads run-scoped inputs; line 253 re-resolves distinct ids before dependencies/report. The new identity guard at line 268 requires matching feature JSON, not merely exit zero. `packages/app/tests/workflow/idea-handoff.test.ts:1060` rejects help text, wrong identity and missing identity with no deps/report; malformed ledger and real missing-I5 E2E also fail closed. |
+| R4 | MET | `packages/app/src/workflow/idea-handoff.ts:291` retains the explicit legacy no-report skip, while undefined ledgers behave as empty. Fresh handoff and inventory tests prove no-ledger/no-followups pass, missing follow-ups fail, and no-report skip is recorded. |
+| R5 | MET | `packages/app/src/workflow/idea-handoff.ts:585` renders Follow-ups filed and Excluded before Next command, with plan commands per linked feature and the existing single main next command. `packages/app/tests/workflow/idea-handoff.test.ts:944` and the published `docs/reports/idea-followup-ledger-e2e-receipt.json:1` prove the report behavior. |
+| R6 | MET | Full repository gate PASS: @batch `.spur/run/run_5cd020af-b6e3-42d0-883a-aa1d54e908f5-feature-verification.log` lines 1-786. Fix-pass artifacts: @batch `.spur/run/1434-verify-answer.txt` lines 1-37 and `.spur/run/1434-verdict.json` lines 1-90; raw evidence under `.spur/run/verify-1434-1436-` and `.spur/run/verify-1436-`. `plugins/sp/skills/spur-dev/references/planning-workflow.md:254` documents fail-closed handoff and both sections; `plugins/sp/skills/spur-dev/references/idea-evaluation.md:5`, line 19 and line 102 all use the run-scoped path. Fresh source inspection found the required contract in all three locations. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | feature-inventory.test.ts: 10 new tests — unfiled/duplicate rows and unknown-item ids each yield findings; filed rows resolve (19/19 pass) |
-| AC2 | MET | test | feature-inventory.test.ts: excluded-disposition tests — `[deferred: excluded — reason]` parsed, filed-excluded finding fires, reason carried |
-| AC3 | MET | test | idea-handoff.test.ts: 7 wiring tests — malformed ledger/missing rows/dangling featureId → ok:false with findings, no report, no deps write |
-| AC4 | MET | test | idea-handoff.test.ts section assertions for `## Follow-ups filed` / `## Excluded`; command: bun test apps/cli/tests/script-absorption-pr5-parity.test.ts 35/35 with updated golden |
+| R1 — Every follow-up inventory item has exactly one resolvable ledger row | MET | command | `docs/reports/idea-followup-ledger-e2e-receipt.json:1`; native positive and negative E2E plus 54 focused inventory/handoff tests. @batch `.spur/run/verify-1434-1436-e2e-final.log` lines 1-46 records 36 pass; `.spur/run/verify-1434-1436-focused-final.log` lines 1-66 records 54 pass. |
+| R2 — Excluded inventory items are never filed and are reported with their reason | MET | command | `docs/reports/idea-followup-ledger-e2e-receipt.json:1`; native positive and negative E2E plus 54 focused inventory/handoff tests. @batch `.spur/run/verify-1434-1436-e2e-final.log` lines 1-46 records 36 pass; `.spur/run/verify-1434-1436-focused-final.log` lines 1-66 records 54 pass. |
+| R3 — Handoff finalization fails closed on an incomplete follow-up ledger | MET | command | `docs/reports/idea-followup-ledger-e2e-receipt.json:1`; native positive and negative E2E plus 54 focused inventory/handoff tests. @batch `.spur/run/verify-1434-1436-e2e-final.log` lines 1-46 records 36 pass; `.spur/run/verify-1434-1436-focused-final.log` lines 1-66 records 54 pass. |
+| R4 — The handoff report lists filed follow-ups and excluded items | MET | command | `docs/reports/idea-followup-ledger-e2e-receipt.json:1`; native positive and negative E2E plus 54 focused inventory/handoff tests. @batch `.spur/run/verify-1434-1436-e2e-final.log` lines 1-46 records 36 pass; `.spur/run/verify-1434-1436-focused-final.log` lines 1-66 records 54 pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: "Fix typesafe decision maker failing every call with TypeError: Body alrea
 status: done
 template: issue
 created_at: 2026-11-22T05:35:46.158Z
-updated_at: "2026-11-22T07:45:18.078Z"
+updated_at: "2026-11-22T19:46:40.507Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -118,6 +118,18 @@ Deferred and recorded in Q&A: logging the model that actually served each decisi
 drops `SystemOneResult.model` by design, so it needs a ts-libs API change plus a `decision_logs`
 column).
 
+#### Forced verification — 2026-11-22
+
+Rebuilt the CLI and verified the installed `spur` resolves to that current bundle; `verification-receipt.json` records its actual path and SHA-256. The adopted catalog and lockfile remain 0.8.4, SDK 0.7.0; the npm registry still reports SDK 0.7.0. No package resolution or upstream source edit was needed.
+
+The upstream driver regression suite passes all 16 tests. A separate SDK-only counterfactual reproduces `Body already used` with a buffered Response and succeeds with the same payload streamed, corroborating the driver-seam fix without editing upstream code or adding a Spur fetch wrapper.
+
+Fresh isolated-database calls through the rebuilt installed bundle both returned source=model, reason=accepted and no error: default SDK model resolution and TYPESAFE_DEFAULT_MODEL=jev-1.13.0. The isolated database has exactly two accepted typesafe rows and zero Body already used errors. The published AC artifacts and verification-receipt.json are refreshed from those actual results; no provider key is persisted. Existing model-pin documentation and the separately filed feature S are retained.
+
+Spec alignment was rechecked against https://api.typesafe.ai/openapi.json (0.2.0): POST /v1/systemone takes model/state/questions. https://docs.typesafe.ai/models#context-length documents 64k per-request and 32k per-question TOKEN limits. The current read-only failure-class input observation is 86 rows, max 2085 SQLite characters / 2115 UTF-8 bytes, with 83 historical Body already used errors. These are stored-input measurements, not an exact full-wire token count. Both live fixture calls accepted without adding a long-context header, so no driver/header change is needed for this bounded workload.
+
+The original 83/92 and 35-call counts describe the earlier diagnosis, not immutable current totals; they are not re-certified as current statistics. Later historical rows in other projects do not invalidate the fresh isolated zero-error proof or authorize changing those projects. No upstream or knowledge-kit files were edited.
+
 ### Testing
 
 **Pipeline verify results**
@@ -126,20 +138,20 @@ column).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Root Cause section of the task; signature in `docs/tasks5/artifacts/1436/ac4-input-size.txt` (failure-class rows in `.spur/spur.db`, re-queried this run: 86 rows) |
-| R2 | MET | `package.json:32-35` pins ts-ai-* 0.8.4; `bun.lock:478` resolves `@gobing-ai/ts-ai-decision@0.8.4` with `@typesafe-ai/sdk` 0.7.0 (no fork, `bun.lock:1064`) |
-| R3 | MET | Upstream test @gobing-ai/ts-ai-decision `tests/typesafe-driver.test.ts` ("buffered (non-stream) fetch bodies are answered"); fix present in the installed bundle: `grep -c streamBackedFetch apps/cli/spur.js` → 2 (re-run this verify) |
-| R4 | MET | Installed `spur` resolves to `apps/cli/spur.js` (contains `streamBackedFetch`); live re-run this verify returned `source: model`, `reason: accepted` |
-| R5 | MET | Re-run this verify: `DATABASE_URL=$TMPDIR/v1436.db spur decision run failure-class --param wbs=1436 --maker typesafe --json` → exit 0, source model, reason accepted, value stop, error null; committed receipt `docs/tasks5/artifacts/1436/ac1-decision-run.json` |
-| R6 | MET | `config/config.global.yaml:166-169` and `docs/design/cli-contracts.md:1220-1226` document `TYPESAFE_DEFAULT_MODEL` and why a catalog `model:` field is wrong |
-| R7 | MET | Solution "R7 disposition" paragraph; re-queried `.spur/spur.db` failure-class max input 2085 B (86 rows) vs 64k limit (`docs/tasks5/artifacts/1436/ac4-input-size.txt`) |
+| R1 | MET | Root cause is confirmed by the installed SDK counterfactual: buffered Response throws Body already used and identical streamed payload succeeds. @batch `.spur/run/verify-1436-sdk-repro.json` lines 1-15 records the actual reproduction; `docs/tasks5/artifacts/1436/ac4-input-size.txt:1` preserves fresh read-only historical measurements. Original diagnosis totals are dated observations, not asserted as current immutable counts. |
+| R2 | MET | `package.json:32` pins the three adopted libraries at 0.8.4; `bun.lock:218` resolves the fixed release. Upstream @ts-libs `packages/ai-decision/src/typesafe-driver.ts` lines 61-73 and 121-135 wraps the fetch at the driver seam. Installed SDK remains 0.7.0 and the npm registry agrees; no SDK fork or Spur-side driver wrapper was added. |
+| R3 | MET | Upstream @ts-libs `packages/ai-decision/tests/typesafe-driver.test.ts` lines 352-370 contains the buffered-response regression. Fresh upstream run: 16 pass. The separate SDK counterfactual proves the failure without the stream seam, without editing upstream sources. |
+| R4 | MET | `docs/tasks5/artifacts/1436/verification-receipt.json:1` records the rebuilt installed bundle path and SHA-256 and accepted live calls. Both the local bundle and installed spur resolve to the fixed build containing streamBackedFetch; package catalog and lock remain 0.8.4. |
+| R5 | MET | `docs/tasks5/artifacts/1436/ac1-decision-run.json:1` and `docs/tasks5/artifacts/1436/ac1-installed-binary.json:1` are fresh bundled-native results: source=model, reason=accepted, no error. `docs/tasks5/artifacts/1436/verification-receipt.json:1` includes the isolated DB and exactly two accepted log rows, zero Body already used errors. |
+| R6 | MET | `config/config.global.yaml:169` and `docs/design/cli-contracts.md:1222` document SDK-owned TYPESAFE_DEFAULT_MODEL beside the maker/key and reject catalog-level model pinning. Installed @typesafe-ai/sdk `dist/index.mjs` lines 552 and 905 resolve the variable then jev-latest. `docs/tasks5/artifacts/1436/ac3-model-pin.json:1` proves the specified jev-1.13.0 pin accepted; served-model telemetry remains separately filed as S. |
+| R7 | MET | Full repository gate PASS: @batch `.spur/run/run_5cd020af-b6e3-42d0-883a-aa1d54e908f5-feature-verification.log` lines 1-786. Fix-pass artifacts: @batch `.spur/run/1436-verify-answer.txt` lines 1-40 and `.spur/run/1436-verdict.json` lines 1-95; raw evidence under `.spur/run/verify-1434-1436-` and `.spur/run/verify-1436-`. Live https://api.typesafe.ai/openapi.json (0.2.0) and https://docs.typesafe.ai/models#context-length were checked. Task Solution and `docs/tasks5/artifacts/1436/ac4-input-size.txt:1` record model/state/questions, 2115 UTF-8 bytes versus 2085 characters for stored input, token-based limits, and accepted live calls without adding a long-context header. No driver/header change is needed for this bounded fixture; byte counts are not claimed as exact full-wire token counts. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | Re-run this verify on temp DB: exit 0, `source: model`, `reason: accepted`, no error; receipt `docs/tasks5/artifacts/1436/ac1-decision-run.json` |
-| AC2 | MET | command | `sqlite3 $TMPDIR/v1436.db "select maker_name,source,reason,count(*),sum(error like '%Body already used%') ..."` → `typesafe\|model\|accepted\|2\|0`; receipt `docs/tasks5/artifacts/1436/ac2-decision-logs.txt` |
-| AC3 | MET | command | `TYPESAFE_DEFAULT_MODEL=jev-1.13.0` re-run this verify → accepted, confidence 0.96; docs at `config/config.global.yaml:166-169`, `docs/design/cli-contracts.md:1220-1226` |
-| AC4 | MET | command | `sqlite3 .spur/spur.db "select count(*), max(length(input_json)) from decision_logs where decision_id='failure-class'"` → `86\|2085`; Solution carries "R7 disposition", "Danger-Zone", "2085" (`spur task show 1436 --json`) |
+| AC1 — the typesafe maker answers failure-class instead of falling back (req: R4, R5) | MET | command | `docs/tasks5/artifacts/1436/ac1-installed-binary.json:1` and `docs/tasks5/artifacts/1436/verification-receipt.json:1` — actual installed bundled call accepted. |
+| AC2 — no new Body-already-used fallbacks in the decision log (req: R4, R5) | MET | command | `docs/tasks5/artifacts/1436/ac2-decision-logs.txt:1` and `docs/tasks5/artifacts/1436/verification-receipt.json:1` — two fresh accepted rows, zero body-use errors. |
+| AC3 — the served model is pinnable without code (req: R6) | MET | command | `docs/tasks5/artifacts/1436/ac3-model-pin.json:1`, `config/config.global.yaml:169`, `docs/design/cli-contracts.md:1222` — specified SDK env pin accepted and documented. |
+| AC4 — spec alignment recorded (req: R7) | MET | command | `docs/tasks5/artifacts/1436/ac4-input-size.txt:1`; task Solution records current primary sources and no new header/driver requirement. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
