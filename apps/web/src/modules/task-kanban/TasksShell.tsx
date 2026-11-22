@@ -96,7 +96,7 @@ export default function TasksShell() {
     const ActiveTab = (TASKS_TABS.find((t) => t.id === activeTab) ?? TASKS_TABS[0]).component;
 
     return (
-        <ModuleShell className="task-kanban h-full" data-tasks-shell>
+        <ModuleShell className="task-kanban h-full max-w-none" data-tasks-shell>
             <ModuleHeader
                 className="max-w-[1600px] mx-auto w-full"
                 icon={<ModuleIcon id="tasks" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
@@ -170,18 +170,26 @@ export default function TasksShell() {
                         >
                             + New Task
                         </Button>
-                        <ModuleTabs
-                            tabs={TASKS_TABS}
-                            value={activeTab}
-                            onChange={(id) => setActiveTab(id as typeof activeTab)}
-                            label="Tasks tabs"
-                            idPrefix="tasks-tab"
-                        />
                     </div>
+                }
+                tabs={
+                    <ModuleTabs
+                        tabs={TASKS_TABS}
+                        value={activeTab}
+                        onChange={(id) => setActiveTab(id as typeof activeTab)}
+                        label="Tasks tabs"
+                        idPrefix="tasks-tab"
+                    />
                 }
             />
 
-            <div data-kanban-board className="flex-1 overflow-hidden">
+            <div
+                data-kanban-board
+                className="flex-1 overflow-hidden"
+                role="tabpanel"
+                id={`tasks-tab-panel-${activeTab}`}
+                aria-labelledby={`tasks-tab-${activeTab}`}
+            >
                 <ActiveTab
                     onSelectTask={selectTask}
                     filters={filters}

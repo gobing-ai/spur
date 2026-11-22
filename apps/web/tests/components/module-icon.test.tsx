@@ -21,6 +21,7 @@ const BUILTIN_IDS = [
     'designs',
     'features',
     'history',
+    'integrations',
     'observability',
     'plans',
     'projects',
@@ -57,6 +58,18 @@ describe('1428 R3/R4 — built-in ids resolve to vector icons with a name', () =
 });
 
 describe('1428 R5 — downstream declarations keep working', () => {
+    // Registry ids may equal inherited object keys; they must keep the custom/fallback paths.
+    for (const id of ['constructor', 'toString', '__proto__']) {
+        test(`${id} remains a valid downstream id`, () => {
+            const declared = render(createElement(ModuleIcon, { id, icon: '🦊' }));
+            expect(declared.container.querySelector('svg')).toBeNull();
+            expect(declared.container.textContent).toBe('🦊');
+            cleanup();
+            const fallback = render(createElement(ModuleIcon, { id }));
+            expect(fallback.container.querySelector('svg')).not.toBeNull();
+        });
+    }
+
     test('a legacy emoji still renders its vector icon', () => {
         const view = render(createElement(ModuleIcon, { id: 'downstream-thing', icon: '📡', size: 'lg' }));
         expect(view.container.querySelector('svg')).not.toBeNull();

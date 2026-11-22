@@ -43,6 +43,7 @@ describe('ModuleTabs (R4 — tab ARIA and controlled change)', () => {
         const tabs = view.getAllByRole('tab');
         expect(tabs.map((tab) => tab.textContent)).toEqual(['Events', 'Jobs']);
         expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+        expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0]);
     });
 
     test('pairs each tab with the panel id its caller must render', () => {

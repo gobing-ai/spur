@@ -73,54 +73,52 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
                 }
             />
 
-            {data.loading && data.status === null ? (
-                <div className="p-8 flex justify-center" data-testid="integrations-loading">
-                    <Loading />
-                </div>
-            ) : data.error !== null ? (
-                <div className="flex flex-col gap-2">
-                    <Diagnostic
-                        testId="integrations-diagnostic"
-                        title="The integrations status could not be read"
-                        detail={data.error.message}
-                        hint="Check that the server is running, then retry."
-                    />
-                    <div className="px-4">
-                        <Button size="sm" variant="primary" onClick={data.retry}>
-                            Retry
-                        </Button>
+            <section
+                id={`integrations-tab-panel-${active?.id ?? 'summary'}`}
+                role="tabpanel"
+                aria-labelledby={`integrations-tab-${active?.id ?? 'summary'}`}
+            >
+                {data.loading && data.status === null ? (
+                    <div className="p-8 flex justify-center" data-testid="integrations-loading">
+                        <Loading />
                     </div>
-                </div>
-            ) : data.status === null ? null : allSurfacesOff(data.status) && active?.id === 'summary' ? (
-                <EmptyState testId="integrations-empty">
-                    No agent-protocol surface is enabled. Turn one on in .spur/config.yaml:{' '}
-                    {enablementKeys().join(' or ')}.
-                </EmptyState>
-            ) : (
-                <section
-                    id={`integrations-tab-panel-${active?.id ?? 'summary'}`}
-                    role="tabpanel"
-                    aria-labelledby={`integrations-tab-${active?.id ?? 'summary'}`}
-                >
-                    {active?.id === 'mcp' ? (
-                        <McpTab status={data.status} events={data.mcpEvents} />
-                    ) : active?.id === 'a2a' ? (
-                        <A2aTab
-                            status={data.status}
-                            requests={data.requests}
-                            receipts={data.receipts}
-                            events={data.a2aEvents}
+                ) : data.error !== null ? (
+                    <div className="flex flex-col gap-2">
+                        <Diagnostic
+                            testId="integrations-diagnostic"
+                            title="The integrations status could not be read"
+                            detail={data.error.message}
+                            hint="Check that the server is running, then retry."
                         />
-                    ) : (
-                        <SummaryTab
-                            status={data.status}
-                            usage={data.usage}
-                            mcpEvents={data.mcpEvents}
-                            a2aEvents={data.a2aEvents}
-                        />
-                    )}
-                </section>
-            )}
+                        <div className="px-4">
+                            <Button size="sm" variant="primary" onClick={data.retry}>
+                                Retry
+                            </Button>
+                        </div>
+                    </div>
+                ) : data.status === null ? null : allSurfacesOff(data.status) && active?.id === 'summary' ? (
+                    <EmptyState testId="integrations-empty">
+                        No agent-protocol surface is enabled. Turn one on in .spur/config.yaml:{' '}
+                        {enablementKeys().join(' or ')}.
+                    </EmptyState>
+                ) : active?.id === 'mcp' ? (
+                    <McpTab status={data.status} events={data.mcpEvents} />
+                ) : active?.id === 'a2a' ? (
+                    <A2aTab
+                        status={data.status}
+                        requests={data.requests}
+                        receipts={data.receipts}
+                        events={data.a2aEvents}
+                    />
+                ) : (
+                    <SummaryTab
+                        status={data.status}
+                        usage={data.usage}
+                        mcpEvents={data.mcpEvents}
+                        a2aEvents={data.a2aEvents}
+                    />
+                )}
+            </section>
         </ModuleShell>
     );
 }

@@ -10,8 +10,8 @@
  *
  * `ConversationDraftContext` is provided by `BoardLayout` (beside
  * `ProjectProvider`) because `GlobalAgentBar` (0844) mounts outside the
- * module; a context owned by `ConversationView` would unmount exactly when it
- * needs it.
+ * module; a context owned by `ProjectsShell` would unmount on route changes
+ * while that composer still needs its draft.
  */
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { scopedKey } from '../../components/base-path';

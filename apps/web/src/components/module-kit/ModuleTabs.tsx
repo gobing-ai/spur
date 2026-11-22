@@ -73,6 +73,7 @@ export function ModuleTabs({ tabs, value, onChange, label, idPrefix, className }
                         type="button"
                         role="tab"
                         aria-selected={selected}
+                        tabIndex={selected ? 0 : -1}
                         aria-controls={`${idPrefix}-panel-${tab.id}`}
                         id={`${idPrefix}-${tab.id}`}
                         onClick={() => onChange(tab.id)}

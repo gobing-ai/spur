@@ -564,7 +564,12 @@ export const HistoryShell: React.FC = () => {
             )}
 
             {/* Tab Views */}
-            <div className="mt-2">
+            <div
+                className="mt-2"
+                role="tabpanel"
+                id={`history-panel-${activeTab}`}
+                aria-labelledby={`history-${activeTab}`}
+            >
                 {activeTab === 'summary' && (
                     <SummaryTab
                         data={summaryData}

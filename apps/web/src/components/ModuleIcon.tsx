@@ -5,6 +5,7 @@ import {
     FolderGit2,
     Layers,
     type LucideIcon,
+    Plug,
     Radio,
     Search,
     Settings,
@@ -41,6 +42,7 @@ const sizeClasses: Record<ModuleIconSize, string> = {
 const BUILTIN: Record<string, { Icon: LucideIcon; label: string; emoji: readonly string[] }> = {
     observability: { Icon: Radio, label: 'Observability', emoji: ['📡'] },
     history: { Icon: BarChart3, label: 'History', emoji: ['📊'] },
+    integrations: { Icon: Plug, label: 'Integrations', emoji: [] },
     plans: { Icon: Compass, label: 'Plans', emoji: ['🧭'] },
     designs: { Icon: Layers, label: 'Designs', emoji: ['📐'] },
     features: { Icon: Tag, label: 'Features', emoji: ['🏷️', '🏷', '🎯'] },
@@ -52,7 +54,7 @@ const BUILTIN: Record<string, { Icon: LucideIcon; label: string; emoji: readonly
 
 /** The built-in entry for one id. */
 function entryForId(id: string): (typeof BUILTIN)[string] | undefined {
-    return BUILTIN[id];
+    return Object.hasOwn(BUILTIN, id) ? BUILTIN[id] : undefined;
 }
 
 /** The built-in entry whose legacy emoji list carries `icon` (the downstream compatibility path). */
