@@ -82,6 +82,12 @@ const CLEAN_FEATURE = (id: string, status: string): string =>
         '',
     ].join('\n');
 
+/**
+ * Both P2 tests reach the D63 completion gate, which captures a real git-tree proof digest over the
+ * whole checkout (measured 0.4-0.9 s warm; the whole-suite CI run pushes it past bun's 5 s default).
+ */
+const PROOF_CAPTURE_TIMEOUT_MS = 30_000;
+
 /** Hermetic synthetic project; dir names deliberately avoid the real corpus layout. */
 function makeCtx(features: Record<string, string>, content: (id: string, status: string) => string = FEATURE) {
     const root = mkdtempSync(join(tmpdir(), 'spur-1137-server-'));
@@ -216,33 +222,41 @@ describe('server feature.transition guard (task 1137 R2)', () => {
         }
     });
 
-    test('P2 remediation — a receipt-less verifying → done over the server path is denied', async () => {
-        // Strict-clean: without wiring runDir + the run-store port, the D63 receipt
-        // gate never fires and this hop would commit unguarded.
-        const { ctx, featurePath, cleanup } = makeCtx({ F9: 'verifying' }, CLEAN_FEATURE);
-        try {
-            const before = readFileSync(featurePath('F9'), 'utf8');
-            await expect(ctx.transitionFeature({ id: 'F9', to: 'done' })).rejects.toThrow(GuardDeniedError);
-            await expect(ctx.transitionFeature({ id: 'F9', to: 'done' })).rejects.toThrow(
-                /completion evidence rejected/,
-            );
-            expect(readFileSync(featurePath('F9'), 'utf8')).toBe(before);
-        } finally {
-            cleanup();
-        }
-    });
+    test(
+        'P2 remediation — a receipt-less verifying → done over the server path is denied',
+        async () => {
+            // Strict-clean: without wiring runDir + the run-store port, the D63 receipt
+            // gate never fires and this hop would commit unguarded.
+            const { ctx, featurePath, cleanup } = makeCtx({ F9: 'verifying' }, CLEAN_FEATURE);
+            try {
+                const before = readFileSync(featurePath('F9'), 'utf8');
+                await expect(ctx.transitionFeature({ id: 'F9', to: 'done' })).rejects.toThrow(GuardDeniedError);
+                await expect(ctx.transitionFeature({ id: 'F9', to: 'done' })).rejects.toThrow(
+                    /completion evidence rejected/,
+                );
+                expect(readFileSync(featurePath('F9'), 'utf8')).toBe(before);
+            } finally {
+                cleanup();
+            }
+        },
+        PROOF_CAPTURE_TIMEOUT_MS,
+    );
 
-    test('P2 remediation — a current PASS receipt validates over the server path (runDir + run-store port wired)', async () => {
-        const { ctx, root, featurePath, cleanup } = makeCtx({ F9: 'verifying' }, CLEAN_FEATURE);
-        try {
-            await recordServerReceipt(ctx, root, featurePath('F9'), 'F9');
-            const result = await ctx.transitionFeature({ id: 'F9', to: 'done' });
-            expect(result.toStatus).toBe('done');
-            expect(readFileSync(featurePath('F9'), 'utf8')).toContain('status: done');
-        } finally {
-            cleanup();
-        }
-    });
+    test(
+        'P2 remediation — a current PASS receipt validates over the server path (runDir + run-store port wired)',
+        async () => {
+            const { ctx, root, featurePath, cleanup } = makeCtx({ F9: 'verifying' }, CLEAN_FEATURE);
+            try {
+                await recordServerReceipt(ctx, root, featurePath('F9'), 'F9');
+                const result = await ctx.transitionFeature({ id: 'F9', to: 'done' });
+                expect(result.toStatus).toBe('done');
+                expect(readFileSync(featurePath('F9'), 'utf8')).toContain('status: done');
+            } finally {
+                cleanup();
+            }
+        },
+        PROOF_CAPTURE_TIMEOUT_MS,
+    );
 
     test('AC5 — the task→feature reopen hook still reopens verifying → active with one History line', async () => {
         const { ctx, featurePath, cleanup } = makeCtx({ F2: 'verifying' });
