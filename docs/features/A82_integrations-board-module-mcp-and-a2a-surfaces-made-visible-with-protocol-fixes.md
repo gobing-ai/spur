@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A82"
 name: "Integrations Board module: MCP and A2A surfaces made visible, with protocol fixes"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-22T02:05:52.821Z"
-updated_at: "2026-11-22T17:31:22.636Z"
+updated_at: "2026-11-22T23:53:57.312Z"
 ---
 
 # A82: Integrations Board module: MCP and A2A surfaces made visible, with protocol fixes
@@ -203,4 +203,5 @@ Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all -
 - 2026-11-22T02:19:02.338Z moved S → A82 (system)
 - 2026-11-22T05:03:46.617Z backlog → active (system)
 - 2026-11-22T06:57:48.092Z active → verifying (system)
+- 2026-11-22T23:53:57.312Z verifying → active (system)
 
