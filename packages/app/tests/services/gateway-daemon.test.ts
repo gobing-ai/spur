@@ -179,16 +179,60 @@ describe('installGatewayDaemon (K4 R9/R10)', () => {
         expect(calls.map((call) => call.args[0])).toEqual(['print']);
     });
 
-    it('boots out then bootstraps when the plist changed', async () => {
+    it('boots out, waits for the unload, then bootstraps when the plist changed', async () => {
         const deps = makeDeps();
+        // print(loaded) → bootout → print(wait: still loaded) → print(wait: gone) → bootstrap.
         const { exec, calls } = scriptedExec([
             { exitCode: 0, stdout: 'pid = 4242\n' },
             { exitCode: 0 },
+            { exitCode: 0, stdout: 'pid = 4242\n' },
+            { exitCode: 113 },
             { exitCode: 0 },
         ]);
         const result = await installGatewayDaemon({ ...deps, exec });
         expect(result.status).toBe('installed');
-        expect(calls.map((call) => call.args[0])).toEqual(['print', 'bootout', 'bootstrap']);
+        expect(calls.map((call) => call.args[0])).toEqual(['print', 'bootout', 'print', 'print', 'bootstrap']);
+    });
+
+    it('retries a bootstrap that launchd answered with EINPROGRESS', async () => {
+        const deps = makeDeps();
+        const { exec, calls } = scriptedExec([
+            { exitCode: 0, stdout: 'pid = 4242\n' },
+            { exitCode: 0 },
+            { exitCode: 113 },
+            { exitCode: 5, stderr: 'Bootstrap failed: 5: Input/output error' },
+            { exitCode: 0 },
+        ]);
+        const result = await installGatewayDaemon({ ...deps, exec });
+        expect(result.status).toBe('installed');
+        expect(calls.map((call) => call.args[0])).toEqual(['print', 'bootout', 'print', 'bootstrap', 'bootstrap']);
+    });
+
+    it('restores the previous plist instead of deleting it when an update cannot bootstrap', async () => {
+        const previous = '<?xml version="1.0"?><plist><!-- previous agent on 3000 --></plist>';
+        const deps = makeDeps({ fs: memoryFs({ '/opt/spur': '', [PLIST]: previous }) });
+        (deps.fs as unknown as { files: Map<string, string> }).files.set(PLIST, previous);
+        // print(loaded) → bootout → print(wait: gone) → bootstrap fails → retry fails → restore + bootstrap.
+        const { exec, calls } = scriptedExec([
+            { exitCode: 0, stdout: 'pid = 4242\n' },
+            { exitCode: 0 },
+            { exitCode: 113 },
+            { exitCode: 5, stderr: 'Bootstrap failed: 5: Input/output error' },
+            { exitCode: 5, stderr: 'Bootstrap failed: 5: Input/output error' },
+            { exitCode: 0 },
+        ]);
+        await expect(installGatewayDaemon({ ...deps, exec })).rejects.toThrow(
+            /previous LaunchAgent was restored and is running/,
+        );
+        expect(deps.fs.files.get(PLIST)).toBe(previous);
+        expect(calls.map((call) => call.args[0])).toEqual([
+            'print',
+            'bootout',
+            'print',
+            'bootstrap',
+            'bootstrap',
+            'bootstrap',
+        ]);
     });
 
     it('removes the plist and reports stderr when bootstrap fails', async () => {

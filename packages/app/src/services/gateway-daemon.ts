@@ -155,12 +155,39 @@ export function parsePrintOutput(output: string): { pid: number | null; lastExit
     };
 }
 
+/** Poll cadence while launchd finishes an unload. */
+const UNLOAD_POLL_MS = 50;
+/** ~2s ceiling: launchd unloads in milliseconds, but this must not hang an install. */
+const UNLOAD_POLL_ATTEMPTS = 40;
+/** Delay before re-trying a bootstrap that launchd answered with EINPROGRESS. */
+const BOOTSTRAP_RETRY_MS = 250;
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wait until launchd reports the label unloaded.
+ *
+ * `bootout` returns before the service is gone. Bootstrapping the same label in that window fails
+ * `EINPROGRESS` (37), which launchctl renders as the uninformative `5: Input/output error` —
+ * observed on every port-changing re-install before this wait existed.
+ */
+async function waitForUnload(deps: GatewayDaemonDeps): Promise<boolean> {
+    for (let attempt = 0; attempt < UNLOAD_POLL_ATTEMPTS; attempt++) {
+        if (!(await printService(deps)).loaded) return true;
+        await sleep(UNLOAD_POLL_MS);
+    }
+    return false;
+}
+
 /**
  * Install (or update) the agent.
  *
  * Order is load-bearing: platform → port availability → logs dir → render → byte compare → atomic
- * write → bootout-if-loaded-and-changed → bootstrap. A bootstrap failure removes the plist, so a
- * failed install leaves no half-registered service.
+ * write → bootout-if-loaded-and-changed → wait for the unload → bootstrap (one retry). A failed
+ * bootstrap of a first install removes the plist, so nothing is half-registered; a failed *update*
+ * restores the previous plist instead, because deleting it would take a working agent down.
  */
 export async function installGatewayDaemon(deps: GatewayDaemonDeps): Promise<GatewayInstallResult> {
     assertMacos(deps);
@@ -190,14 +217,31 @@ export async function installGatewayDaemon(deps: GatewayDaemonDeps): Promise<Gat
     }
     if (before.loaded) {
         await launchctl(deps, ['bootout', `gui/${deps.uid}/${GATEWAY_LABEL}`]);
+        await waitForUnload(deps);
     }
 
-    const bootstrap = await launchctl(deps, ['bootstrap', `gui/${deps.uid}`, plistPath]);
+    let bootstrap = await launchctl(deps, ['bootstrap', `gui/${deps.uid}`, plistPath]);
+    if (bootstrap.exitCode !== 0 && before.loaded) {
+        // The label had been loaded, so a lingering unload is the likeliest cause: one retry.
+        await sleep(BOOTSTRAP_RETRY_MS);
+        bootstrap = await launchctl(deps, ['bootstrap', `gui/${deps.uid}`, plistPath]);
+    }
     if (bootstrap.exitCode !== 0) {
-        // Leave nothing half-registered.
-        await deps.fs.deleteFile(plistPath);
         const detail = bootstrap.stderr.trim() || bootstrap.stdout.trim() || `launchctl exited ${bootstrap.exitCode}`;
-        throw new Error(`launchctl bootstrap failed: ${detail}`);
+        if (existing === null) {
+            // First install: leave nothing half-registered.
+            await deps.fs.deleteFile(plistPath);
+            throw new Error(`launchctl bootstrap failed: ${detail}`);
+        }
+        // Update: the previously working agent was booted out above, so restore its plist and try
+        // to bring it back rather than leaving the machine with no gateway at all.
+        await deps.fs.writeFile(plistPath, existing);
+        const restored = await launchctl(deps, ['bootstrap', `gui/${deps.uid}`, plistPath]);
+        const suffix =
+            restored.exitCode === 0
+                ? 'the previous LaunchAgent was restored and is running'
+                : 'the previous LaunchAgent was restored but is not running; re-run `spur self install --daemon`';
+        throw new Error(`launchctl bootstrap failed: ${detail} — ${suffix}`);
     }
     return { status: existing === null ? 'installed' : 'updated', plistPath };
 }
