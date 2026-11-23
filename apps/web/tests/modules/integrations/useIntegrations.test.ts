@@ -68,6 +68,7 @@ function makeSeams(
         list?: () => Promise<{ messages: Array<Record<string, unknown>>; nextCursor: null }>;
         usageSince?: string[];
         historySince?: string[];
+        requestsInputs?: unknown[];
     } = {},
 ): IntegrationsSeams {
     return {
@@ -88,7 +89,10 @@ function makeSeams(
                 },
             },
             inbox: {
-                requests: async () => REQUESTS,
+                requests: async (input?: unknown) => {
+                    options.requestsInputs?.push(input);
+                    return REQUESTS;
+                },
                 list:
                     options.list ??
                     (async () => ({
@@ -141,14 +145,22 @@ describe('1424 — hook data assembly', () => {
         ]);
     });
 
-    test('a failed activity read is an error, not a silently empty list', async () => {
+    test('a failed activity read surfaces the server error detail instead of a silently empty list', async () => {
         const seams: IntegrationsSeams = {
             ...makeSeams(),
-            fetchHistory: async () => Response.json({ message: 'nope' }, { status: 500 }),
+            fetchHistory: async () => Response.json({ error: 'unknown prefix: "mcp"' }, { status: 400 }),
         };
         const { result } = renderHook(() => useIntegrations(seams));
         await waitFor(() => expect(result.current.error).not.toBeNull());
-        expect(result.current.error?.message).toContain('500');
+        expect(result.current.error?.message).toBe('events/history answered 400 (unknown prefix: "mcp")');
+    });
+
+    test('requests queries scope "all" so non-orchestrator A2A tasks and outbound receipts are included', async () => {
+        const requestsInputs: unknown[] = [];
+        const seams = makeSeams({ requestsInputs });
+        const { result } = renderHook(() => useIntegrations(seams));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(requestsInputs).toEqual([{ limit: 100, scope: 'all' }]);
     });
 
     test('the activity lists are newest-first across the two families', async () => {

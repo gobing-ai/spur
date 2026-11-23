@@ -231,18 +231,18 @@ export function createInboxHandlers(ctx: ServerContext) {
         }),
 
         requests: os.inbox.requests.handler(async ({ input }) => {
+            const allScope = input.scope === 'all' && input.messageId === undefined;
             // Degraded states are named values, never an error: no bound orchestrator means this
             // project has no request feed to show, not that the read failed.
-            const orchestratorId = await orchestratorAddress(ctx);
-            if (orchestratorId === '' && input.messageId === undefined) return [];
+            const orchestratorId = allScope || input.messageId !== undefined ? '' : await orchestratorAddress(ctx);
+            if (!allScope && orchestratorId === '' && input.messageId === undefined) return [];
 
             const limit = input.limit ?? 50;
-            const rows = await ctx
-                .inbox()
-                .requests(input.messageId === undefined ? orchestratorId : undefined, input.messageId);
+            const memberScope = allScope || input.messageId !== undefined ? undefined : orchestratorId;
+            const rows = await ctx.inbox().requests(memberScope, input.messageId);
             const reconciler = new DeliveryReconciler({ getDb: () => ctx.getDb() });
             const classified = await reconciler.classify(
-                input.messageId === undefined ? orchestratorId : undefined,
+                memberScope,
                 input.messageId === undefined ? undefined : rows.filter((row) => row.kind === 'request'),
             );
             const reasonByMessage = new Map(classified.map((item) => [item.messageId, item.reason]));

@@ -134,6 +134,8 @@ const inboxRequestsInputSchema = z.object({
     limit: z.coerce.number<number>().int().positive().max(200).optional(),
     /** Exact receipt for a sent message, including chat and non-orchestrator recipients. */
     messageId: z.string().min(1).optional(),
+    /** Scope: `orchestrator` (default, GlobalAgentBar feed) or `all` (every inbox address, e.g. Integrations A2A tasks). */
+    scope: z.enum(['orchestrator', 'all']).optional(),
 });
 
 /** The `inbox` procedure set: reads are side-effect free, mutations name their actor. */

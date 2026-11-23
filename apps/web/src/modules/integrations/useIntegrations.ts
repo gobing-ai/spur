@@ -58,7 +58,11 @@ async function readEvents(
 ): Promise<ProtocolEventRow[]> {
     const url = eventsHistoryUrl({ prefix, since, limit: 50 });
     const res = await (seams.fetchHistory ?? apiFetchWithTimeout)(new Request(url));
-    if (!res.ok) throw new Error(`events/history answered ${res.status}`);
+    if (!res.ok) {
+        const errorBody = (await res.json().catch(() => null)) as { error?: string } | null;
+        const detail = typeof errorBody?.error === 'string' && errorBody.error !== '' ? ` (${errorBody.error})` : '';
+        throw new Error(`events/history answered ${res.status}${detail}`);
+    }
     const body = (await res.json()) as { events?: unknown[] };
     return (body.events ?? []).flatMap((row) => {
         const projected = projectProtocolEvent(row);
@@ -79,7 +83,7 @@ async function load(
         readEvents('mcp', since, seams),
         readEvents('a2a', since, seams),
         readEvents('auth', since, seams),
-        client.inbox.requests({ limit: 100 }),
+        client.inbox.requests({ limit: 100, scope: 'all' }),
     ]);
     // One receipt page serves both the A2A task list and the per-member outbound receipts: the
     // receipt row IS the request row, so no second read and no N+1 per message.

@@ -560,5 +560,53 @@ describe('1267 R4 — the raw routes are gone', () => {
             const members = await call<Array<{ id: string; queued: number; unread: number }>>('members', {});
             expect(members).toEqual([{ id: 'proj-coder', queued: 1, unread: 1 }]);
         });
+
+        test('requests with scope "all" includes non-orchestrator members even with no orchestrator bound', async () => {
+            const sent = await call<{ message: { id: string } }>('send', {
+                to: 'proj-coder',
+                from: 'a2a',
+                body: 'a2a task',
+                kind: 'request',
+                requestKey: 'a2a:proj-coder:m-1',
+            });
+            await call('send', { to: 'proj-coder', from: 'operator', body: 'chat only', kind: 'chat' });
+
+            expect(await call('requests', {})).toEqual([]);
+            const allRows = await call<Array<{ messageId: string; requestKey: string | null }>>('requests', {
+                scope: 'all',
+            });
+            expect(allRows.map((row) => row.messageId)).toEqual([sent.message.id]);
+            expect(allRows[0]?.requestKey).toBe('a2a:proj-coder:m-1');
+
+            const bound = await makeHarness({ orchestrator: 'proj-orch' });
+            try {
+                const sendProc = bound.handlers.send as unknown as {
+                    '~orpc': { handler: (opts: { input: unknown }) => Promise<{ message: { id: string } }> };
+                };
+                const reqProc = bound.handlers.requests as unknown as {
+                    '~orpc': { handler: (opts: { input: unknown }) => Promise<Array<{ messageId: string }>> };
+                };
+                const orchSent = await sendProc['~orpc'].handler({
+                    input: { to: 'proj-orch', from: 'spur', body: 'orch work', kind: 'request' },
+                });
+                const coderSent = await sendProc['~orpc'].handler({
+                    input: {
+                        to: 'proj-coder',
+                        from: 'a2a',
+                        body: 'coder work',
+                        kind: 'request',
+                        requestKey: 'a2a:proj-coder:m-2',
+                    },
+                });
+                const defaultRows = await reqProc['~orpc'].handler({ input: {} });
+                expect(defaultRows.map((row) => row.messageId)).toEqual([orchSent.message.id]);
+                const scopedAllRows = await reqProc['~orpc'].handler({ input: { scope: 'all' } });
+                expect(scopedAllRows.map((row) => row.messageId).sort()).toEqual(
+                    [coderSent.message.id, orchSent.message.id].sort(),
+                );
+            } finally {
+                await bound.close();
+            }
+        });
     });
 });
