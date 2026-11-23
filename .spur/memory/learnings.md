@@ -7623,3 +7623,117 @@ Frontmatter `updated_at` bumped on the edited satellite only; the index pointer 
   satellite's status before re-adding a row.
 
 Skipped: no repo-wide gate (`spur-check-feature`/`bun run check`) — docs-only change; `spur rule run` could not self-check the edited file (frontmatter YAML parse). Risk: the `dist/index.mjs:552` and `decision-service.ts:459` anchors are verified against the installed 0.8.4 artifacts, so they drift again on the next SDK bump.
+**Doc drift repaired** — three satellites, `docs/` only (wrap scope clean: no non-docs path changed).
+
+| Doc | Code says | Doc said | Repair |
+| --- | --- | --- | --- |
+| `docs/design/inter-agent-control-plane.md:335` | `inboxRequestsInputSchema.scope?: 'orchestrator'\|'all'`, `all` needs no bound orchestrator | `requests(orchestrator)`, orchestrator feed only | Row now names `requests(scope)` with both values and the `all` semantics |
+| `docs/design/integrations-module.md` §2 | `callerBase()` honours `x-forwarded-host/-prefix/-proto`; gateway port from `SPUR_GATEWAY_PORT`; `a2a.inbound` drops `enabled: false` and outbound peers | Caller base implied `cardOrigin()` prefix headers only; no port source; no membership rule | Two bullets added/expanded; `cardUrl`-as-link gate recorded |
+| `docs/design/integrations-module.md` §3 | Header renders `server v… · up …` from a tolerant `/api/health` read, `server identity unreadable` otherwise | Header described as icon + title + status chip only | Paragraph added; A2A row records the `scope: 'all'` read and the `eventName`-without-`runId` seed |
+| `docs/design/run-record-contract.md:103` | `applyNavIntentToFilter()` seeds `searchQuery`/`searchScope: 'name'` from `eventName` with no `runId` | Stated only the `runId` seed | Clause appended (1437) |
+
+Left unchanged, deliberately: `docs/00_ADR.md` (bug fixes restoring an existing contract; ADR-151's rejected serve-side `X-Forwarded-*` trust covers routing/adaptation, and this reads forwarded `proto` only for URL provenance — same narrow exception `cardOrigin()` already had, so no amendment passes §6.1), `docs/03_ARCHITECTURE.md` (no topology/ownership change; `rg` over inbox/forwarded/uptime found no stale mechanism claim), `docs/04_DESIGN.md` (index row 111 and the `inbox` pointer §"Message routes" remain true; no re-adds), `05`/corpus untouched.
+
+Verification: `bun test packages/app/tests/workflow/wrapup-pipeline.test.ts` — 52 pass / 0 fail; `git status --short` shows only the three `docs/design/*` files.
+
+```text
+# Working learnings — wrap-up for tasks [1437]
+
+## 2026-11-22 · 1437 — Integrations fix handoff: finish gate, restart live server, close A82 gaps
+
+### Symptom → root cause discipline
+
+- A Board module that fails with one opaque message can be a **stale daemon**, not a code bug. Check
+  runtime identity first: `curl http://localhost:3000/<prefix>/api/health` → `version` +
+  `uptime_seconds`. Here the gateway routed `/spur-new/*` to a 5-day-old `v0.4.37` serve while
+  `dist/web` was rebuilt at `v0.4.43`, and the old build rejected `prefix=mcp|a2a|auth`
+  (`UNKNOWN_PREFIX`, 400), lacked `/api/integrations/{status,usage}` (404) and rejected
+  `/api/inbox/requests?limit=100` (400). Every "code defect" symptom was reproducible only against the
+  old process for some paths and the new tree for others.
+- The macOS gateway LaunchAgent runs with `AbandonProcessGroup: true`, so a project serve survives
+  gateway restarts and keeps serving an old bundle. Restart through the monorepo CLI
+  (`bun apps/cli/src/index.ts projects stop|start spur-new`): `resolveSpurServeCommand()`
+  (`packages/app/src/services/project-start.ts`) spawns argv1 = monorepo CLI, never the global
+  `~/.bun/bin/spur`.
+- When a version skew was the cause, make the skew visible instead of re-diagnosing it: read
+  `/api/health` and render `server v<version> · up <uptime>` in the module header, with
+  `server identity unreadable` as the fallback. That regressed nothing and turned an opaque 400 into
+  evidence (1437 R6).
+
+### React data hooks
+
+- `Promise.all` in a hook surfaces only the **first** rejection. Four independent sub-reads of one
+  module collapsed into one 400. Read each independent resource on its own effect pass and merge with
+  `previous`, so a failed status read still names the server behind it and the module keeps rendering
+  what did succeed.
+- Preserve the server's JSON `error` field in client error text. Discarding it hid the actual prefix
+  rejection for a whole debugging session.
+- Deep-link seeds must apply in **both** the initial `useState` and the `navIntent` effect. Seeding
+  only in the effect leaves the first fetch unfiltered: `applyNavIntentToFilter()` now sets
+  `searchQuery` + `searchScope: 'name'` from `eventName` even when the intent carries no `runId`.
+- Fighting `lint/correctness/useExhaustiveDependencies` with an `attempt`-only effect is a losing
+  trade; reuse the existing fetch seam and accept the extra GET (accepted P4: a usage-window switch
+  re-reads `/api/health` once).
+
+### Gateway-prefixed URLs
+
+- Every client-side URL under a gateway mount must go through `withBase()`. `inboxLink()` and
+  `systemEventLink()` hard-coded `/board/...` and escaped the `/spur-new/` prefix; the live page
+  looked correct only because the server tolerated the root path.
+- Server-side, the caller's base is **not** `new URL(request.url).origin`: the gateway rewrites `Host`
+  to the upstream loopback authority. Reconstruct from `x-forwarded-host` + `x-forwarded-prefix`, and
+  take the scheme from `x-forwarded-proto` (first value; `https` only when it reads `https`, absent ⇒
+  `http`). Without it, published card/MCP URLs fell back to `http://` behind a TLS-terminating proxy.
+- `SpurConfig` has no `server` section — do not read `ctx.spurConfig.server`. The gateway port is
+  `SPUR_ENV_VARS.gatewayPort` (`SPUR_GATEWAY_PORT`, default 3000).
+
+### Additive contract changes on oRPC
+
+- New optional input fields are the cheap compat move: `inboxRequestsInputSchema.scope?:
+  'orchestrator' | 'all'` kept the GlobalAgentBar's default feed and gave Integrations a feed that
+  includes non-orchestrator A2A tasks and outbound receipts. The `all` branch also removes the
+  "no bound orchestrator ⇒ empty array" early return, so it must be gated on `scope === 'all'` and
+  `messageId === undefined` to stay compatible.
+- A shape that renders as "off" should also stop advertising: disabled fleet members are answered
+  `404` by the A2A listener, so omit them from `a2a.inbound` and render `cardUrl` as a link only while
+  `a2a.enabled`.
+
+### Gate and flake triage
+
+- A 30s timeout inside the full `bun run spur-check` run can be parallel-load flake. Verify with an
+  isolated run (`bun test scripts/commands/fleet-e2e-turn-perf.test.ts` → 4/4 green at ~5.1s), then
+  check whether the file touches the changed code at all before calling it a regression. Record the
+  evidence either way; never silently retry until green.
+- Root `bun run` scripts that use `--filter` fail inside the agent sandbox with
+  `CouldntReadCurrentDirectory`; run workspace scripts in a subshell or outside the sandbox.
+- A committed E2E receipt with `verdict: FAIL` keeps the feature in `L4.feature-receipt-failed` even
+  after the code fix. Regenerate it (`bun scripts/commands/integrations-e2e.ts`) in the same run, then
+  `spur feature verify <id>`.
+
+### Verification surfaces that actually pin behavior
+
+- Runtime identity claims belong in the heavy CDP test
+  (`apps/web/tests/modules/integrations-browser.heavy.test.ts`), which asserts the served version and
+  uptime on the rendered Board page — a unit test on `formatUptime` alone would not catch a header
+  that never mounted.
+- Tasks that declare no Acceptance Criteria close cleanly with an explicit `AC-none` row
+  ("R1–Rn carry the acceptance evidence"); coverage is verdict-based, not measured, and that is
+  reported rather than papered over.
+- Commit shape for a handoff close: one atomic `fix(...)` commit for the behavior, then a separate
+  `docs(tasks): …` commit for the record. Follow-up scope (design gaps G1–G5) went out as tasks via
+  `spur task create --feature A82 --skip-ready`.
+
+### Doc-drift routing (this wrap-up)
+
+- T3 drift for a contract fix lands in the **satellite that names the changed symbol**, not in the
+  `04` index or `03` topology. Grep the changed identifier (`inbox.requests`, `cardOrigin`,
+  `/api/health`, `runId` seed) across `docs/design/` — the stale claim was one table row in
+  `inter-agent-control-plane.md` and one bullet in `run-record-contract.md`.
+- Bug fixes that restore an existing contract (forwarded-header provenance, a feed scope, a deep-link
+  seed) need no ADR. Check the nearest ADR's *rejected alternatives* before assuming: ADR-151 rejected
+  serve-side `X-Forwarded-*` trust for routing/adaptation, and this change only reads forwarded
+  `proto` for URL provenance in a read-only status — same narrow exception `cardOrigin()` already had,
+  so no amendment was warranted.
+```
+
+Skipped: no `test-repo-wide` doc tripwire run (the pipeline runs it next); `docs/04_DESIGN.md` index rows left as-is since their indexed facts did not change.

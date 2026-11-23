@@ -2,7 +2,7 @@
 kind: design
 title: "Integrations Board Module and MCP/A2A Protocol Fixes (A82)"
 created_at: 2026-11-21
-updated_at: 2026-11-21
+updated_at: 2026-11-22
 related: [A82, A8, B9, G9, G91, I61, J94, K42, A81]
 tags: [system, A82, web, mcp, a2a]
 doc: design/integrations-module
@@ -89,9 +89,18 @@ interface IntegrationsStatus {
   handler passes the catalog to `IntegrationsService` through a port.
 - `tokenPresent` comes from the server's existing `bearerEnv` + `requiredToken` pair (ADR-120 gateway
   underneath). The service receives only the boolean.
+- Every caller-visible URL the status builds (`mcp.url`, `a2a.url`, `cardUrl`, `gateway.rootMcpUrl`)
+  comes from the caller's own base, not the loopback address the gateway forwards to:
+  `x-forwarded-host` + `x-forwarded-prefix` when both are present — the scheme comes from
+  `x-forwarded-proto`'s first value, `https` only when it reads `https` (absent ⇒ `http`) —
+  otherwise the request's own origin. It is the rule `cardOrigin()` already applies to the A2A card.
+- `a2a.inbound` lists only receive-capable, enabled members: a member declared by `a2a`/`project`
+  is an outbound peer, and `enabled: false` is omitted because the listener already answers it
+  `404`. The A2A tab renders `cardUrl` as a link only while `a2a.enabled`.
 - Gateway detection uses the forwarded prefix headers that `cardOrigin()` already reads. The
-  counters come from the gateway's `/api/health` over loopback. If that read fails, the response
-  carries `counters: null` plus a `diagnostic` string; the procedure itself still succeeds.
+  counters come from the gateway's `/api/health` over loopback on `SPUR_GATEWAY_PORT` (default
+  `3000`). If that read fails, the response carries `counters: null` plus a `diagnostic` string;
+  the procedure itself still succeeds.
 
 ### 2.1 Activity
 
@@ -109,11 +118,17 @@ status chip, `TimeRangePresets` for the usage window) > `ModuleTabs` from an app
 It uses semantic tokens only. The `WebModule` `icon` field follows the current convention; the
 emoji-vs-ADR-133 cleanup belongs to the Board maturity sweep (A83).
 
+Beside the status chip the header names the served build — `server v<version> · up <uptime>`, or
+`server identity unreadable` — from `GET /api/health` (`formatUptime` truncates to the two largest
+units). That read is tolerant and runs on its own effect pass: a stale server behind a rebuilt
+`dist/web` is exactly the case that must still name itself instead of failing the module, so a
+failed identity read leaves the rest of the status visible (1437 R6).
+
 | Tab | Content | Data |
 | --- | --- | --- |
 | Summary | One row per surface: state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus a gateway counters strip when served | status + usage |
 | MCP | Tool table (origin badge, read/write badge, opens a schema drawer), `spur://` resource list, recent calls (tool, duration, outcome, errorCode), copyable client config snippet (URL + `${ENV}` placeholder) | status + events |
-| A2A | Inbound member cards (card URL, write-fenced badge); A2A tasks (sender `a2a`) with run state → Projects › Inbox; outbound/cross-project receipts (G91); event rows → Observability › System Events (`ObservabilityNavIntent {tab:'system-events', eventName, runId}`) | status + inbox + events |
+| A2A | Inbound member cards (card URL, write-fenced badge); A2A tasks (sender `a2a`) with run state → Projects › Inbox, read through `inbox.requests({ limit: 100, scope: 'all' })` so non-orchestrator tasks and outbound receipts are not dropped by the default orchestrator feed; outbound/cross-project receipts (G91); event rows → Observability › System Events (`ObservabilityNavIntent {tab:'system-events', eventName, runId}`; the seed applies `eventName` even when the intent carries no `runId`) | status + inbox + events |
 
 States: a loading skeleton; an `EmptyState` when every surface is off, with the config keys that
 enable each one; a `Diagnostic` with retry when `integrations.status` fails.

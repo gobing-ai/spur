@@ -3,7 +3,7 @@ kind: design
 title: "Inter-agent control plane"
 status: accepted
 created_at: 2026-08-12
-updated_at: 2026-10-21
+updated_at: 2026-11-22
 related: [G4, "0529", "0530", "0531", "0599", "0685", "0820", "1080", "1081", "1271"]
 tags: [system, G4, agent]
 ---
@@ -332,7 +332,7 @@ the same stored-envelope path as the history endpoint, so live and history agree
 
 | Surface | Calls |
 | --- | --- |
-| oRPC inbox contract | `list(member, direction)`, `thread(id)`, `send`, `reply`, `read`, `requests(orchestrator)`. Optional `messageId` on requests reads the exact any-kind/any-recipient receipt instead; the default feed remains request-only. Reads are side-effect free; guest expiry and the claim sweep run in the server reconciler pass. |
+| oRPC inbox contract | `list(member, direction)`, `thread(id)`, `send`, `reply`, `read`, `requests(scope)`. Optional `messageId` on requests reads the exact any-kind/any-recipient receipt instead; the default feed remains request-only. `scope` is `orchestrator` (default — the GlobalAgentBar feed, and empty when no orchestrator is bound) or `all` (every inbox address, so non-orchestrator A2A tasks and outbound receipts stay queryable; `all` needs no bound orchestrator). Reads are side-effect free; guest expiry and the claim sweep run in the server reconciler pass. |
 | CLI | `spur message send` (defaults to the orchestrator, sender `operator`), `inbox` (read-only), `show <id>`, `read <id>`, `reply`, `watch`. |
 | `spur agent run` | Claims its inbox into the prompt and settles via the service on exit. |
 | Board Projects → Inbox | Member list → two-direction thread → composer, with reply and mark-read. Declared members appear before their first message. Updates refresh through the oldest loaded row; page responses cannot cross member selection or outlive their refresh. |
