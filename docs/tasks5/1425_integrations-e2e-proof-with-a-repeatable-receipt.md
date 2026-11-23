@@ -4,7 +4,7 @@ name: Integrations E2E proof with a repeatable receipt
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.289Z
-updated_at: "2026-11-23T06:14:42.405Z"
+updated_at: "2026-11-23T06:16:24.027Z"
 feature_id: A82
 priority: P2
 tags: ["integrations", "A82"]
@@ -103,7 +103,7 @@ Measured
 - `bun run integrations-e2e` → 8/8 passed, `verdict: PASS`; run twice, `steps` identical.
 - The Board leg was written against the existing heavy-test harness and the same CDP helper; it is gated on `availableBrowserBinary()` like every other `*.heavy.test.ts`.
 
-**Forced re-verification update.** The acceptance proof uses the existing 200 CancelTask response. Both its metadata and the cancellation event must report a stopped run, and the next task must be claimed. The browser leg serves the same scratch project as the protocol proof. Ordinary runs write to `.spur/run/integrations-proof/`; `SPUR_WRITE_INTEGRATIONS_REPORTS=1 bun test tests/modules/integrations-browser.heavy.test.ts` from `apps/web` refreshes both tracked screenshots and the combined receipt.
+**Forced re-verification update.** The acceptance proof uses the existing 200 CancelTask response. Both its metadata and the cancellation event must report a stopped run, and the next task must be claimed. The browser leg serves the same scratch project as the protocol proof. Ordinary runs write to `.spur/run/integrations-proof/`; rerun `bun test tests/modules/integrations-browser.heavy.test.ts` from `apps/web`, then copy the three `integrations-e2e-*` outputs from `.spur/run/integrations-proof/` to `docs/reports/`.
 
 ### Testing
 

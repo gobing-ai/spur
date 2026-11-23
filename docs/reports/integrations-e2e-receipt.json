@@ -1,10 +1,10 @@
 {
     "artifact": "integrations-e2e",
-    "generatedAt": "2026-11-23T06:10:49.629Z",
+    "generatedAt": "2026-11-23T06:16:42.483Z",
     "context": {
-        "port": 52914,
+        "port": 53784,
         "scratch": "(removed)",
-        "member": "spur-integrations-e2e-kYwgZk-coder"
+        "member": "spur-integrations-e2e-pVLReu-coder"
     },
     "steps": [
         {

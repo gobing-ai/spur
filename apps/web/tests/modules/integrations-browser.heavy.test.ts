@@ -5,11 +5,7 @@ import { runIntegrationsE2e } from '../../../../scripts/commands/integrations-e2
 import { buildBoardToTemp, removeBoardBuild, WEB_ROOT } from '../test-helpers/board-build';
 import { availableBrowserBinary, launchBrowser } from '../test-helpers/cdp';
 
-// Keep ordinary test runs out of tracked reports. Opt in when refreshing the feature's artifacts.
-const reports = join(
-    WEB_ROOT,
-    Bun.env.SPUR_WRITE_INTEGRATIONS_REPORTS === '1' ? '../../docs/reports' : '../../.spur/run/integrations-proof',
-);
+const reports = join(WEB_ROOT, '../../.spur/run/integrations-proof');
 
 test.skipIf(availableBrowserBinary() === undefined)(
     'A82 live protocol and Board proof writes a receipt and both screenshots',

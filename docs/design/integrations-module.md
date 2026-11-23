@@ -182,8 +182,12 @@ overwritten each run, as `a2a-serve-e2e` does). The Board leg is the heavy test
 `apps/web/tests/modules/integrations-browser.heavy.test.ts`, which renders `/board/integrations`, opens
 the MCP tab to assert the namespace line, the refused exposure and the project command (1438 R2).
 The test writes a combined receipt and both Summary screenshots under `.spur/run/integrations-proof/`.
-To refresh their tracked copies in `docs/reports/`, run
-`SPUR_WRITE_INTEGRATIONS_REPORTS=1 bun test tests/modules/integrations-browser.heavy.test.ts` from `apps/web`.
+To refresh the tracked copies, run these commands from `apps/web`:
+
+```sh
+bun test tests/modules/integrations-browser.heavy.test.ts &&
+  cp ../../.spur/run/integrations-proof/integrations-e2e-* ../../docs/reports/
+```
 
 ## 5. Out of scope
 
