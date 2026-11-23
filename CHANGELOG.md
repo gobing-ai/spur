@@ -8,6 +8,12 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.46] - 2026-11-23
+
+### Fixed
+- a gateway re-install waits for launchd to finish unloading the LaunchAgent before bootstrapping it and retries once, so changing the port no longer fails with `5: Input/output error`, and a failed update restores the previous plist instead of deleting a running agent (5875ab19c)
+  <!-- src: packages/app/src/services/gateway-daemon.ts:176, packages/app/src/services/gateway-daemon.ts:226, packages/app/src/services/gateway-daemon.ts:238 · confidence: HIGH -->
+
 ## [0.4.45] - 2026-11-23
 
 ### Fixed
