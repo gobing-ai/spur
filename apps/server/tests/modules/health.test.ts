@@ -346,8 +346,18 @@ describe('healthModule', () => {
         setPortProbeForTests(async (port) => (port === targetPort ? 'in-use' : 'available'));
         ProjectRegistry.prototype.allocatePort = async () => targetPort;
         const registry = new ProjectRegistry(projectsFile);
-        await registry.upsert({ name: 'kk', path: normalizeProjectPath(tempDir), host: '192.168.87.27', port: 3003 });
-        await registry.upsert({ name: 'kk', path: tempDir, port: 0, prefix: '/kk' });
+        const selectedPath = join(tempDir, 'selected');
+        const otherPath = join(tempDir, 'other');
+        mkdirSync(selectedPath);
+        mkdirSync(otherPath);
+        await registry.upsert({
+            name: 'kk',
+            path: normalizeProjectPath(selectedPath),
+            host: '192.168.87.27',
+            port: 3003,
+        });
+        await registry.upsert({ name: 'kk', path: otherPath, port: 0, prefix: '/other' });
+        await registry.upsert({ name: 'kk', path: selectedPath, port: 0, prefix: '/kk' });
         setDetachedServeSpawnForTests(() => ({ exitCode: null, unref: () => {} }));
 
         try {
@@ -355,15 +365,29 @@ describe('healthModule', () => {
             healthModule.mount(app, { cwd: tempDir } as ServerContext);
             const res = await app.request('/api/projects/start', {
                 method: 'POST',
-                body: JSON.stringify({ name: 'kk', path: tempDir, host: 'localhost' }),
+                body: JSON.stringify({ name: 'kk', path: selectedPath, host: 'localhost' }),
                 headers: { 'content-type': 'application/json' },
             });
             expect(res.status).toBe(200);
             const body = (await res.json()) as { port: number; url: string };
             expect(body.port).toBe(targetPort);
             expect(body.url).toBe('http://localhost:3000/kk/board');
+            const forwarded = await app.request('/api/projects/start', {
+                method: 'POST',
+                body: JSON.stringify({ name: 'kk', path: selectedPath, host: 'localhost' }),
+                headers: {
+                    'content-type': 'application/json',
+                    'x-forwarded-host': 'board.example.test',
+                    'x-forwarded-prefix': '/current',
+                    'x-forwarded-proto': 'https',
+                },
+            });
+            expect(forwarded.status).toBe(200);
+            const forwardedBody = (await forwarded.json()) as { url: string };
+            expect(forwardedBody.url).toBe('/kk/board');
             const saved = registry.readRaw().projects;
-            expect(saved.find((p) => p.host === 'localhost')?.port).toBe(targetPort);
+            expect(saved.find((p) => p.prefix === '/kk')?.port).toBe(targetPort);
+            expect(saved.find((p) => p.prefix === '/other')?.port).toBe(0);
             expect(saved.find((p) => p.host === '192.168.87.27')?.port).toBe(3003);
         } finally {
             setDetachedServeSpawnForTests(undefined);

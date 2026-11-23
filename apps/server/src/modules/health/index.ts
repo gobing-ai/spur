@@ -507,6 +507,9 @@ export const healthModule: ServerModule = {
             if (body === null || typeof body !== 'object' || Array.isArray(body)) {
                 return c.json({ error: 'request body must be a JSON object' }, 400);
             }
+            if ([body.name, body.path, body.host].some((value) => value !== undefined && typeof value !== 'string')) {
+                return c.json({ error: 'name, path and host must be strings' }, 400);
+            }
             const target = body.name ?? body.path;
             if (!target) {
                 return c.json({ error: 'Missing name or path in request body' }, 400);
@@ -514,34 +517,32 @@ export const healthModule: ServerModule = {
 
             try {
                 const registry = new ProjectRegistry();
-                const entry = body.host
+                const host = body.host?.trim().toLowerCase();
+                const entry = host
                     ? (await registry.list()).find((p) => {
-                          const host = body.host?.trim().toLowerCase() ?? '';
                           const hostMatches = isLocalHost(host)
                               ? isLocalHost(p.host)
                               : (p.host?.trim().toLowerCase() ?? 'localhost') === host;
                           if (!hostMatches) return false;
-                          const nameMatches = p.name.toLowerCase() === target.toLowerCase();
-                          const pathMatches = isLocalHost(p.host)
-                              ? normalizeProjectPath(p.path) === normalizeProjectPath(target)
-                              : p.path === target;
-                          return nameMatches || pathMatches;
+                          const path = body.path;
+                          if (path === undefined) return p.name.toLowerCase() === target.toLowerCase();
+                          return isLocalHost(p.host)
+                              ? normalizeProjectPath(p.path) === normalizeProjectPath(path)
+                              : p.path === path;
                       })
                     : ((await registry.getByName(target)) ?? (await registry.getByPath(target)));
-                if (body.host && entry === undefined) throw new Error(`Project not found in registry: "${target}"`);
+                if (host && entry === undefined) throw new Error(`Project not found in registry: "${target}"`);
                 const result = await startRegisteredProject(registry, target, {
                     ...(entry === undefined ? {} : { entry }),
                 });
                 const serverConfig = buildConfigFromEnv(getEnvVars()).server;
+                const project = entry ?? { name: result.name };
+                const prefix = resolveProjectPrefix(project);
                 const publicUrl =
-                    entry !== undefined && !isLocalHost(entry.host)
-                        ? result.url
+                    prefix !== null && c.req.header('x-forwarded-prefix')?.trim()
+                        ? `${prefix}/board`
                         : (resolveProjectGatewayUrl(
-                              {
-                                  name: result.name,
-                                  host: entry?.host ?? 'localhost',
-                                  prefix: entry?.prefix,
-                              },
+                              project,
                               { host: serverConfig.host, port: serverConfig.gateway.port },
                               '/board',
                           ) ?? result.url);

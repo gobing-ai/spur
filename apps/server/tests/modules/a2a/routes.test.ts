@@ -701,6 +701,16 @@ describe('A2A card origin behind the gateway (1395 R4)', () => {
         );
     });
 
+    test('preserves the HTTPS scheme of the forwarded gateway origin', async () => {
+        expect(
+            await cardWith({
+                'x-forwarded-host': 'board.example.test',
+                'x-forwarded-prefix': '/tslibs',
+                'x-forwarded-proto': 'https',
+            }),
+        ).toBe(`https://board.example.test/tslibs/a2a/members/${MEMBER}`);
+    });
+
     test('falls back to the request origin when a header is missing', async () => {
         const partials: Array<Record<string, string>> = [
             {},

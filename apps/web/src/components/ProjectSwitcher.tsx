@@ -349,9 +349,8 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
             if (!res.ok) {
                 throw new Error('Failed to start project');
             }
-            const body = (await res.json()) as { url: string; port: number };
-            const started = project.prefix && basePath() !== '/' ? `${project.prefix}/board` : null;
-            window.location.href = started || body.url;
+            const body = (await res.json()) as { url: string };
+            window.location.href = body.url;
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Start failed');
             setLoadingProject(null);

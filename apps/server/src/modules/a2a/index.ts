@@ -37,7 +37,6 @@ const CARD_SUFFIX = '.well-known/agent-card.json';
 const SEND_PATH = 'message:send';
 const CANCEL_SUFFIX = ':cancel';
 
-/** The fleet seam the inbox module uses: an injected `fleetService()` wins, else resolve locally. */
 /** The canonical gateway base for a direct-root card, or undefined when no local prefix exists. */
 function localCardOrigin(ctx: ServerContext): string | undefined {
     const entry = new ProjectRegistry()
@@ -284,6 +283,7 @@ export const a2aModule: ServerModule = {
                         {
                             host: c.req.header('x-forwarded-host'),
                             prefix: c.req.header('x-forwarded-prefix'),
+                            proto: c.req.header('x-forwarded-proto'),
                         },
                         localCardOrigin(ctx) ?? new URL(c.req.url).origin,
                     ),

@@ -4,7 +4,7 @@ name: Canonicalize all local project URLs on the gateway
 status: done
 template: issue
 created_at: 2026-11-23T18:40:23.173Z
-updated_at: "2026-11-23T20:55:37.259Z"
+updated_at: "2026-11-23T22:00:44.595Z"
 feature_id: K4
 
 ac_altitude: task-local
@@ -198,23 +198,23 @@ ADR-151 migrated request routing and Board base-path handling, but it did not es
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/config/src/projects.ts:75-86` implements canonical local/remote URL resolution and IPv6 handling; `packages/config/tests/projects-prefix.test.ts:80-130` covers default, custom, IPv6, and remote cases without liveness probes. |
-| R2 | MET | `apps/cli/src/commands/projects.ts:248-275,478-525` and `apps/server/src/serve.ts:1342-1370` produce canonical Board URLs and separate availability; `apps/cli/tests/commands/{projects-list-url,projects,projects-prefix}.test.ts` and `apps/server/tests/serve.test.ts:565-635` pass. |
-| R3 | MET | `apps/web/src/components/ProjectSwitcher.tsx:44-55,333-354` uses server-resolved local URLs in every base mode; `apps/server/src/modules/health/index.ts:444-477` returns direct-root absolute and forwarded-relative forms; switcher and health tests plus the real beta switch prove it. |
-| R4 | MET | `apps/cli/src/commands/agent/shared.ts:75-124` implements explicit override → local-host prefix → unregistered fallback; `apps/cli/tests/commands/agent/shared.test.ts:73-310` covers dead/stopped and same-path remote rows and never returns gateway-root `/api` for registered projects. |
-| R5 | MET | `apps/cli/src/commands/mcp.ts:140-160` always returns canonical local MCP URLs; `apps/cli/tests/commands/mcp.test.ts:150-175` proves gateway-up/down identity and unregistered fallback; live resolution returned `http://localhost:3900/alpha/mcp`. |
-| R6 | MET | `apps/server/src/modules/health/index.ts:515-554` maps exact-entry start responses; `packages/app/src/services/integrations-service.ts:87-121` and `apps/server/src/modules/a2a/index.ts:41-55,281-289` preserve forwarded/canonical/direct precedence. Handler/service/A2A tests and live cards all pass. |
-| R7 | MET | ADR-151 and all named owning docs are synchronized. Five workspace typechecks, changed-path light gate, pipeline DEFERRED gate, real gateway heavy proof, and repeatable CLI/browser artifacts passed. |
-| R8 | MET | `apps/web/src/components/ProjectSwitcher.tsx:60-68,340,473-500` scopes keys/loading/labels by host identity; `apps/server/src/modules/health/index.ts:464,517-554` scopes `current` and exact-entry start. Same-path tests and the live remote row `current:false` confirm it. |
+| R1 | MET | `packages/config/src/projects.ts:76-86` builds the one local gateway URL and excludes remote entries. The 19-test config suite passed, and a curl to the knowledge-kit Board resolved localhost over ::1 and returned 200. |
+| R2 | MET | The projects list and start adapters in `apps/cli/src/commands/projects.ts:246-268` and `apps/cli/src/commands/projects.ts:478-525` and normal serve in `apps/server/src/serve.ts:1343-1376` publish the canonical Board URL. The 95-test CLI run and 169-test server run passed. |
+| R3 | MET | `apps/web/src/components/ProjectSwitcher.tsx:44-55` and `apps/server/src/modules/health/index.ts:441-477` use an absolute gateway destination from a direct port and a current-origin path through the gateway. The Chromium proof cold-started beta from a legacy direct-root Board. |
+| R4 | MET | `apps/cli/src/commands/agent/shared.ts:82-124` resolves the local ancestor's prefixed API. The agent shared/start/stop tests passed, including dead ports, same-path remote exclusion, explicit override and the unregistered fallback. |
+| R5 | MET | `apps/cli/src/commands/mcp.ts:148-160` selects the registered local prefix without a liveness dependency. The CLI MCP tests passed with gateway up/down, the legacy unregistered port and explicit URL dispatch. |
+| R6 | MET | `apps/server/src/modules/health/index.ts:522-554` returns local start URLs in the request's gateway context. `apps/server/src/modules/a2a/projection.ts:74-83` preserves forwarded HTTPS, and `packages/app/src/services/integrations-service.ts:116-123` preserves forwarded base precedence. Handler, A2A and Integrations tests passed. |
+| R7 | MET | ADR-151 and the owning contracts were checked against the implementation, including the start and A2A updates in `docs/design/project-switcher.md:249-253` and `docs/design/a2a-member-transport.md:185`. The CLI gateway process proof, focused suites, repository lint/typechecks, web build and cold-start browser proof passed. |
+| R8 | MET | `apps/web/src/components/ProjectSwitcher.tsx:60-68` keys local/remote identity separately. `apps/server/src/modules/health/index.ts:461-472` scopes current state by host and `apps/server/tests/modules/health.test.ts:344-398` proves that a shared name cannot override the requested path and host. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — CLI and MCP use a reachable canonical origin | MET | test | `packages/config/tests/projects-prefix.test.ts`, `apps/cli/tests/commands/{projects-list-url,projects,mcp,self/serve}.test.ts`, and live `projects list` / MCP probes all returned canonical URLs; remote stayed host:port. |
-| AC2 — Switcher navigation and identity stay canonical | MET | test | `apps/web/tests/components/project-switcher.test.ts`, `apps/server/tests/modules/health.test.ts`, and the real browser moved stopped beta from direct 3901 to `localhost:3900/beta/board/observability`; same-path remote was not current and local labels were prefixes. |
-| AC3 — Registered agent APIs never target the gateway root | MET | test | `apps/cli/tests/commands/agent/{shared,start,stop}.test.ts` plus live `resolveAgentServer` returned `http://localhost:3900/alpha/api`; explicit override and unregistered fallback remain covered. |
-| AC4 — Gateway-down does not reintroduce per-port public URLs | MET | test | `apps/cli/tests/commands/projects-list-url.test.ts` and `commands/mcp.test.ts` mock gateway-down and retain canonical identity with separate availability; production gateway was not stopped. |
-| AC5 — Start, Integrations, and A2A advertise canonical URLs | MET | test | `apps/server/tests/modules/{health,a2a/routes,integrations/handlers}.test.ts` and `packages/app/tests/services/integrations-service.test.ts`; live exact-entry start, A2A card, and Integrations URLs all used `localhost:3900/alpha`. |
-| AC6 — Contracts and regression coverage migrate together | MET | test | ADR/design/help/plugin docs updated; changed-path light gate and pipeline DEFERRED gate passed; `apps/cli/tests/commands/serve-gateway.heavy.test.ts` and `/tmp/spur-1444-e2e-TmCMTY/{cli-proof.txt,browser-proof.md,beta-board.png}` provide the receipt. |
+| AC1 — CLI and MCP use a reachable canonical origin | MET | test | CLI list, start, MCP and self-serve tests passed in the 95-test CLI run. The gateway heavy test in `apps/cli/tests/commands/serve-gateway.heavy.test.ts:53-145` passed, and the live localhost Board returned HTTP 200 over ::1. |
+| AC2 — Switcher navigation and identity stay canonical | MET | command | After bun run --filter @gobing-ai/spur-web build, bun .spur/run/1444-browser-proof.ts exited 0. This run's .spur/run artifact `1444-browser-proof.log` lines 1–2 records Headless Chromium switching from a direct-root Board to the gateway's /beta/board/observability, cold-starting beta, and preserving the same-path remote row. |
+| AC3 — Registered agent APIs never target the gateway root | MET | test | From apps/cli, the focused agent shared/start/stop suites exited 0. `apps/cli/tests/commands/agent/shared.test.ts:73-130` covers explicit override, prefixed discovery, dead registered ports and the unregistered fallback. |
+| AC4 — Gateway-down does not reintroduce per-port public URLs | MET | test | Gateway-down probes passed in `apps/cli/tests/commands/projects-list-url.test.ts:53-71` and `apps/cli/tests/commands/mcp.test.ts:163-175`. Gateway availability and URL identity were asserted independently. |
+| AC5 — Start, Integrations, and A2A advertise canonical URLs | MET | test | From apps/server, bun test tests/modules/health.test.ts tests/modules/a2a/routes.test.ts --test-name-pattern 'exact local entry |
+| AC6 — Contracts and regression coverage migrate together | MET | command | Fresh repo lint/typechecking, focused app/config/CLI/server/web checks, the process-level gateway proof, web build and Chromium proof all exited 0. This run's .spur/run artifact `1444-browser-proof.ts` lines 1–91 reproduces the browser flow and writes the log and screenshot evidence. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

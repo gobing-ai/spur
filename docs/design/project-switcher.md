@@ -236,7 +236,7 @@ GET /api/projects
 
 POST /api/projects/start
 body: { "name"?: string, "path"?: string, "host"?: string }
-→ { "name", "path", "port", "running": true, "url": "http://localhost:<gateway.port>/<prefix>/board" }
+→ { "name", "path", "port", "running": true, "url": string }
 
 GET /api/project/fleet   (0840)
 → { "path": string|null, "enabled": boolean,
@@ -251,6 +251,8 @@ GET /api/project/fleet   (0840)
 - `running` is live-checked (TCP or `GET /api/health` with short timeout), not only `port > 0`.
 - `current` marks the board’s own local project; a same-path remote row is never current.
 - Start is idempotent if already running (return existing port plus the canonical public URL).
+- With `path` and `host`, start selects that registry identity even when another row shares the name.
+- A local start response uses `/<prefix>/board` through the gateway and an absolute gateway URL from a direct upstream request.
 - CF Worker: list may return empty / not configured; start returns 501 — registry is local-disk only.
 - `/api/project/fleet` (0840) reads the served project's own migrated db and `agent.fleet`
   through `FleetService` + `StrategyRuntime`; every fact degrades to a named state

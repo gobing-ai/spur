@@ -71,11 +71,15 @@ export interface AgentCardInput {
  * port that dies on the next restart. The upstream binds loopback only, so these headers can come
  * from a local process, and they affect the advertised URL alone: never authentication.
  */
-export function cardOrigin(forwarded: { host?: string | null; prefix?: string | null }, fallback: string): string {
+export function cardOrigin(
+    forwarded: { host?: string | null; prefix?: string | null; proto?: string | null },
+    fallback: string,
+): string {
     const host = forwarded.host?.trim() ?? '';
     const prefix = forwarded.prefix?.trim() ?? '';
     if (host === '' || prefix === '') return fallback;
-    return `http://${host}${prefix.replace(/\/+$/, '')}`;
+    const proto = forwarded.proto?.split(',')[0]?.trim().toLowerCase() === 'https' ? 'https' : 'http';
+    return `${proto}://${host}${prefix.replace(/\/+$/, '')}`;
 }
 
 /** Build the card: protocol 1.0, HTTP+JSON only, streaming and push declared false. */
