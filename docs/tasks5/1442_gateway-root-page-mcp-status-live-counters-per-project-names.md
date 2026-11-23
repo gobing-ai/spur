@@ -4,7 +4,7 @@ name: "Gateway root page: MCP status, live counters, per-project namespaces and 
 status: done
 template: issue
 created_at: 2026-11-23T00:56:05.442Z
-updated_at: "2026-11-23T04:22:24.619Z"
+updated_at: "2026-11-23T06:14:46.436Z"
 feature_id: A82
 
 ac_numbering: task-local
@@ -89,13 +89,13 @@ Extend `GatewayIndexInput` and the existing system-info region in `project-gatew
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — on gateway `GET /`, show gateway MCP enablement, credential presence, the current routing counters, local project MCP namespaces and gateway discovery diagnostics | MET | `packages/app/src/services/project-gateway-html.ts:17-70,108-160` (typed snapshot + popover rows); `packages/app/src/services/project-gateway.ts:528-590` (`counterSnapshot`, `mcpIndexSnapshot`, display-safe projections); tests `packages/app/tests/services/project-gateway-mcp.test.ts:290-360` |
-| R2 — dependency-free server-rendered HTML from the current process, with an explicit unavailable state when discovery fails and a usable index in every state | MET | `packages/app/src/services/project-gateway-html.ts:760-775` (no client read; the existing popover script only toggles visibility); `packages/app/src/services/project-gateway.ts:556-580` (MCP-off skips discovery; a throwing resolver yields `unavailable`); tests `packages/app/tests/services/project-gateway-html.test.ts:145-235`, `packages/app/tests/services/project-gateway-mcp.test.ts:360-390` |
+| R1 | MET | `packages/app/tests/services/project-gateway-mcp.test.ts:317` — The root reports the current counters, auth presence and collision and remote diagnostics. The regression asserts one registry read for both cards and discovery. Nonzero 5xx and restart behavior is verified by the gateway counter and HTML suites. |
+| R2 | MET | `packages/app/tests/services/project-gateway-mcp.test.ts:347` — Off and unavailable states keep the page usable; the renderer escapes dynamic values at packages/app/tests/services/project-gateway-html.test.ts:145. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — the gateway root renders the current routing and discovery snapshot (req: R1) | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:290-360` — two local projects colliding on one namespace and one remote entry: the page reports `data-gateway-mcp="on"`, the credential name and `set`, both namespaces as `unassigned`, the `namespace-collision` and `remote-not-proxied (ADR-151)` diagnostics with their remedies, and `errors 2 / 0` from two recorded 404s; the token value is absent |
-| AC2 — the index works with MCP off or discovery unavailable (req: R2) | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:360-390` (MCP off → `data-gateway-mcp="off"`, no namespace list, cards and counters intact; a throwing discovery read → `data-gateway-discovery="unavailable"` with no exception text, cards and counters intact) and `packages/app/tests/services/project-gateway-html.test.ts:210-235` (same two states at the render layer, plus escaped `<script>` payloads) |
+| AC1 — Gateway root renders the current routing and discovery snapshot (req: R1) | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:317` — The root reports the current counters, auth presence and collision and remote diagnostics. The regression asserts one registry read for both cards and discovery. Nonzero 5xx and restart behavior is verified by the gateway counter and HTML suites. |
+| AC2 — Gateway index works with MCP off or discovery unavailable (req: R2) | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:347` — Off and unavailable states keep the page usable; the renderer escapes dynamic values at packages/app/tests/services/project-gateway-html.test.ts:145. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

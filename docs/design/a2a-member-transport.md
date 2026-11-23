@@ -184,6 +184,9 @@ The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a 
 | member id | the member's inbox address `<projectSlug>-<memberLocalId>`; `FleetService.memberAddresses` resolves it from the declaration alone, so a member whose executor is globally disabled still has an address (its launch is a separate failure) |
 | Forwarded identity | the gateway's `proxy` sets `x-forwarded-host` (the authority the client dialed) and `x-forwarded-prefix` (the matched project prefix) on every upstream request, and strips any inbound copy first (1395 R3) |
 
+An accepted CancelTask returns HTTP 200 with the task. Its `metadata.runStopped` matches the
+cancellation event and is false if the run has not cleared by the end of the wait.
+
 Receiver-side state mapping (the inverse of §4.2, `projectState`): a cancel intent outranks the
 receipt (a stopped run exits `errored`, and the caller must still read `canceled`); then run row
 `exited` → `COMPLETED`, `errored` → `FAILED` (with the reason as the status message), `running` →

@@ -4,7 +4,7 @@ name: "A2A inspection: agent card JSON, a2a snippets, outbound auth state and tr
 status: done
 template: issue
 created_at: 2026-11-23T00:55:57.547Z
-updated_at: "2026-11-23T04:08:34.032Z"
+updated_at: "2026-11-23T06:14:45.069Z"
 feature_id: A82
 
 ac_numbering: task-local
@@ -114,15 +114,15 @@ Emit `withBase('/board/observability?...')` with `tab=trace` and an encoded `run
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — inspect the actual public Agent Card JSON inline on demand, and copy `a2a card get` / `a2a send` examples for the selected inbound member | MET | `apps/web/src/modules/integrations/A2aTab.tsx:24-95` (`CardInspector`: nothing fetched until asked, inline error + retry, no fetch while the listener is off) and `:120-165` (examples); `apps/web/src/modules/integrations/helpers.ts:170-200` (`a2aExamples` uses the card URL and the credential-helper option, never a token); tests `apps/web/tests/modules/integrations/integrations-module.test.tsx:545-620` |
-| R2 — outbound/cross-project credential state by variable name and presence; each receipt shows the remote task id, context id and branch it persisted | MET | `packages/contracts/src/integrations.ts:66-80`; `packages/app/src/services/integrations-service.ts:46-60,236-262`; `apps/server/src/modules/integrations/handlers.ts:60-85`; `packages/contracts/src/inbox.ts:52-75`; `packages/domain/src/dao/inbox-dao.ts:500-530`; `apps/server/src/modules/inbox/handlers.ts:276-292`; UI `apps/web/src/modules/integrations/A2aTab.tsx:100-135,300-345`; tests `apps/server/tests/modules/integrations/handlers.test.ts:410-455`, `apps/server/tests/modules/inbox/handlers.test.ts:630-690`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:620-670` |
-| R3 — a base-aware Observability Trace link that opens the selected local run, and a warning when the enabled listener has no inbound members | MET | `apps/web/src/modules/integrations/helpers.ts:130-145` (`traceLink`, UUID-only and base-aware); `apps/web/src/modules/observability/TraceTab.tsx:300-470,560-580` (exact-run precedence, loading/retry/missing, highlighted node); `apps/server/src/modules/observability/index.ts:40-75,490-520` (route, 400/404, projection); `apps/web/src/modules/integrations/A2aTab.tsx:150-160` (no-inbound warning); tests `apps/server/tests/modules/observability/index.test.ts:1115-1185`, `apps/web/tests/modules/observability/agent-trace.test.ts`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:670-700` |
+| R1 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:689` — The inspector stays on the current Board mount despite a different advertised origin. On-demand rendering, retry, off state and CLI examples are tested in the same suite. |
+| R2 | MET | `apps/server/tests/modules/inbox/handlers.test.ts:616` — Two receipts retain separate remote refs; missing refs remain absent. Outbound credentials report their name and presence only, proved at apps/server/tests/modules/integrations/handlers.test.ts:405. |
+| R3 | MET | `apps/server/tests/modules/observability/index.test.ts:1150` — The route opens an older exact run with no log or session metadata. Links and the inbound warning are exercised in apps/web/tests/modules/integrations/integrations-module.test.tsx:794 and :804. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — inbound card inspection is on demand and scoped to the current project (req: R1) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:545-620` — no JSON before the click, the member's own `cardUrl` is what is fetched (the seam receives it), a 500 renders an inline error with retry while the tab stays intact, and a disabled listener renders neither the button nor the examples |
-| AC2 — outbound auth and remote refs are scoped to their owners (req: R2) | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:410-455` (name + presence, `unset` case, no value in the payload) and `apps/server/tests/modules/inbox/handlers.test.ts:630-690` (two receipts, different remote ids/branches, malformed artifact → no branch); UI assertions in `apps/web/tests/modules/integrations/integrations-module.test.tsx:620-670` |
-| AC3 — A2A run links open the selected trace and empty inbound is diagnosed (req: R3) | MET | test | `apps/server/tests/modules/observability/index.test.ts:1115-1185` (an older child run opens by identity with no `logPath`/`sessionIds`; 404/400) and `apps/web/tests/modules/integrations/integrations-module.test.tsx:670-700` (a UUID run is a `tab=trace&runId=` link, `run-1` is plain text, an enabled listener with no inbound members warns) |
+| AC1 — Inbound card inspection is on demand and scoped to the current project (req: R1) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:689` — The inspector stays on the current Board mount despite a different advertised origin. On-demand rendering, retry, off state and CLI examples are tested in the same suite. |
+| AC2 — Outbound auth and remote refs are scoped to their owners (req: R2) | MET | test | `apps/server/tests/modules/inbox/handlers.test.ts:616` — Two receipts retain separate remote refs; missing refs remain absent. Outbound credentials report their name and presence only, proved at apps/server/tests/modules/integrations/handlers.test.ts:405. |
+| AC3 — A2A run links open the selected trace and empty inbound is diagnosed (req: R3) | MET | test | `apps/server/tests/modules/observability/index.test.ts:1150` — The route opens an older exact run with no log or session metadata. Links and the inbound warning are exercised in apps/web/tests/modules/integrations/integrations-module.test.tsx:794 and :804. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

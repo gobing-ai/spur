@@ -4,7 +4,7 @@ name: Render per-tool protocol telemetry and the mcp/a2a/auth prefix colors
 status: done
 template: issue
 created_at: 2026-11-23T00:55:53.073Z
-updated_at: "2026-11-23T03:50:46.326Z"
+updated_at: "2026-11-23T06:14:44.427Z"
 feature_id: A82
 
 ac_numbering: task-local
@@ -95,13 +95,13 @@ Extend `PREFIX_COLORS` and `PREFIX_COLOR_MAP` with MCP using info, A2A using suc
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — show the selected window's tool latency and unmeasured durations, resource reads, actor attribution, incoming A2A counts, auth refusals and repeated failures; tool/resource/failure detail on MCP and member/refusal detail on A2A | MET | `apps/web/src/modules/integrations/SummaryTab.tsx:186-420` (six `Slice` cards, each with an empty state); `apps/web/src/modules/integrations/McpTab.tsx:220-300`; `apps/web/src/modules/integrations/A2aTab.tsx:70-130`; `apps/web/src/modules/integrations/helpers.ts:118-140`; `apps/web/src/modules/integrations/IntegrationsModule.tsx:128-142` (the hook's existing `usage` passed through — no new read); tests `apps/web/tests/modules/integrations/integrations-module.test.tsx:505-610` |
-| R2 — give `mcp`, `a2a` and `auth` explicit, consistent, distinguishable colors in Observability Summary and System Events, keeping visible text labels | MET | `apps/web/src/modules/observability/SummaryTab.tsx:18-50` (`var(--color-spur-info |
+| R1 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:597` — The six Summary slices render and update by selected window. MCP and A2A subsets render at lines 633 and 647. |
+| R2 | MET | `apps/web/tests/modules/observability.test.ts:68` — Summary resolves distinct theme tokens. System Events uses named styles and preserves its fallback at apps/web/tests/modules/observability/system-events-tab.test.ts:451. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Integrations shows the selected usage window in each view (req: R1) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:505-610` — the default window shows all six slices with three empty states, switching to `All` replaces the detail (`sp_task_list` gone, `sp_workflow_run` present), a null percentile renders `—` beside `4 unmeasured`, and the MCP/A2A tabs show their own subsets |
-| AC2 — Protocol event prefixes use named colors in both Observability views (req: R2) | MET | test | `apps/web/tests/modules/observability/system-events-tab.test.ts:470-490` (three distinct `text-spur-*` classes; an uncatalogued prefix keeps `text-spur-text-muted`) and `apps/web/tests/modules/observability.test.ts:60-75` (three distinct `var(--color-spur-*)` values; an unknown prefix still hashes into the palette) |
+| AC1 — Integrations shows the selected usage window in each view (req: R1) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:597` — The six Summary slices render and update by selected window. MCP and A2A subsets render at lines 633 and 647. |
+| AC2 — Protocol event prefixes use named colors in both Observability views (req: R2) | MET | test | `apps/web/tests/modules/observability.test.ts:68` — Summary resolves distinct theme tokens. System Events uses named styles and preserves its fallback at apps/web/tests/modules/observability/system-events-tab.test.ts:451. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

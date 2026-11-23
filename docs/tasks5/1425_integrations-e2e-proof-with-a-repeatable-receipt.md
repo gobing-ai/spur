@@ -4,7 +4,7 @@ name: Integrations E2E proof with a repeatable receipt
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.289Z
-updated_at: "2026-11-22T07:14:58.432Z"
+updated_at: "2026-11-23T06:14:42.405Z"
 feature_id: A82
 priority: P2
 tags: ["integrations", "A82"]
@@ -38,10 +38,10 @@ Design satellite: docs/design/integrations-module.md §4. Follows the existing s
   - a `tools/call` with an unknown argument returns `errorCode: invalid_arguments` (F1);
   - `tools/list` entries carry `annotations` (F2);
   - an unauthenticated card GET returns 200 with a non-empty `skills`, and an unauthenticated `message:send` returns 401 (F3, F4);
-  - send then cancel on the stub member returns 202 with `runStopped: true`, the member instance is still running, and a second send is claimed (F6);
+  - send then cancel on the stub member returns 200 with `metadata.runStopped: true`, the cancellation event confirms `runStopped: true`, the member instance stays running, and a second send is claimed (F6);
   - `integrations.status`, serialized, does not contain the token value (R7).
 - [x] R3. It writes `docs/reports/integrations-e2e-receipt.json` (stable name, overwritten each run). Each step records the command, exit or HTTP status, and the observed and expected value. It exits nonzero on any failed assertion.
-- [x] R4. `apps/web/tests/modules/integrations-browser.heavy.test.ts` loads `/board/integrations` against a served build with MCP and A2A enabled. It asserts one `integrations-row-<surface>` per surface and writes `docs/reports/integrations-e2e-summary-{light,dark}.png`. It skips with a reason when no browser binary is available, as the existing heavy tests do.
+- [x] R4. `apps/web/tests/modules/integrations-browser.heavy.test.ts` loads `/board/integrations` against a served build with MCP and A2A enabled. It asserts one `integrations-row-<surface>` per surface and writes both Summary screenshots. The explicit report refresh writes them to `docs/reports/integrations-e2e-summary-{light,dark}.png`. It skips with a reason when no browser binary is available, as the existing heavy tests do.
 
 Out of scope: real model agents, a gateway-served run (covered by K4 heavy tests), and CI wiring.
 
@@ -103,33 +103,35 @@ Measured
 - `bun run integrations-e2e` → 8/8 passed, `verdict: PASS`; run twice, `steps` identical.
 - The Board leg was written against the existing heavy-test harness and the same CDP helper; it is gated on `availableBrowserBinary()` like every other `*.heavy.test.ts`.
 
+**Forced re-verification update.** The acceptance proof uses the existing 200 CancelTask response. Both its metadata and the cancellation event must report a stopped run, and the next task must be claimed. The browser leg serves the same scratch project as the protocol proof. Ordinary runs write to `.spur/run/integrations-proof/`; `SPUR_WRITE_INTEGRATIONS_REPORTS=1 bun test tests/modules/integrations-browser.heavy.test.ts` from `apps/web` refreshes both tracked screenshots and the combined receipt.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | scripts/commands/integrations-e2e.ts:228 boots a temporary project with both listeners and a real spawned stub member. |
-| R2 | MET | docs/reports/integrations-e2e-receipt.json:10 shows all eight protocol steps, including the invalid_arguments ledger event and live cancellation. |
-| R3 | MET | scripts/commands/integrations-e2e.ts:307 omits the ephemeral port and member from the step. Two post-fix runs yielded byte-identical steps, retained in .spur/run/verifyall-A82/protocol-first-steps.json:1 and .spur/run/verifyall-A82/protocol-second-steps.json:1. Updated verdict: .spur/run/1425-verdict.json:15-19. |
-| R4 | MET | apps/web/tests/modules/integrations-browser.heavy.test.ts:131 verifies four rows, writes light and dark screenshots, and skips when Chromium is unavailable. |
+| R1 | MET | `docs/reports/integrations-e2e-receipt.json:11` — The scratch Spur server and cold stub start in the live proof. |
+| R2 | MET | `docs/reports/integrations-e2e-receipt.json:21-98` — Live MCP errors and annotations, public/protected A2A routes, successful stop and continued drain, and token-free status all pass. |
+| R3 | MET | `docs/reports/integrations-e2e-receipt.json:113` — Both report export and ordinary runs exit zero with 10 passed assertions. The stable scenario projections matched across both runs. |
+| R4 | MET | `apps/web/tests/modules/integrations-browser.heavy.test.ts:41` — Chromium asserted all four surface rows and public-card inspection. Both tracked Summary screenshots were refreshed via the explicit report run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R14 — An E2E proof exercises the protocol fixes and the module and leaves an artifact | PARTIAL | command | Two protocol runs passed 8/8 with identical steps and Chromium passed 2/2. scripts/commands/integrations-e2e.ts:265 asserts the errorCode on the event, and apps/web/tests/modules/integrations-browser.heavy.test.ts:70 stubs status, so these legs do not prove all feature-level R1 and R11 assertions. |
+| R14 — An E2E proof exercises the protocol fixes and the module and leaves an artifact | MET | test | `docs/reports/integrations-e2e-receipt.json:21-98` — Live MCP errors and annotations, public/protected A2A routes, successful stop and continued drain, and token-free status all pass. `docs/reports/integrations-e2e-receipt.json:113` — Both report export and ordinary runs exit zero with 10 passed assertions. The stable scenario projections matched across both runs. `apps/web/tests/modules/integrations-browser.heavy.test.ts:41` — Chromium asserted all four surface rows and public-card inspection. Both tracked Summary screenshots were refreshed via the explicit report run. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P2 | correctness | — | The browser proof injects an API fixture at apps/web/tests/modules/integrations-browser.heavy.test.ts:71. The live protocol leg verifies the event errorCode at scripts/commands/integrations-e2e.ts:265. The combined proof leaves the feature's response and live Board assertions open. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

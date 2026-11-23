@@ -515,9 +515,8 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         return started;
     }
 
-    async function localEntries(): Promise<Array<{ entry: ProjectEntry; prefix: string }>> {
-        const projects = await deps.listProjects();
-        return projects.flatMap((entry) => {
+    async function localEntries(projects?: ProjectEntry[]): Promise<Array<{ entry: ProjectEntry; prefix: string }>> {
+        return (projects ?? (await deps.listProjects())).flatMap((entry) => {
             const prefix = resolveProjectPrefix(entry);
             return prefix === null || !isLocalHost(entry.host) ? [] : [{ entry, prefix }];
         });
@@ -561,11 +560,11 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
     }
 
     /** The root page's gateway-MCP block: state, credential presence, namespaces, diagnostics. */
-    async function mcpIndexSnapshot(): Promise<GatewayIndexMcp> {
+    async function mcpIndexSnapshot(entries: ProjectEntry[]): Promise<GatewayIndexMcp> {
         const auth = deps.mcpAuth ?? { envName: '', tokenPresent: false };
         if (deps.mcp === undefined) return { enabled: false, auth, namespaces: [], diagnostics: [] };
         try {
-            const extras = await mcpRegistry.discoverExtras();
+            const extras = await mcpRegistry.discoverExtras(entries);
             return {
                 enabled: true,
                 auth,
@@ -612,7 +611,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 port: deps.port,
                 edge: deps.edge,
                 projects,
-                mcp: await mcpIndexSnapshot(),
+                mcp: await mcpIndexSnapshot(entries),
                 routing: counterSnapshot(),
             }),
             { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
@@ -773,9 +772,9 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
      * namespace and exposed workflow tools, recomputed per call so listing never starts a
      * project and no cache can go stale.
      */
-    async function mcpRoutes(fs: FileSystem): Promise<GatewayMcpRoute[]> {
+    async function mcpRoutes(fs: FileSystem, entries?: ProjectEntry[]): Promise<GatewayMcpRoute[]> {
         const routes: GatewayMcpRoute[] = [];
-        for (const { entry, prefix } of await localEntries()) {
+        for (const { entry, prefix } of await localEntries(entries)) {
             const { namespace } = await resolveMcpNamespace({
                 configured: deps.projectMcpNamespace,
                 projectRoot: entry.path,
@@ -817,7 +816,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         return new Error(message);
     }
 
-    const mcpRegistry: McpGatewayRegistry = {
+    const mcpRegistry = {
         async listTools(): Promise<McpGatewayTool[]> {
             const routes = await mcpRoutes(createNodeFileSystem());
             const collisions = collidingNamespaces(routes);
@@ -986,8 +985,9 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             return null;
         },
 
-        async discoverExtras(): Promise<{ projects: unknown[]; diagnostics: unknown[] }> {
-            const routes = await mcpRoutes(createNodeFileSystem());
+        async discoverExtras(entries?: ProjectEntry[]): Promise<{ projects: unknown[]; diagnostics: unknown[] }> {
+            const registered = entries ?? (await deps.listProjects());
+            const routes = await mcpRoutes(createNodeFileSystem(), registered);
             const collisions = collidingNamespaces(routes);
             const projects = routes.map((route) => ({
                 name: route.entry.name,
@@ -995,7 +995,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 namespace: route.namespace,
             }));
             const diagnostics: Array<{ name: string; reason: string; remedy: string }> = [];
-            for (const entry of await deps.listProjects()) {
+            for (const entry of registered) {
                 if (!isLocalHost(entry.host)) {
                     diagnostics.push({
                         name: entry.name,
@@ -1013,7 +1013,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             }
             return { projects, diagnostics };
         },
-    };
+    } satisfies McpGatewayRegistry;
 
     /** Count every final response once, so refusals and upstream failures are not invisible (R1). */
     const handle = async (req: Request): Promise<Response> => {

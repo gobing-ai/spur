@@ -4,7 +4,7 @@ name: MCP error codes, MCP tool annotations, and A2A public card, card skills an
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.285Z
-updated_at: "2026-11-22T07:14:53.692Z"
+updated_at: "2026-11-23T06:14:39.507Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
@@ -35,7 +35,7 @@ Design satellite: docs/design/integrations-module.md §1 (F1–F5). ADR-148 amen
 - [x] R2. All 10 built-in MCP tool descriptors, and every workflow-derived tool, declare `annotations: { readOnlyHint, destructiveHint, idempotentHint }` in `tools/list`.
 - [x] R3. `GET /a2a/members/:member/.well-known/agent-card.json` answers without a bearer token. Every other `/a2a` route still returns 401 without one and emits `auth.denied`.
 - [x] R4. The Agent Card `skills` array has one skill derived from the member's `role` and `purpose`, or one default `general` skill when the member has no role.
-- [x] R5. A completed A2A task's `metadata.remoteBranch` is the branch of the tree its drain ran in. The drain tree is resolved by the same `laneForRequestKey(…) ?? project` rule the agent loop uses, so A2A tasks report the project tree's branch even with lane mode on.
+- [x] R5. A completed A2A task's `metadata.remoteBranch` is the branch of the tree its drain ran in. For a named member using its registered lane worktree, report that lane's branch. Runs with no member lane report the project tree's branch.
 
 Out of scope: lane routing for A2A requests, per-run cancel (1422), the Board status contract (1423), and any token value in a card or error body.
 
@@ -109,39 +109,40 @@ Out of scope: lane routing for A2A requests, per-run cancel (1422), the Board st
 | `apps/server/tests/modules/a2a/{routes,projection}.test.ts` | public card, 401 elsewhere, skills, lane-mode branch | R3/R4/R5 |
 | `docs/design/embedded-mcp-server.md`, `docs/design/a2a-member-transport.md` | annotations, typed error code, public card, skills, drain tree | T3: the design satellite moves with the surface |
 
+**Forced re-verification update.** The original F5 design preceded lane-backed A2A runs. The existing lane allocator resolves a named member's registered lane and the loop writes its branch beside the run receipt. GetTask reads that recorded branch, with a project-tree fallback for ordinary runs. This implements A82 R5; see `packages/app/tests/services/agent-loop-service.test.ts:1198` and `apps/server/tests/modules/a2a/routes.test.ts:439`.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | PARTIAL | apps/server/tests/modules/mcp-module.test.ts:537 proves the event classification for validation failures and the unknown-tool and service-error controls. apps/server/src/modules/mcp/protocol.ts:249 emits no response errorCode. |
-| R2 | MET | apps/server/tests/modules/mcp-module.test.ts:659 verifies built-ins and workflow descriptors with all three hints. |
-| R3 | MET | apps/server/tests/modules/a2a/routes.test.ts:259 verifies the public card, protected routes and auth.denied. |
-| R4 | MET | apps/server/tests/modules/a2a/projection.test.ts:53 and :66 verify declared and default skills. |
-| R5 | MET | apps/server/src/modules/a2a/index.ts:148 and :171 use the drain tree. apps/server/tests/modules/a2a/routes.test.ts:438 proves the task's approved project-tree behavior in lane mode. |
+| R1 | MET | `apps/server/tests/modules/mcp-module.test.ts:537` — Response and ledger agree on invalid_arguments for each validation family; error controls retain their classifications. |
+| R2 | MET | `apps/server/tests/modules/mcp-module.test.ts:666` — Built-ins and exposed workflows carry their three behavior hints. |
+| R3 | MET | `apps/server/tests/modules/a2a/routes.test.ts:236` — Bearer refusal emits auth.denied; the same suite proves the card alone is public. |
+| R4 | MET | `apps/server/tests/modules/a2a/projection.test.ts:53` — Declared role and purpose form the skill; the default general skill is covered at line 66. |
+| R5 | MET | `packages/app/tests/services/agent-loop-service.test.ts:1198` — The named member runs in its registered lane. HTTP returns the recorded branch in apps/server/tests/modules/a2a/routes.test.ts:439; the preceding test covers the project-tree fallback. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — MCP argument-validation failures classify as invalid_arguments | PARTIAL | test | apps/server/tests/modules/mcp-module.test.ts:537 proves the event classification for validation failures and the unknown-tool and service-error controls. apps/server/src/modules/mcp/protocol.ts:249 emits no response errorCode. |
-| R2 — MCP tool descriptors declare read and write annotations | MET | test | apps/server/tests/modules/mcp-module.test.ts:659 verifies built-ins and workflow descriptors with all three hints. |
-| R3 — The A2A Agent Card is public while other A2A routes stay bearer-only | MET | test | apps/server/tests/modules/a2a/routes.test.ts:259 verifies the public card, protected routes and auth.denied. |
-| R4 — The A2A Agent Card lists skills from the member declaration | MET | test | apps/server/tests/modules/a2a/projection.test.ts:53 and :66 verify declared and default skills. |
-| R5 — A2A remoteBranch reports the member's own working-tree branch | UNMET | test | apps/server/tests/modules/a2a/routes.test.ts:438 expects the project branch even in lane mode. The 1421 Q&A excludes routing A2A work to a lane, so the feature's lane/dev case remains unmet. |
+| R1 — MCP argument-validation failures classify as invalid_arguments | MET | test | `apps/server/tests/modules/mcp-module.test.ts:537` — Response and ledger agree on invalid_arguments for each validation family; error controls retain their classifications. |
+| R2 — MCP tool descriptors declare read and write annotations | MET | test | `apps/server/tests/modules/mcp-module.test.ts:666` — Built-ins and exposed workflows carry their three behavior hints. |
+| R3 — The A2A Agent Card is public while other A2A routes stay bearer-only | MET | test | `apps/server/tests/modules/a2a/routes.test.ts:236` — Bearer refusal emits auth.denied; the same suite proves the card alone is public. |
+| R4 — The A2A Agent Card lists skills from the member declaration | MET | test | `apps/server/tests/modules/a2a/projection.test.ts:53` — Declared role and purpose form the skill; the default general skill is covered at line 66. |
+| R5 — A2A remoteBranch reports the member's own working-tree branch | MET | test | `packages/app/tests/services/agent-loop-service.test.ts:1198` — The named member runs in its registered lane. HTTP returns the recorded branch in apps/server/tests/modules/a2a/routes.test.ts:439; the preceding test covers the project-tree fallback. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: FAIL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P2 | correctness | — | Feature R1 requires a response errorCode. apps/server/src/modules/mcp/protocol.ts:249 serializes the JSON-RPC code and message while apps/server/src/modules/mcp/index.ts:336 emits the classification to the ledger. |
-| P1 | correctness | — | Feature R5 requires lane/dev. apps/server/tests/modules/a2a/routes.test.ts:438 verifies that A2A drains use the project branch in lane mode, in line with the task's recorded Q&A. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

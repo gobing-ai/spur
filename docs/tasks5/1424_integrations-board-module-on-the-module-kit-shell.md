@@ -4,7 +4,7 @@ name: Integrations Board module on the module-kit shell
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.289Z
-updated_at: "2026-11-22T07:14:56.525Z"
+updated_at: "2026-11-23T06:14:41.682Z"
 feature_id: A82
 priority: P2
 tags: ["integrations", "A82"]
@@ -139,36 +139,36 @@ Notes
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:182 and :195 prove discovery, routing, shell, header and tab rendering. |
-| R2 | MET | apps/web/tests/modules/integrations/tabs.test.ts:6 pins the order. |
-| R3 | PARTIAL | apps/web/tests/modules/integrations/integrations-module.test.tsx:225 now verifies 25% for one conflict in four attempts and observes the last intake rather than cancellation. apps/web/tests/modules/integrations/useIntegrations.test.ts:217 verifies the same window reaches usage and history. Gateway MCP and A2A outbound still lack windowed metrics at apps/web/src/modules/integrations/SummaryTab.tsx:83 and :109. Updated verdict: .spur/run/1424-verdict.json:15-19. |
-| R4 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:249 and :263 prove catalog, resources and activity; apps/web/src/modules/integrations/McpTab.tsx:12 supplies the schema drawer and placeholder snippet. |
-| R5 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:282 checks members, filtered task states and links. apps/web/tests/modules/integrations/useIntegrations.test.ts exercises outbound receipts. |
-| R6 | MET | apps/web/tests/modules/observability/url-seed.test.ts:20 verifies the URL intent is applied initially. |
-| R7 | MET | apps/web/tests/modules/integrations/integrations-module.test.tsx:305 and :317 verify empty guidance and retry. apps/web/src/modules/integrations/IntegrationsModule.tsx:78 renders the loading state. |
+| R1 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:245` — Auto-discovery and the module-kit identity and tab strip are asserted. |
+| R2 | MET | `apps/web/tests/modules/integrations/tabs.test.ts:6` — The three tab IDs and order are pinned. |
+| R3 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:305` — The four rows render windowed counts, errors, last calls and denials. Live Summary state and all four row IDs are asserted at apps/web/tests/modules/integrations-browser.heavy.test.ts:41. |
+| R4 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:352` — Catalog origin, hints, resources and schema disclosure render. The same suite asserts recent tool name, duration, outcome and error code, and checks the copyable examples and probe. |
+| R5 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:378` — Members, requests and deep links render. Outbound receipt assembly is tested at apps/web/tests/modules/integrations/useIntegrations.test.ts:210. |
+| R6 | MET | `apps/web/tests/modules/observability/url-seed.test.ts:29` — System Events reads eventName/runId; the initial event-name filter is exercised at line 52. |
+| R7 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:416` — Empty guidance and retry states render; the loading branch is in apps/web/src/modules/integrations/IntegrationsModule.tsx:78. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R10 — The Board shows an Integrations module built on the module-kit shell | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:182 and :195 prove discovery, routing, shell, header and tab rendering. |
-| R11 — The Summary tab shows one health row per surface | PARTIAL | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:225 now verifies 25% for one conflict in four attempts and observes the last intake rather than cancellation. apps/web/tests/modules/integrations/useIntegrations.test.ts:217 verifies the same window reaches usage and history. Gateway MCP and A2A outbound still lack windowed metrics at apps/web/src/modules/integrations/SummaryTab.tsx:83 and :109. Updated verdict: .spur/run/1424-verdict.json:15-19. |
-| R12 — The MCP tab shows the catalog, recent calls and a client config snippet | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:249 and :263 prove catalog, resources and activity; apps/web/src/modules/integrations/McpTab.tsx:12 supplies the schema drawer and placeholder snippet. |
-| R13 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:282 checks members, filtered task states and links. apps/web/tests/modules/integrations/useIntegrations.test.ts exercises outbound receipts. |
-| R15 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable | MET | test | apps/web/tests/modules/integrations/integrations-module.test.tsx:305 and :317 verify empty guidance and retry. apps/web/src/modules/integrations/IntegrationsModule.tsx:78 renders the loading state. |
+| R10 — The Board shows an Integrations module built on the module-kit shell | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:245` — Auto-discovery and the module-kit identity and tab strip are asserted. |
+| R11 — The Summary tab shows one health row per surface | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:305` — The four rows render windowed counts, errors, last calls and denials. Live Summary state and all four row IDs are asserted at apps/web/tests/modules/integrations-browser.heavy.test.ts:41. |
+| R12 — The MCP tab shows the catalog, recent calls and a client config snippet | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:352` — Catalog origin, hints, resources and schema disclosure render. The same suite asserts recent tool name, duration, outcome and error code, and checks the copyable examples and probe. |
+| R13 — The A2A tab shows member cards, A2A tasks and outbound receipts with deep links | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:378` — Members, requests and deep links render. Outbound receipt assembly is tested at apps/web/tests/modules/integrations/useIntegrations.test.ts:210. |
+| R15 — The Integrations module renders empty and diagnostic states when surfaces are off or unreachable | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:416` — Empty guidance and retry states render; the loading branch is in apps/web/src/modules/integrations/IntegrationsModule.tsx:78. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P2 | correctness | — | apps/web/src/modules/integrations/SummaryTab.tsx:83 and :109 lack selected-window gateway MCP and outbound activity. Gateway counters cover all gateway requests; outbound activity columns are unmeasured. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

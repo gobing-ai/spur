@@ -357,6 +357,32 @@ describe('ProcessesView: selection reaches the shared keyed terminal (1163 R1)',
         capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
     };
 
+    test('watch rows label remote transports only when the fleet declares them', async () => {
+        setFetchForTesting(statusFetch(['literal', 'cross-project', 'local', 'undeclared']));
+        const local = { executor: 'claude', enabled: true, writeCapable: true, capabilityState: 'active' } as const;
+        const fleet = {
+            ...snapshot,
+            members: [
+                { ...local, instanceId: 'literal', a2a: 'https://peer.example/agent-card.json', enabled: false },
+                { ...local, instanceId: 'cross-project', project: 'other', member: 'worker' },
+                { ...local, instanceId: 'local' },
+            ],
+        };
+        const view = render(
+            <ProjectContext.Provider value={{ path: '/work/project', name: 'project', fleet, state: 'ready' }}>
+                <ProcessesView />
+            </ProjectContext.Provider>,
+        );
+        await flush();
+        for (const id of ['literal', 'cross-project', 'local', 'undeclared']) {
+            const row = view.container.querySelector(`[data-processes-row="sup:${id}"]`);
+            expect(row).not.toBeNull();
+            expect(row?.textContent).toContain('running');
+            const label = id === 'literal' ? 'A2A' : id === 'cross-project' ? 'Cross-project' : undefined;
+            expect(row?.querySelector('[data-processes-transport]')?.textContent).toBe(label);
+        }
+    });
+
     test('selecting a different watch row remounts the shared detail terminal', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const req = input as Request;

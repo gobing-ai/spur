@@ -9,6 +9,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { resetBasePathForTesting } from '../../../src/components/base-path';
 import { module as integrationsModule } from '../../../src/modules/integrations';
 import { traceLink } from '../../../src/modules/integrations/helpers';
 import IntegrationsModule from '../../../src/modules/integrations/IntegrationsModule';
@@ -160,6 +161,13 @@ const MCP_EVENTS = [
         occurredAt: '2026-11-22T01:00:00.000Z',
         runId: null,
         payload: { data: { tool: 'sp_task_list', durationMs: 12, outcome: 'ok' } },
+    },
+    {
+        id: 'e4',
+        eventName: 'mcp.tool.called',
+        occurredAt: '2026-11-22T01:05:00.000Z',
+        runId: null,
+        payload: { data: { tool: 'sp_task_list', durationMs: 3, outcome: 'error', errorCode: 'invalid_arguments' } },
     },
 ];
 const A2A_EVENTS = [
@@ -353,6 +361,9 @@ describe('1424 — MCP tab (R4)', () => {
         expect(workflow).toContain('workflow');
         expect(workflow).toContain('write');
         expect(view.getByTestId('integrations-mcp-resources').textContent).toContain('spur://tasks/{wbs}');
+        const disclosure = view.getByTestId('integrations-tool-sp_task_list').querySelector('details');
+        expect(disclosure?.querySelector('summary')?.textContent).toBe('input schema');
+        expect(disclosure?.querySelector('pre')?.textContent).toContain('"type": "object"');
     });
 
     test('recent calls show tool, duration and outcome', async () => {
@@ -364,6 +375,7 @@ describe('1424 — MCP tab (R4)', () => {
         expect(calls).toContain('sp_task_list');
         expect(calls).toContain('12ms');
         expect(calls).toContain('ok');
+        expect(calls).toContain('invalid_arguments');
     });
 
     test('the rendered module contains no token value', async () => {
@@ -672,6 +684,37 @@ describe('1440 — A2A inspection and trace links', () => {
         const json = view.getByTestId('integrations-a2a-card-json').textContent ?? '';
         expect(json).toContain('"name": "proj-coder"');
         expect(json).toContain('"skills"');
+    });
+
+    test('the card inspector stays on the Board mount when the advertised origin differs', async () => {
+        const base = document.createElement('meta');
+        base.name = 'spur-base';
+        base.content = '/mounted/';
+        document.head.append(base);
+        resetBasePathForTesting();
+        const reads: string[] = [];
+        const seams = makeSeams();
+        try {
+            const view = render(
+                <IntegrationsModule
+                    seams={{
+                        ...seams,
+                        fetchCard: async (url) => {
+                            reads.push(url);
+                            return Response.json({ name: 'proj-coder' });
+                        },
+                    }}
+                />,
+            );
+            await openA2a(view);
+            expect(reads).toEqual([]);
+            fireEvent.click(view.getByTestId('integrations-a2a-card-load'));
+            await waitFor(() => expect(view.getByTestId('integrations-a2a-card-json')).toBeTruthy());
+            expect(reads).toEqual(['/mounted/a2a/members/proj-coder/.well-known/agent-card.json']);
+        } finally {
+            base.remove();
+            resetBasePathForTesting();
+        }
     });
 
     test('an unavailable card shows an inline error and a retry, not a blank tab', async () => {

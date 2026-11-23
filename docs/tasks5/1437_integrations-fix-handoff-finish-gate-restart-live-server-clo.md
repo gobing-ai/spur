@@ -4,7 +4,7 @@ name: "Integrations fix handoff: finish gate, restart live server, close A82 gap
 status: done
 template: issue
 created_at: 2026-11-22T23:53:57.100Z
-updated_at: "2026-11-23T01:32:33.463Z"
+updated_at: "2026-11-23T06:14:43.046Z"
 feature_id: A82
 
 done_forced: "false"
@@ -127,17 +127,13 @@ Uncommitted changes currently in the working tree:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1. Decide whether the `fleet-e2e-turn-perf` timeout is related, and fix or record it | MET | `bun test scripts/commands/fleet-e2e-turn-perf.test.ts` — deterministic fixture, 4/4 isolated runs green at ~5.1s each (`scripts/commands/fleet-e2e-turn-perf.test.ts:6`); the same test passed inside the full `bun run spur-check` run. The 30s timeout was parallel-load flake, and the file touches no Integrations code (`scripts/commands/fleet-e2e-turn-perf.ts:1`), so it is recorded as pre-existing load flake with this evidence. |
-| R2. `bun run spur-check` exits 0, including `test-post-check` | MET | `bun run spur-check` exit 0: biome 1922 files clean + all-workspace typecheck clean (`package.json:87`), `test-pre-check` 52 rules pass, 13166 pass / 0 fail, `test-post-check` 3 rules pass; log `.spur/run/1437-spur-check.log` and the gate receipt `.spur/run/1437-check-receipt.json` (status PASS). |
-| R3. Restart the live `spur-new` server via the monorepo CLI; every listed endpoint 200; board HTML carries `spur-base`; browser-check the module | MET | Named checks: `bun apps/cli/src/index.ts projects stop spur-new` then `projects start spur-new`; through `http://localhost:3000/spur-new` — `/api/health` 200 (`version: 0.4.43`, `uptime_seconds: 4`), `/api/integrations/status` 200, `/api/integrations/usage` 200, `/api/events/history?prefix=mcp |
-| R4. Re-run `scripts/commands/integrations-e2e.ts` and regenerate the receipt | MET | `bun scripts/commands/integrations-e2e.ts` → `verdict: PASS`, 8/8 steps, and `docs/reports/integrations-e2e-receipt.json` no longer carries the failing `harness` row for `/api/inbox/requests?limit=100` (`scripts/commands/integrations-e2e.ts:484`). |
-| R5. Atomic conventional commit, then `spur feature verify A82` | MET | Commits `d8769bbee fix(integrations): surface the served build version and uptime` and `96d4905d4 docs(tasks): close the integrations fix handoff …`; `spur feature verify A82` → `A82 verification PASS` (run `run_80339ff0-d560-4b99-9b00-084990bd9ec0`, log `.spur/run/run_80339ff0-d560-4b99-9b00-084990bd9ec0-feature-verification.log`, 86 tests / 85 pass / 1 skip / 0 fail). |
-| R6. Surface server runtime identity (version, uptime) so a stale-server / fresh-`dist/web` skew is visible | MET | `apps/web/src/modules/integrations/helpers.ts:149` (`ServerRuntime`, `formatUptime`), `apps/web/src/modules/integrations/useIntegrations.ts:76` (tolerant `/api/health` read, independent of the status read) and `apps/web/src/modules/integrations/IntegrationsModule.tsx:52` (header renders `server v<version> · up <uptime>`, or `server identity unreadable`). Covered by `apps/web/tests/modules/integrations/helpers.test.ts:189`, `apps/web/tests/modules/integrations/useIntegrations.test.ts:267`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:216` and the live CDP assertion at `apps/web/tests/modules/integrations-browser.heavy.test.ts:57`. |
-| R7. File follow-up tasks for design gaps G1–G5 | MET | `docs/tasks5/1438_mcp-namespace-and-exposure-diagnostics-on-the-integrations-m.md`, `…1439_render-per-tool-protocol-telemetry…`, `…1440_a2a-inspection-agent-card-json…`, `…1441_badge-a2a-cross-project…`, `…1442_gateway-root-page-mcp-status…` — all created with `spur task create --feature A82 --skip-ready`. |
-
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC-none | N/A | n/a | The task declares no Acceptance Criteria; R1–R7 carry the acceptance evidence. |
+| R1 | MET | `scripts/commands/fleet-e2e-turn-perf.test.ts:6` — The isolated timing case passed with all 197 assertions using bun test --config=bunfig.heavy.toml scripts/commands/fleet-e2e-turn-perf.test.ts. |
+| R2 | MET | `docs/tasks5/1437_integrations-fix-handoff-finish-gate-restart-live-server-clo.md:155` — Original gate receipt .spur/run/1437-check-receipt.json reports PASS with post-check. The fresh repository verification is tracked separately. |
+| R3 | MET | `docs/tasks5/1437_integrations-fix-handoff-finish-gate-restart-live-server-clo.md:150` — The original run recorded restart, live gateway probes and browser render. A read-only re-probe found port 3000 offline; the fresh scratch-server browser proof covers current code. |
+| R4 | MET | `docs/reports/integrations-e2e-receipt.json:113` — The tracked receipt is refreshed and all 10 assertions pass. |
+| R5 | MET | `docs/features/A82_integrations-board-module-mcp-and-a2a-surfaces-made-visible-with-protocol-fixes.md:210` — Confirmed the historical fix and feature-close commits in Git, plus the feature verification receipt for the historical run. |
+| R6 | MET | `apps/web/tests/modules/integrations-browser.heavy.test.ts:57` — The live Board header names the served version and uptime. |
+| R7 | MET | `docs/features/A82_integrations-board-module-mcp-and-a2a-surfaces-made-visible-with-protocol-fixes.md:186` — 1438–1442 are recorded A82 follow-ups and all five have implementations and evidence. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

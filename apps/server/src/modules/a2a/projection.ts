@@ -45,8 +45,8 @@ export interface A2ATask {
     status: { state: A2ATaskState; message?: A2AMessage; timestamp?: string };
     artifacts?: { artifactId: string; parts: A2APart[] }[];
     history?: A2AMessage[];
-    /** Spur-specific completion metadata; A2A permits custom key/value metadata. */
-    metadata?: { remoteBranch?: string };
+    /** Spur-specific task metadata; A2A permits custom key/value metadata. */
+    metadata?: { remoteBranch?: string; runStopped?: boolean };
 }
 
 /** One Agent Card for one live member (R2). */

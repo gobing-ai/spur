@@ -560,6 +560,7 @@ describe('a2a module — CancelTask stops the run (R5)', () => {
         const runId = await seedRun(sent.task.id, 'running');
         const res = await cancel(sent.task.id);
         expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ metadata: { runStopped: false } });
         expect(harness.stops).toEqual([]);
         expect(existsSync(join(tempDir, '.spur', 'run', runId, 'cancel-requested'))).toBe(true);
         const row = await harness.rows('a2a.task.cancelled');

@@ -46,8 +46,9 @@ interrupting the current drain while leaving the loop and the queue alone:
    through `AgentService`. A warm turn spawns nothing, so it cannot be aborted: cancel reports
    `runStopped: false`. The
    drain settles as `canceled`, the loop clears its current run and claims the next request.
-4. The server waits for the coordination row to leave `running`, up to a bound (default 10s). On timeout it
-   answers 202 with `runStopped: false`. It never escalates to `supervisor().stop`.
+4. The server waits up to 10 seconds for the coordination row to leave `running`. An accepted cancel
+   returns the task in a 200 response. `metadata.runStopped` and the cancellation event both report
+   whether the row cleared before the wait ended.
 
 `a2a.task.cancelled` keeps its payload and adds `runId`.
 
@@ -140,7 +141,7 @@ failed identity read leaves the rest of the status visible (1437 R6).
 | --- | --- | --- |
 | Summary | One row per surface: state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus the window's six usage slices — tool latency (p50/p95 with unmeasured calls counted and a null percentile as `—`), resource reads, actor attribution, A2A intake, auth refusals by surface and reason, and repeated `(tool, errorCode)` failures with their first→last range — each with its own empty state. Plus a gateway counters strip when served | status + usage |
 | MCP | Namespace line (`namespace <ns> · from <config\|plugin-manifest\|none>`), tool table (origin badge, read/write badge, opens a schema drawer) with a case-insensitive name filter that never hides the exposure findings or the `spur://` list, exposure findings with their remedies, the window's tool latency, resource reads and repeated failures, `spur://` resource list, recent calls (tool, duration, outcome, errorCode), copyable client config snippet (URL + `${ENV}` placeholder), the project command `spur mcp --url <endpoint>`, the gateway command `spur mcp --gateway` only when the gateway's own MCP entry is on, and a JSON-RPC `server/discover` probe expanding the auth variable name only | status + usage + events |
-| A2A | Inbound member cards (card URL, write-fenced badge) with an on-demand **card inspector** (the public card JSON, fetched only when asked, an inline error with retry, and no fetch at all while the listener is off) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project members with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
+| A2A | Inbound member cards (card URL, write-fenced badge) with an on-demand **card inspector** (public JSON fetched under the current Board mount, with inline retry, while the listener is on) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project members with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
 
 States: a loading skeleton; an `EmptyState` when every surface is off, with the config keys that
 enable each one; a `Diagnostic` with retry when `integrations.status` fails.
@@ -179,8 +180,10 @@ unauthenticated card GET and message:send (F3, F4), send then cancel with `runSt
 no token in `integrations.status`. It writes `docs/reports/integrations-e2e-receipt.json` (stable name,
 overwritten each run, as `a2a-serve-e2e` does). The Board leg is the heavy test
 `apps/web/tests/modules/integrations-browser.heavy.test.ts`, which renders `/board/integrations`, opens
-the MCP tab to assert the namespace line, the refused exposure and the project command (1438 R2), and
-writes `docs/reports/integrations-e2e-summary-{light,dark}.png`.
+the MCP tab to assert the namespace line, the refused exposure and the project command (1438 R2).
+The test writes a combined receipt and both Summary screenshots under `.spur/run/integrations-proof/`.
+To refresh their tracked copies in `docs/reports/`, run
+`SPUR_WRITE_INTEGRATIONS_REPORTS=1 bun test tests/modules/integrations-browser.heavy.test.ts` from `apps/web`.
 
 ## 5. Out of scope
 

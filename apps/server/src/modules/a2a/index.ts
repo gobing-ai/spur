@@ -383,7 +383,8 @@ export const a2aModule: ServerModule = {
                 runId: run.run_id,
                 runStopped,
             });
-            return c.json(await projectTask(ctx, inbox, (await inbox.get(taskId)) ?? message));
+            const task = await projectTask(ctx, inbox, (await inbox.get(taskId)) ?? message);
+            return c.json({ ...task, metadata: { ...task.metadata, runStopped } });
         });
     },
 };

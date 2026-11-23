@@ -122,9 +122,9 @@ use the same namespace setting as the gateway would use to discover it.
    server-rendered system-info popover (1442): the gateway MCP state and credential presence
    (variable NAME + set/unset), the same routing counters `/api/health` reports, each local
    project's gateway MCP namespace (`unassigned` when it claims none) and the display-safe discovery
-   diagnostics (reason + remedy only). The snapshot is sampled at render time from the current
-   process — no polling, no persistence, no new endpoint (ADR-151). With MCP off the popover shows
-   the off state and performs no discovery read; a discovery failure shows an explicit
+   diagnostics (reason + remedy only). The project cards, namespaces and diagnostics share one
+   registry read. Counters are sampled at render time from the current process (ADR-151).
+   With MCP off the popover shows the off state and performs no discovery read. A discovery failure shows an explicit
    "Discovery unavailable" row and keeps the cards, counters and removal action usable.
    `GET /api/health`
    → `{ ok, gateway: true, port, projects: [{name, prefix, running}], counters }` (read by

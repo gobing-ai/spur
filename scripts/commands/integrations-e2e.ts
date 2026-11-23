@@ -452,6 +452,7 @@ export async function runIntegrationsE2e(
         const cancelText = await cancelRes.text().catch(() => '');
         const cancelBody = JSON.parse(cancelText === '' ? '{}' : cancelText) as {
             status?: { state?: string };
+            metadata?: { runStopped?: boolean };
             error?: { status?: string; message?: string };
         };
         const cancelled = await newestEvent(root, 'a2a.task.cancelled');
@@ -465,8 +466,10 @@ export async function runIntegrationsE2e(
                 working === true &&
                 cancelRes.status === 200 &&
                 cancelBody?.status?.state === 'TASK_STATE_CANCELED' &&
+                cancelBody.metadata?.runStopped === true &&
                 cancelled?.runStopped === true,
-            expected: 'the run row reads running, cancel answers 200, state CANCELED and runStopped=true',
+            expected:
+                'the run row reads running, cancel answers 200 with state CANCELED and runStopped=true in the response and event',
             evidence: `accepted=${String(working === true)} http ${cancelRes.status} state=${String(
                 cancelBody?.status?.state,
             )} runStopped=${String(cancelled?.runStopped)} reason=${String(cancelBody?.error?.message ?? '').slice(

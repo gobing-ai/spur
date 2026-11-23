@@ -4,7 +4,7 @@ name: A2A CancelTask stops only the run behind the task
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.288Z
-updated_at: "2026-11-22T07:13:32.648Z"
+updated_at: "2026-11-23T06:14:40.181Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
@@ -109,15 +109,15 @@ Out of scope: aborting a warm turn (persistent worker, nothing spawned); see Q&A
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/server/tests/modules/a2a/routes.test.ts:510 and :545 cover working and queued cancel requests. Terminal requests are also refused. |
-| R2 | MET | packages/app/tests/services/agent-loop-service.test.ts:1123 proves the next queued request is drained. docs/reports/integrations-e2e-receipt.json:61 proves live child cancellation and continuation. |
-| R3 | MET | apps/server/tests/modules/a2a/routes.test.ts:528 verifies the 10-second timeout returns runStopped:false and does not stop the member. |
-| R4 | MET | apps/server/tests/modules/a2a/routes.test.ts:528 asserts the cancellation event runId. |
-| R5 | MET | packages/app/tests/services/agent-loop-service.test.ts:1172 verifies a keyed drain completes normally without a cancel request. |
+| R1 | MET | `apps/server/tests/modules/a2a/routes.test.ts:573` — Queued and terminal runs refuse cancellation. |
+| R2 | MET | `docs/reports/integrations-e2e-receipt.json:71` — The live child stops and the next request is claimed; the drain test confirms the member loop continues at packages/app/tests/services/agent-loop-service.test.ts:1125. |
+| R3 | MET | `apps/server/tests/modules/a2a/routes.test.ts:558` — Ten-second timeout reports metadata.runStopped false and the event agrees, with no supervisor stop. The live receipt proves true in both channels. |
+| R4 | MET | `apps/server/tests/modules/a2a/routes.test.ts:558` — The cancellation event carries the same run ID as the per-run request. |
+| R5 | MET | `packages/app/tests/services/agent-loop-service.test.ts:1250` — Normal keyed drains still finish without cancellation. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R6 — A2A CancelTask stops only the run behind that task | MET | test | packages/app/tests/services/agent-loop-service.test.ts:1123 proves the next queued request is drained. docs/reports/integrations-e2e-receipt.json:61 proves live child cancellation and continuation. |
+| R6 — A2A CancelTask stops only the run behind that task | MET | test | `docs/reports/integrations-e2e-receipt.json:71` — The live child stops and the next request is claimed; the drain test confirms the member loop continues at packages/app/tests/services/agent-loop-service.test.ts:1125. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

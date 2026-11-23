@@ -39,6 +39,7 @@ const EXPECTED_PROBES = [
     'real MemberDetail: stale alpha callbacks cannot touch beta DOM',
     'real MemberDetail: session metadata changes keep the same stream and cursor',
     'real MemberDetail: unmount aborts the status request and clears the poll interval',
+    'watch rows label remote transports only when the fleet declares them',
     'selecting a different watch row remounts the shared detail terminal',
 ];
 

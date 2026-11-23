@@ -4,7 +4,7 @@ name: Badge A2A, cross-project and MCP-exposed members in Settings and Projects
 status: done
 template: issue
 created_at: 2026-11-23T00:56:01.336Z
-updated_at: "2026-11-23T04:16:22.316Z"
+updated_at: "2026-11-23T06:14:45.781Z"
 feature_id: A82
 
 ac_numbering: task-local
@@ -93,13 +93,13 @@ Add optional `mcpExposureDeclared: boolean` to `workflowDefinitionDtoSchema` in 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — mark literal A2A and project-addressed targets with distinct labels in Settings › Agents and Projects › Processes where a row has a declared member, preserving enabled and observed states | MET | `apps/web/src/modules/projects/useProjectContext.tsx:44-70` (the optional addressing fields plus the one `transportBadge` rule); `apps/web/src/modules/settings/AgentsView.tsx:1074-1100`; `apps/web/src/modules/projects/ProcessesView.tsx:455-470`; test `apps/web/tests/modules/settings/agents-view.test.ts:60-100` |
-| R2 — in Settings › Workflows, mark a valid workflow whose parsed `metadata.mcp.expose` is the boolean `true` as declaring MCP exposure | MET | `packages/contracts/src/fleet.ts:241-258`; `apps/server/src/modules/health/index.ts:671-750` (strict boolean predicate over the raw YAML, gated on validity); `apps/web/src/modules/settings/WorkflowsView.tsx:275-300`; tests `apps/server/tests/modules/health.test.ts:1225-1310`, `apps/web/tests/modules/settings/workflows-view.test.ts` |
+| R1 | MET | `apps/web/tests/modules/settings/agents-view.test.ts:107` — The Settings roster and the rendered Processes watch rows distinguish both remote transports and leave local and undeclared rows unbadged. Processes regression at apps/web/tests/modules/projects/member-terminal-identity-pipeline.tsx:360 also checks the observed running state. |
+| R2 | MET | `apps/server/tests/modules/health.test.ts:1273` — Only a valid boolean-true declaration carries the flag. All three Workflows render cases pass at apps/web/tests/modules/settings/workflows-view.test.ts:46. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — member badges distinguish the configured transport (req: R1) | MET | test | `apps/web/tests/modules/settings/agents-view.test.ts:60-100` — a literal A2A member reads `A2A`, a project-addressed member `Cross-project`, a local member has no badge, and the disabled remote member still shows `disabled` in its declared facts |
-| AC2 — the workflow badge follows the parsed exposure declaration (req: R2) | MET | test | `apps/server/tests/modules/health.test.ts:1225-1310` (boolean `true` only; `false`, `'true'`, absent and an invalid definition omit the flag) and `apps/web/tests/modules/settings/workflows-view.test.ts` (badge present for a declared exposure, absent for an omitted flag and for an invalid definition) |
+| AC1 — Member badges distinguish the configured transport (req: R1) | MET | test | `apps/web/tests/modules/settings/agents-view.test.ts:107` — The Settings roster and the rendered Processes watch rows distinguish both remote transports and leave local and undeclared rows unbadged. Processes regression at apps/web/tests/modules/projects/member-terminal-identity-pipeline.tsx:360 also checks the observed running state. |
+| AC2 — Workflow badge follows parsed exposure declaration (req: R2) | MET | test | `apps/server/tests/modules/health.test.ts:1273` — Only a valid boolean-true declaration carries the flag. All three Workflows render cases pass at apps/web/tests/modules/settings/workflows-view.test.ts:46. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

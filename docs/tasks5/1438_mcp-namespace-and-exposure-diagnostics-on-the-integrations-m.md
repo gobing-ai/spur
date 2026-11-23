@@ -4,7 +4,7 @@ name: MCP namespace and exposure diagnostics on the Integrations MCP tab
 status: done
 template: issue
 created_at: 2026-11-23T00:55:48.651Z
-updated_at: "2026-11-23T03:39:55.001Z"
+updated_at: "2026-11-23T06:14:43.758Z"
 feature_id: A82
 
 ac_numbering: task-local
@@ -98,13 +98,13 @@ Add optional `namespace: string | null`, `namespaceSource: 'config' | 'plugin-ma
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — status reports the effective workflow namespace, its provenance and exposure findings, keeping the same tools/resources | MET | `apps/server/src/modules/mcp/index.ts:263-283` (`catalog()` returns namespace, source and the resolver's `issues`; `readMcpCatalog:628-637` is now one walk); `apps/server/src/modules/integrations/handlers.ts:101-118`; `packages/app/src/services/integrations-service.ts:196-215` (fields omitted when a server does not report them); `packages/contracts/src/integrations.ts:77-101`; test `apps/server/tests/modules/integrations/handlers.test.ts:300-401` |
-| R2 — MCP tab shows the namespace and actionable findings, filters the tool list, and offers project/gateway stdio examples plus a `server/discover` probe using variable references | MET | `apps/web/src/modules/integrations/McpTab.tsx:20-60,62-160,230-275`; `apps/web/src/modules/integrations/helpers.ts:63-115` (`projectMcpCommand`, `gatewayMcpCommand`, `discoverProbe`, `filterTools`); test `apps/web/tests/modules/integrations/integrations-module.test.tsx:400-500` |
+| R1 | MET | `apps/server/tests/modules/integrations/handlers.test.ts:335` — Explicit config wins, both catalogs agree and a colliding workflow has a remedy. Manifest and no-namespace fallbacks pass at lines 365 and 382. |
+| R2 | MET | `apps/web/tests/modules/integrations/integrations-module.test.tsx:487` — Filtering preserves the remedy. The probe, distinct gateway command and off state are exercised at lines 508, 522 and 543. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — catalog status explains workflow exposure (req: R1) | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:319-401` — config beats manifest, a colliding pair is refused with a `rename` remedy, and the status tool set equals `tools/list`; manifest-only and no-namespace cases in the same block |
-| AC2 — MCP inspection and examples use the correct surface (req: R2) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:400-500` — `TASK` filters to `sp_task_list` while the `ops_dup` remedy and the `spur://` list stay visible, `zzz` renders the no-match state, the probe expands `${SPUR_MCP_TOKEN}` and no token value reaches the DOM, the gateway command appears only under a gateway with MCP on, and an off surface drops command and probe |
+| AC1 — Catalog status explains workflow exposure (req: R1) | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:335` — Explicit config wins, both catalogs agree and a colliding workflow has a remedy. Manifest and no-namespace fallbacks pass at lines 365 and 382. |
+| AC2 — MCP inspection and examples use the correct surface (req: R2) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:487` — Filtering preserves the remedy. The probe, distinct gateway command and off state are exercised at lines 508, 522 and 543. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

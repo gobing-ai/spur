@@ -1,10 +1,10 @@
 {
     "artifact": "integrations-e2e",
-    "generatedAt": "2026-11-23T00:56:32.542Z",
+    "generatedAt": "2026-11-23T06:10:49.629Z",
     "context": {
-        "port": 55343,
+        "port": 52914,
         "scratch": "(removed)",
-        "member": "spur-integrations-e2e-z0MVz6-coder"
+        "member": "spur-integrations-e2e-kYwgZk-coder"
     },
     "steps": [
         {
@@ -35,7 +35,17 @@
             "exitCode": null,
             "status": "passed",
             "expected": "every tool declares readOnlyHint, and at least one is a read",
-            "evidence": "10 tools, 10 annotated, reads=sp_feature_check,sp_rule_run,sp_task_list,sp_task_show,sp_workflow_status"
+            "evidence": "11 tools, 11 annotated, reads=sp_feature_check,sp_rule_run,sp_task_list,sp_task_show,sp_workflow_status"
+        },
+        {
+            "step": "integrations-namespace-diagnostics",
+            "requirement": "R1 / G1",
+            "command": "GET /api/integrations/status + POST /mcp tools/list",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "the status names the configured namespace, refuses both colliding workflows with a remedy, and its tool set matches tools/list",
+            "evidence": "source=config namespace=e2e refused=2 tools=11 agree=true"
         },
         {
             "step": "a2a-card-public",
@@ -64,7 +74,7 @@
             "httpStatus": 200,
             "exitCode": null,
             "status": "passed",
-            "expected": "the run row reads running, cancel answers 200, state CANCELED and runStopped=true",
+            "expected": "the run row reads running, cancel answers 200 with state CANCELED and runStopped=true in the response and event",
             "evidence": "accepted=true http 200 state=TASK_STATE_CANCELED runStopped=true reason="
         },
         {
@@ -86,9 +96,19 @@
             "status": "passed",
             "expected": "http 200, both surfaces enabled, the auth env NAME present and no token value",
             "evidence": "http 200 mcp=true env=SPUR_MCP_TOKEN tokenPresent=true a2a=true gatewayServed=true"
+        },
+        {
+            "step": "integrations-board",
+            "requirement": "R11 / R14",
+            "command": "Chromium GET /board/integrations against the live served project",
+            "httpStatus": 200,
+            "exitCode": null,
+            "status": "passed",
+            "expected": "four Summary rows, MCP token-unset error, A2A on and light/dark screenshots",
+            "evidence": "four Summary surfaces; MCP token unset is an error and authenticated A2A is on; the served build version and uptime are named; the selected window's tool latency lists this run's own calls; the MCP tab names the workflow namespace and the refused exposure"
         }
     ],
-    "passed": 8,
+    "passed": 10,
     "failed": 0,
     "verdict": "PASS"
 }

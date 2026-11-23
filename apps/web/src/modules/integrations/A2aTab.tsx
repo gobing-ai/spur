@@ -1,5 +1,6 @@
 import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { useState } from 'react';
+import { withBase } from '../../components/base-path';
 import { Badge, Button, Card, CardBody } from '../../components/module-kit';
 import { fetchWithTimeout } from '../../lib/rpc-client';
 import {
@@ -33,14 +34,18 @@ type CardState =
  * unauthenticated — the card is the one public A2A route — and an error stays inside the inspector
  * so a refused card never blanks the tab.
  */
-function CardInspector({ cardUrl, fetchCard }: { cardUrl: string; fetchCard?: (url: string) => Promise<Response> }) {
+function CardInspector({ member, fetchCard }: { member: string; fetchCard?: (url: string) => Promise<Response> }) {
     const [state, setState] = useState<CardState>({ status: 'idle' });
     const load = () => {
         setState({ status: 'loading' });
         void (async () => {
             try {
-                const read = fetchCard ?? ((url: string) => fetchWithTimeout(new Request(url)));
-                const res = await read(cardUrl);
+                const read =
+                    fetchCard ??
+                    ((url: string) => fetchWithTimeout(new Request(url, { credentials: 'omit', redirect: 'error' })));
+                const res = await read(
+                    withBase(`/a2a/members/${encodeURIComponent(member)}/.well-known/agent-card.json`),
+                );
                 if (!res.ok) throw new Error(`card fetch answered ${res.status}`);
                 setState({ status: 'ready', json: JSON.stringify(await res.json(), null, 2) });
             } catch (error) {
@@ -152,7 +157,7 @@ export function A2aTab({
                                             >
                                                 {member.cardUrl}
                                             </a>
-                                            <CardInspector cardUrl={member.cardUrl} fetchCard={fetchCard} />
+                                            <CardInspector member={member.member} fetchCard={fetchCard} />
                                             <pre
                                                 className="mt-2 overflow-auto rounded bg-base-200 p-2 text-xs"
                                                 data-testid={`integrations-a2a-examples-${member.member}`}

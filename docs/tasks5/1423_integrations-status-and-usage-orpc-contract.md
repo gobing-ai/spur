@@ -4,7 +4,7 @@ name: Integrations status and usage oRPC contract
 status: done
 template: feature-impl
 created_at: 2026-11-22T02:10:29.288Z
-updated_at: "2026-11-22T07:14:54.896Z"
+updated_at: "2026-11-23T06:14:40.926Z"
 feature_id: A82
 priority: P1
 tags: ["integrations", "A82"]
@@ -109,34 +109,34 @@ Notes
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/server/tests/modules/integrations/handlers.test.ts:67 and :86 verify the route is mounted with both transports off. |
-| R2 | MET | apps/server/tests/modules/integrations/handlers.test.ts:102 checks the serialized response against the configured token. |
-| R3 | MET | apps/server/tests/modules/integrations/handlers.test.ts:118 compares the two catalogs. |
-| R4 | MET | packages/app/tests/services/integrations-service.test.ts:145 covers fleet member projection. |
-| R5 | MET | apps/server/tests/modules/integrations/handlers.test.ts:134 and :159 cover the successful and failed gateway health probe. apps/server/tests/modules/integrations/handlers.test.ts:67 covers standalone. |
-| R6 | MET | packages/app/tests/services/integrations-service.test.ts:227 checks the time-bounded protocol ledger fold. |
-| R7 | MET | apps/server/tests/modules/integrations/handlers.test.ts:185 tests the dotless catalog families and matching event rows. |
+| R1 | MET | `apps/server/tests/modules/integrations/handlers.test.ts:75` — Status answers with both surfaces off; the contract and app implementation remain separately owned. |
+| R2 | MET | `apps/server/tests/modules/integrations/handlers.test.ts:110` — The serialized status carries the variable name and token presence without the value. |
+| R3 | MET | `apps/server/tests/modules/integrations/handlers.test.ts:126` — The status and MCP protocol catalogs agree. |
+| R4 | MET | `packages/app/tests/services/integrations-service.test.ts:146` — Inbound and outbound member projection comes from the fleet declaration. |
+| R5 | MET | `apps/server/tests/modules/integrations/handlers.test.ts:142` — The gateway health read populates counters; cases at lines 75 and 204 cover standalone and unavailable counters. |
+| R6 | MET | `packages/app/tests/services/integrations-service.test.ts:299` — The time window is applied to real ledger rows. |
+| R7 | MET | `apps/server/tests/modules/integrations/handlers.test.ts:233` — All three protocol event families return matching results in dotted and dotless spelling. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — The integrations status contract reports each surface without leaking tokens | MET | test | apps/server/tests/modules/integrations/handlers.test.ts:102 checks the serialized response against the configured token. |
-| R8 — The integrations status contract carries catalogs, members and gateway counters | MET | test | apps/server/tests/modules/integrations/handlers.test.ts:118 and :134 plus packages/app/tests/services/integrations-service.test.ts:145 cover source catalog, gateway counters and fleet members. |
-| R9 — Integrations activity reads protocol events from the event history ledger | PARTIAL | test | apps/server/tests/modules/integrations/handlers.test.ts:185 proves the Board's dotless query syntax. The test at :202 explicitly expects HTTP 400 for the feature's dotted syntax. |
+| R7 — The integrations status contract reports each surface without leaking tokens | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:110` — The serialized status carries the variable name and token presence without the value. |
+| R8 — The integrations status contract carries catalogs, members and gateway counters | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:126` — The status and MCP protocol catalogs agree. `packages/app/tests/services/integrations-service.test.ts:146` — Inbound and outbound member projection comes from the fleet declaration. `apps/server/tests/modules/integrations/handlers.test.ts:142` — The gateway health read populates counters; cases at lines 75 and 204 cover standalone and unavailable counters. |
+| R9 — Integrations activity reads protocol events from the event history ledger | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:233` — All three protocol event families return matching results in dotted and dotless spelling. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P2 | correctness | — | apps/server/tests/modules/integrations/handlers.test.ts:202 expects HTTP 400 for the dotted prefixes in feature R9. Board and task R7 use the dotless API. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
