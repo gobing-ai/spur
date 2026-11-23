@@ -4,7 +4,7 @@ name: Fix local startup beside same-path remote registry entries
 status: done
 template: issue
 created_at: 2026-11-23T17:44:33.925Z
-updated_at: "2026-11-23T17:56:59.926Z"
+updated_at: "2026-11-23T21:59:31.255Z"
 feature_id: K4
 
 done_forced: "false"
@@ -63,13 +63,13 @@ Public-flow probe: a source-run gateway on port 3100 started the local `knowledg
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/project-start.ts:355-358` filters to local hosts; `packages/app/tests/services/project-start.test.ts:690-706` proves a live remote port is never probed. Focused test: 41 pass, 0 fail. |
-| R2 | MET | `packages/app/tests/services/project-start.test.ts:668-687` proves live-local refusal without registry mutation; lines 708-713 prove the same refusal with a remote entry ordered first. |
-| R3 | MET | `curl http://localhost:3000/knowledge-kit/board` → 200 HTML; `curl http://127.0.0.1:3002/api/project` → the knowledge-kit path; registry inspection preserved remote `192.168.87.27:3003` and local prefix `/knowledge-kit`. |
+| R1 | MET | The startup guard selects only local hosts before probing in `packages/app/src/services/project-start.ts:349-362`. The remote-first mixed-host regression in `packages/app/tests/services/project-start.test.ts:690-713` passed in the 56-test app run. |
+| R2 | MET | The live-local fixture in `packages/app/tests/services/project-start.test.ts:668-687` passed and asserts the registry is unchanged. The mixed-host regression also refuses a live local port. |
+| R3 | MET | `curl --max-time 6 http://localhost:3000/knowledge-kit/board` returned HTTP 200 over ::1. A GET of the same prefix's `/api/projects` retained the remote port 3003 with current=false, alongside the local /knowledge-kit row with current=true. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-N | N/A | n/a | No acceptance criteria are declared; R1–R3 are the task's complete verification targets. |
+| AC-N | N/A | n/a | The task has no declared acceptance criteria. The three requirement rows are its verification targets. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
