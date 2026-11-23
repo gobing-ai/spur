@@ -8,6 +8,40 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.44] - 2026-11-22
+
+### Added
+- the Integrations module's telemetry and inspection wave (1438-1442): MCP namespace provenance and exposure findings, per-tool protocol telemetry with `mcp`/`a2a`/`auth` prefix colours, an A2A card inspector with per-receipt remote refs, outbound credential state and exact-run Trace links, transport badges in Settings and Processes, and a gateway root page carrying MCP state, routing counters and discovery diagnostics (8e9bc8c05)
+  <!-- src: apps/web/src/modules/integrations/McpTab.tsx:57, packages/app/src/services/integrations-service.ts:165, apps/web/src/modules/integrations/A2aTab.tsx:37, apps/web/src/modules/settings/AgentsView.tsx:1090, packages/app/src/services/project-gateway.ts:614 · confidence: HIGH -->
+
+### Fixed
+- `inbox.requests` accepts `scope: all`, so a non-orchestrator A2A task and an outbound receipt reach the Integrations feed, and the web hook keeps the server's `error` detail when events or history fail (5316a79e2)
+  <!-- src: packages/contracts/src/inbox.ts:146, apps/server/src/modules/inbox/handlers.ts:250 · confidence: HIGH -->
+- the Integrations header reads `/api/health` tolerantly and names the served build version and uptime, so a stale server behind a fresh `dist/web` stops being an opaque status error (d8769bbee)
+  <!-- src: apps/web/src/modules/integrations/useIntegrations.ts:84, apps/web/src/modules/integrations/helpers.ts:253 · confidence: HIGH -->
+- a `?tab=system-events&eventName=…` deep link seeds the event-name filter even without a `runId`, so a trace link from Integrations lands on the filtered feed (42da95279)
+  <!-- src: apps/web/src/modules/observability/SystemEventsTab.tsx:572 · confidence: HIGH -->
+- inbox and system-event deep links go through `withBase` and stay inside the gateway prefix, and the empty state counts gateway MCP and A2A outbound members before declaring every surface off (a19639d83)
+  <!-- src: apps/web/src/modules/integrations/helpers.ts:182, apps/web/src/modules/integrations/helpers.ts:187, apps/web/src/modules/integrations/helpers.ts:236 · confidence: HIGH -->
+- behind a TLS proxy the caller base URL honours `x-forwarded-proto` instead of falling back to `http`, and a disabled fleet member's card URL renders as text rather than a link that answers 404 (2100e6358)
+  <!-- src: packages/app/src/services/integrations-service.ts:104, apps/web/src/modules/integrations/A2aTab.tsx:176 · confidence: HIGH -->
+- an A2A cancel answers the task with `metadata.runStopped`, the card inspector fetches under the current Board mount with credentials omitted and redirects refused, and gateway MCP discovery reuses the one project listing so the root snapshot and the routing table agree (b1feb3203)
+  <!-- src: apps/server/src/modules/a2a/projection.ts:49, apps/web/src/modules/integrations/A2aTab.tsx:37, packages/app/src/services/project-gateway.ts:988 · confidence: HIGH -->
+- the pipeline's `escalate` hop reads the operator question through the `options.path` key its action declares, so an implement escalation pauses on the question instead of failing the run with `file.read.into-var: path is required` (b4493ae83)
+  <!-- src: config/workflows/task-pipeline.yaml:390 · confidence: HIGH -->
+
+### Changed
+- the Integrations E2E writes its receipt and Summary screenshots under `.spur/run/integrations-proof/`, with the tracked copies in `docs/reports/` refreshed by an explicit command instead of by every run (2d8c162e5)
+  <!-- src: docs/design/integrations-module.md:184 · confidence: HIGH -->
+
+### Other
+- close the A82 integrations module feature after the 1438-1442 batch (b71810169)
+- refine the A82 integration follow-ups to ready (3cf930c3a)
+- sync the Integrations, inbox-scope and run-link satellites with 1437 (a51fe3ab2)
+- close 1437 with the review verdict and Testing evidence (a5b53030f)
+- close the integrations fix handoff and file the G1-G5 follow-ups (96d4905d4)
+- record the A82 integrations fix handoff (9326e1a38)
+
 ## [0.4.43] - 2026-11-22
 
 ### Added
