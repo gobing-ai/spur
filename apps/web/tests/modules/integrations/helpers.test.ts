@@ -5,8 +5,9 @@
  * the copyable snippet that names a variable instead of a token, the `a2a:` request-key family, and
  * the two deep-link URL shapes.
  */
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import type { IntegrationsStatus } from '@gobing-ai/spur-contracts';
+import { resetBasePathForTesting } from '../../../src/lib/base-path';
 import {
     a2aRequests,
     allSurfacesOff,
@@ -19,6 +20,10 @@ import {
     surfaceState,
     systemEventLink,
 } from '../../../src/modules/integrations/helpers';
+import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
+
+registerHappyDom();
+afterAll(teardownHappyDom);
 
 describe('1424 — surface state vocabulary', () => {
     test('exactly three states, and only a missing token is the error tone', () => {
@@ -30,10 +35,31 @@ describe('1424 — surface state vocabulary', () => {
     test('every surface off is the only empty-state condition', () => {
         const off = {
             mcp: { enabled: false },
-            a2a: { enabled: false },
+            a2a: { enabled: false, outbound: [] },
+            gateway: { served: false },
         } as unknown as IntegrationsStatus;
         expect(allSurfacesOff(off)).toBe(true);
-        expect(allSurfacesOff({ ...off, a2a: { enabled: true } } as unknown as IntegrationsStatus)).toBe(false);
+        expect(allSurfacesOff({ ...off, a2a: { enabled: true, outbound: [] } } as unknown as IntegrationsStatus)).toBe(
+            false,
+        );
+        expect(
+            allSurfacesOff({
+                ...off,
+                gateway: {
+                    served: true,
+                    namespace: '/spur-new',
+                    rootMcpUrl: 'http://localhost:3000/mcp',
+                    counters: null,
+                    mcp: { enabled: true, auth: { envName: 'GW_TOKEN', tokenPresent: true } },
+                },
+            } as unknown as IntegrationsStatus),
+        ).toBe(false);
+        expect(
+            allSurfacesOff({
+                ...off,
+                a2a: { enabled: false, outbound: [{ member: 'peer', kind: 'a2a', target: 'http://peer' }] },
+            } as unknown as IntegrationsStatus),
+        ).toBe(false);
     });
 
     test('the empty state names the config keys that turn each surface on', () => {
@@ -139,5 +165,22 @@ describe('1424 — deep links', () => {
         expect(systemEventLink('mcp.tool.failed')).toBe(
             '/board/observability?tab=system-events&eventName=mcp.tool.failed',
         );
+    });
+
+    test('deep links respect the gateway base-path meta tag', () => {
+        const meta = document.createElement('meta');
+        meta.name = 'spur-base';
+        meta.content = '/spur-new/';
+        document.head.appendChild(meta);
+        resetBasePathForTesting();
+        try {
+            expect(inboxLink()).toBe('/spur-new/board/projects/inbox');
+            expect(systemEventLink('a2a.message.received')).toBe(
+                '/spur-new/board/observability?tab=system-events&eventName=a2a.message.received',
+            );
+        } finally {
+            meta.remove();
+            resetBasePathForTesting();
+        }
     });
 });

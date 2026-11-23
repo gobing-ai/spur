@@ -1,4 +1,5 @@
 import type { IntegrationsStatus } from '@gobing-ai/spur-contracts';
+import { withBase } from '../../lib/base-path';
 
 /**
  * The Integrations module's pure projections (feature A82, task 1424).
@@ -82,14 +83,14 @@ export function requestState(row: InboxRequestRow): string {
 
 /** The Projects › Inbox deep link (the tab is a path segment, not a query). */
 export function inboxLink(): string {
-    return '/board/projects/inbox';
+    return withBase('/board/projects/inbox');
 }
 
 /** The Observability › System Events deep link for one event row. */
 export function systemEventLink(eventName: string, runId?: string | null): string {
     const params = new URLSearchParams({ tab: 'system-events', eventName });
     if (runId !== undefined && runId !== null && runId !== '') params.set('runId', runId);
-    return `/board/observability?${params.toString()}`;
+    return withBase(`/board/observability?${params.toString()}`);
 }
 
 /** One history row as the module renders it (the fields the two activity lists need). */
@@ -134,9 +135,11 @@ export function projectProtocolEvent(row: unknown): ProtocolEventRow | null {
     };
 }
 
-/** True when every surface is off — the one case that renders the empty state. */
+/** True when every surface (project MCP, A2A inbound, gateway MCP, and A2A outbound) is off — renders the empty state. */
 export function allSurfacesOff(status: IntegrationsStatus): boolean {
-    return !status.mcp.enabled && !status.a2a.enabled;
+    const gatewayMcpOn = status.gateway?.served === true && status.gateway.mcp?.enabled === true;
+    const outboundOn = (status.a2a.outbound?.length ?? 0) > 0;
+    return !status.mcp.enabled && !status.a2a.enabled && !gatewayMcpOn && !outboundOn;
 }
 
 /** The config keys an operator sets to enable each surface, named for the empty state. */
