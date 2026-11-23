@@ -16,7 +16,7 @@ import ObservabilityFilters, {
     TIME_RANGE_MS,
     timeRangeSince,
 } from './ObservabilityFilters';
-import type { ObservabilityTabProps, ObservabilityTimeRange } from './tabs';
+import type { ObservabilityNavIntent, ObservabilityTabProps, ObservabilityTimeRange } from './tabs';
 
 export type { ObservabilityFilterValues as FilterState };
 export {
@@ -560,6 +560,26 @@ export function serializeFilter(
     return out;
 }
 
+/** Apply a System Events deep-link intent (runId and/or eventName) to a filter snapshot. */
+export function applyNavIntentToFilter(
+    base: ObservabilityFilterValues,
+    intent: ObservabilityNavIntent | null | undefined,
+): ObservabilityFilterValues {
+    if (intent?.tab !== 'system-events') return base;
+    const nextRunId = intent.runId !== undefined ? intent.runId : base.runId;
+    const nextQuery = intent.eventName !== undefined ? intent.eventName : base.searchQuery;
+    const nextScope = intent.eventName !== undefined ? 'name' : base.searchScope;
+    if (base.runId === nextRunId && base.searchQuery === nextQuery && base.searchScope === nextScope) {
+        return base;
+    }
+    return {
+        ...base,
+        runId: nextRunId,
+        searchQuery: nextQuery,
+        searchScope: nextScope,
+    };
+}
+
 /**
  * Client-side post-filter predicate applied to the current page for immediate
  * UX. Also gates SSE prepend so a non-matching frame is silently dropped (R5).
@@ -762,9 +782,13 @@ export default function SystemEventsTab({ onLivenessChange, timeRange, navIntent
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    const [filter, setFilter] = useState<ObservabilityFilterValues>(DEFAULT_FILTER);
+    const [filter, setFilter] = useState<ObservabilityFilterValues>(() =>
+        applyNavIntentToFilter(DEFAULT_FILTER, navIntent),
+    );
     // Debounced filter - the actual server query driver.
-    const [debouncedFilter, setDebouncedFilter] = useState<ObservabilityFilterValues>(DEFAULT_FILTER);
+    const [debouncedFilter, setDebouncedFilter] = useState<ObservabilityFilterValues>(() =>
+        applyNavIntentToFilter(DEFAULT_FILTER, navIntent),
+    );
 
     // Liveness strip state (task 0222). `sseStatus` is tri-state so the
     // indicator can render connecting/live/errored distinctly.
@@ -798,14 +822,12 @@ export default function SystemEventsTab({ onLivenessChange, timeRange, navIntent
         return () => window.clearTimeout(handle);
     }, [filter]);
 
-    // Cross-tab intent (E72 R6): a run link in another tab sets our run-id
-    // filter. Applied to both filter states so the server query is filtered on
+    // Cross-tab intent (E72 R6 / A82 1424 R6): a deep link in another tab sets our run-id and/or
+    // event-name filter. Applied to both filter states so the server query is filtered on
     // the first fetch, not only after the debounce settles.
     useEffect(() => {
-        if (navIntent?.tab !== 'system-events' || navIntent.runId === undefined) return;
-        const runId = navIntent.runId;
-        setFilter((prev) => (prev.runId === runId ? prev : { ...prev, runId }));
-        setDebouncedFilter((prev) => (prev.runId === runId ? prev : { ...prev, runId }));
+        setFilter((prev) => applyNavIntentToFilter(prev, navIntent));
+        setDebouncedFilter((prev) => applyNavIntentToFilter(prev, navIntent));
     }, [navIntent]);
 
     const activeFilter = useMemo(() => serializeFilter(debouncedFilter, timeRange), [debouncedFilter, timeRange]);

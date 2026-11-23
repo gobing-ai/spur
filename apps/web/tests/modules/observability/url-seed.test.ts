@@ -4,12 +4,20 @@
  * The failure: another module links to `?tab=system-events&eventName=…&runId=…` and the shell
  * ignores the filter, so the operator lands on the unfiltered ledger and re-types the search.
  */
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { cleanup, render, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
+import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
+import SystemEventsTab from '../../../src/modules/observability/SystemEventsTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 registerHappyDom();
+afterEach(() => {
+    cleanup();
+    resetFetchForTesting();
+});
 afterAll(teardownHappyDom);
 
 const shellSource = readFileSync(
@@ -39,5 +47,35 @@ describe('1424 R6 — URL deep link seeds the nav intent', () => {
             'utf8',
         );
         expect(tabSource).toContain('navIntent');
+    });
+
+    test('SystemEventsTab includes names filter on its initial fetch when navIntent sets eventName without runId', async () => {
+        const historyUrls: string[] = [];
+        const mockFetch: typeof fetch = Object.assign(
+            async (input: string | URL | Request) => {
+                const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+                if (url.includes('/api/events/history')) {
+                    historyUrls.push(url);
+                }
+                return new Response(
+                    JSON.stringify({ events: [], count: 0, catalog: [], nextCursor: null, hasMore: false }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                );
+            },
+            { preconnect: () => {} },
+        );
+        setFetchForTesting(mockFetch);
+
+        render(
+            createElement(SystemEventsTab, {
+                timeRange: '4h',
+                navIntent: { tab: 'system-events', eventName: 'a2a.message.received' },
+            }),
+        );
+
+        await waitFor(() => {
+            expect(historyUrls.length).toBeGreaterThanOrEqual(1);
+        });
+        expect(historyUrls[0]).toContain('names=a2a.message.received');
     });
 });
