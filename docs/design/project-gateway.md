@@ -2,7 +2,7 @@
 kind: design
 title: "Project gateway — one port, path prefixes, LaunchAgent (feature K4)"
 created_at: 2026-11-16
-updated_at: 2026-11-20
+updated_at: 2026-11-23
 related: [K4, K1]
 tags: [system, K4, server, web, cli]
 doc: design/project-gateway
@@ -320,18 +320,31 @@ Requirement: the gateway is always on. Surface: `spur self install --daemon`, `s
 
 ## 8. Switcher and CLI
 
-- `directBoardUrl()` (`ProjectSwitcher.tsx:39`): local → `/<prefix>/board` on the current origin when
-  `basePath() !== '/'`, else today's per-port URL; remote → unchanged.
-- `/api/projects` (`apps/server/src/modules/health/index.ts:428`) adds `prefix` (null for remote) and
-  `url`; `spur projects list` shows `PREFIX` as its own field and `URL` (gateway URL for local
-  entries when `server.gateway.port` answers, else per-port). A stopped entry prints the prefix
-  route instead of an unroutable `http://localhost:0/board`.
+- `directBoardUrl()` (`ProjectSwitcher.tsx:44-55`): a local entry navigates to the server-resolved
+  canonical `url` in every base mode — absolute when the Board was opened on a legacy direct port,
+  prefix-relative behind the gateway — so no per-port public fallback remains and a stopped local
+  entry starts through the gateway; remote → `http://<host>:<port>/board` unchanged. React keys and
+  loading state use `projectIdentity()` (effective host + normalized path) and `projectEndpointLabel()`
+  shows the prefix, so same-path local/remote rows stay independent and an internal port is never
+  presented as a destination.
+- `/api/projects` (`apps/server/src/modules/health/index.ts:437-495`) adds `host`, `prefix` (null for
+  remote) and `url`: prefix-relative on a forwarded request (`x-forwarded-prefix`), otherwise the
+  absolute canonical gateway URL from `resolveProjectGatewayUrl`; `current` is local-host scoped.
+  `POST /api/projects/start` accepts additive optional `host`, starts the exact selected entry, and
+  answers the canonical URL rather than the internal start result.
+- `spur projects list` shows `PREFIX` as its own field and prints the same canonical `URL` for
+  running, stopped and gateway-down entries alike, reporting gateway/upstream availability
+  separately. A stopped entry prints the prefix route instead of an unroutable
+  `http://localhost:0/board`.
 - Misconfiguration is surfaced, never silent: `findPrefixCollisions()` already reports derived
   collisions in `spur projects list`; the Board renders the same finding (colliding prefix, both
   entry names, duplicate-path entries) from `/api/projects` so an operator sees why a route fails
   instead of reading a bare 502.
-- CLI agent server resolution (`apps/cli/src/commands/agent/shared.ts:111`) keeps the internal
-  loopback port — unchanged.
+- CLI agent server resolution (`apps/cli/src/commands/agent/shared.ts:82-123`) targets the nearest
+  ancestor's registered **local** entry through its canonical `<prefix>/api`; a same-path remote row
+  is ignored, a dead/stopped entry keeps the canonical route so the gateway can start it, and only
+  an unregistered project falls back to `http://localhost:<server.port>/api`. The gateway root `/api`
+  is never a project fallback (1444).
 
 ## 9. Module boundaries
 

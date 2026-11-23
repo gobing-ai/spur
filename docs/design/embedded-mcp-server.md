@@ -3,7 +3,7 @@ kind: design
 title: "Embedded MCP 2.0+ server in spur self serve"
 status: accepted
 created_at: 2026-11-17
-updated_at: 2026-11-20
+updated_at: 2026-11-23
 related:
   - docs/features/B9_embedded-mcp-2-0-server-in-spur-serve.md
   - docs/design/configuration-contracts.md

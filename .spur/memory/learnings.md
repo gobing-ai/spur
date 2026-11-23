@@ -7737,3 +7737,49 @@ Verification: `bun test packages/app/tests/workflow/wrapup-pipeline.test.ts` —
 ```
 
 Skipped: no `test-repo-wide` doc tripwire run (the pipeline runs it next); `docs/04_DESIGN.md` index rows left as-is since their indexed facts did not change.
+Wrap done. Repairs, all inside `docs/` (4 files, no task/feature corpus touched):
+
+| File | Drift found | Repair |
+| --- | --- | --- |
+| `docs/design/project-gateway.md:321-341` | §8 "Switcher and CLI" still described pre-1444 behavior: per-port fallback when `basePath() === '/'`, `URL` per-port when the gateway is down, and "CLI agent server resolution keeps the internal loopback port — unchanged" (flatly wrong after 1444) | Replaced with the canonical behavior, verified against `ProjectSwitcher.tsx:44-70`, `apps/server/src/modules/health/index.ts:437-495`, `apps/cli/src/commands/agent/shared.ts:82-123` |
+| `docs/00_ADR.md:6-7` | ADR-151 gained a 2026-11-23 amendment but frontmatter stayed `1.76.0` / `2026-11-20` (§4.3, §7.1) | `1.77.0`, `2026-11-23` |
+| `docs/03_ARCHITECTURE.md:188-192` | Gateway paragraph described prefix/routing only — the repo-wide public-URL invariant had no `03` owner; dates stale | Added one invariant sentence (identity vs availability, loopback is private, forwarded origin preserved); `1.82.0`, `2026-11-23` |
+| `docs/design/embedded-mcp-server.md:6` | Body edited 2026-11-23, date `2026-11-20` | `2026-11-23` |
+
+Left alone deliberately: `docs/design/project-gateway.md` B13 risk-register row and the 2026-11-17 "shipped deviations" block (historical, §6.5); `docs/04_DESIGN.md` (index pointers and descriptions still hold — §4.5, and the superseded-satellite row stays absent).
+
+Detection evidence: `rg` for `127.0.0.1:3000` / per-port claims in scope → 0 hits after repair; GitHub-rule anchor check over `00`/`03`/`04`/`docs/design/*` → 0 broken links (`planning-record-contracts.md#7-...` is valid, a false positive under a naive slugger); `bun test scripts/commands/flag-contract-parity.test.ts` 40 pass, `(cd apps/cli && bun test tests/commands/self/serve.test.ts)` 20 pass, `script-contract-check` PASS. `git status --short` shows only the four `docs/` paths.
+
+Skipped: no ADR content change (1444's amendment already passed §6.1), no `AGENTS.md`/`01`/`02`/`05` touch, no full-repo audit — only the 1444 owners and their references. Risk: the amended `03` sentence is a judgment call about where the invariant is owned; if you prefer it to live only in ADR-151 + satellites, drop those four lines.
+
+## 2026-11-23 — 1444 (Canonicalize all local project URLs on the gateway)
+
+### Conventions established
+
+- **One owner for public URL identity.** `resolveProjectGatewayUrl(entry, { host, port }, suffix)` in `packages/config/src/projects.ts` is the only place a local public URL is built. CLI, server, Integrations and A2A adapters call it; nobody re-derives `host:port`. Adding a second URL policy is the defect this task closed.
+- **Identity vs availability are separate facts.** A local entry's public URL stays canonical when the gateway is down or the upstream port is dead; liveness is reported as its own field (`gateway.running`, `warning:` lines, `GET /api/projects` `running`). Never substitute an internal port to make output look reachable.
+- **Boundary-only mapping.** `ProjectStartResult.url` (and any loopback diagnostic) stays internal; public URLs are derived at the CLI text/JSON, HTTP response and React boundaries.
+- **Only an unregistered project may fall back** to direct `server.port`, because it has no prefix. The gateway root `/api` is never a project fallback. Same rule for MCP: `--url` → canonical `<prefix>/mcp` → `server.port` when unregistered.
+
+### Errors fixed and their root causes
+
+- Hard-coded `http://127.0.0.1:<gateway-port>` broke every CLI/MCP URL: the gateway binds `server.host` (`localhost` → `::1` on macOS), so IPv4 refused connection while `localhost` answered. Fix: default to `localhost`, bracket IPv6 literals, and probe the same host you print.
+- `http://localhost:3000/api` treated as a project API returned 404 `Unknown prefix /api` — the gateway root is not a project route. Fix: agent resolution walks ancestors for a **local** registry entry and renders `<prefix>/api`.
+- `basePath() === '/'` was read as permission to bypass the gateway. Correct reading: a direct-root Board is a *legacy entry point* that must navigate back to the canonical origin. Fix: the server returns an absolute canonical `url` for direct-root requests and a prefix-relative one when `x-forwarded-prefix` is present.
+- Same-path local/remote registry entries shared React keys, loading state, `current` and start target. Fix: `projectIdentity()` = effective host + normalized path drives keys/loading, `current` is local-host scoped, and `/api/projects/start` takes additive optional `host` so the exact selected entry reaches `startRegisteredProject`.
+
+### Patterns worth reusing
+
+- **Freeze the seams before implementing a migration.** The refine pass named `resolveProjectGatewayUrl` and `localGatewayBase` up front, so eight requirements landed without duplicate registries or competing URL rules.
+- **Precedence chains, written down.** Forwarded host+prefix(+proto) → canonical local gateway base → request origin only for unregistered/remote contexts. The same ordered sentence appears in `docs/design/{project-gateway,integrations-module,a2a-member-transport}.md`; one wording, three surfaces.
+- **Additive protocol change keeps compatibility.** Optional `host` on `POST /api/projects/start` left legacy bodies working while the switcher always sends it.
+- **Prove with the real thing, simulate only the outage.** Real browser cold start plus the existing gateway heavy proof for the happy path; gateway-down covered by mocked probes — the production gateway is never stopped to make a test pass.
+
+### Gotchas
+
+- A stopped local entry must still print/navigate its prefix route; `http://localhost:0/board` is the symptom of formatting the raw registry port instead of the canonical URL.
+- Registry reads in resolution paths use `peek()`; healing/purging inside a URL lookup silently mutates operator state and hides dead ports that should still route through the gateway.
+- Doc anchor slugging: GitHub keeps the double hyphen created when punctuation is removed (`reserved — ADR-020` → `reserved--adr-020`). A naive slugger reports false broken anchors — verify with GitHub rules before "repairing" a link.
+- A migration commit can amend the ADR and most satellites yet leave one current-behavior section stale: `docs/design/project-gateway.md` §8 "Switcher and CLI" still claimed the CLI agent resolver "keeps the internal loopback port — unchanged" after 1444 changed it. Risk-register rows (B13) are historical and must be preserved; current-behavior sections must be replaced in place.
+- Amend-then-forget metadata: ADR-151 gained a dated 2026-11-23 amendment while `00_ADR.md`, `03_ARCHITECTURE.md`, `project-gateway.md` and `embedded-mcp-server.md` kept older `updated_at` (and 00/03 an unbumped minor version). §4.3 requires the bump; §7.1 lists the date as drift.
+- Editing a satellite does not obligate an `04_DESIGN.md` edit when its pointer and description still hold (§4.5) — an unchanged index needs no ceremonial touch, and a deliberately removed satellite row must not be re-added.

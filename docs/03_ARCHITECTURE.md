@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.81.0
+version: 1.82.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-11-20
+updated_at: 2026-11-23
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -184,7 +184,11 @@ subscription; commands are displayed without dispatch. Shape and failure behavio
 
 Server startup acquires an application-owned atomic project lifetime claim before database/runtime boot, retains it until runtime shutdown and the separately owned lazy server-context database close complete, and uses the registry guard to refuse an already-live older project server. CLI serve dispatch bypasses the CLI database/runtime boot.
 
-Local projects can also be reached through one gateway port (ADR-151): `spur self serve --gateway` proxies `/<prefix>/*` to each project serve on its internal loopback port, adapts host, origin and HTML at the edge so serves stay unchanged, and owns no project runtime. The prefix is the registry's optional `prefix` field (derived from `name` when absent; `resolveProjectPrefix` returns `null` for remote entries, which are never proxied), `server.gateway.{port,allowedHosts}` configures the listener, and `spur self install --daemon` / `spur self uninstall` / `spur self status` manage a macOS user LaunchAgent that keeps it on. See [project gateway](design/project-gateway.md).
+Local projects can also be reached through one gateway port (ADR-151): `spur self serve --gateway` proxies `/<prefix>/*` to each project serve on its internal loopback port, adapts host, origin and HTML at the edge so serves stay unchanged, and owns no project runtime. The prefix is the registry's optional `prefix` field (derived from `name` when absent; `resolveProjectPrefix` returns `null` for remote entries, which are never proxied), `server.gateway.{port,allowedHosts}` configures the listener, and `spur self install --daemon` / `spur self uninstall` / `spur self status` manage a macOS user LaunchAgent that keeps it on. A local project's public URL
+identity is always the gateway route `http://<server.host>:<server.gateway.port><prefix>`, built by
+`resolveProjectGatewayUrl` independent of gateway liveness; only availability is probed, the internal
+loopback port is a private start/diagnostic value, and gateway-forwarded responses keep the caller's
+origin. See [project gateway](design/project-gateway.md).
 
 ## 3. CLI Architecture (`apps/cli`)
 
