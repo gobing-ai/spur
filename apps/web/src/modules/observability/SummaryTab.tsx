@@ -24,6 +24,11 @@ const PREFIX_COLORS: Record<string, string> = {
     rule: '#ec4899',
     agent: '#06b6d4',
     history: '#64748b',
+    // A82 1439 R2: the three agent-protocol prefixes read as theme tokens, so the chart follows
+    // the active theme instead of pinning a hex value that only fits one canvas.
+    mcp: 'var(--color-spur-info)',
+    a2a: 'var(--color-spur-success)',
+    auth: 'var(--color-spur-error)',
 };
 
 const PALETTE = ['#38bdf8', '#818cf8', '#a78bfa', '#f59e0b', '#10b981', '#ec4899', '#06b6d4', '#f43f5e', '#64748b'];
@@ -39,6 +44,9 @@ function getPrefixColor(prefix: string): string {
     const idx = Math.abs(hash) % PALETTE.length;
     return PALETTE[idx] ?? '#38bdf8';
 }
+
+/** The color a prefix renders in (exported for the 1439 R2 mapping assertion). */
+export const prefixColor = getPrefixColor;
 
 /** Mean duration in seconds for Top Event Types. Missing durations render as an em dash, never as `0`. */
 function formatAvgProcessingSeconds(avgDurationMs: number | null | undefined): string {

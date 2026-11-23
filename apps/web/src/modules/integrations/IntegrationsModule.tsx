@@ -113,13 +113,15 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
                         {enablementKeys().join(' or ')}.
                     </EmptyState>
                 ) : active?.id === 'mcp' ? (
-                    <McpTab status={data.status} events={data.mcpEvents} />
+                    <McpTab status={data.status} events={data.mcpEvents} usage={data.usage} />
                 ) : active?.id === 'a2a' ? (
                     <A2aTab
                         status={data.status}
                         requests={data.requests}
                         receipts={data.receipts}
                         events={data.a2aEvents}
+                        usage={data.usage}
+                        {...(seams?.fetchCard === undefined ? {} : { fetchCard: seams.fetchCard })}
                     />
                 ) : (
                     <SummaryTab

@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "Gateway root page: MCP status, live counters, per-project namespaces and discover diagnostics"
-status: todo
+status: done
 template: issue
 created_at: 2026-11-23T00:56:05.442Z
-updated_at: "2026-11-23T02:51:22.036Z"
+updated_at: "2026-11-23T04:22:24.619Z"
 feature_id: A82
 
 ac_numbering: task-local
 ac_altitude: task-local
 priority: P2
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1442. Gateway root page: MCP status, live counters, per-project namespaces and discover diagnostics
@@ -26,8 +28,8 @@ Task 1437 filed this as gap G5. The root gateway index renders the registry, rou
 
 ### Requirements
 
-- [ ] R1. On gateway `GET /`, show gateway MCP enablement, credential presence, the current routing counters, local project MCP namespaces and gateway discovery diagnostics.
-- [ ] R2. Render this information as dependency-free HTML from the current gateway process, with an explicit unavailable state when discovery fails and a usable gateway index in every state.
+- [x] R1. On gateway `GET /`, show gateway MCP enablement, credential presence, the current routing counters, local project MCP namespaces and gateway discovery diagnostics.
+- [x] R2. Render this information as dependency-free HTML from the current gateway process, with an explicit unavailable state when discovery fails and a usable gateway index in every state.
 
 Out of scope are new gateway endpoints, client polling, auto-starting project listeners, and gateway state persistence.
 
@@ -71,18 +73,50 @@ Extend `GatewayIndexInput` and the existing system-info region in `project-gatew
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `packages/app/src/services/project-gateway-html.ts` | 17–70, 108–160, 425–445, 760–775 | `GatewayIndexInput` gains a typed `mcp` block (state, credential name + presence, namespaces, diagnostics, `unavailable`) and the `routing` snapshot; `mcpInfoRows` / `routingInfoRows` render them in the existing system-info popover, every dynamic value through `escapeHtml`, and a small `.sys-list` rule so the lists wrap instead of truncating. |
+| `packages/app/src/services/project-gateway.ts` | 12–20, 528–590, 600–610, 1050–1070 | `counterSnapshot()` is the one projection `/api/health` and the root page share; `mcpIndexSnapshot()` reuses the registry's `discoverExtras()` (namespaces + reason/remedy diagnostics), skips discovery entirely when `deps.mcp` is not mounted, and degrades to `unavailable` when the resolver throws. |
+| `packages/app/tests/services/project-gateway-html.test.ts` | 145–235 | R1/R2 regression: the snapshot rows, escaped dynamic values, the MCP-off state without a namespace list, and the unavailable state keeping cards and counters. |
+| `packages/app/tests/services/project-gateway-mcp.test.ts` | 290–390 | R1/R2 regression through the real handler: two colliding local projects and one remote entry render their namespaces and both diagnostics with the recorded counters and no credential value; MCP off stays operable; a throwing discovery read yields the unavailable row without leaking its message. |
+| `docs/design/project-gateway.md` | 121–130 | The root screen's new system-info content and its statelessness recorded beside the surface change (T3). |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — on gateway `GET /`, show gateway MCP enablement, credential presence, the current routing counters, local project MCP namespaces and gateway discovery diagnostics | MET | `packages/app/src/services/project-gateway-html.ts:17-70,108-160` (typed snapshot + popover rows); `packages/app/src/services/project-gateway.ts:528-590` (`counterSnapshot`, `mcpIndexSnapshot`, display-safe projections); tests `packages/app/tests/services/project-gateway-mcp.test.ts:290-360` |
+| R2 — dependency-free server-rendered HTML from the current process, with an explicit unavailable state when discovery fails and a usable index in every state | MET | `packages/app/src/services/project-gateway-html.ts:760-775` (no client read; the existing popover script only toggles visibility); `packages/app/src/services/project-gateway.ts:556-580` (MCP-off skips discovery; a throwing resolver yields `unavailable`); tests `packages/app/tests/services/project-gateway-html.test.ts:145-235`, `packages/app/tests/services/project-gateway-mcp.test.ts:360-390` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — the gateway root renders the current routing and discovery snapshot (req: R1) | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:290-360` — two local projects colliding on one namespace and one remote entry: the page reports `data-gateway-mcp="on"`, the credential name and `set`, both namespaces as `unassigned`, the `namespace-collision` and `remote-not-proxied (ADR-151)` diagnostics with their remedies, and `errors 2 / 0` from two recorded 404s; the token value is absent |
+| AC2 — the index works with MCP off or discovery unavailable (req: R2) | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:360-390` (MCP off → `data-gateway-mcp="off"`, no namespace list, cards and counters intact; a throwing discovery read → `data-gateway-discovery="unavailable"` with no exception text, cards and counters intact) and `packages/app/tests/services/project-gateway-html.test.ts:210-235` (same two states at the render layer, plus escaped `<script>` payloads) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| ID | Sev | Location | Finding |
+| --- | --- | --- | --- |
+| F1 | P4 | `packages/app/src/services/project-gateway.ts:556-580` | `mcpIndexSnapshot` reuses `discoverExtras()`, which performs its own registry read, so the page reads the registry twice per load. Cheap and keeps one owner of the namespace rules; fold only if the root page gets expensive. |
+| F2 | P4 | `packages/app/tests/services/project-gateway-mcp.test.ts:360-390` | The unavailable path is simulated by a `listProjects` that succeeds once then throws on the discovery pass (the resolver has no injectable failure seam). The assertion covers the boundary behavior, not the resolver's own error. |
+| F3 | P4 | `packages/app/src/services/project-gateway-html.ts:108-160` | The popover is taller now; values keep `nowrap` and only `.sys-list` wraps, so a long remedy wraps instead of widening the panel. Verified by markup/CSS only — no browser pass in this run. |
+
+SECUA: server-rendered with every dynamic value through `escapeHtml`; only the credential NAME and a boolean cross the boundary; diagnostics reduced to reason + remedy so exception text stays out; no new route, cache, ticker or upstream call.
+
+Verdict: PASS
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-11-23T04:21:57.969Z todo → wip (system)
+- 2026-11-23T04:22:22.795Z wip → testing (system)
+- 2026-11-23T04:22:24.614Z testing → done (system)
+

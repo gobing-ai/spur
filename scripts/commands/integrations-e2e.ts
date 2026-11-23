@@ -39,6 +39,8 @@ const MCP_TOKEN = 'integrations-e2e-mcp-token';
 const A2A_TOKEN = 'integrations-e2e-a2a-token';
 const MCP_AUTH_ENV = 'SPUR_MCP_TOKEN';
 const A2A_AUTH_ENV = 'SPUR_A2A_TOKEN';
+/** The workflow tool namespace the scratch project configures (1438 R1). */
+const MCP_NAMESPACE = 'e2e';
 /** The stub sleeps this long, so a cancel always has a live child to abort. */
 const STUB_SLEEP_SECONDS = 60;
 
@@ -145,6 +147,31 @@ function scaffold(dir: string, webDistPath?: string): string {
     chmodSync(join(binDir, AGENT_TYPE), 0o755);
     writeFileSync(join(binDir, 'bun'), `#!/bin/sh\nexec ${process.execPath} "$@"\n`);
     chmodSync(join(binDir, 'bun'), 0o755);
+    // Two workflows: one exposable, and a pair whose shared `name` collides on one tool name — the
+    // refused exposure the Integrations MCP tab must report with a remedy (1438 R1/R2).
+    mkdirSync(join(dir, '.spur/workflows'), { recursive: true });
+    for (const [file, name] of [
+        ['report.yaml', 'report'],
+        ['dup-a.yaml', 'dup'],
+        ['dup-b.yaml', 'dup'],
+    ] as const) {
+        writeFileSync(
+            join(dir, '.spur/workflows', file),
+            [
+                `name: ${name}`,
+                'kind: state-machine',
+                'metadata:',
+                '  mcp:',
+                '    expose: true',
+                'initialState: start',
+                'states:',
+                '  - id: start',
+                'terminalStates:',
+                '  - start',
+                '',
+            ].join('\n'),
+        );
+    }
     return binDir;
 }
 
@@ -162,6 +189,9 @@ function startServe(dir: string, port: number, mcpToken = MCP_TOKEN): Subprocess
             SPUR_SLASH_COMMANDS_FILE: join(dir, 'slash_commands.json'),
             SPUR_MCP_ENABLED: '1',
             SPUR_MCP_AUTH_ENV: MCP_AUTH_ENV,
+            // A configured namespace plus the scaffolded workflows: the status read's namespace
+            // provenance and its refused exposures are only observable when both exist (1438 R1).
+            SPUR_MCP_NAMESPACE: MCP_NAMESPACE,
             [MCP_AUTH_ENV]: mcpToken,
             SPUR_A2A_ENABLED: '1',
             SPUR_A2A_AUTH_ENV: A2A_AUTH_ENV,
@@ -307,6 +337,46 @@ export async function runIntegrationsE2e(
             passed: tools.length > 0 && annotated.length === tools.length && readTools.length > 0,
             expected: 'every tool declares readOnlyHint, and at least one is a read',
             evidence: `${tools.length} tools, ${annotated.length} annotated, reads=${readTools.sort().join(',')}`,
+        });
+
+        // ── R1 / G1 — the status read names the namespace and the refused exposures ───────
+        const diagnosticsRes = await fetch(`${root}/api/integrations/status`);
+        const diagnosticsBody = (await diagnosticsRes.json().catch(() => null)) as {
+            mcp?: {
+                namespace?: string | null;
+                namespaceSource?: string;
+                tools?: Array<{ name: string }>;
+                exposureIssues?: Array<{ tool: string; reason: string; remedy: string }>;
+            };
+        } | null;
+        const advertised = (diagnosticsBody?.mcp?.tools ?? []).map((tool) => tool.name);
+        const issues = diagnosticsBody?.mcp?.exposureIssues ?? [];
+        const refused = issues.filter((issue) => issue.reason === 'duplicate' && issue.remedy !== '');
+        const agreed =
+            advertised.length > 0 &&
+            advertised.slice().sort().join(',') ===
+                tools
+                    .map((tool) => tool.name)
+                    .sort()
+                    .join(',');
+        record(rows, {
+            step: 'integrations-namespace-diagnostics',
+            requirement: 'R1 / G1',
+            command: 'GET /api/integrations/status + POST /mcp tools/list',
+            httpStatus: diagnosticsRes.status,
+            exitCode: null,
+            passed:
+                diagnosticsRes.status === 200 &&
+                diagnosticsBody?.mcp?.namespaceSource === 'config' &&
+                diagnosticsBody?.mcp?.namespace === MCP_NAMESPACE &&
+                advertised.includes(`${MCP_NAMESPACE}_report`) &&
+                refused.length === 2 &&
+                agreed,
+            expected:
+                'the status names the configured namespace, refuses both colliding workflows with a remedy, and its tool set matches tools/list',
+            evidence: `source=${String(diagnosticsBody?.mcp?.namespaceSource)} namespace=${String(
+                diagnosticsBody?.mcp?.namespace,
+            )} refused=${refused.length} tools=${advertised.length} agree=${agreed}`,
         });
 
         // ── R2 / F3, F4 — the card is public and carries skills ─────────────────────────

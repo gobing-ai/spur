@@ -8,6 +8,7 @@ import {
     parseHistoryResponse,
     parseHistoryRow,
     parseSystemEventView,
+    prefixColorClass,
 } from '../../../src/modules/observability/SystemEventsTab';
 
 describe('formatDuration', () => {
@@ -441,5 +442,20 @@ describe('matchesClientFilter tier visibility (task 0794 R7)', () => {
     test("tierFilter 'default' still admits a cataloged default-tier row", () => {
         const filters = { ...DEFAULT_FILTER, tierFilter: 'default' as const };
         expect(matchesClientFilter({ ...uncatalogedRow, eventName: 'task.updated' }, filters, tierByName)).toBe(true);
+    });
+});
+
+// ─── 1439 R2: the three protocol prefixes get named colors, not the fallback ───────────────
+describe('protocol prefix colors', () => {
+    test('mcp, a2a and auth resolve to distinct theme tokens', () => {
+        const classes = ['mcp', 'a2a', 'auth'].map((prefix) => prefixColorClass(prefix));
+        expect(new Set(classes).size).toBe(3);
+        expect(classes.every((value) => value !== prefixColorClass(undefined))).toBe(true);
+        expect(classes.every((value) => value.startsWith('text-spur-'))).toBe(true);
+    });
+
+    test('an uncatalogued prefix keeps the muted fallback', () => {
+        expect(prefixColorClass('uncatalogued')).toBe(prefixColorClass(undefined));
+        expect(prefixColorClass(undefined)).toBe('text-spur-text-muted');
     });
 });

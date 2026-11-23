@@ -610,3 +610,90 @@ describe('1267 R4 — the raw routes are gone', () => {
         });
     });
 });
+
+// ─── 1440 R2: each receipt reports the remote refs ITS OWN run persisted ─────────────────────
+describe('1440 — receipt remote refs', () => {
+    test('two receipts for one member keep their own task, context and branch', async () => {
+        const { CoordinationRunDao } = await import('@gobing-ai/spur-domain');
+        const dao = new CoordinationRunDao(await harness.ctx.getDb());
+        const first = await call<{ message: { id: string } }>('send', {
+            to: 'proj-coder',
+            body: 'first',
+            kind: 'request',
+        });
+        const second = await call<{ message: { id: string } }>('send', {
+            to: 'proj-coder',
+            body: 'second',
+            kind: 'request',
+        });
+        await dao.insertStart({
+            specId: 'proj-coder',
+            agentKind: 'claude-code',
+            processId: null,
+            runId: 'run-first',
+            generation: 1,
+            startedAt: '2026-11-23T00:00:00.000Z',
+            messageIds: [first.message.id],
+            remoteTaskId: 'remote-t1',
+            remoteContextId: 'ctx-1',
+        });
+        await dao.updateExit('run-first', 'exited', '2026-11-23T00:01:00.000Z', '[{"remoteBranch":"lane/one"}]', {
+            messageIds: [first.message.id],
+            outcome: 'verified',
+        });
+        await dao.insertStart({
+            specId: 'proj-coder',
+            agentKind: 'claude-code',
+            processId: null,
+            runId: 'run-second',
+            generation: 2,
+            startedAt: '2026-11-23T00:02:00.000Z',
+            messageIds: [second.message.id],
+            remoteTaskId: 'remote-t2',
+            remoteContextId: 'ctx-2',
+        });
+        // A malformed artifact ref must read as "no branch", never as a failed row.
+        await dao.updateExit('run-second', 'exited', '2026-11-23T00:03:00.000Z', 'not-json', {
+            messageIds: [second.message.id],
+            outcome: 'verified',
+        });
+
+        const rows = await call<
+            Array<{
+                messageId: string;
+                remoteTaskId?: string | null;
+                remoteContextId?: string | null;
+                remoteBranch?: string | null;
+            }>
+        >('requests', { messageId: first.message.id });
+        const secondRows = await call<Array<{ remoteTaskId?: string | null; remoteContextId?: string | null }>>(
+            'requests',
+            { messageId: second.message.id },
+        );
+        expect(rows).toMatchObject([
+            {
+                messageId: first.message.id,
+                remoteTaskId: 'remote-t1',
+                remoteContextId: 'ctx-1',
+                remoteBranch: 'lane/one',
+            },
+        ]);
+        // A malformed artifact ref reads as "no branch" rather than failing the row.
+        expect(secondRows).toMatchObject([
+            { messageId: second.message.id, remoteTaskId: 'remote-t2', remoteContextId: 'ctx-2', remoteBranch: null },
+        ]);
+    });
+
+    test('a receipt with no run carries no remote refs', async () => {
+        const sent = await call<{ message: { id: string } }>('send', {
+            to: 'proj-coder',
+            body: 'unstarted',
+            kind: 'request',
+        });
+        const [row] = await call<Array<{ remoteTaskId?: string | null; remoteBranch?: string | null }>>('requests', {
+            messageId: sent.message.id,
+        });
+        expect(row?.remoteTaskId ?? null).toBeNull();
+        expect(row?.remoteBranch ?? null).toBeNull();
+    });
+});

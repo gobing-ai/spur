@@ -134,6 +134,22 @@ async function addressableRecipients(ctx: ServerContext): Promise<Set<string>> {
  * `unresolvable` binding is an empty answer, never a thrown error: the caller decides whether
  * that is a refusal (send) or an empty feed (requests).
  */
+/**
+ * The remote branch one run's artifact refs recorded, when they record one (1440 R2). Malformed or
+ * absent JSON reads as absent: a ref the transport could not write must not blank the row.
+ */
+function remoteBranchOf(artifactRefsJson: string | null): string | null {
+    if (artifactRefsJson === null) return null;
+    try {
+        const refs = JSON.parse(artifactRefsJson) as Array<{ remoteBranch?: unknown }>;
+        if (!Array.isArray(refs)) return null;
+        const branch = refs.find((ref) => typeof ref?.remoteBranch === 'string')?.remoteBranch;
+        return typeof branch === 'string' ? branch : null;
+    } catch {
+        return null;
+    }
+}
+
 async function orchestratorAddress(ctx: ServerContext): Promise<string> {
     try {
         const { state, instanceId } = await fleetOver(ctx).resolveOrchestrator(normalizeProjectPath(ctx.cwd));
@@ -275,6 +291,11 @@ export function createInboxHandlers(ctx: ServerContext) {
                 outcome: row.runOutcome ?? null,
                 reason: reasonByMessage.get(row.id) ?? null,
                 hold: holdByTask.get(row.runTaskId ?? row.taskId ?? '') ?? null,
+                // 1440 R2: the remote refs THIS run persisted. Malformed or absent artifacts read as
+                // absent — a receipt that never reached a remote task has nothing to show.
+                remoteTaskId: row.runRemoteTaskId ?? null,
+                remoteContextId: row.runContextId ?? null,
+                remoteBranch: remoteBranchOf(row.runArtifactRefsJson),
             }));
         }),
 

@@ -133,6 +133,11 @@ const PREFIX_COLOR_MAP: Record<string, string> = {
     queue: 'text-orange-400',
     bus: 'text-pink-400',
     api: 'text-teal-400',
+    // A82 1439 R2: the three agent-protocol prefixes use the theme's semantic tokens, matching
+    // the Summary chart's choice so one prefix never reads in two different colors.
+    mcp: 'text-spur-info',
+    a2a: 'text-spur-success',
+    auth: 'text-spur-error',
 };
 const FALLBACK_COLOR = 'text-spur-text-muted';
 
@@ -143,6 +148,9 @@ function getPrefixColor(prefix: string | undefined): string {
     if (!prefix) return FALLBACK_COLOR;
     return PREFIX_COLOR_MAP[prefix] ?? FALLBACK_COLOR;
 }
+
+/** The text class a prefix renders in (exported for the 1439 R2 mapping assertion). */
+export const prefixColorClass = getPrefixColor;
 /**
  * Tri-state SSE connection status surfaced by the liveness strip (task 0222 R1).
  * `connecting` covers both initial mount before the first frame and any

@@ -60,6 +60,73 @@ export function clientSnippet(status: IntegrationsStatus): string {
     ].join('\n');
 }
 
+/** A shell-safe credential reference: the variable name when it is a valid identifier, else a placeholder. */
+function envRef(envName: string): string {
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(envName) ? `\${${envName}}` : '<ENV_NAME>';
+}
+
+/** A URL quoted only when it carries shell-significant characters. */
+function shellQuote(value: string): string {
+    return /^[A-Za-z0-9_@%+=:,./~-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The project's own stdio example: `spur mcp --url <project endpoint>` (1438 R2). Null when the
+ * surface is off — there is no endpoint to point a client at.
+ */
+export function projectMcpCommand(status: IntegrationsStatus): string | null {
+    if (status.mcp.url === null) return null;
+    return `spur mcp --url ${shellQuote(status.mcp.url)}`;
+}
+
+/**
+ * The gateway's stdio example. Offered only when the project is served under a gateway whose own MCP
+ * entry is on: a standalone server has no gateway surface to reach (1438 R2).
+ */
+export function gatewayMcpCommand(status: IntegrationsStatus): string | null {
+    if (!status.gateway.served || status.gateway.mcp?.enabled !== true) return null;
+    return 'spur mcp --gateway';
+}
+
+/**
+ * A JSON-RPC `server/discover` probe against the project endpoint, expanding only the auth
+ * VARIABLE NAME — the Board never holds the token, so it cannot print one (1438 R2).
+ */
+export function discoverProbe(status: IntegrationsStatus): string | null {
+    if (status.mcp.url === null) return null;
+    return [
+        `curl -s -X POST ${shellQuote(status.mcp.url)} \\`,
+        `  -H "Authorization: Bearer ${envRef(status.mcp.auth.envName)}" \\`,
+        `  -H 'Content-Type: application/json' \\`,
+        `  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover"}'`,
+    ].join('\n');
+}
+
+/** The tools whose name contains `query`, case-insensitive; an empty query keeps every tool. */
+export function filterTools<T extends { name: string }>(tools: T[], query: string): T[] {
+    const needle = query.trim().toLowerCase();
+    return needle === '' ? tools : tools.filter((tool) => tool.name.toLowerCase().includes(needle));
+}
+
+/** A windowed latency in milliseconds; `null` is unavailable and reads as an em dash, never `0ms`. */
+export function formatLatency(ms: number | null): string {
+    return ms === null ? '—' : `${Math.round(ms)}ms`;
+}
+
+/** How many calls in a slice carried no measurable duration (1439 R1). */
+export function unmeasuredLabel(count: number): string {
+    return count === 0 ? 'all measured' : `${count} unmeasured`;
+}
+
+/** A failure cluster's first and last sighting, both rendered by the locale. */
+export function clusterRange(cluster: { firstAt: string; lastAt: string }): string {
+    const at = (value: string): string => {
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
+    };
+    return `${at(cluster.firstAt)} → ${at(cluster.lastAt)}`;
+}
+
 /** One inbox request row as the A2A tab lists it. */
 export interface InboxRequestRow {
     messageId: string;
@@ -69,6 +136,36 @@ export interface InboxRequestRow {
     runStatus?: string | null;
     taskId: string | null;
     outcome: string | null;
+    /** The remote refs this receipt's own run persisted (1440 R2); absent when it has none. */
+    remoteTaskId?: string | null;
+    remoteContextId?: string | null;
+    remoteBranch?: string | null;
+}
+
+/**
+ * The Observability › Trace deep link for one exact local run (1440 R3). Only a UUID can be a run id
+ * here, so a receipt without one gets no link instead of a dead end.
+ */
+export function traceLink(runId: string | null | undefined): string | null {
+    if (runId === null || runId === undefined) return null;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(runId)) return null;
+    return withBase(`/board/observability?${new URLSearchParams({ tab: 'trace', runId }).toString()}`);
+}
+
+/**
+ * The copyable `a2a` CLI examples for one inbound member (1440 R1). Both name the card and, when the
+ * member declares a credential, the credential-helper option — never a token value.
+ */
+export function a2aExamples(cardUrl: string, authEnv: string): { card: string; send: string } {
+    const quoted = /^[A-Za-z0-9_@%+=:,./~-]+$/.test(cardUrl) ? cardUrl : `'${cardUrl.replace(/'/g, `'\\''`)}'`;
+    const credential = authEnv === '' ? '' : ' --credential-helper .spur/run/a2a-credential-helper';
+    const payload =
+        `'{"message":{"messageId":"<uuid>","role":"user","parts":[{"text":"<text>"}]},` +
+        `"configuration":{"returnImmediately":true}}'`;
+    return {
+        card: `a2a card get -o json -a ${quoted}${credential}`,
+        send: `a2a send -o json --request-payload ${payload} -a ${quoted}${credential}`,
+    };
 }
 
 /** Only rows the A2A listener created: its request keys are the `a2a:` family. */

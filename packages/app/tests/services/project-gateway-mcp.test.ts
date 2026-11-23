@@ -277,3 +277,112 @@ describe('gateway MCP registry (task 1383)', () => {
         }
     });
 });
+
+// ─── 1442 R1/R2: the root page reports the current MCP and routing snapshot ─────────────────
+describe('1442 — gateway root page', () => {
+    /** Drive the handler and return the root page's HTML plus the recorded request counters. */
+    async function rootPage(
+        entries: Array<{ name: string; path: string; host?: string }>,
+        options: { mcp?: boolean; throwDiscovery?: boolean } = {},
+    ): Promise<{ html: string; status: number }> {
+        const built = build(
+            entries.map((entry) => entry.path),
+            {},
+            async () => Response.json({ ok: true }),
+        );
+        const handler = createGatewayHandler({
+            listProjects: async () => entries as never,
+            ensureUpstream: async () => 4000,
+            port: 3000,
+            builtinTools: () => BUILTINS,
+            projectMcpToken: () => TOKEN,
+            mcpAuth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true },
+            mcpProtocolVersion: '2026-08-01',
+            fetchUpstream: (async () => Response.json({ ok: true })) as unknown as typeof fetch,
+            ...(options.mcp === false ? {} : { mcp: async () => Response.json({ ok: true }) }),
+        });
+        // Two recorded failures, so the counters are not all zero in the assertion.
+        await handler(new Request('http://localhost/does-not-exist'));
+        await handler(new Request('http://localhost/also-missing'));
+        const res = await handler(new Request('http://localhost/'));
+        built.dispose();
+        return { html: await res.text(), status: res.status };
+    }
+
+    it('shows the MCP state, credential presence, namespaces, diagnostics and counters', async () => {
+        const one = project('one', { namespace: 'taken', workflow: 'deploy' });
+        const two = project('two', { namespace: 'taken', workflow: 'audit' });
+        try {
+            const { html, status } = await rootPage([
+                { name: 'one', path: one },
+                { name: 'two', path: two },
+                { name: 'remote-box', path: '/srv/remote', host: '192.168.1.50' },
+            ]);
+            expect(status).toBe(200);
+            expect(html).toContain('data-gateway-mcp="on"');
+            expect(html).toContain('SPUR_MCP_TOKEN');
+            expect(html).toContain('set');
+            // Both colliding projects are listed as unassigned, and the collision is explained.
+            expect(html).toContain('data-gateway-namespace="one"');
+            expect(html).toContain('data-gateway-namespace="two"');
+            expect(html).toContain('data-gateway-diagnostic="namespace-collision"');
+            expect(html).toContain('data-gateway-diagnostic="remote-not-proxied (ADR-151)"');
+            expect(html).toContain('data-gateway-routing="errors">2 / 0<');
+            // The credential VALUE never reaches the page.
+            expect(html).not.toContain(TOKEN);
+            // The page is still the ordinary index: cards and the removal action survive.
+            expect(html).toContain('class="project-grid"');
+            expect(html).toContain('data-path="' + one + '"');
+        } finally {
+            rmSync(one, { recursive: true, force: true });
+            rmSync(two, { recursive: true, force: true });
+        }
+    });
+
+    it('keeps an operable index with MCP off, and with discovery unavailable', async () => {
+        const alpha = project('alpha', { namespace: 'alphaspace', workflow: 'deploy' });
+        try {
+            const off = await rootPage([{ name: 'alpha', path: alpha }], { mcp: false });
+            expect(off.status).toBe(200);
+            expect(off.html).toContain('data-gateway-mcp="off"');
+            expect(off.html).not.toContain('data-gateway-namespaces');
+            expect(off.html).toContain('class="project-grid"');
+            expect(off.html).toContain('data-gateway-routing="requests"');
+        } finally {
+            rmSync(alpha, { recursive: true, force: true });
+        }
+    });
+
+    it('renders the unavailable state when the discovery resolver throws', async () => {
+        const beta = project('beta', { namespace: 'betaspace', workflow: 'deploy' });
+        let calls = 0;
+        const handler = createGatewayHandler({
+            // The index reads the registry once; the discovery pass reads it again and fails, which
+            // is exactly the shape of an unreadable registry during discovery.
+            listProjects: async () => {
+                calls += 1;
+                if (calls > 1) throw new Error('registry unreadable');
+                return [{ name: 'beta', path: beta }] as never;
+            },
+            ensureUpstream: async () => 4000,
+            port: 3000,
+            builtinTools: () => BUILTINS,
+            projectMcpToken: () => TOKEN,
+            mcpAuth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true },
+            mcpProtocolVersion: '2026-08-01',
+            fetchUpstream: (async () => Response.json({ ok: true })) as unknown as typeof fetch,
+            mcp: async () => Response.json({ ok: true }),
+        });
+        const res = await handler(new Request('http://localhost/'));
+        const html = await res.text();
+        expect(res.status).toBe(200);
+        // The failure is reported, never rendered as internal exception text.
+        expect(html).toContain('data-gateway-discovery="unavailable"');
+        expect(html).not.toContain('registry unreadable');
+        // The rest of the page is untouched.
+        expect(html).toContain('class="project-grid"');
+        expect(html).toContain('data-gateway-routing="requests"');
+        expect(html).toContain('data-gateway-mcp="on"');
+        rmSync(beta, { recursive: true, force: true });
+    });
+});

@@ -58,6 +58,11 @@ export const integrationsOutboundMemberSchema = z.object({
     member: z.string(),
     kind: z.enum(['a2a', 'project']),
     target: z.string(),
+    /**
+     * The credential state of the member's declared `authEnv` (1440 R2): the variable NAME and
+     * whether it resolved. Absent when the member declares no credential at all.
+     */
+    auth: integrationsAuthSchema.optional(),
 });
 /** Inferred type for {@link integrationsOutboundMemberSchema}. */
 export type IntegrationsOutboundMember = z.infer<typeof integrationsOutboundMemberSchema>;
@@ -73,6 +78,17 @@ export const integrationsGatewayCountersSchema = z.object({
 /** Inferred type for {@link integrationsGatewayCountersSchema}. */
 export type IntegrationsGatewayCounters = z.infer<typeof integrationsGatewayCountersSchema>;
 
+/** Why an exposed workflow cannot become a tool, with the remedy the operator must apply (1438). */
+export const integrationsMcpExposureIssueSchema = z.object({
+    tool: z.string(),
+    /** Project-relative display path, or the basename for a definition outside the checkout. */
+    file: z.string(),
+    reason: z.enum(['no-namespace', 'builtin-collision', 'duplicate']),
+    remedy: z.string(),
+});
+/** Inferred type for {@link integrationsMcpExposureIssueSchema}. */
+export type IntegrationsMcpExposureIssue = z.infer<typeof integrationsMcpExposureIssueSchema>;
+
 /** The MCP surface block. */
 export const integrationsMcpSurfaceSchema = z.object({
     enabled: z.boolean(),
@@ -83,6 +99,13 @@ export const integrationsMcpSurfaceSchema = z.object({
     protocolVersion: z.string(),
     tools: z.array(integrationsMcpToolSchema),
     resources: z.array(integrationsMcpResourceSchema),
+    /**
+     * The workflow tool namespace and its provenance (1438). Optional so a Board can read an older
+     * server's status: absent means "this server does not report exposure", not "no namespace".
+     */
+    namespace: z.string().nullable().optional(),
+    namespaceSource: z.enum(['config', 'plugin-manifest', 'none']).optional(),
+    exposureIssues: z.array(integrationsMcpExposureIssueSchema).optional(),
 });
 /** Inferred type for {@link integrationsMcpSurfaceSchema}. */
 export type IntegrationsMcpSurface = z.infer<typeof integrationsMcpSurfaceSchema>;

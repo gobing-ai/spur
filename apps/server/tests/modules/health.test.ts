@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -1215,6 +1215,104 @@ describe('healthModule', () => {
             expect(res.status).toBeGreaterThanOrEqual(400);
             const body = (await res.json()) as { error: string };
             expect(body.error).toBeTruthy();
+        } finally {
+            close();
+        }
+    });
+});
+
+// ─── 1441 R2: the listing marks a declared MCP exposure, and only a real one ─────────────────
+describe('1441 — workflow MCP exposure declaration', () => {
+    /** A hermetic project: its own temp dir, config isolation and workflow service. */
+    async function projectCtx(): Promise<{ ctx: ServerContext; dir: string; close: () => void }> {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-health-1441-'));
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
+        mkdirSync(join(dir, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: join(dir, '.spur', 'spur.db') });
+        const wfSvc = new WorkflowAppService({
+            cwd: dir,
+            spurConfig: null,
+            getDb: () => Promise.resolve(db),
+            agentService: () => ({}) as never,
+            ruleService: () => ({}) as never,
+            hitlResponder: () => ({}) as never,
+        });
+        return {
+            dir,
+            ctx: {
+                cwd: dir,
+                fs: createNodeFileSystem(dir),
+                getDb: () => Promise.resolve(db),
+                taskService: () => ({ list: async () => ({ data: [] }) }),
+                workflowService: () => wfSvc,
+                reloadAgentConfig: async () => loadSpurConfig(dir),
+            } as unknown as ServerContext,
+            close: () => {
+                db.close();
+                rmSync(dir, { recursive: true, force: true });
+            },
+        };
+    }
+
+    const definition = (name: string, metadata: string[]): string =>
+        [
+            `name: ${name}`,
+            'kind: state-machine',
+            'initialState: start',
+            'terminalStates: [done]',
+            'states:',
+            '  - id: start',
+            '  - id: done',
+            'transitions:',
+            '  - from: start',
+            '    to: done',
+            '    trigger: proceed',
+            ...metadata,
+        ].join('\n');
+
+    test('only a valid definition with boolean expose true carries the flag', async () => {
+        const { ctx, dir, close } = await projectCtx();
+        const wfDir = join(dir, '.spur', 'workflows');
+        mkdirSync(wfDir, { recursive: true });
+        writeFileSync(
+            join(wfDir, 'exposed.yaml'),
+            definition('exposed-flow', ['metadata:', '  mcp:', '    expose: true']),
+        );
+        writeFileSync(
+            join(wfDir, 'not-exposed.yaml'),
+            definition('not-exposed-flow', ['metadata:', '  mcp:', '    expose: false']),
+        );
+        writeFileSync(
+            join(wfDir, 'string-exposed.yaml'),
+            definition('string-exposed-flow', ['metadata:', '  mcp:', "    expose: 'true'"]),
+        );
+        writeFileSync(join(wfDir, 'absent.yaml'), definition('absent-flow', []));
+        // A malformed definition that still looks like it declares exposure.
+        writeFileSync(
+            join(wfDir, 'broken.yaml'),
+            [
+                'name: broken-flow',
+                'kind: state-machine',
+                'metadata:',
+                '  mcp:',
+                '    expose: true',
+                'states: nope',
+            ].join('\n'),
+        );
+
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+        try {
+            const body = (await (await app.request('/api/project/workflows')).json()) as {
+                workflows: Array<{ name: string; valid: boolean; mcpExposureDeclared?: boolean }>;
+            };
+            const byName = new Map(body.workflows.map((entry) => [entry.name, entry]));
+            expect(byName.get('exposed-flow')?.mcpExposureDeclared).toBe(true);
+            expect(byName.get('not-exposed-flow')?.mcpExposureDeclared).toBeUndefined();
+            expect(byName.get('string-exposed-flow')?.mcpExposureDeclared).toBeUndefined();
+            expect(byName.get('absent-flow')?.mcpExposureDeclared).toBeUndefined();
+            expect(byName.get('broken-flow')?.valid).toBe(false);
+            expect(byName.get('broken-flow')?.mcpExposureDeclared).toBeUndefined();
         } finally {
             close();
         }

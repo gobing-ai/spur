@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { discoverModules, isWebModule, readModule } from '../../src/modules/discover';
 import { module as observabilityModule } from '../../src/modules/observability';
+import { prefixColor } from '../../src/modules/observability/SummaryTab';
 import { OBSERVABILITY_TABS } from '../../src/modules/observability/tabs';
 
 /**
@@ -59,5 +60,20 @@ describe('observability web module', () => {
     test('tab ids are unique — the shell keys selection by id', () => {
         const ids = OBSERVABILITY_TABS.map((t) => t.id);
         expect(new Set(ids).size).toBe(ids.length);
+    });
+});
+
+// ─── 1439 R2: the Summary chart's protocol prefixes use the same three theme tokens ─────────
+describe('observability Summary prefix colors', () => {
+    test('mcp, a2a and auth resolve to distinct theme colors', () => {
+        const colors = ['mcp', 'a2a', 'auth'].map((prefix) => prefixColor(prefix));
+        expect(new Set(colors).size).toBe(3);
+        expect(colors.every((value) => value.startsWith('var(--color-spur-'))).toBe(true);
+    });
+
+    test('an uncatalogued prefix still hashes into the existing palette', () => {
+        const color = prefixColor('uncatalogued');
+        expect(color.startsWith('#')).toBe(true);
+        expect(['mcp', 'a2a', 'auth'].map((prefix) => prefixColor(prefix))).not.toContain(color);
     });
 });

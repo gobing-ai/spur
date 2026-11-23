@@ -1,6 +1,6 @@
 import { FleetService, type IntegrationsGatewayProbe, IntegrationsService } from '@gobing-ai/spur-app';
 import { SPUR_ENV_VARS } from '@gobing-ai/spur-config';
-import { contract, integrationsGatewayHealthSchema } from '@gobing-ai/spur-contracts';
+import { contract, type IntegrationsAuth, integrationsGatewayHealthSchema } from '@gobing-ai/spur-contracts';
 import { implement } from '@orpc/server';
 import type { ServerContext } from '../../context';
 import { bearerEnv } from '../../middleware/bearer-guard';
@@ -84,17 +84,36 @@ async function probeGateway(port: number, since?: string): Promise<IntegrationsG
     }
 }
 
+/**
+ * Outbound credential state, keyed by member instance id (1440 R2). Only the variable NAME and
+ * whether it resolved leaves this function — the value stays in the environment.
+ */
+async function outboundAuthOf(ctx: ServerContext, fleet: FleetService): Promise<Record<string, IntegrationsAuth>> {
+    const env = bearerEnv(ctx);
+    const [declaration, addresses] = await Promise.all([fleet.load(ctx.cwd), fleet.memberAddresses(ctx.cwd)]);
+    const result: Record<string, IntegrationsAuth> = {};
+    (declaration?.members ?? []).forEach((member, index) => {
+        if (member.a2a === undefined && member.project === undefined) return;
+        const id = addresses[index]?.instanceId ?? member.id ?? '';
+        if (id === '') return;
+        const authEnv = member.authEnv ?? null;
+        result[id] = { envName: authEnv ?? '', tokenPresent: tokenPresent(env, authEnv) };
+    });
+    return result;
+}
+
 /** Build the status/usage handlers bound to this server's context. */
 export function createIntegrationsHandlers(ctx: ServerContext) {
-    const service = () =>
-        new IntegrationsService({
+    const service = () => {
+        const fleet = new FleetService({
+            fs: ctx.fs,
+            reloadAgentConfig: () => ctx.reloadAgentConfig(),
+            openDb: () => ctx.getDb(),
+        });
+        return new IntegrationsService({
             projectPath: ctx.cwd,
             getDb: () => ctx.getDb(),
-            fleet: new FleetService({
-                fs: ctx.fs,
-                reloadAgentConfig: () => ctx.reloadAgentConfig(),
-                openDb: () => ctx.getDb(),
-            }),
+            fleet,
             sources: {
                 mcp: async () => {
                     const settings = mcpSettings(ctx);
@@ -107,6 +126,11 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                         tools: catalog.tools,
                         resources: catalog.resources,
                         builtinToolNames: BUILTIN_TOOL_NAMES,
+                        // 1438 R1: the namespace the tools are named under, where it came from, and
+                        // the workflows the same resolver refused — carried straight through.
+                        namespace: catalog.namespace,
+                        namespaceSource: catalog.namespaceSource,
+                        exposureIssues: catalog.exposureIssues,
                     };
                 },
                 a2a: async () => {
@@ -115,11 +139,13 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                         enabled: settings.enabled,
                         authEnv: settings.authEnv,
                         tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv),
+                        outboundAuth: await outboundAuthOf(ctx, fleet),
                     };
                 },
                 gateway: async (since) => probeGateway(gatewayPort(bearerEnv(ctx)), since),
             },
         });
+    };
 
     /** The inbound request, when the transport put it on the oRPC context (bootstrap does). */
     const requestOf = (context: unknown): Request | undefined => {

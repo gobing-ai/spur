@@ -249,6 +249,11 @@ export const workflowDefinitionDtoSchema = z.object({
     error: z.string().optional(),
     rawYaml: z.string(),
     mermaidDiagram: z.string(),
+    /**
+     * True only when the definition is valid AND its parsed `metadata.mcp.expose` is the boolean
+     * `true` (1441 R2). Omitted means "declares no exposure" — a string `'true'` is not a declaration.
+     */
+    mcpExposureDeclared: z.boolean().optional(),
 });
 
 /** Workflow definition DTO inferred from the public schema. */

@@ -76,3 +76,104 @@ describe('renderGatewayIndex', () => {
         expect(html).toContain('id="project-filter"');
     });
 });
+
+// ─── 1442 R1/R2: the root page's gateway MCP and routing snapshot ────────────────────────────
+describe('renderGatewayIndex — gateway MCP and routing snapshot', () => {
+    const routing = {
+        since: '2026-11-23T00:00:00.000Z',
+        requests: 12,
+        status4xx: 3,
+        status5xx: 1,
+        upstreamRestarts: { '/alpha': 2 },
+    };
+    const project = { entry: { name: 'alpha', path: '/Users/dev/alpha', port: 3007 }, prefix: '/alpha' };
+
+    it('reports MCP state, credential presence, namespaces, diagnostics and the counters', () => {
+        const html = renderGatewayIndex({
+            port: 3000,
+            projects: [project],
+            routing,
+            mcp: {
+                enabled: true,
+                auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true },
+                namespaces: [{ name: 'alpha', prefix: '/alpha', namespace: 'alphaspace' }],
+                diagnostics: [
+                    {
+                        name: 'one, two',
+                        reason: 'namespace-collision',
+                        remedy: 'give each project a distinct plugin.json name',
+                    },
+                    {
+                        name: 'remote-box',
+                        reason: 'remote-not-proxied (ADR-151)',
+                        remedy: 'run the project locally',
+                    },
+                ],
+            },
+        });
+        expect(html).toContain('data-gateway-mcp="on"');
+        expect(html).toContain('SPUR_MCP_TOKEN');
+        expect(html).toContain('set');
+        expect(html).toContain('data-gateway-namespace="alpha"');
+        expect(html).toContain('alphaspace');
+        expect(html).toContain('data-gateway-diagnostic="namespace-collision"');
+        expect(html).toContain('data-gateway-diagnostic="remote-not-proxied (ADR-151)"');
+        expect(html).toContain('give each project a distinct plugin.json name');
+        expect(html).toContain('data-gateway-routing="requests">12<');
+        expect(html).toContain('data-gateway-routing="errors">3 / 1<');
+        expect(html).toContain('/alpha: 2');
+        expect(html).toContain('2026-11-23T00:00:00.000Z');
+    });
+
+    it('escapes every dynamic value and never renders a credential value', () => {
+        const html = renderGatewayIndex({
+            port: 3000,
+            projects: [project],
+            routing,
+            mcp: {
+                enabled: true,
+                auth: { envName: 'TOKEN<script>', tokenPresent: false },
+                namespaces: [{ name: '<b>evil</b>', prefix: '/evil"', namespace: null }],
+                diagnostics: [{ name: '<i>x</i>', reason: 'r&d', remedy: '<script>alert(1)</script>' }],
+            },
+        });
+        expect(html).not.toContain('<script>alert(1)</script>');
+        expect(html).toContain('&#60;script&#62;');
+        expect(html).toContain('&#60;b&#62;evil&#60;/b&#62;');
+        expect(html).toContain('unassigned');
+        expect(html).toContain('unset');
+    });
+
+    it('an MCP-off gateway shows the off state and no namespace list', () => {
+        const html = renderGatewayIndex({
+            port: 3000,
+            projects: [project],
+            routing,
+            mcp: { enabled: false, auth: { envName: '', tokenPresent: false }, namespaces: [], diagnostics: [] },
+        });
+        expect(html).toContain('data-gateway-mcp="off"');
+        expect(html).toContain('no variable configured');
+        expect(html).not.toContain('data-gateway-namespaces');
+        // The counters stay: "off" is not "no information".
+        expect(html).toContain('data-gateway-routing="requests"');
+    });
+
+    it('an unavailable discovery keeps the cards and counters and says so', () => {
+        const html = renderGatewayIndex({
+            port: 3000,
+            projects: [project],
+            routing,
+            mcp: {
+                enabled: true,
+                auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true },
+                namespaces: [],
+                diagnostics: [],
+                unavailable: true,
+            },
+        });
+        expect(html).toContain('data-gateway-discovery="unavailable"');
+        expect(html).toContain('Discovery unavailable');
+        expect(html).toContain('class="project-grid"');
+        expect(html).toContain('data-gateway-routing="requests"');
+    });
+});

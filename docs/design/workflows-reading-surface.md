@@ -37,6 +37,7 @@ Response: `{ workflows: WorkflowEntry[], total: number }` where each entry carri
 | `valid` / `error` | entry validity; read or resolve failures degrade the entry instead of failing the request |
 | `rawYaml` | raw file text read via the context filesystem (empty string on read failure) |
 | `mermaidDiagram` | fenced mermaid render of the fully resolved definition, only for valid entries |
+| `mcpExposureDeclared` | optional; present and `true` only when the entry is **valid** and its raw YAML's parsed `metadata.mcp.expose` is the boolean `true` (1441 R2). A string `'true'`, an absent key, or an invalid definition omits the field — the Board reads "omitted" as "declares nothing" |
 
 Resolution order per entry: `registeredWorkflowPaths(ctx.spurConfig)` → `workflowService().list(paths)`
 → raw YAML read → for valid entries `resolveWorkflowDefinition(ctx.cwd, path, { registered })` →

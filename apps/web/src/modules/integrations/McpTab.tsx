@@ -1,64 +1,146 @@
-import type { IntegrationsStatus } from '@gobing-ai/spur-contracts';
+import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import { useState } from 'react';
 import { Badge, Button, Card, CardBody } from '../../components/module-kit';
-import { clientSnippet, type ProtocolEventRow } from './helpers';
+import {
+    clientSnippet,
+    clusterRange,
+    discoverProbe,
+    filterTools,
+    formatLatency,
+    gatewayMcpCommand,
+    type ProtocolEventRow,
+    projectMcpCommand,
+    unmeasuredLabel,
+} from './helpers';
 
 /**
- * Integrations › MCP (task 1424 R4).
+ * Integrations › MCP (task 1424 R4; namespace and exposure diagnostics 1438 R2).
  *
- * The advertised catalog (origin + read/write badges, a schema drawer), the `spur://` resource
- * templates, the window's recent calls, and a copyable client config that names the variable
- * holding the token — never the token itself.
+ * The advertised catalog (origin + read/write badges, a schema drawer), the workflow namespace and
+ * the exposures the resolver refused with their remedies, the `spur://` resource templates, the
+ * window's recent calls, and the copyable client config, command and probe — each naming the
+ * variable holding the token, never the token itself.
  */
-export function McpTab({ status, events }: { status: IntegrationsStatus; events: ProtocolEventRow[] }) {
+export function McpTab({
+    status,
+    events,
+    usage,
+}: {
+    status: IntegrationsStatus;
+    events: ProtocolEventRow[];
+    usage: IntegrationsUsage | null;
+}) {
+    const [query, setQuery] = useState('');
     const snippet = clientSnippet(status);
-    const copy = () => {
+    const tools = filterTools(status.mcp.tools, query);
+    const issues = status.mcp.exposureIssues ?? [];
+    const toolUsage = usage?.tools ?? [];
+    const resourceUsage = usage?.resources ?? [];
+    const clusters = usage?.failureClusters ?? [];
+    const command = projectMcpCommand(status);
+    const gatewayCommand = gatewayMcpCommand(status);
+    const probe = discoverProbe(status);
+    const copy = (text: string) => {
         if (typeof navigator !== 'undefined' && navigator.clipboard !== undefined) {
-            void navigator.clipboard.writeText(snippet);
+            void navigator.clipboard.writeText(text);
         }
     };
     return (
         <div className="flex flex-col gap-4">
             <Card>
                 <CardBody>
-                    <h2 className="text-sm font-semibold mb-2">Tools</h2>
-                    <table className="table table-sm w-full" data-testid="integrations-mcp-tools">
-                        <thead>
-                            <tr>
-                                <th scope="col">Tool</th>
-                                <th scope="col">Origin</th>
-                                <th scope="col">Access</th>
-                                <th scope="col">Schema</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {status.mcp.tools.map((tool) => (
-                                <tr key={tool.name} data-testid={`integrations-tool-${tool.name}`}>
-                                    <td className="font-mono text-xs">{tool.name}</td>
-                                    <td>
-                                        <Badge variant={tool.origin === 'built-in' ? 'primary' : 'secondary'} size="sm">
-                                            {tool.origin}
-                                        </Badge>
-                                    </td>
-                                    <td>
-                                        <Badge
-                                            variant={tool.annotations.readOnlyHint ? 'success' : 'warning'}
-                                            size="sm"
-                                        >
-                                            {tool.annotations.readOnlyHint ? 'read' : 'write'}
-                                        </Badge>
-                                    </td>
-                                    <td>
-                                        <details>
-                                            <summary className="cursor-pointer text-xs">input schema</summary>
-                                            <pre className="mt-1 max-h-64 overflow-auto rounded bg-base-200 p-2 text-xs">
-                                                {JSON.stringify(tool.inputSchema, null, 2)}
-                                            </pre>
-                                        </details>
-                                    </td>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div>
+                            <h2 className="text-sm font-semibold">Tools</h2>
+                            {status.mcp.namespace === undefined ? null : (
+                                <p className="text-xs text-base-content/70" data-testid="integrations-mcp-namespace">
+                                    namespace {status.mcp.namespace ?? 'none'} · from{' '}
+                                    {status.mcp.namespaceSource ?? 'none'}
+                                </p>
+                            )}
+                        </div>
+                        <input
+                            type="search"
+                            className="input input-sm"
+                            placeholder="Filter tools"
+                            aria-label="Filter tools"
+                            data-testid="integrations-mcp-filter"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                        />
+                    </div>
+                    {tools.length === 0 ? (
+                        <p className="text-sm text-base-content/70" data-testid="integrations-mcp-no-match">
+                            No advertised tool matches “{query}”.
+                        </p>
+                    ) : (
+                        <table className="table table-sm w-full" data-testid="integrations-mcp-tools">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Tool</th>
+                                    <th scope="col">Origin</th>
+                                    <th scope="col">Access</th>
+                                    <th scope="col">Schema</th>
                                 </tr>
+                            </thead>
+                            <tbody>
+                                {tools.map((tool) => (
+                                    <tr key={tool.name} data-testid={`integrations-tool-${tool.name}`}>
+                                        <td className="font-mono text-xs">{tool.name}</td>
+                                        <td>
+                                            <Badge
+                                                variant={tool.origin === 'built-in' ? 'primary' : 'secondary'}
+                                                size="sm"
+                                            >
+                                                {tool.origin}
+                                            </Badge>
+                                        </td>
+                                        <td>
+                                            <Badge
+                                                variant={tool.annotations.readOnlyHint ? 'success' : 'warning'}
+                                                size="sm"
+                                            >
+                                                {tool.annotations.readOnlyHint ? 'read' : 'write'}
+                                            </Badge>
+                                        </td>
+                                        <td>
+                                            <details>
+                                                <summary className="cursor-pointer text-xs">input schema</summary>
+                                                <pre className="mt-1 max-h-64 overflow-auto rounded bg-base-200 p-2 text-xs">
+                                                    {JSON.stringify(tool.inputSchema, null, 2)}
+                                                </pre>
+                                            </details>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </CardBody>
+            </Card>
+
+            <Card>
+                <CardBody>
+                    <h2 className="text-sm font-semibold mb-2">Exposure findings</h2>
+                    {issues.length === 0 ? (
+                        <p className="text-sm text-base-content/70" data-testid="integrations-mcp-exposure-clear">
+                            Every workflow that opted into MCP exposure is advertised.
+                        </p>
+                    ) : (
+                        <ul className="flex flex-col gap-2 text-xs" data-testid="integrations-mcp-exposure">
+                            {issues.map((issue) => (
+                                <li key={`${issue.tool}:${issue.file}:${issue.reason}`}>
+                                    <span className="font-mono">{issue.tool}</span>{' '}
+                                    <Badge variant="error" size="sm">
+                                        {issue.reason}
+                                    </Badge>
+                                    <div className="text-base-content/70">
+                                        {issue.file} — {issue.remedy}
+                                    </div>
+                                </li>
                             ))}
-                        </tbody>
-                    </table>
+                        </ul>
+                    )}
                 </CardBody>
             </Card>
 
@@ -77,6 +159,88 @@ export function McpTab({ status, events }: { status: IntegrationsStatus; events:
                                             {resource.description}
                                         </span>
                                     )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </CardBody>
+            </Card>
+
+            <Card>
+                <CardBody>
+                    <h2 className="text-sm font-semibold mb-2">Tool latency</h2>
+                    {toolUsage.length === 0 ? (
+                        <p className="text-sm text-base-content/70" data-testid="integrations-mcp-usage-tools-empty">
+                            No MCP tool calls in this window.
+                        </p>
+                    ) : (
+                        <table className="table table-sm w-full" data-testid="integrations-mcp-usage-tools">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Tool</th>
+                                    <th scope="col">Calls</th>
+                                    <th scope="col">Failures</th>
+                                    <th scope="col">p50</th>
+                                    <th scope="col">p95</th>
+                                    <th scope="col">Measured</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {toolUsage.map((tool) => (
+                                    <tr key={tool.tool}>
+                                        <td className="font-mono text-xs">{tool.tool}</td>
+                                        <td>{tool.calls}</td>
+                                        <td>{tool.failures}</td>
+                                        <td>{formatLatency(tool.p50Ms)}</td>
+                                        <td>{formatLatency(tool.p95Ms)}</td>
+                                        <td className="text-xs">{unmeasuredLabel(tool.durationUnmeasured)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </CardBody>
+            </Card>
+
+            <Card>
+                <CardBody>
+                    <h2 className="text-sm font-semibold mb-2">Resource reads</h2>
+                    {resourceUsage.length === 0 ? (
+                        <p
+                            className="text-sm text-base-content/70"
+                            data-testid="integrations-mcp-usage-resources-empty"
+                        >
+                            No resource reads in this window.
+                        </p>
+                    ) : (
+                        <ul className="text-xs flex flex-col gap-1" data-testid="integrations-mcp-usage-resources">
+                            {resourceUsage.map((resource) => (
+                                <li key={resource.uri} className="font-mono break-all">
+                                    {resource.uri}
+                                    <span className="ml-2 font-sans text-base-content/60">
+                                        {resource.reads} reads · {resource.failures} failures
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </CardBody>
+            </Card>
+
+            <Card>
+                <CardBody>
+                    <h2 className="text-sm font-semibold mb-2">Repeated failures</h2>
+                    {clusters.length === 0 ? (
+                        <p className="text-sm text-base-content/70" data-testid="integrations-mcp-usage-clusters-empty">
+                            No repeated failure pair in this window.
+                        </p>
+                    ) : (
+                        <ul className="text-xs flex flex-col gap-1" data-testid="integrations-mcp-usage-clusters">
+                            {clusters.map((cluster) => (
+                                <li key={`${cluster.tool}:${cluster.errorCode}`}>
+                                    <span className="font-mono">{cluster.tool}</span> ·{' '}
+                                    <span className="font-mono">{cluster.errorCode}</span> · {cluster.count}× ·{' '}
+                                    {clusterRange(cluster)}
                                 </li>
                             ))}
                         </ul>
@@ -122,7 +286,7 @@ export function McpTab({ status, events }: { status: IntegrationsStatus; events:
                 <CardBody>
                     <div className="flex items-center justify-between gap-2 mb-2">
                         <h2 className="text-sm font-semibold">Client config</h2>
-                        <Button size="sm" variant="ghost" onClick={copy}>
+                        <Button size="sm" variant="ghost" onClick={() => copy(snippet)}>
                             Copy
                         </Button>
                     </div>
@@ -134,6 +298,52 @@ export function McpTab({ status, events }: { status: IntegrationsStatus; events:
                     </pre>
                 </CardBody>
             </Card>
+
+            {command === null ? null : (
+                <Card>
+                    <CardBody>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                            <h2 className="text-sm font-semibold">Project command</h2>
+                            <Button size="sm" variant="ghost" onClick={() => copy(command)}>
+                                Copy
+                            </Button>
+                        </div>
+                        <pre
+                            className="overflow-auto rounded bg-base-200 p-2 text-xs"
+                            data-testid="integrations-mcp-project-command"
+                        >
+                            {command}
+                        </pre>
+                        {gatewayCommand === null ? null : (
+                            <>
+                                <h3 className="text-xs font-semibold mt-3 mb-1">Gateway command</h3>
+                                <pre
+                                    className="overflow-auto rounded bg-base-200 p-2 text-xs"
+                                    data-testid="integrations-mcp-gateway-command"
+                                >
+                                    {gatewayCommand}
+                                </pre>
+                            </>
+                        )}
+                        {probe === null ? null : (
+                            <>
+                                <div className="flex items-center justify-between gap-2 mt-3 mb-1">
+                                    <h3 className="text-xs font-semibold">Discovery probe</h3>
+                                    <Button size="sm" variant="ghost" onClick={() => copy(probe)}>
+                                        Copy
+                                    </Button>
+                                </div>
+                                <pre
+                                    className="overflow-auto rounded bg-base-200 p-2 text-xs"
+                                    data-testid="integrations-mcp-probe"
+                                >
+                                    {probe}
+                                </pre>
+                            </>
+                        )}
+                    </CardBody>
+                </Card>
+            )}
         </div>
     );
 }

@@ -278,6 +278,15 @@ export default function WorkflowsView() {
                         <code className="text-spur-text-muted font-mono text-[11px] bg-black/20 px-1.5 py-0.5 rounded">
                             {activeWorkflow.path}
                         </code>
+                        {/* 1441 R2: only a valid definition that declares boolean `expose: true`. */}
+                        {activeWorkflow.mcpExposureDeclared === true && (
+                            <span
+                                data-testid="workflow-mcp-exposure"
+                                className="px-2 py-0.5 rounded-full bg-spur-success/15 text-spur-success text-[11px] font-semibold border border-spur-success/30"
+                            >
+                                MCP exposure declared
+                            </span>
+                        )}
                     </div>
 
                     {activeWorkflow.description && (

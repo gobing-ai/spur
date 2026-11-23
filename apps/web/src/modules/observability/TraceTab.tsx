@@ -278,10 +278,145 @@ function evidenceFromRecord(
  * paging stays consistent (E72 R2). A `wbs` search param switches the list to
  * `GET /api/runs/by-wbs/:wbs` so the time window cannot hide linked runs (1307).
  */
+/** The exact-run lineage the deep link opens (1440 R3): identity and shape, no logs or sessions. */
+interface AgentTraceNode {
+    runId: string;
+    kind: 'workflow' | 'agent';
+    status: string;
+    parentRunId: string | null;
+}
+
+/** `GET /api/observability/agent-trace/:runId` as the tab reads it. */
+export function parseAgentTrace(raw: unknown): { rootRunId: string; nodes: AgentTraceNode[] } | null {
+    if (raw === null || typeof raw !== 'object') return null;
+    const value = raw as { rootRunId?: unknown; nodes?: unknown };
+    if (typeof value.rootRunId !== 'string' || !Array.isArray(value.nodes)) return null;
+    const nodes = value.nodes.flatMap((entry): AgentTraceNode[] => {
+        if (entry === null || typeof entry !== 'object') return [];
+        const node = entry as Record<string, unknown>;
+        if (typeof node.runId !== 'string' || typeof node.status !== 'string') return [];
+        if (node.kind !== 'workflow' && node.kind !== 'agent') return [];
+        return [
+            {
+                runId: node.runId,
+                kind: node.kind,
+                status: node.status,
+                parentRunId: typeof node.parentRunId === 'string' ? node.parentRunId : null,
+            },
+        ];
+    });
+    return { rootRunId: value.rootRunId, nodes };
+}
+
+/**
+ * The exact run a `runId` intent names. It takes precedence over the WBS/list filters: a receipt's
+ * Run link must open THAT run even when the shell's time window would hide it (1440 R3).
+ */
+function ExactRunLineage({ runId }: { runId: string }) {
+    const [state, setState] = useState<{ status: 'loading' | 'ready' | 'error' | 'missing'; error?: string }>({
+        status: 'loading',
+    });
+    const [tree, setTree] = useState<{ rootRunId: string; nodes: AgentTraceNode[] } | null>(null);
+    const [attempt, setAttempt] = useState(0);
+    useEffect(() => {
+        let cancelled = false;
+        // `attempt` is the retry identity: this read belongs to the attempt that started it, and a
+        // superseded attempt's answer is dropped.
+        const forAttempt = attempt;
+        const live = (): boolean => !cancelled && attempt === forAttempt;
+        setState({ status: 'loading' });
+        void (async () => {
+            try {
+                const url = `${resolveApiUrl()}/observability/agent-trace/${encodeURIComponent(runId)}`;
+                const res = await fetchWithTimeout(new Request(url));
+                if (!live()) return;
+                if (res.status === 404) {
+                    setState({ status: 'missing' });
+                    return;
+                }
+                if (!res.ok) throw new Error(`agent trace answered ${res.status}`);
+                const parsed = parseAgentTrace(await res.json());
+                if (parsed === null) throw new Error('agent trace response failed schema validation');
+                setTree(parsed);
+                setState({ status: 'ready' });
+            } catch (error) {
+                if (live())
+                    setState({ status: 'error', error: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [runId, attempt]);
+    return (
+        <div
+            className="bg-base-200 rounded-xl border border-base-content/10 p-3 flex flex-col gap-2"
+            data-trace-exact-run={runId}
+        >
+            <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">
+                    Run <span className="font-mono text-xs">{runId}</span>
+                </h3>
+                <button
+                    type="button"
+                    className="text-xs link"
+                    onClick={() => setAttempt((value) => value + 1)}
+                    data-testid="trace-exact-run-retry"
+                >
+                    Retry
+                </button>
+            </div>
+            {state.status === 'loading' ? <Loading size="sm" /> : null}
+            {state.status === 'missing' ? (
+                <p className="text-xs text-spur-text-muted" data-testid="trace-exact-run-missing">
+                    No run <span className="font-mono">{runId}</span> is stored in this project.
+                </p>
+            ) : null}
+            {state.status === 'error' ? (
+                <p className="text-xs text-error" data-testid="trace-exact-run-error">
+                    {state.error}
+                </p>
+            ) : null}
+            {state.status === 'ready' && tree !== null ? (
+                <>
+                    <p className="text-xs text-spur-text-muted">
+                        Root <span className="font-mono">{tree.rootRunId}</span> · {tree.nodes.length} run(s) in the
+                        lineage
+                    </p>
+                    <ul className="flex flex-col gap-1 text-xs" data-testid="trace-exact-run-nodes">
+                        {tree.nodes.map((node) => (
+                            <li
+                                key={node.runId}
+                                className="flex flex-wrap items-center gap-2"
+                                aria-current={node.runId === runId ? 'true' : undefined}
+                                data-trace-node={node.runId}
+                                data-trace-node-requested={node.runId === runId ? 'true' : undefined}
+                            >
+                                <span className="font-mono">{node.runId}</span>
+                                <span className="text-[10px] font-semibold uppercase text-spur-text-muted">
+                                    {node.kind}
+                                </span>
+                                <span>{node.status}</span>
+                                {node.parentRunId === null ? null : (
+                                    <span className="text-spur-text-muted">
+                                        parent <span className="font-mono">{node.parentRunId}</span>
+                                    </span>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </>
+            ) : null}
+        </div>
+    );
+}
+
 export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProps) {
     const [params] = useSearchParams();
     const linkedParam = params.get('wbs');
     const linkedWbs = linkedParam !== null && linkedParam !== '' ? linkedParam : null;
+    const exactParam = params.get('runId');
+    const exactRunId = exactParam !== null && exactParam !== '' ? exactParam : null;
     const [statusFilter, setStatusFilter] = useState<TraceStatusFilter>('all');
     const [workflowFilter, setWorkflowFilter] = useState('');
     const [runs, setRuns] = useState<TraceRunEntry[]>([]);
@@ -390,16 +525,16 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
     }, [linkedWbs, loadLinked, loadWindow]);
 
     useEffect(() => {
-        if (linkedWbs !== null) return;
+        if (linkedWbs !== null || exactRunId !== null) return;
         loadWindow();
         return () => listAbortRef.current?.abort();
-    }, [linkedWbs, loadWindow]);
+    }, [linkedWbs, exactRunId, loadWindow]);
 
     useEffect(() => {
-        if (linkedWbs === null) return;
+        if (linkedWbs === null || exactRunId !== null) return;
         loadLinked();
         return () => listAbortRef.current?.abort();
-    }, [linkedWbs, loadLinked]);
+    }, [linkedWbs, exactRunId, loadLinked]);
 
     // Load more: same filters, opaque keyset cursor (E72 R2).
     const loadMore = useCallback(async () => {
@@ -547,6 +682,16 @@ export default function TraceTab({ timeRange, onNavigate }: ObservabilityTabProp
         () => (detailState?.projection ? slowestAttemptIds(detailState.projection) : new Set<string>()),
         [detailState],
     );
+
+    // Exact-run intent wins over the list and the WBS filter: the receipt's Run link must open that
+    // run even when the shell's time window or a WBS filter would not list it (1440 R3).
+    if (exactRunId !== null) {
+        return (
+            <div className="flex flex-col gap-3" data-trace-tab data-trace-exact-run={exactRunId}>
+                <ExactRunLineage runId={exactRunId} />
+            </div>
+        );
+    }
 
     if (listStatus === 'loading' && runs.length === 0) {
         return (

@@ -4,6 +4,7 @@ import type {
     IntegrationsGateway,
     IntegrationsGatewayCounters,
     IntegrationsInboundMember,
+    IntegrationsMcpExposureIssue,
     IntegrationsMcpSurface,
     IntegrationsMcpTool,
     IntegrationsOutboundMember,
@@ -39,6 +40,10 @@ export interface IntegrationsMcpSource {
     resources: Array<{ uri: string; description?: string }>;
     /** Which advertised names are built-ins; everything else was derived from a workflow. */
     builtinToolNames: readonly string[];
+    /** The effective workflow tool namespace, where it came from, and the refused exposures (1438). */
+    namespace?: string | null;
+    namespaceSource?: 'config' | 'plugin-manifest' | 'none';
+    exposureIssues?: IntegrationsMcpExposureIssue[];
 }
 
 /** The A2A settings the server owns. */
@@ -46,6 +51,11 @@ export interface IntegrationsA2aSource {
     enabled: boolean;
     authEnv: string | null;
     tokenPresent: boolean;
+    /**
+     * Outbound credential state keyed by member instance id (1440 R2). Only the variable NAME and its
+     * presence cross this port — the server reads the environment, the service never does.
+     */
+    outboundAuth?: Record<string, IntegrationsAuth>;
 }
 
 /** What the gateway probe answered: its counters, or why they could not be read. */
@@ -205,6 +215,15 @@ export class IntegrationsService {
                 uriTemplate: resource.uri,
                 description: resource.description ?? '',
             })),
+            // A server that does not report exposure omits the fields entirely, so an older status
+            // response stays readable rather than reading as "no namespace" (1438).
+            ...(source.namespace === undefined && source.exposureIssues === undefined
+                ? {}
+                : {
+                      namespace: source.namespace ?? null,
+                      namespaceSource: source.namespaceSource ?? ('none' as const),
+                      exposureIssues: source.exposureIssues ?? [],
+                  }),
         };
     }
 
@@ -231,13 +250,23 @@ export class IntegrationsService {
         });
         const outbound = members.flatMap((member, index): IntegrationsOutboundMember[] => {
             const instanceId = addresses[index]?.instanceId ?? member.id ?? '';
-            if (member.a2a !== undefined) return [{ member: instanceId, kind: 'a2a' as const, target: member.a2a }];
+            const auth = source.outboundAuth?.[instanceId];
+            if (member.a2a !== undefined)
+                return [
+                    {
+                        member: instanceId,
+                        kind: 'a2a' as const,
+                        target: member.a2a,
+                        ...(auth === undefined ? {} : { auth }),
+                    },
+                ];
             if (member.project !== undefined) {
                 return [
                     {
                         member: instanceId,
                         kind: 'project' as const,
                         target: member.member === undefined ? member.project : `${member.project}/${member.member}`,
+                        ...(auth === undefined ? {} : { auth }),
                     },
                 ];
             }

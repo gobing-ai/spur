@@ -47,6 +47,9 @@ export interface InboxRequestRow extends InboxMessage {
     runStatus: string | null;
     runOutcome: string | null;
     runTaskId: string | null;
+    runContextId: string | null;
+    /** The REMOTE A2A task id (`coordination_runs.remote_task_id`), distinct from the local task id. */
+    runRemoteTaskId: string | null;
     runArtifactRefsJson: string | null;
 }
 
@@ -118,6 +121,8 @@ interface InboxRequestDbRow extends InboxRow {
     run_status: string | null;
     run_outcome: string | null;
     run_task_id: string | null;
+    run_context_id: string | null;
+    run_remote_task_id: string | null;
     run_artifact_refs_json: string | null;
 }
 
@@ -504,7 +509,8 @@ export class InboxDao extends BaseDao {
                 .map((column) => `m.${column.trim()}`)
                 .join(', ')},
                     r.run_id AS run_id, r.status AS run_status, r.outcome AS run_outcome,
-                    r.task_id AS run_task_id, r.artifact_refs_json AS run_artifact_refs_json
+                    r.task_id AS run_task_id, r.remote_context_id AS run_context_id,
+                    r.remote_task_id AS run_remote_task_id, r.artifact_refs_json AS run_artifact_refs_json
              FROM inbox_messages m
              LEFT JOIN coordination_runs r ON r.run_id = (
                  SELECT c.run_id FROM coordination_runs c, json_each(c.message_ids_json) j
@@ -522,6 +528,8 @@ export class InboxDao extends BaseDao {
             runStatus: row.run_status ?? null,
             runOutcome: row.run_outcome ?? null,
             runTaskId: row.run_task_id ?? null,
+            runContextId: row.run_context_id ?? null,
+            runRemoteTaskId: row.run_remote_task_id ?? null,
             runArtifactRefsJson: row.run_artifact_refs_json ?? null,
         }));
     }

@@ -43,6 +43,25 @@ export interface ResolvedFleetMember {
      * reported. `blocked` means it is waiting on a human.
      */
     lifecycle?: MemberLifecycle;
+    /**
+     * Remote addressing as the declaration names it (1441 R1): a literal A2A card URL, a registered
+     * project (and optionally one of its members), or neither for a local member.
+     */
+    a2a?: string;
+    project?: string;
+    member?: string;
+}
+
+/**
+ * The transport badge one declared member earns: `A2A` for a literal remote target,
+ * `Cross-project` for a project address, and none for a local member or an undeclared row (1441 R1).
+ */
+export function transportBadge(
+    member: Pick<ResolvedFleetMember, 'a2a' | 'project'> | null | undefined,
+): 'A2A' | 'Cross-project' | null {
+    if (member?.a2a !== undefined) return 'A2A';
+    if (member?.project !== undefined) return 'Cross-project';
+    return null;
 }
 
 /** Member agent session on the wire (0897). `id` rides only `resume` mode. */

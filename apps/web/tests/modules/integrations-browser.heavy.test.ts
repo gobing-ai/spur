@@ -60,6 +60,13 @@ test.skipIf(availableBrowserBinary() === undefined)(
                             { sessionId: page },
                         );
                         expect(runtime).toMatch(/^server v\d+\.\d+\.\d+ · up /);
+                        // 1439 R1: the live window is populated by this run's own MCP calls, so the
+                        // tool-latency slice must show them rather than an empty state.
+                        const usageTools = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid=integrations-usage-tools]")?.textContent ?? ""',
+                            { sessionId: page },
+                        );
+                        expect(usageTools).toContain('sp_task_list');
                         for (const theme of ['light', 'dark']) {
                             await browser.evaluate(`document.documentElement.setAttribute('data-theme', '${theme}')`, {
                                 sessionId: page,
@@ -72,7 +79,64 @@ test.skipIf(availableBrowserBinary() === undefined)(
                                 Buffer.from(capture.data, 'base64'),
                             );
                         }
-                        return 'four Summary surfaces; MCP token unset is an error and authenticated A2A is on; the served build version and uptime are named';
+                        // 1438 R2: the MCP tab names the namespace, keeps the refused exposure's
+                        // remedy visible, and offers a project command that names no token value.
+                        await browser.evaluate('document.querySelector("#integrations-tab-mcp").click()', {
+                            sessionId: page,
+                        });
+                        await browser.waitFor(
+                            'Boolean(document.querySelector("[data-testid=integrations-mcp-tools]"))',
+                            { sessionId: page, label: 'live Integrations MCP tab', timeoutMs: 30_000 },
+                        );
+                        const namespace = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid=integrations-mcp-namespace]")?.textContent ?? ""',
+                            { sessionId: page },
+                        );
+                        expect(namespace).toContain('e2e');
+                        const exposure = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid=integrations-mcp-exposure]")?.textContent ?? ""',
+                            { sessionId: page },
+                        );
+                        expect(exposure).toContain('duplicate');
+                        const command = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid=integrations-mcp-project-command]")?.textContent ?? ""',
+                            { sessionId: page },
+                        );
+                        expect(command).toContain('spur mcp --url');
+                        // 1440 R1: the A2A card inspector fetches the live public card on demand and
+                        // renders it as text; the live listener has one member, so no warning shows.
+                        await browser.evaluate('document.querySelector("#integrations-tab-a2a").click()', {
+                            sessionId: page,
+                        });
+                        await browser.waitFor(
+                            'Boolean(document.querySelector("[data-testid=integrations-a2a-members]"))',
+                            { sessionId: page, label: 'live Integrations A2A tab', timeoutMs: 30_000 },
+                        );
+                        expect(
+                            await browser.evaluate<boolean>(
+                                'Boolean(document.querySelector("[data-testid=integrations-a2a-no-inbound]"))',
+                                { sessionId: page },
+                            ),
+                        ).toBe(false);
+                        await browser.evaluate(
+                            'document.querySelector("[data-testid=integrations-a2a-card-load]").click()',
+                            { sessionId: page },
+                        );
+                        await browser.waitFor(
+                            'Boolean(document.querySelector("[data-testid=integrations-a2a-card-json]"))',
+                            { sessionId: page, label: 'live Agent Card JSON', timeoutMs: 30_000 },
+                        );
+                        const cardJson = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid=integrations-a2a-card-json]").textContent',
+                            { sessionId: page },
+                        );
+                        expect(cardJson).toContain('"name"');
+                        const examples = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid^=integrations-a2a-examples-]").textContent',
+                            { sessionId: page },
+                        );
+                        expect(examples).toContain('a2a card get -o json');
+                        return "four Summary surfaces; MCP token unset is an error and authenticated A2A is on; the served build version and uptime are named; the selected window's tool latency lists this run's own calls; the MCP tab names the workflow namespace and the refused exposure";
                     } finally {
                         await browser.close();
                     }

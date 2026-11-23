@@ -118,7 +118,15 @@ use the same namespace setting as the gateway would use to discover it.
    host must equal the (already allowlisted) request `Host`. Scheme is not compared because the tunnel
    terminates TLS — the browser sends `https://…` while the loopback listener's `req.url` is `http://…`.
    Same `/<prefix>/a2a/*` and `/<prefix>/mcp/*` exemptions (bearer-authenticated); refusal is 403 before any upstream contact.
-3. `GET /` → gateway index (name, prefix, running) linking to `/<prefix>/board`. `GET /api/health`
+3. `GET /` → gateway index (name, prefix, running) linking to `/<prefix>/board`, plus the
+   server-rendered system-info popover (1442): the gateway MCP state and credential presence
+   (variable NAME + set/unset), the same routing counters `/api/health` reports, each local
+   project's gateway MCP namespace (`unassigned` when it claims none) and the display-safe discovery
+   diagnostics (reason + remedy only). The snapshot is sampled at render time from the current
+   process — no polling, no persistence, no new endpoint (ADR-151). With MCP off the popover shows
+   the off state and performs no discovery read; a discovery failure shows an explicit
+   "Discovery unavailable" row and keeps the cards, counters and removal action usable.
+   `GET /api/health`
    → `{ ok, gateway: true, port, projects: [{name, prefix, running}], counters }` (read by
    `spur self status` and its machine-scoped `gateway` section). `counters` is additive (1385):
    `{ since, requests, status4xx, status5xx, upstreamRestarts }`, counted in memory since handler

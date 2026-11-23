@@ -13,11 +13,103 @@ export interface GatewayIndexProject {
     prefix: string | null;
 }
 
+/** One local project's gateway-root MCP namespace; `null` means the project claims none (1442 R1). */
+export interface GatewayIndexNamespace {
+    name: string;
+    prefix: string;
+    namespace: string | null;
+}
+
+/** One display-safe discovery diagnostic: the reason and remedy, never internal exception text. */
+export interface GatewayIndexDiagnostic {
+    name: string;
+    reason: string;
+    remedy: string;
+}
+
+/** The gateway-root MCP block the root page reports, sampled at render time. */
+export interface GatewayIndexMcp {
+    enabled: boolean;
+    /** The credential variable NAME and whether it resolved — never the value. */
+    auth: { envName: string; tokenPresent: boolean };
+    namespaces: GatewayIndexNamespace[];
+    diagnostics: GatewayIndexDiagnostic[];
+    /** The discovery resolver failed: the page says so and keeps everything else usable. */
+    unavailable?: boolean;
+}
+
+/** The since-creation routing snapshot `/api/health` and the root page share (1385, 1442). */
+export interface GatewayIndexRouting {
+    since: string;
+    requests: number;
+    status4xx: number;
+    status5xx: number;
+    upstreamRestarts: Record<string, number>;
+}
+
 /** Template inputs for the gateway landing page render. */
 export interface GatewayIndexInput {
     port: number;
     edge?: GatewayEdgeOptions;
     projects: GatewayIndexProject[];
+    /** Omitted by callers that render the page without a gateway MCP snapshot. */
+    mcp?: GatewayIndexMcp;
+    routing?: GatewayIndexRouting;
+}
+
+/** The MCP rows of the system-info popover: state, credential presence, namespaces, diagnostics. */
+function mcpInfoRows(mcp: GatewayIndexMcp): string {
+    const state = mcp.enabled ? 'Enabled' : 'Off';
+    const credential =
+        mcp.auth.envName === ''
+            ? 'no variable configured'
+            : `${mcp.auth.envName} ${mcp.auth.tokenPresent ? 'set' : 'unset'}`;
+    const rows = [
+        `<div class="sys-row"><dt>Gateway MCP</dt><dd data-gateway-mcp="${mcp.enabled ? 'on' : 'off'}">${state} &middot; ${escapeHtml(credential)}</dd></div>`,
+    ];
+    if (!mcp.enabled) return rows.join('');
+    if (mcp.unavailable === true) {
+        rows.push(
+            '<div class="sys-row"><dt>Discovery</dt><dd data-gateway-discovery="unavailable">Discovery unavailable — namespace assignments and diagnostics could not be read</dd></div>',
+        );
+        return rows.join('');
+    }
+    const namespaces =
+        mcp.namespaces.length === 0
+            ? '<li data-gateway-namespace-empty>No local project claims a gateway MCP namespace.</li>'
+            : mcp.namespaces
+                  .map(
+                      (entry) =>
+                          `<li data-gateway-namespace="${escapeHtml(entry.name)}"><code>${escapeHtml(entry.prefix)}</code> &middot; ${escapeHtml(entry.name)} &middot; ${entry.namespace === null ? 'unassigned' : `<code>${escapeHtml(entry.namespace)}</code>`}</li>`,
+                  )
+                  .join('');
+    const diagnostics =
+        mcp.diagnostics.length === 0
+            ? '<li data-gateway-diagnostic-empty>No discovery diagnostics.</li>'
+            : mcp.diagnostics
+                  .map(
+                      (entry) =>
+                          `<li data-gateway-diagnostic="${escapeHtml(entry.reason)}"><strong>${escapeHtml(entry.name)}</strong> &middot; ${escapeHtml(entry.reason)}<br>${escapeHtml(entry.remedy)}</li>`,
+                  )
+                  .join('');
+    rows.push(
+        `<div class="sys-row"><dt>Namespaces</dt><dd><ul class="sys-list" data-gateway-namespaces>${namespaces}</ul></dd></div>`,
+        `<div class="sys-row"><dt>Discovery</dt><dd><ul class="sys-list" data-gateway-diagnostics>${diagnostics}</ul></dd></div>`,
+    );
+    return rows.join('');
+}
+
+/** The routing rows of the system-info popover, from the same snapshot `/api/health` reports. */
+function routingInfoRows(routing: GatewayIndexRouting): string {
+    const restarts = Object.entries(routing.upstreamRestarts);
+    const restartText =
+        restarts.length === 0 ? 'none' : restarts.map(([prefix, count]) => `${prefix}: ${count}`).join(', ');
+    return [
+        `<div class="sys-row"><dt>Requests</dt><dd data-gateway-routing="requests">${routing.requests}</dd></div>`,
+        `<div class="sys-row"><dt>4xx / 5xx</dt><dd data-gateway-routing="errors">${routing.status4xx} / ${routing.status5xx}</dd></div>`,
+        `<div class="sys-row"><dt>Counting since</dt><dd>${escapeHtml(routing.since)}</dd></div>`,
+        `<div class="sys-row"><dt>Upstream restarts</dt><dd data-gateway-routing="restarts">${escapeHtml(restartText)}</dd></div>`,
+    ].join('');
 }
 
 /**
@@ -27,7 +119,7 @@ export interface GatewayIndexInput {
  * dependencies so the gateway works offline and behind strict CSP/tunnel origins.
  */
 export function renderGatewayIndex(input: GatewayIndexInput): string {
-    const { port, edge, projects } = input;
+    const { port, edge, projects, mcp, routing } = input;
     const localCount = projects.filter(({ prefix }) => prefix !== null).length;
     const remoteCount = projects.length - localCount;
 
@@ -347,6 +439,17 @@ html, body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+.sys-row dd .sys-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    white-space: normal;
+    text-align: right;
+    font-family: var(--font-sans);
 }
 .sys-popover-foot {
     margin-top: 12px;
@@ -732,6 +835,8 @@ h1 {
                     <div class="sys-row"><dt>Allowed hosts</dt><dd title="${escapeHtml(allowedHosts)}">${escapeHtml(allowedHosts)}</dd></div>
                     <div class="sys-row"><dt>Projects</dt><dd>${localCount} local / ${remoteCount} remote</dd></div>
                     <div class="sys-row"><dt>Runtime</dt><dd>Bun ${escapeHtml(Bun.version)}</dd></div>
+                    ${routing === undefined ? '' : routingInfoRows(routing)}
+                    ${mcp === undefined ? '' : mcpInfoRows(mcp)}
                 </dl>
                 <div class="sys-popover-foot">
                     <a href="/api/health">View /api/health &rarr;</a>

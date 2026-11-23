@@ -1113,3 +1113,73 @@ describe('getLedgerWatcher in-flight reuse and stale-path teardown', () => {
         }
     });
 });
+
+// ─── 1440 R3: the exact run a deep link names ───────────────────────────────────────────────
+describe('1440 — GET /api/observability/agent-trace/:runId', () => {
+    const ROOT_RUN = '11111111-1111-4111-8111-111111111111';
+    const CHILD_RUN = '22222222-2222-4222-8222-222222222222';
+    const MISSING_RUN = '33333333-3333-4333-8333-333333333333';
+
+    async function mountWithRuns() {
+        const { CoordinationRunDao } = await import('@gobing-ai/spur-domain');
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const dao = new CoordinationRunDao(db);
+        for (const [runId, parent] of [
+            [ROOT_RUN, undefined],
+            [CHILD_RUN, ROOT_RUN],
+        ] as const) {
+            await dao.insertStart({
+                specId: 'lane',
+                agentKind: 'claude',
+                processId: null,
+                runId,
+                generation: 1,
+                startedAt: '2026-11-23T00:00:00.000Z',
+                ...(parent === undefined ? {} : { parentRunId: parent }),
+            });
+        }
+        const app = new Hono();
+        observabilityModule.mount(app, {
+            cwd: '/tmp/agent-trace-test',
+            getDb: async () => db,
+        } as unknown as ServerContext);
+        return { app, db };
+    }
+
+    test('an older child run opens by identity, with no logs, sessions or contents', async () => {
+        const { app, db } = await mountWithRuns();
+        const res = await app.request(`/api/observability/agent-trace/${CHILD_RUN}`);
+        expect(res.status).toBe(200);
+        const raw = await res.text();
+        const body = JSON.parse(raw) as {
+            rootRunId: string;
+            requestedRunId: string;
+            nodes: Array<{ runId: string; kind: string; status: string; parentRunId: string | null }>;
+        };
+        expect(body.rootRunId).toBe(ROOT_RUN);
+        expect(body.requestedRunId).toBe(CHILD_RUN);
+        expect(body.nodes.map((node) => node.runId)).toEqual([ROOT_RUN, CHILD_RUN]);
+        expect(body.nodes[1]).toEqual({
+            runId: CHILD_RUN,
+            kind: 'agent',
+            status: 'running',
+            parentRunId: ROOT_RUN,
+        });
+        // The projection must not carry the trace layer's internal fields.
+        expect(raw).not.toContain('logPath');
+        expect(raw).not.toContain('sessionIds');
+        db.close();
+    });
+
+    test('an absent run is a 404 and a non-UUID is a 400', async () => {
+        const { app, db } = await mountWithRuns();
+        const missing = await app.request(`/api/observability/agent-trace/${MISSING_RUN}`);
+        expect(missing.status).toBe(404);
+        expect(((await missing.json()) as { code: string }).code).toBe('run-not-found');
+        const invalid = await app.request('/api/observability/agent-trace/run-1');
+        expect(invalid.status).toBe(400);
+        expect(((await invalid.json()) as { code: string }).code).toBe('invalid-run-id');
+        db.close();
+    });
+});

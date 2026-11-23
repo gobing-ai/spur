@@ -61,6 +61,14 @@ export const inboxRequestSchema = z.object({
     outcome: z.string().nullable(),
     reason: z.string().nullable(),
     hold: z.string().nullable(),
+    /**
+     * The remote refs the coordination run persisted for THIS receipt (1440 R2): several runs for one
+     * member can refer to different remote tasks, so these are per-row, never per-member. Absent when
+     * the receipt has no local run or the run persisted no ref for that field.
+     */
+    remoteTaskId: z.string().nullable().optional(),
+    remoteContextId: z.string().nullable().optional(),
+    remoteBranch: z.string().nullable().optional(),
 });
 
 const inboxListInputSchema = z.object({

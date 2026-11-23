@@ -1,7 +1,14 @@
 import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import type { ReactNode } from 'react';
 import { Badge, Card, CardBody } from '../../components/module-kit';
-import type { ProtocolEventRow } from './helpers';
-import { stateTone, surfaceState } from './helpers';
+import {
+    clusterRange,
+    formatLatency,
+    type ProtocolEventRow,
+    stateTone,
+    surfaceState,
+    unmeasuredLabel,
+} from './helpers';
 
 /**
  * Integrations › Summary (task 1424 R3).
@@ -129,6 +136,49 @@ function when(value: string | null): string {
     return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
 }
 
+/** One usage slice: a titled table, or its empty state when the window holds no rows. */
+function Slice({
+    title,
+    testId,
+    isEmpty,
+    empty,
+    head,
+    children,
+}: {
+    title: string;
+    testId: string;
+    isEmpty: boolean;
+    empty: string;
+    head: string[];
+    children: ReactNode;
+}) {
+    return (
+        <Card>
+            <CardBody>
+                <h2 className="text-sm font-semibold mb-2">{title}</h2>
+                {isEmpty ? (
+                    <p className="text-sm text-base-content/70" data-testid={`${testId}-empty`}>
+                        {empty}
+                    </p>
+                ) : (
+                    <table className="table table-sm w-full" data-testid={testId}>
+                        <thead>
+                            <tr>
+                                {head.map((column) => (
+                                    <th key={column} scope="col">
+                                        {column}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>{children}</tbody>
+                    </table>
+                )}
+            </CardBody>
+        </Card>
+    );
+}
+
 /** Render the Summary tab. */
 export function SummaryTab({
     status,
@@ -142,6 +192,12 @@ export function SummaryTab({
     a2aEvents: ProtocolEventRow[];
 }) {
     const rows = summaryRows(status, usage, mcpEvents, a2aEvents);
+    const tools = usage?.tools ?? [];
+    const resources = usage?.resources ?? [];
+    const actors = usage?.byActor ?? [];
+    const members = usage?.a2a ?? [];
+    const denials = usage?.authDenied ?? [];
+    const clusters = usage?.failureClusters ?? [];
     return (
         <div className="flex flex-col gap-4">
             <Card>
@@ -180,6 +236,108 @@ export function SummaryTab({
                     </table>
                 </CardBody>
             </Card>
+            <Slice
+                title="Tool latency"
+                testId="integrations-usage-tools"
+                isEmpty={tools.length === 0}
+                empty="No MCP tool calls in this window."
+                head={['Tool', 'Calls', 'Failures', 'p50', 'p95', 'Measured']}
+            >
+                {tools.map((tool) => (
+                    <tr key={tool.tool} data-testid={`integrations-usage-tool-${tool.tool}`}>
+                        <td className="font-mono text-xs">{tool.tool}</td>
+                        <td>{tool.calls}</td>
+                        <td>{tool.failures}</td>
+                        <td>{formatLatency(tool.p50Ms)}</td>
+                        <td>{formatLatency(tool.p95Ms)}</td>
+                        <td className="text-xs">{unmeasuredLabel(tool.durationUnmeasured)}</td>
+                    </tr>
+                ))}
+            </Slice>
+
+            <Slice
+                title="Resource reads"
+                testId="integrations-usage-resources"
+                isEmpty={resources.length === 0}
+                empty="No resource reads in this window."
+                head={['Resource', 'Reads', 'Failures']}
+            >
+                {resources.map((resource) => (
+                    <tr key={resource.uri}>
+                        <td className="font-mono text-xs break-all">{resource.uri}</td>
+                        <td>{resource.reads}</td>
+                        <td>{resource.failures}</td>
+                    </tr>
+                ))}
+            </Slice>
+
+            <Slice
+                title="Actor attribution"
+                testId="integrations-usage-actors"
+                isEmpty={actors.length === 0}
+                empty="No actor attribution in this window."
+                head={['Actor', 'Calls', 'Failures']}
+            >
+                {actors.map((actor) => (
+                    <tr key={actor.actor}>
+                        <td className="font-mono text-xs">{actor.actor}</td>
+                        <td>{actor.calls}</td>
+                        <td>{actor.failures}</td>
+                    </tr>
+                ))}
+            </Slice>
+
+            <Slice
+                title="A2A intake"
+                testId="integrations-usage-a2a"
+                isEmpty={members.length === 0}
+                empty="No A2A intake in this window."
+                head={['Member', 'Received', 'Replayed', 'Conflict', 'Cancelled']}
+            >
+                {members.map((member) => (
+                    <tr key={member.member}>
+                        <td className="font-mono text-xs">{member.member}</td>
+                        <td>{member.received}</td>
+                        <td>{member.replayed}</td>
+                        <td>{member.conflict}</td>
+                        <td>{member.cancelled}</td>
+                    </tr>
+                ))}
+            </Slice>
+
+            <Slice
+                title="Auth refusals"
+                testId="integrations-usage-denials"
+                isEmpty={denials.length === 0}
+                empty="No refused credentials in this window."
+                head={['Surface', 'Reason', 'Count']}
+            >
+                {denials.map((denial) => (
+                    <tr key={`${denial.surface}:${denial.reason}`}>
+                        <td>{denial.surface}</td>
+                        <td>{denial.reason}</td>
+                        <td>{denial.count}</td>
+                    </tr>
+                ))}
+            </Slice>
+
+            <Slice
+                title="Repeated failures"
+                testId="integrations-usage-clusters"
+                isEmpty={clusters.length === 0}
+                empty="No repeated failure pair in this window."
+                head={['Tool', 'Error code', 'Count', 'Window']}
+            >
+                {clusters.map((cluster) => (
+                    <tr key={`${cluster.tool}:${cluster.errorCode}`}>
+                        <td className="font-mono text-xs">{cluster.tool}</td>
+                        <td className="font-mono text-xs">{cluster.errorCode}</td>
+                        <td>{cluster.count}</td>
+                        <td className="text-xs">{clusterRange(cluster)}</td>
+                    </tr>
+                ))}
+            </Slice>
+
             {status.gateway.served ? (
                 <Card>
                     <CardBody>

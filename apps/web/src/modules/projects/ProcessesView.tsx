@@ -17,7 +17,7 @@ import {
 } from './MemberTerminal';
 import { type MemberObservedState, type RosterEntry, sessionLabel } from './roster';
 import type { MemberSession } from './useProjectContext';
-import { useProjectContext } from './useProjectContext';
+import { transportBadge, useProjectContext } from './useProjectContext';
 
 /** Unified table row for the Processes / Fleet watch list. */
 export interface WatchRow {
@@ -448,6 +448,14 @@ export default function ProcessesView({ pollMs = STATUS_POLL_MS }: { pollMs?: nu
                                         {isOrchestrator && (
                                             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-spur-accent/20 text-spur-accent tracking-wide uppercase">
                                                 lead
+                                            </span>
+                                        )}
+                                        {transportBadge(member) === null ? null : (
+                                            <span
+                                                data-processes-transport={transportBadge(member) ?? undefined}
+                                                className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-spur-surface-3 text-spur-text-muted border border-spur-border tracking-wide"
+                                            >
+                                                {transportBadge(member)}
                                             </span>
                                         )}
                                         {member?.lifecycle?.state === 'blocked' && (

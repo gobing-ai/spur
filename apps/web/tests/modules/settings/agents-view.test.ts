@@ -2,7 +2,7 @@ registerHappyDom();
 
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { REGISTERED_CANONICAL_STAGES } from '@gobing-ai/spur-domain';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import AgentsView from '../../../src/modules/settings/AgentsView';
@@ -101,4 +101,77 @@ test('fallback stages name the registry reasoning skills', async () => {
         const badge = view.container.querySelector(`[data-stage-card="${id}"] [title^="Reasoning skill: "]`);
         expect(badge?.getAttribute('title')).toBe(`Reasoning skill: ${registrySkills.get(id)}`);
     }
+});
+
+// ─── 1441 R1: the transport badge, beside the lifecycle states ──────────────────────────────
+test('remote members carry a transport badge and local or undeclared rows carry none', async () => {
+    const fleet = {
+        ...FLEET,
+        members: [
+            {
+                instanceId: 'proj-coder',
+                executor: 'claude',
+                enabled: true,
+                writeCapable: true,
+                capabilityState: 'native-known',
+            },
+            {
+                instanceId: 'proj-a2a',
+                executor: 'claude',
+                enabled: false,
+                writeCapable: false,
+                capabilityState: 'unknown',
+                a2a: 'https://peer.example/.well-known/agent-card.json',
+                authEnv: 'PEER_TOKEN',
+            },
+            {
+                instanceId: 'proj-cross',
+                executor: 'claude',
+                enabled: true,
+                writeCapable: true,
+                capabilityState: 'native-known',
+                project: 'other-project',
+                authEnv: 'CROSS_TOKEN',
+            },
+        ],
+    };
+    // The roster needs BOTH feeds: the declaration and the observed process list.
+    const processes = {
+        processes: [
+            {
+                agentId: 'proj-coder',
+                status: 'running',
+                startedAt: '2026-11-23T00:00:00.000Z',
+                pid: 11,
+                exitCode: null,
+            },
+            {
+                agentId: 'proj-cross',
+                status: 'running',
+                startedAt: '2026-11-23T00:00:00.000Z',
+                pid: 12,
+                exitCode: null,
+            },
+        ],
+    };
+    setFetchForTesting((async (input: Request) => {
+        if (input.url.endsWith('/project/fleet')) return json(fleet);
+        if (input.url.endsWith('/processes')) return json(processes);
+        return json({ error: 'unexpected read' }, 500);
+    }) as typeof fetch);
+    const view = render(createElement(AgentsView, { pollMs: 60_000 }));
+    // The roster lives on the Fleet tab; roles/stages are the default view.
+    await waitFor(() => expect(view.container.textContent).toContain('auditor'));
+    const fleetTab = [...view.container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Fleet'));
+    expect(fleetTab).toBeDefined();
+    fireEvent.click(fleetTab as HTMLButtonElement);
+    await waitFor(() => expect(view.container.querySelector('[data-roster-entry="proj-a2a"]')).not.toBeNull());
+    const badge = (id: string): string | null =>
+        view.container.querySelector(`[data-roster-entry="${id}"] [data-roster-transport]`)?.textContent ?? null;
+    expect(badge('proj-a2a')).toBe('A2A');
+    expect(badge('proj-cross')).toBe('Cross-project');
+    expect(badge('proj-coder')).toBeNull();
+    // The existing lifecycle states stay visible beside the badge.
+    const disabled = view.container.querySelector('[data-roster-entry="proj-a2a"] [data-roster-declared]')?.textContent;
+    expect(disabled).toContain('disabled');
 });

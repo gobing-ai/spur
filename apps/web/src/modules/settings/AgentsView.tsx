@@ -9,7 +9,7 @@ import type {
     ConfiguredStageInfo,
     ProjectFleetSnapshot,
 } from '../projects/useProjectContext';
-import { useProjectContext } from '../projects/useProjectContext';
+import { transportBadge, useProjectContext } from '../projects/useProjectContext';
 
 const fleetUrl = () => `${resolveApiUrl()}/project/fleet`;
 const processesUrl = () => `${resolveApiUrl()}/processes`;
@@ -1069,6 +1069,7 @@ function ExecutorCard({
 
 function RosterCard({ entry, orchestratorOffline }: { entry: RosterEntry; orchestratorOffline: boolean }) {
     const observed = observedFact(entry, orchestratorOffline);
+    const transport = transportBadge(entry.declared);
     // AC1: running + derivable start time only; null for exited/not-started/null startedAt.
     const uptime = entry.observed.status === 'running' ? formatUptime(entry.observed.startedAt) : null;
     return (
@@ -1083,6 +1084,15 @@ function RosterCard({ entry, orchestratorOffline }: { entry: RosterEntry; orches
                 {entry.isOrchestrator && (
                     <span data-roster-orchestrator className="text-xs px-1 rounded bg-spur-accent/20 text-spur-accent">
                         orchestrator
+                    </span>
+                )}
+                {/* 1441 R1: the configured transport, beside (never instead of) the lifecycle states. */}
+                {transport === null ? null : (
+                    <span
+                        data-roster-transport={transport}
+                        className="text-xs px-1 rounded bg-spur-surface-3 text-spur-text-muted border border-spur-border"
+                    >
+                        {transport}
                     </span>
                 )}
             </div>

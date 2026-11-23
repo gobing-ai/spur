@@ -51,6 +51,8 @@ export interface IntegrationsData {
 export interface IntegrationsSeams {
     api?: ApiClient;
     fetchHistory?: (request: Request) => Promise<Response>;
+    /** The public Agent Card read (1440 R1); defaults to the production fetch. */
+    fetchCard?: (url: string) => Promise<Response>;
 }
 
 /** Read one events-history page for a prefix family. */

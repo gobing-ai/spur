@@ -2,6 +2,8 @@ import { join } from 'node:path';
 import {
     type ExposedWorkflowTool,
     type FeatureShowResult,
+    type McpExposureIssue,
+    type McpNamespaceSource,
     resolveMcpNamespace,
     resolveProjectWorkflowTools,
     type WorkflowRunResult,
@@ -232,6 +234,7 @@ type McpToolResult = unknown;
 /** The narrow context slice the dispatcher reads; tests stub these accessors. */
 class McpDispatcher implements McpHandlerRegistry {
     private resolvedNamespace: string | null = null;
+    private resolvedNamespaceSource: McpNamespaceSource = 'none';
     private readonly namespaceReady: Promise<void>;
 
     constructor(private readonly ctx: ServerContext) {
@@ -243,9 +246,11 @@ class McpDispatcher implements McpHandlerRegistry {
         })
             .then((resolved) => {
                 this.resolvedNamespace = resolved.namespace;
+                this.resolvedNamespaceSource = resolved.source;
             })
             .catch(() => {
                 this.resolvedNamespace = null;
+                this.resolvedNamespaceSource = 'none';
             });
     }
 
@@ -255,25 +260,47 @@ class McpDispatcher implements McpHandlerRegistry {
 
     async listTools(): Promise<McpToolDescriptor[]> {
         await this.namespaceReady;
-        const exposed = await this.exposedWorkflowTools();
-        return [...TOOL_DESCRIPTORS, ...exposed.map(workflowToolDescriptor)];
+        const { tools } = await this.exposedWorkflowTools();
+        return [...TOOL_DESCRIPTORS, ...tools.map(workflowToolDescriptor)];
+    }
+
+    /**
+     * The catalog `tools/list` serves, plus the namespace provenance and the exposures the resolver
+     * refused (1438 R1). One resolver walk answers both, so the status read can never disagree with
+     * the protocol — and the issue list the dispatcher used to discard reaches a reader.
+     */
+    async catalog(): Promise<{
+        tools: McpToolDescriptor[];
+        resources: McpResourceDescriptor[];
+        namespace: string | null;
+        namespaceSource: McpNamespaceSource;
+        exposureIssues: McpExposureIssue[];
+    }> {
+        await this.namespaceReady;
+        const { tools, issues } = await this.exposedWorkflowTools();
+        return {
+            tools: [...TOOL_DESCRIPTORS, ...tools.map(workflowToolDescriptor)],
+            resources: await this.listResources(),
+            namespace: this.resolvedNamespace,
+            namespaceSource: this.resolvedNamespaceSource,
+            exposureIssues: issues,
+        };
     }
 
     /**
      * Workflows this project exposes as tools (task 1381 R2). Recomputed per call: the server is
      * stateless and the resolver is one directory walk, so a cache would only add staleness.
      */
-    private async exposedWorkflowTools(): Promise<ExposedWorkflowTool[]> {
+    private async exposedWorkflowTools(): Promise<{ tools: ExposedWorkflowTool[]; issues: McpExposureIssue[] }> {
         // The namespace resolves asynchronously; a `tools/call` can be the very first request,
         // so awaiting here is what stops it reading a not-yet-resolved `null` (task 1381 R3).
         await this.namespaceReady;
-        const { tools } = await resolveProjectWorkflowTools({
+        return resolveProjectWorkflowTools({
             namespace: this.resolvedNamespace,
             cwd: this.ctx.cwd,
             config: this.ctx.spurConfig ?? null,
             fs: this.ctx.fs,
         });
-        return tools;
     }
 
     /** R3: run an exposed workflow through the same service path as `sp_workflow_run`. */
@@ -531,7 +558,7 @@ class McpDispatcher implements McpHandlerRegistry {
                 if (renamed !== undefined) {
                     throw new Error(`tool "${name}" was renamed to "${renamed}"`);
                 }
-                const exposed = (await this.exposedWorkflowTools()).find((tool) => tool.tool === name);
+                const exposed = (await this.exposedWorkflowTools()).tools.find((tool) => tool.tool === name);
                 if (exposed !== undefined) return this.callWorkflowTool(exposed, args);
                 throw new Error(
                     `unknown tool "${name}"; supported: ${TOOL_DESCRIPTORS.map((tool) => tool.name).join(', ')}`,
@@ -601,9 +628,11 @@ class McpDispatcher implements McpHandlerRegistry {
 export async function readMcpCatalog(ctx: ServerContext): Promise<{
     tools: McpToolDescriptor[];
     resources: McpResourceDescriptor[];
+    namespace: string | null;
+    namespaceSource: McpNamespaceSource;
+    exposureIssues: McpExposureIssue[];
 }> {
-    const dispatcher = new McpDispatcher(ctx);
-    return { tools: await dispatcher.listTools(), resources: await dispatcher.listResources() };
+    return new McpDispatcher(ctx).catalog();
 }
 
 /** Serve an embedded MCP handler over the injected dispatcher (`createMcpDispatcher`). */

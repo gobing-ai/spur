@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Badge A2A, cross-project and MCP-exposed members in Settings and Projects
-status: todo
+status: done
 template: issue
 created_at: 2026-11-23T00:56:01.336Z
-updated_at: "2026-11-23T02:51:17.511Z"
+updated_at: "2026-11-23T04:16:22.316Z"
 feature_id: A82
 
 ac_numbering: task-local
 ac_altitude: task-local
 priority: P2
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1441. Badge A2A, cross-project and MCP-exposed members in Settings and Projects
@@ -25,8 +27,8 @@ Task 1437 filed this as gap G4. `FleetService.resolve` emits `a2a`, `project`, `
 
 ### Requirements
 
-- [ ] R1. Mark literal A2A targets and project-addressed targets with distinct labels in Settings › Agents and in Projects › Processes where a row has a declared member. Preserve displayed enabled and observed process states.
-- [ ] R2. In Settings › Workflows, mark a valid workflow whose parsed `metadata.mcp.expose` is the boolean `true` as declaring MCP exposure.
+- [x] R1. Mark literal A2A targets and project-addressed targets with distinct labels in Settings › Agents and in Projects › Processes where a row has a declared member. Preserve displayed enabled and observed process states.
+- [x] R2. In Settings › Workflows, mark a valid workflow whose parsed `metadata.mcp.expose` is the boolean `true` as declaring MCP exposure.
 
 Out of scope are new process rows, health probes, executable MCP availability badges, and mutation of agent or workflow settings.
 
@@ -70,18 +72,55 @@ Add optional `mcpExposureDeclared: boolean` to `workflowDefinitionDtoSchema` in 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `apps/web/src/modules/projects/useProjectContext.tsx` | 30–70 | `ResolvedFleetMember` mirrors the server's optional `a2a` / `project` / `member` addressing, and `transportBadge` is the one rule both views use (`A2A` for a literal target, `Cross-project` for a project address, none otherwise). |
+| `apps/web/src/modules/settings/AgentsView.tsx` | 1074–1100 | The roster card renders the transport badge beside the existing declared/observed facts, so a disabled remote member still shows `disabled` and its badge. |
+| `apps/web/src/modules/projects/ProcessesView.tsx` | 455–470 | The process row renders the same badge for a matched `instanceId`; undeclared rows keep none. |
+| `packages/contracts/src/fleet.ts` | 241–258 | `workflowDefinitionDtoSchema` gains optional `mcpExposureDeclared`. |
+| `apps/server/src/modules/health/index.ts` | 671–750 | The listing parses the raw YAML it already read with the same strict predicate as `mcp-workflow-tools.ts` (boolean `true`, never `'true'`) and sets the flag only on a valid entry. |
+| `apps/web/src/modules/settings/WorkflowsView.tsx` | 275–300 | The selected workflow's meta bar shows "MCP exposure declared" when the flag is `true`; an omitted flag renders nothing. |
+| `apps/web/tests/modules/settings/agents-view.test.ts` | 60–100 | R1 regression: A2A / Cross-project / no badge, with the declared state still visible. |
+| `apps/server/tests/modules/health.test.ts` | 1225–1310 | R2 regression: `true` sets the flag; `false`, `'true'`, absent and an invalid definition do not. |
+| `apps/web/tests/modules/settings/workflows-view.test.ts` | 1–60 | R2 regression: the badge renders for a declared exposure and is absent for an omitted flag or an invalid definition. |
+| `docs/design/workflows-reading-surface.md` | 36–41 | The optional DTO field and its strictness recorded beside the surface change (T3). |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — mark literal A2A and project-addressed targets with distinct labels in Settings › Agents and Projects › Processes where a row has a declared member, preserving enabled and observed states | MET | `apps/web/src/modules/projects/useProjectContext.tsx:44-70` (the optional addressing fields plus the one `transportBadge` rule); `apps/web/src/modules/settings/AgentsView.tsx:1074-1100`; `apps/web/src/modules/projects/ProcessesView.tsx:455-470`; test `apps/web/tests/modules/settings/agents-view.test.ts:60-100` |
+| R2 — in Settings › Workflows, mark a valid workflow whose parsed `metadata.mcp.expose` is the boolean `true` as declaring MCP exposure | MET | `packages/contracts/src/fleet.ts:241-258`; `apps/server/src/modules/health/index.ts:671-750` (strict boolean predicate over the raw YAML, gated on validity); `apps/web/src/modules/settings/WorkflowsView.tsx:275-300`; tests `apps/server/tests/modules/health.test.ts:1225-1310`, `apps/web/tests/modules/settings/workflows-view.test.ts` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — member badges distinguish the configured transport (req: R1) | MET | test | `apps/web/tests/modules/settings/agents-view.test.ts:60-100` — a literal A2A member reads `A2A`, a project-addressed member `Cross-project`, a local member has no badge, and the disabled remote member still shows `disabled` in its declared facts |
+| AC2 — the workflow badge follows the parsed exposure declaration (req: R2) | MET | test | `apps/server/tests/modules/health.test.ts:1225-1310` (boolean `true` only; `false`, `'true'`, absent and an invalid definition omit the flag) and `apps/web/tests/modules/settings/workflows-view.test.ts` (badge present for a declared exposure, absent for an omitted flag and for an invalid definition) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| ID | Sev | Location | Finding |
+| --- | --- | --- | --- |
+| F1 | P4 | `apps/web/src/modules/projects/ProcessesView.tsx:455-470` | The Processes badge is asserted through the shared `transportBadge` rule and the Agents render, not a mounted ProcessesView (no render harness exists; the live Board leg visits it). |
+| F2 | P4 | `apps/server/src/modules/health/index.ts:676-690` | `declaresMcpExposure` restates the predicate `mcp-workflow-tools.ts` keeps private; sharing it would mean exporting an internal for one listing read. A divergence would surface as a badge disagreeing with the exposure findings. |
+| F3 | P4 | `apps/web/tests/modules/settings/workflows-view.test.ts` | The three-view browser leg was not extended in this run; the component renders plus the server listing test cover the contract. |
+
+SECUA: both badges are additive labels on existing rows — no row, probe or mutation added; the exposure flag uses the resolver's own strictness, so a `'true'` string cannot advertise a tool that will never exist.
+
+Verdict: PASS
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-11-23T04:15:58.703Z todo → wip (system)
+- 2026-11-23T04:16:20.760Z wip → testing (system)
+- 2026-11-23T04:16:22.312Z testing → done (system)
+

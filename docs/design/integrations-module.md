@@ -69,6 +69,12 @@ interface IntegrationsStatus {
             annotations: { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean };
             inputSchema: unknown }>;
         resources: Array<{ uriTemplate: string; description: string }>;
+        // 1438: optional, so a Board reading an older server shows no namespace line rather than
+        // "none". `exposureIssues` are the workflows the resolver refused, each with its remedy.
+        namespace?: string | null;
+        namespaceSource?: 'config' | 'plugin-manifest' | 'none';
+        exposureIssues?: Array<{ tool: string; file: string;
+            reason: 'no-namespace' | 'builtin-collision' | 'duplicate'; remedy: string }>;
     };
     a2a: {
         enabled: boolean; basePath: '/a2a'; auth: { envName: string; tokenPresent: boolean };
@@ -87,6 +93,12 @@ interface IntegrationsStatus {
 - The catalog comes from the same `listTools()` and `RESOURCE_DESCRIPTORS` that `tools/list` and
   `resources/list` use, so the two cannot drift. `packages/app` cannot import the server module, so the
   handler passes the catalog to `IntegrationsService` through a port.
+- `namespace`, `namespaceSource` and `exposureIssues` come from the SAME resolver walk the catalog
+  does (`McpDispatcher.catalog()`): `resolveMcpNamespace` gives `config` → `plugin-manifest` → `none`
+  precedence, and `resolveProjectWorkflowTools`'s issue list — previously discarded inside the
+  dispatcher — is carried through with `tool`, `file`, `reason` and `remedy` (1438). The workflow
+  namespace is a tool-name prefix, not the gateway's routing prefix (`gateway.namespace`); the two are
+  reported separately and never conflated.
 - `tokenPresent` comes from the server's existing `bearerEnv` + `requiredToken` pair (ADR-120 gateway
   underneath). The service receives only the boolean.
 - Every caller-visible URL the status builds (`mcp.url`, `a2a.url`, `cardUrl`, `gateway.rootMcpUrl`)
@@ -126,22 +138,48 @@ failed identity read leaves the rest of the status visible (1437 R6).
 
 | Tab | Content | Data |
 | --- | --- | --- |
-| Summary | One row per surface: state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus a gateway counters strip when served | status + usage |
-| MCP | Tool table (origin badge, read/write badge, opens a schema drawer), `spur://` resource list, recent calls (tool, duration, outcome, errorCode), copyable client config snippet (URL + `${ENV}` placeholder) | status + events |
-| A2A | Inbound member cards (card URL, write-fenced badge); A2A tasks (sender `a2a`) with run state → Projects › Inbox, read through `inbox.requests({ limit: 100, scope: 'all' })` so non-orchestrator tasks and outbound receipts are not dropped by the default orchestrator feed; outbound/cross-project receipts (G91); event rows → Observability › System Events (`ObservabilityNavIntent {tab:'system-events', eventName, runId}`; the seed applies `eventName` even when the intent carries no `runId`) | status + inbox + events |
+| Summary | One row per surface: state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus the window's six usage slices — tool latency (p50/p95 with unmeasured calls counted and a null percentile as `—`), resource reads, actor attribution, A2A intake, auth refusals by surface and reason, and repeated `(tool, errorCode)` failures with their first→last range — each with its own empty state. Plus a gateway counters strip when served | status + usage |
+| MCP | Namespace line (`namespace <ns> · from <config\|plugin-manifest\|none>`), tool table (origin badge, read/write badge, opens a schema drawer) with a case-insensitive name filter that never hides the exposure findings or the `spur://` list, exposure findings with their remedies, the window's tool latency, resource reads and repeated failures, `spur://` resource list, recent calls (tool, duration, outcome, errorCode), copyable client config snippet (URL + `${ENV}` placeholder), the project command `spur mcp --url <endpoint>`, the gateway command `spur mcp --gateway` only when the gateway's own MCP entry is on, and a JSON-RPC `server/discover` probe expanding the auth variable name only | status + usage + events |
+| A2A | Inbound member cards (card URL, write-fenced badge) with an on-demand **card inspector** (the public card JSON, fetched only when asked, an inline error with retry, and no fetch at all while the listener is off) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project members with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
 
 States: a loading skeleton; an `EmptyState` when every surface is off, with the config keys that
 enable each one; a `Diagnostic` with retry when `integrations.status` fails.
+
+**Remote refs are per receipt, credentials are per member (1440 R2).** `coordination_runs` holds one
+row per dispatched run, so several receipts for one member can name different remote tasks. The inbox
+request projection therefore carries `remoteTaskId`, `remoteContextId` and `remoteBranch` on the row
+(`inboxRequestSchema`, optional; a malformed or absent artifact reads as absent) rather than on the
+member. Credential state is the opposite: it belongs to the member declaration, so the server reads
+`authEnv` presence and the service projects only `envName` + `tokenPresent` into
+`outbound[].auth` — a member that declares no credential omits the field, and the value never crosses
+the port.
+
+**The exact-run deep link (1440 R3).** A receipt's Run link is
+`/board/observability?tab=trace&runId=<uuid>`. Only a UUID qualifies, so a receipt with a non-run id
+renders plain text instead of a dead link. `TraceTab` gives the `runId` intent precedence over the
+WBS/list filters and reads `GET /api/observability/agent-trace/:runId` — a read-only projection of
+`AgentTraceService.trace` that keeps root id, node id, kind, status and parent id, and drops log
+paths, session ids and contents. A non-UUID is a 400 and a run the project never stored is a 404; a
+missing `parentRunId` stays absent rather than being invented.
+
+**Protocol prefixes carry named colors (1439 R2).** `mcp`, `a2a` and `auth` map to the theme's
+info / success / error tokens in both Observability views — `var(--color-spur-*)` for the Summary
+chart and `text-spur-*` for the System Events label — so one prefix reads in one color in both
+places and follows light/dark without a second palette. Every other prefix keeps its existing value
+and an uncatalogued prefix keeps its fallback (hashed palette entry in Summary, muted text in System
+Events); the text label is always rendered, so color is never the only signal.
 
 ## 4. Verification
 
 Two legs. The protocol leg is `scripts/commands/integrations-e2e.ts`, alongside the existing
 `a2a-*-e2e.ts` scripts. It boots `spur self serve` with MCP and A2A enabled and one cold member whose
-agent is a sleeping stub binary. It checks a bad-argument tools/call (F1), annotations (F2), an
+agent is a sleeping stub binary. It checks a bad-argument tools/call (F1), annotations (F2), the
+namespace provenance and refused exposures against `tools/list` (1438 R1), an
 unauthenticated card GET and message:send (F3, F4), send then cancel with `runStopped: true` (F6) and
 no token in `integrations.status`. It writes `docs/reports/integrations-e2e-receipt.json` (stable name,
 overwritten each run, as `a2a-serve-e2e` does). The Board leg is the heavy test
-`apps/web/tests/modules/integrations-browser.heavy.test.ts`, which renders `/board/integrations` and
+`apps/web/tests/modules/integrations-browser.heavy.test.ts`, which renders `/board/integrations`, opens
+the MCP tab to assert the namespace line, the refused exposure and the project command (1438 R2), and
 writes `docs/reports/integrations-e2e-summary-{light,dark}.png`.
 
 ## 5. Out of scope

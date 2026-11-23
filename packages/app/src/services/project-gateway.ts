@@ -9,7 +9,14 @@ import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
 import { resolveMcpNamespace } from './mcp-namespace';
 import { resolveProjectWorkflowTools, workflowToolDescriptor } from './mcp-workflow-tools';
-import { type GatewayIndexProject, renderGatewayIndex } from './project-gateway-html';
+import {
+    type GatewayIndexDiagnostic,
+    type GatewayIndexMcp,
+    type GatewayIndexNamespace,
+    type GatewayIndexProject,
+    type GatewayIndexRouting,
+    renderGatewayIndex,
+} from './project-gateway-html';
 
 /**
  * The one-port project gateway's request handler (feature K4, ADR-151 §4).
@@ -516,6 +523,61 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         });
     }
 
+    /** The one since-creation snapshot projection: `/api/health` and the root page report the same numbers. */
+    function counterSnapshot(): GatewayIndexRouting {
+        return { ...counters, upstreamRestarts: { ...counters.upstreamRestarts } };
+    }
+
+    /** Keep only the display-safe namespace rows the registry's discovery projection carries. */
+    function namespaceRows(projects: unknown[]): GatewayIndexNamespace[] {
+        return projects.flatMap((project) => {
+            if (typeof project !== 'object' || project === null) return [];
+            const value = project as Record<string, unknown>;
+            if (typeof value.name !== 'string' || typeof value.prefix !== 'string') return [];
+            return [
+                {
+                    name: value.name,
+                    prefix: value.prefix,
+                    namespace: typeof value.namespace === 'string' ? value.namespace : null,
+                },
+            ];
+        });
+    }
+
+    /** Reason and remedy only: internal exception text never reaches the page (1442 R1). */
+    function diagnosticRows(items: unknown[]): GatewayIndexDiagnostic[] {
+        return items.flatMap((item) => {
+            if (typeof item !== 'object' || item === null) return [];
+            const value = item as Record<string, unknown>;
+            if (typeof value.name !== 'string' || typeof value.reason !== 'string') return [];
+            return [
+                {
+                    name: value.name,
+                    reason: value.reason,
+                    remedy: typeof value.remedy === 'string' ? value.remedy : '',
+                },
+            ];
+        });
+    }
+
+    /** The root page's gateway-MCP block: state, credential presence, namespaces, diagnostics. */
+    async function mcpIndexSnapshot(): Promise<GatewayIndexMcp> {
+        const auth = deps.mcpAuth ?? { envName: '', tokenPresent: false };
+        if (deps.mcp === undefined) return { enabled: false, auth, namespaces: [], diagnostics: [] };
+        try {
+            const extras = await mcpRegistry.discoverExtras();
+            return {
+                enabled: true,
+                auth,
+                namespaces: namespaceRows(extras.projects),
+                diagnostics: diagnosticRows(extras.diagnostics),
+            };
+        } catch {
+            // A discovery failure must never cost the operator the page: cards and counters stay.
+            return { enabled: true, auth, namespaces: [], diagnostics: [], unavailable: true };
+        }
+    }
+
     function health(known: Array<{ entry: ProjectEntry; prefix: string }>, mcpSince: string | null): Response {
         return Response.json({
             ok: true,
@@ -527,7 +589,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 running: entry.port > 0,
             })),
             // 1385 R2: additive — `isGatewayAnswering`/`probeGatewayPort` read only `gateway`.
-            counters: { ...counters, upstreamRestarts: { ...counters.upstreamRestarts } },
+            counters: counterSnapshot(),
             ...(deps.mcp === undefined
                 ? {}
                 : {
@@ -544,10 +606,17 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             const prefix = resolveProjectPrefix(entry);
             return prefix === null ? [] : [{ entry, prefix }];
         });
-        return new Response(renderGatewayIndex({ port: deps.port, edge: deps.edge, projects }), {
-            status: 200,
-            headers: { 'content-type': 'text/html; charset=utf-8' },
-        });
+        // Sampled at render time from the current process — no polling, no persistence (ADR-151).
+        return new Response(
+            renderGatewayIndex({
+                port: deps.port,
+                edge: deps.edge,
+                projects,
+                mcp: await mcpIndexSnapshot(),
+                routing: counterSnapshot(),
+            }),
+            { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
+        );
     }
 
     /** Dial the project's loopback listener, remembering the family that answers. */

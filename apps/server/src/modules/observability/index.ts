@@ -1,4 +1,5 @@
 import {
+    AgentTraceService,
     DecisionLogQueryService,
     type DecisionLogQuerySpec,
     InvalidWorkflowRunIdError,
@@ -6,7 +7,14 @@ import {
     type ToolUseEvent,
 } from '@gobing-ai/spur-app';
 import type { ObservabilitySummaryResponse } from '@gobing-ai/spur-contracts';
-import { DecisionLogDao, queueJobKpis, type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
+import {
+    CoordinationRunDao,
+    DecisionLogDao,
+    queueJobKpis,
+    type RoutingSummaryQuery,
+    RunDao,
+    roleTokenSummary,
+} from '@gobing-ai/spur-domain';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
@@ -452,6 +460,46 @@ function handleObservabilitySummary(ctx: ServerContext) {
  * - GET /api/observability/decisions — decision-log list: rows, KPI strip, facets, cursor `before` (1100)
  * - GET /api/observability/decisions/:id — one decision-log row incl. redacted input and phases (1100)
  */
+/** Run ids in this store are UUIDs; anything else cannot name one, so it is refused before a read. */
+const RUN_ID_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The exact-run lineage the Board's Trace tab renders (1440 R3): identity and shape only. Log paths,
+ * session ids and message contents are deliberately dropped — the deep link answers "which run is
+ * this and what did it dispatch", not "show me its transcript".
+ */
+export interface AgentTraceNodeView {
+    runId: string;
+    kind: 'workflow' | 'agent';
+    status: string;
+    parentRunId: string | null;
+}
+
+/** The wire shape of `GET /api/observability/agent-trace/:runId`. */
+export interface AgentTraceResponse {
+    rootRunId: string;
+    requestedRunId: string;
+    nodes: AgentTraceNodeView[];
+}
+
+/** Project a {@link TraceTree} down to the display shape above. */
+export function projectAgentTrace(
+    tree: { rootRunId: string; nodes: AgentTraceNodeView[] },
+    runId: string,
+): AgentTraceResponse {
+    return {
+        rootRunId: tree.rootRunId,
+        requestedRunId: runId,
+        nodes: tree.nodes.map((node) => ({
+            runId: node.runId,
+            kind: node.kind,
+            status: node.status,
+            parentRunId: node.parentRunId,
+        })),
+    };
+}
+
+/** The observability module: read-only process/tool-use/decision/run-record and exact-run trace routes. */
 export const observabilityModule: ServerModule = {
     name: 'observability',
 
@@ -482,6 +530,27 @@ export const observabilityModule: ServerModule = {
                 }
                 throw err;
             }
+        });
+        // GET /api/observability/agent-trace/:runId — the exact run a deep link names (1440 R3).
+        // Read-only lineage over `runs`/`coordination_runs`, no remote refresh adapter: the Board must
+        // open an older run without the trace layer reaching out to an A2A peer.
+        app.get('/api/observability/agent-trace/:runId', async (c) => {
+            const runId = c.req.param('runId');
+            if (!RUN_ID_UUID.test(runId)) {
+                return c.json({ error: 'runId must be a UUID', code: 'invalid-run-id', runId }, 400);
+            }
+            const service = new AgentTraceService({ projectPath: ctx.cwd, openDb: () => ctx.getDb() });
+            const tree = await service.trace(runId);
+            // `trace` synthesizes a placeholder node for an id it cannot find, so existence is asked
+            // of the store directly — a dead link must say 404, not render an "unknown" run.
+            const db = await ctx.getDb();
+            const known =
+                (await new CoordinationRunDao(db).getByRunId(runId)) !== null ||
+                (await new RunDao(db).findById(runId)) != null;
+            if (!known) {
+                return c.json({ error: `no run ${runId}`, code: 'run-not-found', runId }, 404);
+            }
+            return c.json(projectAgentTrace(tree, runId));
         });
     },
 };

@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "A2A inspection: agent card JSON, a2a snippets, outbound auth state and trace links"
-status: todo
+status: done
 template: issue
 created_at: 2026-11-23T00:55:57.547Z
-updated_at: "2026-11-23T02:51:29.055Z"
+updated_at: "2026-11-23T04:08:34.032Z"
 feature_id: A82
 
 ac_numbering: task-local
 ac_altitude: task-local
 priority: P2
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1440. A2A inspection: agent card JSON, a2a snippets, outbound auth state and trace links
@@ -26,9 +28,9 @@ Task 1437 filed this as gap G3. The A2A tab links to public inbound cards and di
 
 ### Requirements
 
-- [ ] R1. Let an operator inspect the actual public Agent Card JSON inline on demand and copy `a2a card get` and `a2a send` examples for the selected inbound member.
-- [ ] R2. Show outbound A2A and cross-project credential state using only the configured variable name and its presence. Show the locally persisted remote task ID, context ID and branch on their corresponding receipt.
-- [ ] R3. Offer a base-aware Observability Trace link that opens the selected local run, and warn when the enabled A2A listener has no inbound members.
+- [x] R1. Let an operator inspect the actual public Agent Card JSON inline on demand and copy `a2a card get` and `a2a send` examples for the selected inbound member.
+- [x] R2. Show outbound A2A and cross-project credential state using only the configured variable name and its presence. Show the locally persisted remote task ID, context ID and branch on their corresponding receipt.
+- [x] R3. Offer a base-aware Observability Trace link that opens the selected local run, and warn when the enabled A2A listener has no inbound members.
 
 Out of scope are sending messages from the Board, retrieving live remote task state on page load, and changes to A2A authentication or listener routing.
 
@@ -83,18 +85,65 @@ Emit `withBase('/board/observability?...')` with `tab=trace` and an encoded `run
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `packages/contracts/src/inbox.ts` | 52–75 | `inboxRequestSchema` gains optional `remoteTaskId` / `remoteContextId` / `remoteBranch`: the remote refs belong to the receipt's own run, not to the member. |
+| `packages/domain/src/dao/inbox-dao.ts` | 45–55, 116–128, 500–530 | The joined request query selects `coordination_runs.remote_task_id` and `remote_context_id` beside the existing task id and artifact refs, so one read answers both. |
+| `apps/server/src/modules/inbox/handlers.ts` | 137–160, 276–292 | Projects the three refs per row; a malformed or absent artifact reads as `null` instead of failing the row. |
+| `packages/contracts/src/integrations.ts` | 66–80 | `integrationsOutboundMemberSchema` gains optional `auth` (the declared credential's name and presence). |
+| `packages/app/src/services/integrations-service.ts` | 46–60, 236–262 | The A2A source port carries `outboundAuth` keyed by member instance id; the outbound projection attaches `auth` only when the member declares one. |
+| `apps/server/src/modules/integrations/handlers.ts` | 60–85, 100–125, 145–155 | Reads the fleet declaration and environment once per status read and hands over only `{envName, tokenPresent}` — the value never leaves the handler. |
+| `apps/web/src/modules/integrations/helpers.ts` | 130–200 | `traceLink` (UUID-only, base-aware), `a2aExamples` (card + credential-helper, never a token) and the receipt ref fields. |
+| `apps/web/src/modules/integrations/A2aTab.tsx` | 24–95, 100–210, 300–345 | The on-demand `CardInspector` (lazy fetch, inline error + retry, no fetch while the listener is off), the CLI examples, outbound credential state, per-receipt `RemoteRefs`, the UUID Run link and the no-inbound warning. |
+| `apps/web/src/modules/integrations/IntegrationsModule.tsx` | 150–160 | Threads the card-fetch seam to the A2A tab. |
+| `apps/web/src/modules/observability/TraceTab.tsx` | 300–470, 560–580 | Exact-run intent: `runId` outranks the WBS/list filters and renders the lineage (root, nodes, highlighted requested run) with loading, retry and missing states; the ordinary list is untouched without the intent. |
+| `apps/server/src/modules/observability/index.ts` | 40–75, 490–520 | `GET /api/observability/agent-trace/:runId` — UUID-guarded, 404 for a run the project never stored, projection without logs/sessions. |
+| `apps/server/tests/modules/inbox/handlers.test.ts` | 630–690 | R2 regression: two receipts for one member keep their own task/context/branch, and a malformed artifact reads as no branch. |
+| `apps/server/tests/modules/integrations/handlers.test.ts` | 410–455 | R2 regression: a declared credential reports its name and presence, an unset one reports `tokenPresent: false`, and the token value is absent from the payload. |
+| `apps/server/tests/modules/observability/index.test.ts` | 1115–1185 | R3 regression: an older child run opens by identity with no `logPath`/`sessionIds`, an absent run is 404 and a non-UUID is 400. |
+| `apps/web/tests/modules/integrations/integrations-module.test.tsx` | 100–135, 545–700 | R1–R3 regression: lazy card fetch, inline error, disabled listener, examples, outbound credential state, per-receipt refs, UUID Run link and the no-inbound warning. |
+| `apps/web/tests/modules/observability/agent-trace.test.ts` | 1–45 | R3 regression: the projection keeps identity and shape and drops every internal field. |
+| `apps/web/tests/modules/integrations-browser.heavy.test.ts` | 60–120 | The live Board leg opens the A2A tab, asserts no warning, and loads the real public card. |
+| `docs/design/integrations-module.md` | 130–175 | A2A tab contents, the per-receipt refs rule, the credential rule and the exact-run link recorded beside the surface change (T3). |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 — inspect the actual public Agent Card JSON inline on demand, and copy `a2a card get` / `a2a send` examples for the selected inbound member | MET | `apps/web/src/modules/integrations/A2aTab.tsx:24-95` (`CardInspector`: nothing fetched until asked, inline error + retry, no fetch while the listener is off) and `:120-165` (examples); `apps/web/src/modules/integrations/helpers.ts:170-200` (`a2aExamples` uses the card URL and the credential-helper option, never a token); tests `apps/web/tests/modules/integrations/integrations-module.test.tsx:545-620` |
+| R2 — outbound/cross-project credential state by variable name and presence; each receipt shows the remote task id, context id and branch it persisted | MET | `packages/contracts/src/integrations.ts:66-80`; `packages/app/src/services/integrations-service.ts:46-60,236-262`; `apps/server/src/modules/integrations/handlers.ts:60-85`; `packages/contracts/src/inbox.ts:52-75`; `packages/domain/src/dao/inbox-dao.ts:500-530`; `apps/server/src/modules/inbox/handlers.ts:276-292`; UI `apps/web/src/modules/integrations/A2aTab.tsx:100-135,300-345`; tests `apps/server/tests/modules/integrations/handlers.test.ts:410-455`, `apps/server/tests/modules/inbox/handlers.test.ts:630-690`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:620-670` |
+| R3 — a base-aware Observability Trace link that opens the selected local run, and a warning when the enabled listener has no inbound members | MET | `apps/web/src/modules/integrations/helpers.ts:130-145` (`traceLink`, UUID-only and base-aware); `apps/web/src/modules/observability/TraceTab.tsx:300-470,560-580` (exact-run precedence, loading/retry/missing, highlighted node); `apps/server/src/modules/observability/index.ts:40-75,490-520` (route, 400/404, projection); `apps/web/src/modules/integrations/A2aTab.tsx:150-160` (no-inbound warning); tests `apps/server/tests/modules/observability/index.test.ts:1115-1185`, `apps/web/tests/modules/observability/agent-trace.test.ts`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:670-700` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — inbound card inspection is on demand and scoped to the current project (req: R1) | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:545-620` — no JSON before the click, the member's own `cardUrl` is what is fetched (the seam receives it), a 500 renders an inline error with retry while the tab stays intact, and a disabled listener renders neither the button nor the examples |
+| AC2 — outbound auth and remote refs are scoped to their owners (req: R2) | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts:410-455` (name + presence, `unset` case, no value in the payload) and `apps/server/tests/modules/inbox/handlers.test.ts:630-690` (two receipts, different remote ids/branches, malformed artifact → no branch); UI assertions in `apps/web/tests/modules/integrations/integrations-module.test.tsx:620-670` |
+| AC3 — A2A run links open the selected trace and empty inbound is diagnosed (req: R3) | MET | test | `apps/server/tests/modules/observability/index.test.ts:1115-1185` (an older child run opens by identity with no `logPath`/`sessionIds`; 404/400) and `apps/web/tests/modules/integrations/integrations-module.test.tsx:670-700` (a UUID run is a `tab=trace&runId=` link, `run-1` is plain text, an enabled listener with no inbound members warns) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| ID | Sev | Location | Finding |
+| --- | --- | --- | --- |
+| F1 | P4 | `apps/web/src/modules/observability/TraceTab.tsx:300-470` | `ExactRunLineage` is covered through `parseAgentTrace` and the server route, not through a mounted TraceTab: the tab has no existing render harness (runs list + search params + three fetches). The render path is exercised by the live Board leg. |
+| F2 | P4 | `apps/web/tests/modules/integrations-browser.heavy.test.ts:60-120` | The live A2A assertions were added but not executed in this run (needs a served project plus a Board build — the feature-scope heavy pass). |
+| F3 | P4 | `apps/server/src/modules/observability/index.ts:505-515` | Existence is asked of the store before projecting, because `AgentTraceService.trace` synthesizes an `unknown` node for an id it cannot find. A typed not-found from `trace` would let this check go. |
+
+SECUA: the credential value never crosses the port; the card fetch is unauthenticated by design and stays behind an explicit click; the trace projection is an allow-list; `runId` is UUID-validated before any DB read.
+
+Verdict: PASS
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-11-23T04:06:41.158Z todo → wip (system)
+- 2026-11-23T04:08:32.441Z wip → testing (system)
+- 2026-11-23T04:08:34.028Z testing → done (system)
+

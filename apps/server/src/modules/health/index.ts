@@ -31,7 +31,7 @@ import {
     setExecutorAvailability,
 } from '@gobing-ai/spur-config/loader';
 import { REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, parseYamlObject } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import { version } from '../../../package.json';
 import type { ServerContext } from '../../context';
@@ -668,6 +668,25 @@ export const healthModule: ServerModule = {
         app.get('/api/project/configs', configsHandler);
         app.get('/api/configs', configsHandler);
 
+        /**
+         * Does this raw definition declare MCP exposure? The same strict predicate
+         * `mcp-workflow-tools.ts` applies: a boolean `true`, never the string `'true'` (1441 R2).
+         * A definition that does not parse, or that has no such metadata, declares nothing.
+         */
+        const declaresMcpExposure = (rawYaml: string): boolean => {
+            try {
+                const parsed = parseYamlObject(rawYaml);
+                if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+                const metadata = (parsed as Record<string, unknown>).metadata;
+                if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) return false;
+                const mcp = (metadata as Record<string, unknown>).mcp;
+                if (typeof mcp !== 'object' || mcp === null || Array.isArray(mcp)) return false;
+                return (mcp as Record<string, unknown>).expose === true;
+            } catch {
+                return false;
+            }
+        };
+
         const workflowsHandler = async (c: { json: (data: unknown) => Response }) => {
             if (!ctx) {
                 return c.json({ workflows: [], total: 0 });
@@ -722,6 +741,9 @@ export const healthModule: ServerModule = {
                         error,
                         rawYaml,
                         mermaidDiagram,
+                        // Omitted unless the VALID definition declares exposure: the UI reads an
+                        // omitted flag as "absent", so a malformed file never shows the badge.
+                        ...(isValid && declaresMcpExposure(rawYaml) ? { mcpExposureDeclared: true } : {}),
                     });
                 }
 
