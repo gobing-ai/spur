@@ -204,7 +204,7 @@ spur agent status [options]
 
 | Flag | Description |
 |---|---|
-| `--server <url>` | Supervisor API URL for live run status and member session (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
+| `--server <url>` | Supervisor API URL for live run status and member session (default: registered local project's canonical gateway API, `http://localhost:<gateway.port><prefix>/api`; direct `http://localhost:<server.port>/api` only for an unregistered project) |
 | `--json` | Output machine-readable JSON |
 
 One row per agent spec: `id`, `type`, live `status`, `pid=<n>` where a process exists, and the
@@ -222,7 +222,7 @@ spur agent list [options]
 | Flag | Description |
 |---|---|
 | `--specs` | List agent specs instead of detected agents (see [Agent spec sources](#agent-spec-sources)) |
-| `--server <url>` | With `--specs`: supervisor API for live run status (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
+| `--server <url>` | With `--specs`: supervisor API for live run status (default: registered local project's canonical gateway API, `http://localhost:<gateway.port><prefix>/api`; direct `http://localhost:<server.port>/api` only for an unregistered project) |
 | `--json` | Output machine-readable JSON |
 | `--json-envelope` | With `--json`, wrap output in the `{ok, data\|error}` envelope |
 
@@ -367,7 +367,7 @@ Starts a supervised agent process via `spur self serve`.
 
 | Flag | Description |
 |---|---|
-| `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
+| `--server <url>` | Server API URL (default: registered local project's canonical gateway API, `http://localhost:<gateway.port><prefix>/api`; direct `http://localhost:<server.port>/api` only for an unregistered project) |
 | `--json` | Output machine-readable JSON |
 
 Exit `1` when the server is unreachable or the start fails.
@@ -382,7 +382,7 @@ Stops a supervised agent process via `spur self serve`.
 
 | Flag | Description |
 |---|---|
-| `--server <url>` | Server API URL (default: this project's registry serve port, `http://localhost:<port>/api`; `http://localhost:3000/api` only when the project has no live entry) |
+| `--server <url>` | Server API URL (default: registered local project's canonical gateway API, `http://localhost:<gateway.port><prefix>/api`; direct `http://localhost:<server.port>/api` only for an unregistered project) |
 | `--json` | Output machine-readable JSON |
 
 ## spur agent dogfood-gate

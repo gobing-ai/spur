@@ -158,9 +158,10 @@ describe('healthModule', () => {
         expect(body.projects[0]?.name).toBe('Project A');
         expect(body.projects[0]?.current).toBe(true);
         expect(body.projects[0]?.running).toBe(false);
-        // K4 R7: a local entry carries its gateway prefix and a prefix-relative Board URL.
+        // A direct-root request gets an absolute canonical URL; a prefix-relative URL would
+        // incorrectly stay on the legacy direct port.
         expect(body.projects[0]?.prefix).toBe('/project-a');
-        expect(body.projects[0]?.url).toBe('/project-a/board');
+        expect(body.projects[0]?.url).toBe('http://localhost:3000/project-a/board');
     });
 
     test('/api/projects gives a remote entry a null prefix and its host:port URL (K4 R2/R7)', async () => {
@@ -178,6 +179,29 @@ describe('healthModule', () => {
         expect(body.projects[0]?.prefix).toBeNull();
         expect(body.projects[0]?.url).toBe('http://192.168.87.27:3003/board');
         expect(body.projects[0]?.port).toBe(3003);
+    });
+
+    test('/api/projects scopes same-path current and direct URLs by host and request context', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'kk', path: normalizeProjectPath(tempDir), host: '192.168.87.27', port: 3003 });
+        await registry.upsert({ name: 'kk', path: tempDir, port: 0, prefix: '/kk' });
+
+        const app = new Hono();
+        healthModule.mount(app, { cwd: tempDir } as ServerContext);
+        const direct = (await (await app.request('/api/projects')).json()) as {
+            projects: Array<{ host: string; current: boolean; url: string }>;
+        };
+        expect(direct.projects.find((p) => p.host === 'localhost')?.current).toBe(true);
+        expect(direct.projects.find((p) => p.host === '192.168.87.27')?.current).toBe(false);
+        expect(direct.projects.find((p) => p.host === 'localhost')?.url).toBe('http://localhost:3000/kk/board');
+        expect(direct.projects.find((p) => p.host === '192.168.87.27')?.url).toBe('http://192.168.87.27:3003/board');
+
+        const forwarded = (await (
+            await app.request('/api/projects', {
+                headers: { 'x-forwarded-host': 'localhost:3000', 'x-forwarded-prefix': '/kk' },
+            })
+        ).json()) as { projects: Array<{ host: string; url: string }> };
+        expect(forwarded.projects.find((p) => p.host === 'localhost')?.url).toBe('/kk/board');
     });
 
     test('/api/projects reports a prefix collision and a duplicate path as findings (Q R6)', async () => {
@@ -314,6 +338,35 @@ describe('healthModule', () => {
         } finally {
             setDetachedServeSpawnForTests(undefined);
             ProjectRegistry.prototype.allocatePort = origAllocate;
+        }
+    });
+
+    test('/api/projects/start selects the exact local entry and returns its canonical URL', async () => {
+        const targetPort = 3503;
+        setPortProbeForTests(async (port) => (port === targetPort ? 'in-use' : 'available'));
+        ProjectRegistry.prototype.allocatePort = async () => targetPort;
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'kk', path: normalizeProjectPath(tempDir), host: '192.168.87.27', port: 3003 });
+        await registry.upsert({ name: 'kk', path: tempDir, port: 0, prefix: '/kk' });
+        setDetachedServeSpawnForTests(() => ({ exitCode: null, unref: () => {} }));
+
+        try {
+            const app = new Hono();
+            healthModule.mount(app, { cwd: tempDir } as ServerContext);
+            const res = await app.request('/api/projects/start', {
+                method: 'POST',
+                body: JSON.stringify({ name: 'kk', path: tempDir, host: 'localhost' }),
+                headers: { 'content-type': 'application/json' },
+            });
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { port: number; url: string };
+            expect(body.port).toBe(targetPort);
+            expect(body.url).toBe('http://localhost:3000/kk/board');
+            const saved = registry.readRaw().projects;
+            expect(saved.find((p) => p.host === 'localhost')?.port).toBe(targetPort);
+            expect(saved.find((p) => p.host === '192.168.87.27')?.port).toBe(3003);
+        } finally {
+            setDetachedServeSpawnForTests(undefined);
         }
     });
 

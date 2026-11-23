@@ -226,6 +226,18 @@ describe('1423 status — gateway block', () => {
         );
     });
 
+    test('a direct legacy request uses the local canonical gateway base', async () => {
+        const status = await service().status({
+            origin: 'http://127.0.0.1:3007',
+            localGatewayBase: 'http://localhost:3000/tslibs',
+        });
+        expect(status.gateway).toEqual({ served: false });
+        expect(status.mcp.url).toBe('http://localhost:3000/tslibs/mcp');
+        expect(status.a2a.inbound[0]?.cardUrl).toBe(
+            'http://localhost:3000/tslibs/a2a/members/proj-coder/.well-known/agent-card.json',
+        );
+    });
+
     test('forwardedProto https preserves the public https scheme behind TLS proxies', async () => {
         const status = await service({ sources: sources({ gateway: { counters } }) }).status({
             origin: 'http://127.0.0.1:3007',

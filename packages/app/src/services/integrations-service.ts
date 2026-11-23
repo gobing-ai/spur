@@ -84,6 +84,8 @@ export interface IntegrationsRequestContext {
     forwardedHost?: string | null;
     /** The gateway's mount prefix. A non-empty value is what marks a gateway request. */
     forwardedPrefix?: string | null;
+    /** Canonical local gateway base for a direct-root request; unregistered/remote contexts omit it. */
+    localGatewayBase?: string;
 }
 
 /** Dependencies for {@link IntegrationsService}. */
@@ -114,7 +116,10 @@ function forwardedScheme(proto: string | null | undefined): 'http' | 'https' {
 function callerBase(request: IntegrationsRequestContext): string {
     const host = request.forwardedHost?.trim() ?? '';
     const prefix = mountPrefix(request.forwardedPrefix);
-    if (host === '' || prefix === '') return request.origin.replace(/\/+$/, '');
+    if (host === '' || prefix === '') {
+        const local = request.localGatewayBase?.trim() ?? '';
+        return local !== '' ? local.replace(/\/+$/, '') : request.origin.replace(/\/+$/, '');
+    }
     return `${forwardedScheme(request.forwardedProto)}://${host}${prefix}`;
 }
 

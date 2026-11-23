@@ -72,6 +72,19 @@ export function resolveProjectPrefix(entry: Pick<ProjectEntry, 'name' | 'host' |
     return entry.prefix ?? `/${slugifyProjectName(entry.name)}`;
 }
 
+/** Build a local project's public URL on the gateway, or null when the entry is remote. */
+export function resolveProjectGatewayUrl(
+    entry: Pick<ProjectEntry, 'name' | 'host' | 'prefix'>,
+    gateway: { host?: string; port: number },
+    suffix: string,
+): string | null {
+    const prefix = resolveProjectPrefix(entry);
+    if (prefix === null) return null;
+    const host = gateway.host?.trim() || 'localhost';
+    const authority = host.includes(':') ? `[${host}]` : host;
+    return `http://${authority}:${gateway.port}${prefix}${suffix}`;
+}
+
 /**
  * Map each resolved prefix shared by more than one local entry to those entry names.
  *

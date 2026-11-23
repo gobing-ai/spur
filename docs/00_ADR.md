@@ -2970,6 +2970,15 @@ re-import pressure this entry already records).
   operator trust). Access control for tunnel exposure lives at the Cloudflare tunnel, not in Spur.
   The gateway is IPv6/IPv4 sensitive: it binds `server.host` (`localhost` → `::1` on macOS), so
   gateway health probes target `localhost`, not `127.0.0.1`.
+- **Amended 2026-11-23 (task 1444):** canonical local public URL identity is always
+  `http://<gateway-host>:<gateway-port><prefix>` (default `localhost:3000`), independent of gateway
+  liveness or whether the caller arrived on a legacy direct-port page. There is no per-port public
+  fallback for a registered local project; gateway/upstream availability is reported separately.
+  Direct-root API/start responses return an absolute canonical URL, while gateway-forwarded
+  responses keep the current origin and forwarded scheme. Same-path local/remote entries are
+  selected by path + host, and `/api/projects/start` accepts additive optional `host` so the exact
+  entry reaches `startRegisteredProject`. Internal loopback URLs remain private start/diagnostic
+  values; remote entries and explicit `--server`/`--url` overrides are unchanged.
 - **Detail:** [Project gateway](design/project-gateway.md); [project switcher](design/project-switcher.md).
 
 ## ADR-152: spur serve embeds a stateless MCP 2.0+ server that delegates to spur-app services

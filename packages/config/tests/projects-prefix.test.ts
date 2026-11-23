@@ -5,6 +5,7 @@ import {
     normalizePrefix,
     projectEntrySchema,
     RESERVED_PREFIX_SEGMENTS,
+    resolveProjectGatewayUrl,
     resolveProjectPrefix,
     slugifyProjectName,
     validatePrefix,
@@ -82,6 +83,48 @@ describe('project prefix contract (K4 R1/R2)', () => {
 
         it('returns null for a remote entry, with or without a stored prefix', () => {
             expect(resolveProjectPrefix({ name: 'Remote', host: '192.168.87.27', prefix: '/kk' })).toBeNull();
+        });
+    });
+
+    describe('resolveProjectGatewayUrl', () => {
+        it('builds a canonical local URL without consulting gateway liveness', () => {
+            expect(
+                resolveProjectGatewayUrl(
+                    { name: 'Knowledge Kit', host: 'localhost', prefix: '/kk' },
+                    { port: 3000 },
+                    '/api',
+                ),
+            ).toBe('http://localhost:3000/kk/api');
+            expect(resolveProjectGatewayUrl({ name: 'Knowledge Kit' }, { port: 3000 }, '/board')).toBe(
+                'http://localhost:3000/knowledge-kit/board',
+            );
+        });
+
+        it('honors an explicitly configured gateway host and port', () => {
+            expect(
+                resolveProjectGatewayUrl(
+                    { name: 'Knowledge Kit', host: '127.0.0.1', prefix: '/kk' },
+                    { host: '127.0.0.1', port: 4000 },
+                    '/mcp',
+                ),
+            ).toBe('http://127.0.0.1:4000/kk/mcp');
+            expect(
+                resolveProjectGatewayUrl(
+                    { name: 'Knowledge Kit', host: 'localhost', prefix: '/kk' },
+                    { host: '::1', port: 3000 },
+                    '/api',
+                ),
+            ).toBe('http://[::1]:3000/kk/api');
+        });
+
+        it('returns null for a remote entry', () => {
+            expect(
+                resolveProjectGatewayUrl(
+                    { name: 'Remote', host: '192.168.87.27', prefix: '/kk' },
+                    { port: 3000 },
+                    '/board',
+                ),
+            ).toBeNull();
         });
     });
 

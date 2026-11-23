@@ -18,9 +18,13 @@ import {
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
 import {
+    buildConfigFromEnv,
     findRegistryFindings,
     findRegistrySuspects,
+    getEnvVars,
+    isLocalHost,
     normalizeExecutorAvailability,
+    resolveProjectGatewayUrl,
     resolveProjectPrefix,
 } from '@gobing-ai/spur-config';
 import {
@@ -437,6 +441,8 @@ export const healthModule: ServerModule = {
             const registry = new ProjectRegistry();
             const rawProjects = await registry.list();
             const currentNorm = normalizeProjectPath(ctx.cwd);
+            const forwardedPrefix = c.req.header('x-forwarded-prefix')?.trim();
+            const serverConfig = buildConfigFromEnv(getEnvVars()).server;
 
             const projects = await Promise.all(
                 rawProjects.map(async (p) => {
@@ -455,9 +461,18 @@ export const healthModule: ServerModule = {
                         host,
                         port: p.port,
                         running,
-                        current: normPath === currentNorm,
+                        current: isLocalHost(p.host) && normPath === currentNorm,
                         prefix,
-                        url: prefix === null ? `http://${host}:${p.port}/board` : `${prefix}/board`,
+                        url:
+                            prefix === null
+                                ? `http://${host}:${p.port}/board`
+                                : forwardedPrefix
+                                  ? `${prefix}/board`
+                                  : resolveProjectGatewayUrl(
+                                        p,
+                                        { host: serverConfig.host, port: serverConfig.gateway.port },
+                                        '/board',
+                                    ),
                     };
                 }),
             );
@@ -482,7 +497,7 @@ export const healthModule: ServerModule = {
             if (!ctx) {
                 return c.json({ error: 'Multi-project registry unavailable on Cloudflare Workers' }, 501);
             }
-            let body: { name?: string; path?: string } = {};
+            let body: { name?: string; path?: string; host?: string } = {};
             try {
                 body = await c.req.json();
             } catch {
@@ -499,14 +514,44 @@ export const healthModule: ServerModule = {
 
             try {
                 const registry = new ProjectRegistry();
-                const result = await startRegisteredProject(registry, target);
+                const entry = body.host
+                    ? (await registry.list()).find((p) => {
+                          const host = body.host?.trim().toLowerCase() ?? '';
+                          const hostMatches = isLocalHost(host)
+                              ? isLocalHost(p.host)
+                              : (p.host?.trim().toLowerCase() ?? 'localhost') === host;
+                          if (!hostMatches) return false;
+                          const nameMatches = p.name.toLowerCase() === target.toLowerCase();
+                          const pathMatches = isLocalHost(p.host)
+                              ? normalizeProjectPath(p.path) === normalizeProjectPath(target)
+                              : p.path === target;
+                          return nameMatches || pathMatches;
+                      })
+                    : ((await registry.getByName(target)) ?? (await registry.getByPath(target)));
+                if (body.host && entry === undefined) throw new Error(`Project not found in registry: "${target}"`);
+                const result = await startRegisteredProject(registry, target, {
+                    ...(entry === undefined ? {} : { entry }),
+                });
+                const serverConfig = buildConfigFromEnv(getEnvVars()).server;
+                const publicUrl =
+                    entry !== undefined && !isLocalHost(entry.host)
+                        ? result.url
+                        : (resolveProjectGatewayUrl(
+                              {
+                                  name: result.name,
+                                  host: entry?.host ?? 'localhost',
+                                  prefix: entry?.prefix,
+                              },
+                              { host: serverConfig.host, port: serverConfig.gateway.port },
+                              '/board',
+                          ) ?? result.url);
                 return c.json({
                     name: result.name,
                     path: result.path,
                     port: result.port,
                     running: true,
                     alreadyRunning: result.alreadyRunning,
-                    url: result.url,
+                    url: publicUrl,
                 });
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);

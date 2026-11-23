@@ -853,9 +853,9 @@ never signals the human-owned process; an unsettled turn stays `outcome-unknown`
 **Project-owned supervision (task 1088, feature G67).** A project's loops are reached through the
 serve that owns the project, and a loop never outlives that serve. *Discovery:* the
 `agent status|stop|start` and `agent list --specs` default server URL comes from the cwd's project
-registry entry — the port `spur self serve` records via `ProjectRegistry.setPort`, rendered
-`http://localhost:<port>/api` — and falls back to `http://localhost:3000/api` only when the project
-has no live entry; `--server` still overrides. A hard-coded 3000 default queried another project's
+registry entry — rendered `http://localhost:<gateway.port><prefix>/api` — while an unregistered
+project falls back to `http://localhost:<server.port>/api`. The gateway root `/api` is never a
+project fallback (1444); `--server` still overrides. A hard-coded 3000 default queried another project's
 serve (or nothing) and reported every spec `stopped` while its loops ran. *Lifetime:* a supervised
 `agent loop` is bound to its parent serve. Graceful shutdown reaps it (`supervisor().stopAll()`); a
 SIGKILLed or crashed serve sends its children no signal at all, so the loop re-reads

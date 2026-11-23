@@ -139,10 +139,11 @@ replies to stdout. Stateless requests and replies pass through unchanged.
 Headers always include `Mcp-Protocol-Version: 2026-07-28` and `Content-Type: application/json`;
 `Authorization: Bearer` is attached only when the `server.mcp.authEnv` variable is set — unset is a
 loud `CommandError`, never a silent unauthenticated call. URL resolution order: `--url` → the
-project's gateway prefix (`http://127.0.0.1:<gateway.port><prefix>/mcp`, when the registry entry is
-local and the gateway answers) → the registry entry's live port → `server.port`. `--gateway`
-targets the gateway root at `server.gateway.port` and reads the bearer from the variable named
-by `server.gateway.mcp.authEnv`. Both commands use the same env-derived configuration.
+cwd project's canonical gateway prefix (`http://localhost:<gateway.port><prefix>/mcp` for every
+registered local entry, independent of gateway liveness) → direct `server.port` only when no local
+prefix can be derived (unregistered project). `--gateway` targets the gateway root at
+`server.gateway.port` and reads the bearer from the variable named by `server.gateway.mcp.authEnv`.
+Both commands use the same env-derived configuration.
 
 For legacy stdio clients, the bridge verifies access with `server/discover` before accepting
 `initialize`, declares the tools capability, acknowledges pings and consumes

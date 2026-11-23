@@ -140,7 +140,7 @@ describe('spur projects list output (Q R5)', () => {
             const text = out.join('');
             expect(text).toContain('prefix: /treasury');
             expect(text).not.toContain(':0/board');
-            expect(text).toContain('url: none (stopped; start it with spur projects start Treasury)');
+            expect(text).toContain('url: http://localhost:3000/treasury/board');
         } finally {
             rmSync(local, { recursive: true, force: true });
         }

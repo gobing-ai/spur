@@ -330,6 +330,7 @@ describe('spur projects CLI command', () => {
         });
         expect(jsonExit).toBe(0);
         expect(mockJson.getText()).toContain('"running": true');
+        expect(mockJson.getText()).toContain('"url": "http://localhost:3000/runningproj/board"');
 
         // Start running project plain text
         const mockText = createMockOutput();
@@ -338,7 +339,7 @@ describe('spur projects CLI command', () => {
             output: mockText.output,
         });
         expect(textExit).toBe(0);
-        expect(mockText.getText()).toContain('already running at');
+        expect(mockText.getText()).toContain('already running at http://localhost:3000/runningproj/board');
     });
 
     it('should handle start for an un-registered target path (auto-register)', async () => {

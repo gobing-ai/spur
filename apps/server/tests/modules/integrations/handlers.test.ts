@@ -9,6 +9,8 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { ProjectRegistry } from '@gobing-ai/spur-app';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { createApp } from '../../../src/bootstrap';
@@ -139,6 +141,26 @@ describe('1423 — no token value in the payload (R2)', () => {
 });
 
 describe('1423 — the gateway block (R5)', () => {
+    test('a direct-root request uses the registered local canonical gateway base', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-integrations-direct-'));
+        const projectsFile = join(cwd, 'projects.json');
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
+        await new ProjectRegistry(projectsFile).upsert({ name: 'integrations-test', path: cwd, port: 3007 });
+        const { ctx, close } = await makeCtx({
+            cwd,
+            mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+            env: { SPUR_MCP_TOKEN: MCP_TOKEN, SPUR_GATEWAY_PORT: '3000' },
+        });
+        try {
+            const body = (await (await statusOf(ctx)).json()) as { mcp: { url: string } };
+            expect(body.mcp.url).toBe('http://localhost:3000/integrations-test/mcp');
+        } finally {
+            await close();
+            removeEnvVar('SPUR_PROJECTS_FILE');
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
     test('counters come from the gateway health read', async () => {
         const counters = {
             since: '2026-11-22T00:00:00.000Z',

@@ -78,9 +78,10 @@ Remote entries never get a prefix — `resolveProjectPrefix` returns `null` for 
 (no migration, no load error); `list` prints `Warning: prefix /x is claimed by "a" and "b"; set one
 with spur projects add <path> --prefix /<other>`, and the gateway answers that prefix with 409.
 
-`list` prints `url:` per project and adds `prefix` plus `url` under `--json`: the gateway URL
-(`http://127.0.0.1:<server.gateway.port>/<prefix>/board`) when a gateway actually answers
-`GET /api/health` on its fixed port (200 ms probe — listing never starts one), otherwise the per-port
+`list` prints `url:` per project and adds `prefix` plus `url` under `--json`: every local entry uses
+the canonical gateway URL (`http://localhost:<server.gateway.port>/<prefix>/board`) regardless of
+gateway liveness, with `gateway: { host, port, running }` reported separately. Listing never starts a
+gateway and never substitutes an internal per-port public URL. Remote entries keep
 `http://<host>:<port>/board`.
 
 ## Server lifecycle
@@ -94,7 +95,9 @@ spur projects stop my-project --json
 `start` resolves by name or path. An existing unregistered path is auto-registered. A live recorded
 port is returned idempotently; otherwise the service allocates a port (3000–3999 unless explicitly
 set), spawns `spur self serve --host 127.0.0.1 --no-open` detached in the project root, waits for the port,
-then persists it.
+then persists it. CLI output maps the selected local result to the canonical gateway Board URL
+(`http://localhost:<server.gateway.port><prefix>/board`) while `ProjectStartResult.url` remains the
+internal upstream value.
 
 `stop` signals only a listener that proves `service:spur` identity plus the exact registered project
 path with a stable rediscovered PID; it refuses foreign or unverified listeners with exit 1 and

@@ -34,7 +34,13 @@ function schedulerCustomActiveConflict(jobName: string): Error {
     });
 }
 
-import { getEnvVar, normalizeExecutorAvailability, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import {
+    getEnvVar,
+    normalizeExecutorAvailability,
+    removeEnvVar,
+    setEnvVar,
+    slugifyProjectName,
+} from '@gobing-ai/spur-config';
 import type { CreateServerContextOptions, ServerContext, ServerScheduler } from '../src/context';
 import { createServerContext } from '../src/context';
 import {
@@ -579,7 +585,7 @@ describe('startServer', () => {
             }),
         );
 
-        expect(openedUrl).toBe('http://localhost:4100/board');
+        expect(openedUrl).toBe(`http://localhost:3000/${slugifyProjectName(basename(HERMETIC_ROOT))}/board`);
     });
 
     test('opens /api/health when openBrowser is true but board assets are missing', async () => {
@@ -631,7 +637,7 @@ describe('startServer', () => {
             port: 4102,
             host: 'localhost',
             url: 'http://localhost:4102',
-            boardUrl: 'http://localhost:4102/board',
+            boardUrl: `http://localhost:3000/${slugifyProjectName(basename(HERMETIC_ROOT))}/board`,
         });
     });
 

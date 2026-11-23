@@ -31,7 +31,15 @@ import {
     StrategyRuntime,
     SUPERVISOR_RUN_MARKER,
 } from '@gobing-ai/spur-app';
-import { ExecutorDisabledError, type ProjectEntry, resolveExecutor } from '@gobing-ai/spur-config';
+import {
+    buildConfigFromEnv,
+    ExecutorDisabledError,
+    getEnvVars,
+    isLocalHost,
+    type ProjectEntry,
+    resolveExecutor,
+    resolveProjectGatewayUrl,
+} from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type MemberSessionObservation } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import type { CliContext } from '../../context';
@@ -59,32 +67,17 @@ export function resetAgentServerFetchForTesting(): void {
 }
 
 /**
- * Fallback server API URL for agent start/stop and live `list --specs` status (requires spur
- * serve) — used only when this project has no live registry entry (1088 R1).
+ * Legacy direct-server API fallback for agent start/stop and live `list --specs` status. Registered
+ * local projects never use this root; only an unregistered project may fall back to `server.port`.
  */
 export const DEFAULT_SERVER = 'http://localhost:3000/api';
 
 /**
- * This project's `spur self serve` API URL (1088 R1). `spur self serve` records its port in the project
- * registry (`ProjectRegistry.setPort`), so an entry with `port > 0` names the serve that owns
- * THIS project; the hard-coded 3000 default pointed `agent status|stop|start` at a different
- * project's serve (or nothing at all) and reported every spec `stopped` while loops ran.
- * The port is rendered on host `localhost`, never the IPv4 literal `127.0.0.1`: the server binds
- * `Bun.serve({ hostname: options.host })` with `--host` defaulting to `localhost`, which Bun
- * resolves to IPv6 `[::1]` only, so a `127.0.0.1` client has no listener (ECONNREFUSED). The
- * name form resolves the same address family the server bound.
- * An explicit `--server` always wins, which is why the commander options declare no default.
- *
- * Resolving the default is a READ, so it uses `ProjectRegistry.peek()` — the read-only snapshot.
- * `getByPath` routes through `list()`, which heals tilde paths, purges deleted project
- * directories (signalling a purged entry's listener) and clears `port > 0` whenever a liveness
- * probe misses: a transient miss on a loaded host therefore cleared a live serve's port and
- * silently redirected the CLI to the 3000 default — possibly another project's serve. Liveness is
- * still checked here, with `isPortLive`, so the documented "no live entry → 3000" contract and its
- * diagnostic survive without the registry mutation.
- *
- * The lookup walks the cwd's ancestors: run from a subdirectory of a served project, the registry
- * entry for the project root must still be found instead of falling through to the 3000 default.
+ * Resolve the supervisor API for this project: explicit `--server`, then the nearest ancestor's
+ * local registry entry rendered through `resolveProjectGatewayUrl`, then the unregistered
+ * `server.port` fallback. A stopped upstream or dead recorded port keeps the canonical prefix so
+ * the gateway can start it. Same-path remote entries are ignored, and registry reads stay `peek()`
+ * (never heal/purge). Liveness is only diagnostic; it never changes the public URL.
  */
 export async function resolveAgentServer(
     cwd: string,
@@ -95,6 +88,8 @@ export async function resolveAgentServer(
     // The diagnostic sink is injected (the CLI passes `context.output.error`) — never raw stdio:
     // the `no-raw-stdout-stderr` rule keeps every CLI message on the output contract.
     const warn = deps.warn ?? (() => {});
+    const config = buildConfigFromEnv(getEnvVars());
+    const unregisteredServer = `http://localhost:${config.server.port}/api`;
     try {
         const registry = deps.registry ?? new ProjectRegistry();
         const { projects, unreadable } = registry.peek();
@@ -102,28 +97,31 @@ export async function resolveAgentServer(
             // Previously indistinguishable from "this project has no entry": the parse failure was
             // collapsed into an empty roster and only the generic 3000 fallback showed.
             warn(
-                `warning: project registry unreadable — falling back to ${DEFAULT_SERVER}; run 'spur projects list' to repair it`,
+                `warning: project registry unreadable — falling back to ${unregisteredServer}; run 'spur projects list' to repair it`,
             );
-            return DEFAULT_SERVER;
+            return unregisteredServer;
         }
         const isLive = deps.isLive ?? isPortLive;
         for (const candidate of ancestorDirs(cwd)) {
             const normalized = normalizeProjectPath(candidate);
-            const entry = projects.find((p) => normalizeProjectPath(p.path) === normalized);
-            if (entry === undefined || entry.port <= 0) continue;
-            if (await isLive(entry.port)) return `http://localhost:${entry.port}/api`;
-            // The registered port has no listener. Keep the documented 3000 fallback, but name
-            // what was skipped: silence here reads as "no project registered" (1088 follow-up).
-            warn(
-                `warning: registered serve port ${entry.port} for ${entry.path} is not listening — falling back to ${DEFAULT_SERVER}`,
+            const entry = projects.find((p) => isLocalHost(p.host) && normalizeProjectPath(p.path) === normalized);
+            if (entry === undefined) continue;
+            const url = resolveProjectGatewayUrl(
+                entry,
+                { host: config.server.host, port: config.server.gateway.port },
+                '/api',
             );
-            return DEFAULT_SERVER;
+            if (url === null) continue;
+            if (entry.port > 0 && !(await isLive(entry.port))) {
+                warn(`warning: registered serve port ${entry.port} for ${entry.path} is not listening — using ${url}`);
+            }
+            return url;
         }
     } catch {
         // An unreadable/unlockable registry means "no live entry", not a failed command: fall
         // back to the default port so the existing unreachable-server warning still fires.
     }
-    return DEFAULT_SERVER;
+    return unregisteredServer;
 }
 
 /** `cwd`, then each of its parents up to the filesystem root — nearest first. */

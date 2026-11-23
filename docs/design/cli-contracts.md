@@ -3,7 +3,7 @@ kind: design
 title: "CLI grammar, initialization, agents, teams and rules"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-11-20
+updated_at: 2026-11-23
 related: ["0822", "0850", "0856", "0857", "0860", "0861", "1064", "1080", "1081", "1326"]
 tags: [contract, cli, agent]
 ---
@@ -645,12 +645,14 @@ supervisor through `--server <url>`, each row gaining a
 `running`/`stopped`/`errored`/`unknown` column and `pid=<n>` where a process exists; an unreachable
 server falls back to all `stopped` with a stderr warning.
 
-**Default server resolution (1088 R1).** With no `--server`, the URL is THIS project's serve: the
-port in the cwd's project-registry entry — the port `spur self serve` records via
-`ProjectRegistry.setPort` — rendered `http://localhost:<port>/api`. A project with no live entry
-(a port cleared by the registry's stale heal included) falls back to `http://localhost:3000/api`.
-An explicit `--server` always wins, so the flag declares no default. Same resolution for
-`spur agent status`, `spur agent start`, and `spur agent stop`.
+**Default server resolution (1088 R1, amended by 1444).** With no `--server`, resolution is explicit
+flag → nearest ancestor registry entry matching normalized path **and local host** → that entry's
+canonical `http://localhost:<gateway.port><prefix>/api`. A stopped upstream or dead recorded port
+keeps the canonical route so the gateway can start it; a same-path remote row is never selected.
+Only an unregistered project falls back to direct `http://localhost:<server.port>/api`, because no
+prefix exists. The gateway root `/api` is never used as a project fallback. An explicit `--server`
+always wins, so the flag declares no default. Same resolution for `spur agent status`,
+`spur agent start`, and `spur agent stop`.
 
 <a id="spur-agent-status---server-url---json"></a>
 
@@ -902,7 +904,10 @@ removed at the G64 cutover (2026-09-14): `assign` → `spur task update --assign
 `spur agent list --specs`, `up` → fleet roster derivation at serve start. There is no attach verb:
 attach is `GET /api/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
-- POST to `<server>/agents/<id>/(start|stop)`. The server defaults to this project's registry entry port (`http://localhost:<port>/api`, the port `spur self serve` records via `ProjectRegistry.setPort`) and falls back to `http://localhost:3000/api` when the project has no live entry (1088 R1); `--server` overrides. `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery. The spawned loop's lifetime is bound to its serve (1088 R2 — §17 of `docs/03_ARCHITECTURE.md`).
+- POST to `<server>/agents/<id>/(start|stop)`. The server defaults to the registered local project's
+canonical gateway API (`http://localhost:<gateway.port><prefix>/api`), falling back to direct
+`http://localhost:<server.port>/api` only for an unregistered project (1088 R1, amended by 1444);
+`--server` overrides. `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery. The spawned loop's lifetime is bound to its serve (1088 R2 — §17 of `docs/03_ARCHITECTURE.md`).
 
 <a id="spur-rule-run---preset-name---file-path---rule-id---fail-on-severity---stop-on-first-severity---fix-mode-mode---dry-run---verbose---json"></a>
 
@@ -913,9 +918,9 @@ ADR-152): reads NDJSON from stdin, proxies stateless calls and translates the le
 lifecycle. Always sends `Mcp-Protocol-Version: 2026-07-28` and
 `Content-Type: application/json`; attaches `Authorization: Bearer` only when the environment
 variable `server.mcp.authEnv` names is set — unset/empty is a loud `CommandError`, never a silent
-unauthenticated call. URL resolution: `--url` → the cwd project's gateway prefix
-(`http://127.0.0.1:<gateway.port><prefix>/mcp`, when the registry entry is local and the gateway
-answers) → the registry entry's live port → `server.port`. `--gateway` uses the fixed gateway port
+unauthenticated call. URL resolution: `--url` → the cwd project's canonical gateway prefix
+(`http://localhost:<gateway.port><prefix>/mcp` for every registered local entry, independent of
+gateway liveness) → direct `server.port` only when unregistered. `--gateway` uses the fixed gateway port
 and its own bearer setting. The [embedded MCP server](embedded-mcp-server.md) owns tool and
 resource execution.
 

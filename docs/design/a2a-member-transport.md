@@ -3,7 +3,7 @@ kind: design
 title: Named-agent dispatch with A2A as a hidden member transport
 status: accepted
 created_at: 2026-11-14
-updated_at: 2026-11-15
+updated_at: 2026-11-23
 related:
   - docs/features/G8_a2a-outbound-executor-edge-for-workflow-agent-run.md
   - docs/features/G9_cross-machine-fleet-spur-serve-speaks-a2a.md
@@ -182,7 +182,7 @@ The listener is one `apps/server` module (`apps/server/src/modules/a2a/`) — a 
 | Cancel | `POST /a2a/members/<member>/tasks/<id>:cancel` — records the cancel intent (`a2a-canceled-<messageId>`, so the state survives a restart), then writes a RUN-scoped request `.spur/run/<runId>/cancel-requested` and waits up to 10s for that run's coordination row to leave `running` (1422). The member's keyed drain polls the file once a second and aborts its own spawned child through ts-runtime's process-group kill; **the member loop is never stopped** (`supervisor().stop` is not called), so it claims its next queued request. `runStopped` reports whether the row actually cleared, and `a2a.task.cancelled` names the `runId` beside `member`/`taskId`/`runStopped`. A task whose newest run is not `running` — queued or terminal — is `400 FAILED_PRECONDITION` (`TASK_NOT_CANCELABLE`); a warm turn spawns nothing, so it answers `runStopped: false` rather than pretending |
 | Errors | A2A envelope `{error:{code,status,message,details:[{@type:"type.googleapis.com/google.rpc.ErrorInfo",domain:"a2a-protocol.org",reason,metadata}]}}`; missing/wrong token is `401` with `WWW-Authenticate: Bearer` and **writes nothing** |
 | member id | the member's inbox address `<projectSlug>-<memberLocalId>`; `FleetService.memberAddresses` resolves it from the declaration alone, so a member whose executor is globally disabled still has an address (its launch is a separate failure) |
-| Forwarded identity | the gateway's `proxy` sets `x-forwarded-host` (the authority the client dialed) and `x-forwarded-prefix` (the matched project prefix) on every upstream request, and strips any inbound copy first (1395 R3) |
+| Forwarded identity | the gateway's `proxy` sets `x-forwarded-host` (the authority the client dialed) and `x-forwarded-prefix` (the matched project prefix) on every upstream request, and strips any inbound copy first (1395 R3). For a direct-root request with no forwarded pair, the card uses the registered local project's canonical gateway base from `resolveProjectGatewayUrl`; only an unregistered/remote context falls back to the request origin (1444) |
 
 An accepted CancelTask returns HTTP 200 with the task. Its `metadata.runStopped` matches the
 cancellation event and is false if the run has not cleared by the end of the wait.

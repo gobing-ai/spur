@@ -42,15 +42,30 @@ function isRemoteHost(host?: string): boolean {
  * the browser reaches the host fine — and a remote entry can never be started from here.
  */
 export function directBoardUrl(
-    project: Pick<RegistryProject, 'host' | 'port' | 'running' | 'prefix'>,
+    project: Pick<RegistryProject, 'host' | 'port' | 'running' | 'prefix' | 'url'>,
     base = basePath(),
 ): string | null {
-    // Behind the gateway every local project shares this origin, so navigation is a path under the
-    // current base (`/<prefix>/board`) instead of another port on the loopback host (K4 R7).
-    if (project.prefix && base !== '/') return `${project.prefix}/board`;
+    if (project.prefix) {
+        // Behind the gateway a relative prefix preserves the current origin. A direct-root Board
+        // needs the server's absolute canonical gateway URL instead.
+        if (project.url !== undefined) return project.url;
+        return base !== '/' ? `${project.prefix}/board` : null;
+    }
     if (project.port <= 0) return null;
     if (!project.running && !isRemoteHost(project.host)) return null;
     return `http://${project.host?.trim() || 'localhost'}:${project.port}/board`;
+}
+
+/** Stable React/loading identity for local-or-remote rows that share a path or display name. */
+export function projectIdentity(project: Pick<RegistryProject, 'host' | 'path'>): string {
+    const host = isRemoteHost(project.host) ? project.host?.trim().toLowerCase() : 'localhost';
+    const path = project.path.trim().replace(/\/+$/, '');
+    return `${host}|${path}`;
+}
+
+/** Public route label; internal loopback ports are not presented as local destinations. */
+export function projectEndpointLabel(project: Pick<RegistryProject, 'prefix' | 'port'>): string {
+    return project.prefix ?? `:${project.port}`;
 }
 
 /**
@@ -322,13 +337,13 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
         }
 
         // Start stopped project
-        setLoadingProject(project.name);
+        setLoadingProject(projectIdentity(project));
         try {
             const res = await fetchWithTimeout(
                 new Request(`${resolveApiUrl()}/projects/start`, {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ name: project.name, path: project.path }),
+                    body: JSON.stringify({ name: project.name, path: project.path, host: project.host }),
                 }),
             );
             if (!res.ok) {
@@ -336,7 +351,7 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
             }
             const body = (await res.json()) as { url: string; port: number };
             const started = project.prefix && basePath() !== '/' ? `${project.prefix}/board` : null;
-            window.location.href = started || body.url || `http://${project.host ?? 'localhost'}:${body.port}/board`;
+            window.location.href = started || body.url;
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Start failed');
             setLoadingProject(null);
@@ -455,11 +470,11 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                     ) : (
                         projects.map((p) => (
                             <button
-                                key={p.path}
+                                key={projectIdentity(p)}
                                 type="button"
                                 role="option"
                                 aria-selected={p.current}
-                                disabled={loadingProject === p.name}
+                                disabled={loadingProject === projectIdentity(p)}
                                 onClick={() => handleSelect(p)}
                                 data-testid={`project-item-${p.name}`}
                                 className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-xs text-left transition-colors ${
@@ -473,16 +488,16 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                                         className={`h-2 w-2 rounded-full shrink-0 ${
                                             p.running ? 'bg-green-500' : 'bg-gray-400'
                                         }`}
-                                        title={p.running ? `Running on port ${p.port}` : 'Stopped'}
+                                        title={p.running ? `Running via ${projectEndpointLabel(p)}` : 'Stopped'}
                                     />
                                     <span className="truncate">{projectDisplayName(p)}</span>
                                 </div>
-                                {loadingProject === p.name ? (
+                                {loadingProject === projectIdentity(p) ? (
                                     <span className="text-[10px] text-spur-accent animate-pulse">Starting...</span>
                                 ) : p.current ? (
                                     <span className="text-[10px] font-semibold text-spur-accent">current</span>
                                 ) : p.running ? (
-                                    <span className="text-[10px] text-spur-text-muted">:{p.port}</span>
+                                    <span className="text-[10px] text-spur-text-muted">{projectEndpointLabel(p)}</span>
                                 ) : (
                                     <span className="text-[10px] text-spur-text-muted">stopped</span>
                                 )}

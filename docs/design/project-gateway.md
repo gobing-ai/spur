@@ -54,6 +54,14 @@ projectEntrySchema = z.object({
 - No migration: existing files load unchanged. `spur projects add` gains `--prefix` (local only;
   refused with a remote `--host`).
 
+**Canonical public URLs (1444).** `resolveProjectGatewayUrl` in `packages/config/src/projects.ts`
+builds a local entry's public URL from its prefix and `{ host: server.host, port: server.gateway.port }`.
+A local URL never falls back to the internal serve port, including when the gateway is down;
+availability is reported separately. CLI-originated defaults use `localhost` rather than the IPv4
+literal, because the default gateway bind is IPv6-only on macOS. Direct-root HTTP responses return
+an absolute canonical URL; gateway-forwarded responses stay prefix-relative and preserve the
+forwarded scheme/host. Remote entries and internal start/diagnostic URLs are unchanged.
+
 ## 4. Gateway
 
 ### 4.1 Surface (operator consent required per AGENTS.md)

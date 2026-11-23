@@ -55,18 +55,31 @@ describe('spur projects list --url (K4 R7)', () => {
             { name: 'kk', path: join(tempDir, 'kk'), host: 'localhost', port: 0, prefix: '/kk' },
             { name: 'remote', path: '/srv/remote', host: '192.168.87.27', port: 3003 },
         ]);
-        // A gateway answering on the configured port would change the local URL; no gateway runs in
-        // this test, so the per-port form is what the CLI must report.
+        // URL identity stays canonical even when the gateway is unavailable; availability is separate.
         expect(await list(['--json'])).toBe(0);
         const parsed = JSON.parse(out.join('')) as {
+            gateway: { running: boolean };
             projects: Array<{ name: string; prefix: string | null; url: string }>;
         };
         const local = parsed.projects.find((p) => p.name === 'kk');
         const remote = parsed.projects.find((p) => p.name === 'remote');
+        expect(parsed.gateway.running).toBe(false);
         expect(local?.prefix).toBe('/kk');
-        expect(local?.url).toBe('http://localhost:0/board');
+        expect(local?.url).toBe('http://localhost:3000/kk/board');
         expect(remote?.prefix).toBeNull();
         expect(remote?.url).toBe('http://192.168.87.27:3003/board');
+    });
+
+    it('uses localhost rather than the IPv4 literal when the gateway answers', async () => {
+        setGatewayProbeForTests(async () => true);
+        await seed([{ name: 'kk', path: join(tempDir, 'kk'), host: 'localhost', port: 0, prefix: '/kk' }]);
+        expect(await list(['--json'])).toBe(0);
+        const parsed = JSON.parse(out.join('')) as {
+            gateway: { running: boolean };
+            projects: Array<{ url: string }>;
+        };
+        expect(parsed.gateway.running).toBe(true);
+        expect(parsed.projects[0]?.url).toBe('http://localhost:3000/kk/board');
     });
 
     it('names the route instead of a port-0 url, and the collision remedy (Q R5/R6)', async () => {
@@ -76,9 +89,10 @@ describe('spur projects list --url (K4 R7)', () => {
         ]);
         expect(await list()).toBe(0);
         const text = out.join('');
-        // No gateway answers in this test, so a stopped entry has no URL at all.
+        // A stopped local entry still has a canonical route; availability is reported separately.
         expect(text).not.toContain(':0/board');
-        expect(text).toContain('url: none (stopped; start it with spur projects start kk)');
+        expect(text).toContain('url: http://localhost:3000/kk/board');
+        expect(text).toContain('Gateway: http://localhost:3000 [UNAVAILABLE]');
         expect(text).toContain('Prefix /kk is claimed by "kk" and "KK"');
         expect(text).toContain('--prefix /<other>');
     });

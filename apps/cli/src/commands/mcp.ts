@@ -2,7 +2,7 @@ import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import type { Command } from '@commander-js/extra-typings';
 import { isGatewayAnswering, normalizeProjectPath, ProjectRegistry } from '@gobing-ai/spur-app';
-import { buildConfigFromEnv, isLocalHost, resolveProjectPrefix } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl } from '@gobing-ai/spur-config';
 import { bootFree } from '../boot-free-route';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
@@ -141,19 +141,20 @@ export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise
 }
 
 /**
- * Resolve the project's `/mcp` URL (R1): explicit `--url` wins; else the gateway prefix URL when
- * this project is registered and the gateway answers on its fixed port (same precedence as the
- * `projects list` URL column, K4 R7); else the direct port — the registry's recorded live port,
- * falling back to `server.port` from the app-layer config.
+ * Resolve the project's `/mcp` URL: explicit `--url` wins; otherwise every registered local entry
+ * uses its canonical gateway prefix regardless of liveness. Only an unregistered project uses the
+ * direct `server.port` fallback. The gateway-hosted root `/mcp` resolver is separate.
  */
 export async function resolveMcpUrl(projectRoot: string, env: Record<string, string | undefined>): Promise<string> {
     const entry = findRegisteredEntry(projectRoot);
     const config = buildConfigFromEnv(env);
     if (entry !== undefined && isLocalHost(entry.host)) {
-        const prefix = resolveProjectPrefix(entry);
-        if (prefix !== null && (await isGatewayAnswering(config.server.gateway.port))) {
-            return `http://127.0.0.1:${config.server.gateway.port}${prefix}/mcp`;
-        }
+        const url = resolveProjectGatewayUrl(
+            entry,
+            { host: config.server.host, port: config.server.gateway.port },
+            '/mcp',
+        );
+        if (url !== null) return url;
     }
     const port = entry !== undefined && entry.port > 0 ? entry.port : config.server.port;
     const host =

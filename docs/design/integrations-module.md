@@ -2,7 +2,7 @@
 kind: design
 title: "Integrations Board Module and MCP/A2A Protocol Fixes (A82)"
 created_at: 2026-11-21
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 related: [A82, A8, B9, G9, G91, I61, J94, K42, A81]
 tags: [system, A82, web, mcp, a2a]
 doc: design/integrations-module
@@ -103,10 +103,11 @@ interface IntegrationsStatus {
 - `tokenPresent` comes from the server's existing `bearerEnv` + `requiredToken` pair (ADR-120 gateway
   underneath). The service receives only the boolean.
 - Every caller-visible URL the status builds (`mcp.url`, `a2a.url`, `cardUrl`, `gateway.rootMcpUrl`)
-  comes from the caller's own base, not the loopback address the gateway forwards to:
-  `x-forwarded-host` + `x-forwarded-prefix` when both are present — the scheme comes from
-  `x-forwarded-proto`'s first value, `https` only when it reads `https` (absent ⇒ `http`) —
-  otherwise the request's own origin. It is the rule `cardOrigin()` already applies to the A2A card.
+  uses this precedence: `x-forwarded-host` + `x-forwarded-prefix` when both are present (scheme from
+  `x-forwarded-proto`'s first value, `https` only when it reads `https`; absent ⇒ `http`) → the
+  registered local project's canonical `localGatewayBase` from `resolveProjectGatewayUrl` for a
+  direct-root legacy request → the request's own origin only for an unregistered/remote context.
+  It is the rule `cardOrigin()` already applies to the A2A card.
 - `a2a.inbound` lists only receive-capable, enabled members: a member declared by `a2a`/`project`
   is an outbound peer, and `enabled: false` is omitted because the listener already answers it
   `404`. The A2A tab renders `cardUrl` as a link only while `a2a.enabled`.

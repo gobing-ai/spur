@@ -219,12 +219,7 @@ request by `list` / `/api/projects`, which probe the entry's own host.
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur self serve` as the low-level launcher.
 
-**Gateway navigation (K4, ADR-151).** Through the gateway every local project shares one browser
-origin, so the switcher navigates a local entry to `/<prefix>/board` on the current origin when
-`basePath() !== '/'` and keeps the per-port URL at the root; a remote entry always goes to
-`http://<host>:<port>/board`. `GET /api/projects` supplies `prefix` (`null` for remote) and `url`, and
-`spur projects list` prints the same URL (`--json` adds both fields) plus a warning naming the remedy
-when two local entries resolve to one derived prefix.
+**Gateway navigation (K4, ADR-151, amended by 1444).** Through the gateway every local project shares one browser origin, so the switcher navigates a local entry to `/<prefix>/board` on the current origin when `basePath() !== '/'`. A direct-root Board is a legacy entry point, not a reason to select another internal port: `GET /api/projects` then returns an absolute `http://localhost:<server.gateway.port>/<prefix>/board` URL. Local stopped entries use the same canonical URL and start through the gateway; remote entries always go to `http://<host>:<port>/board`. React keys and loading state use path + effective-host identity, and `current` is local-host scoped, so same-path local/remote rows stay independent. `POST /api/projects/start` accepts additive optional `host` and passes the exact selected entry to `startRegisteredProject`; its local `url` is canonical, not the internal start result. `spur projects list` uses the same identity regardless of gateway liveness and reports `{host, port, running}` separately; it never substitutes a per-port public URL.
 
 **Future launchd:** `start`/`stop` become thin clients of a daemon; `ProjectRegistry` file contract
 unchanged.
@@ -240,8 +235,8 @@ GET /api/projects
 → { "projects": [{ "name", "path", "port", "running": boolean, "current": boolean }] }
 
 POST /api/projects/start
-body: { "name"?: string, "path"?: string }
-→ { "name", "path", "port", "running": true, "url": "http://localhost:<port>" }
+body: { "name"?: string, "path"?: string, "host"?: string }
+→ { "name", "path", "port", "running": true, "url": "http://localhost:<gateway.port>/<prefix>/board" }
 
 GET /api/project/fleet   (0840)
 → { "path": string|null, "enabled": boolean,
@@ -254,8 +249,8 @@ GET /api/project/fleet   (0840)
 ```
 
 - `running` is live-checked (TCP or `GET /api/health` with short timeout), not only `port > 0`.
-- `current` marks the board’s own project.
-- Start is idempotent if already running (return existing port/url).
+- `current` marks the board’s own local project; a same-path remote row is never current.
+- Start is idempotent if already running (return existing port plus the canonical public URL).
 - CF Worker: list may return empty / not configured; start returns 501 — registry is local-disk only.
 - `/api/project/fleet` (0840) reads the served project's own migrated db and `agent.fleet`
   through `FleetService` + `StrategyRuntime`; every fact degrades to a named state

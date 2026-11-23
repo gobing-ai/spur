@@ -18,6 +18,7 @@ import {
     findRegistryFindings,
     findRegistrySuspects,
     getEnvVars,
+    resolveProjectGatewayUrl,
     resolveProjectPrefix,
 } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
@@ -245,9 +246,10 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 const registry = new ProjectRegistry();
                 const rawProjects = await registry.list();
 
-                // K4 R7: the URL column reports the gateway URL when the gateway actually answers on
-                // its fixed port, and the per-port URL otherwise. Listing never starts a gateway.
-                const gatewayPort = buildConfigFromEnv(getEnvVars()).server.gateway.port;
+                // Local public URLs stay canonical regardless of gateway liveness; availability is
+                // reported separately. Listing never starts a gateway.
+                const server = buildConfigFromEnv(getEnvVars()).server;
+                const gatewayPort = server.gateway.port;
                 const gatewayLive = await isGatewayAnswering(gatewayPort);
 
                 const projects = await Promise.all(
@@ -259,9 +261,8 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                             running: p.port > 0 ? await isPortLive(p.port, undefined, p.host) : false,
                             prefix,
                             url:
-                                gatewayLive && prefix !== null
-                                    ? `http://127.0.0.1:${gatewayPort}${prefix}/board`
-                                    : `http://${host}:${p.port}/board`,
+                                resolveProjectGatewayUrl(p, { host: server.host, port: gatewayPort }, '/board') ??
+                                `http://${host}:${p.port}/board`,
                         };
                     }),
                 );
@@ -338,6 +339,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     context.output.write(
                         toEnvelopeJson(
                             {
+                                gateway: { host: server.host, port: gatewayPort, running: gatewayLive },
                                 projects: fleets
                                     ? projects.map((p, i) => {
                                           const f = fleets[i];
@@ -370,6 +372,9 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     for (const finding of findRegistryFindings(rawProjects)) {
                         context.output.write(`Warning: ${finding.message}`);
                     }
+                    context.output.write(
+                        `Gateway: http://${server.host}:${gatewayPort} ${gatewayLive ? '[RUNNING]' : '[UNAVAILABLE]'}`,
+                    );
                     context.output.write('Registered Projects:\n');
                     for (const [i, p] of projects.entries()) {
                         const hostLabel = !isLocalHost(p.host) ? ` (${p.host})` : '';
@@ -377,9 +382,9 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                         context.output.write(`- ${p.name}${hostLabel} ${status} (${p.path})`);
                         // The route an operator needs is the prefix; a remote entry has none.
                         context.output.write(`    prefix: ${p.prefix ?? 'none (remote)'}`);
-                        // A stopped project has no per-port URL, and a routed one is only reachable
-                        // while the gateway answers — never print `http://localhost:0/board`.
-                        if (p.running || (gatewayLive && p.prefix !== null)) {
+                        // Local routes stay canonical for stopped/gateway-down entries; only remote
+                        // entries retain the old running-only direct URL display.
+                        if (p.prefix !== null || p.running) {
                             context.output.write(`    url: ${p.url}`);
                         } else {
                             context.output.write(
@@ -473,9 +478,25 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .action(async (target, options) => {
             try {
                 const registry = new ProjectRegistry();
+                const selectedEntry = (await registry.getByName(target)) ?? (await registry.getByPath(target));
                 const result = await startRegisteredProject(registry, target, {
+                    ...(selectedEntry === undefined ? {} : { entry: selectedEntry }),
                     port: typeof options.port === 'number' && !Number.isNaN(options.port) ? options.port : undefined,
                 });
+
+                const server = buildConfigFromEnv(getEnvVars()).server;
+                const publicUrl =
+                    selectedEntry === undefined || isLocalHost(selectedEntry.host)
+                        ? (resolveProjectGatewayUrl(
+                              {
+                                  name: result.name,
+                                  host: selectedEntry?.host ?? 'localhost',
+                                  prefix: selectedEntry?.prefix,
+                              },
+                              { host: server.host, port: server.gateway.port },
+                              '/board',
+                          ) ?? result.url)
+                        : result.url;
 
                 if (options.json) {
                     context.output.write(
@@ -489,15 +510,15 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                                 },
                                 running: true,
                                 alreadyRunning: result.alreadyRunning,
-                                url: result.url,
+                                url: publicUrl,
                             },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );
                 } else if (result.alreadyRunning) {
-                    context.output.write(`Project "${result.name}" is already running at ${result.url}`);
+                    context.output.write(`Project "${result.name}" is already running at ${publicUrl}`);
                 } else {
-                    context.output.write(`Started project "${result.name}" on ${result.url}`);
+                    context.output.write(`Started project "${result.name}" on ${publicUrl}`);
                 }
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);

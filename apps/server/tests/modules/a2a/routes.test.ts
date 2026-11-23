@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { lanePath, registerSystemEventTap, resolveLaneRoot } from '@gobing-ai/spur-app';
+import { lanePath, ProjectRegistry, registerSystemEventTap, resolveLaneRoot } from '@gobing-ai/spur-app';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -708,6 +709,17 @@ describe('A2A card origin behind the gateway (1395 R4)', () => {
         ];
         for (const headers of partials) {
             expect(await cardWith(headers)).toBe(`http://localhost/a2a/members/${MEMBER}`);
+        }
+    });
+
+    test('uses the canonical local gateway origin for direct legacy requests', async () => {
+        const projectsFile = join(tempDir, 'projects.json');
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
+        await new ProjectRegistry(projectsFile).upsert({ name: 'proj', path: tempDir, port: 3007 });
+        try {
+            expect(await cardWith({})).toBe(`http://localhost:3000/proj/a2a/members/${MEMBER}`);
+        } finally {
+            removeEnvVar('SPUR_PROJECTS_FILE');
         }
     });
 

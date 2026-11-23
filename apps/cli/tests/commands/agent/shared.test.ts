@@ -1,8 +1,7 @@
 /**
  * Supervision of agent loops (task 1088, feature G67):
- * - R1 — `agent status|stop|start|list --specs` target THIS project's live serve: the port comes
- *   from the project registry entry for the cwd (`ProjectRegistry.setPort`), with an explicit
- *   `--server` winning and `http://localhost:3000/api` as the no-live-entry fallback.
+ * - R1 — `agent status|stop|start|list --specs` target THIS project's gateway-prefixed API when registered,
+ *   with an explicit `--server` winning and direct `server.port` only as the unregistered fallback.
  * - R2 — a supervised `agent loop` aborts its loop signal when its parent process changes, so a
  *   SIGKILLed serve cannot leave orphan loops.
  */
@@ -71,12 +70,10 @@ async function seedSpec(cwd: string, specId: string): Promise<void> {
 }
 
 describe('agent server resolution (1088 R1)', () => {
-    test('resolveAgentServer renders the localhost host for the cwd registry port', async () => {
+    test('resolveAgentServer uses the registered project gateway prefix', async () => {
         const { cwd, cleanup } = await makeProject(REGISTRY_PORT, 'in-use');
         try {
-            // host `localhost`, never the IPv4 literal `127.0.0.1`: `Bun.serve` with the `--host`
-            // default binds IPv6 `[::1]` only, so a `127.0.0.1` client would get ECONNREFUSED.
-            expect(await resolveAgentServer(cwd)).toBe(`http://localhost:${REGISTRY_PORT}/api`);
+            expect(await resolveAgentServer(cwd)).toBe('http://localhost:3000/demo/api');
         } finally {
             await cleanup();
         }
@@ -93,13 +90,22 @@ describe('agent server resolution (1088 R1)', () => {
         }
     });
 
-    test('resolveAgentServer falls back to port 3000 when the entry port is not live', async () => {
+    test('resolveAgentServer keeps the gateway prefix when the entry port is not live', async () => {
         const { cwd, cleanup } = await makeProject(REGISTRY_PORT, 'available');
         try {
-            expect(await resolveAgentServer(cwd)).toBe('http://localhost:3000/api');
+            expect(await resolveAgentServer(cwd)).toBe('http://localhost:3000/demo/api');
         } finally {
             await cleanup();
         }
+    });
+
+    test('resolveAgentServer ignores a same-path remote entry', async () => {
+        const projects = [
+            { name: 'demo', path: '/work/demo', host: '192.168.87.27', port: 3003 },
+            { name: 'demo', path: '/work/demo', host: 'localhost', port: 0, prefix: '/local' },
+        ];
+        const deps = { registry: { peek: () => ({ projects, unreadable: false }) }, isLive: async () => false };
+        expect(await resolveAgentServer('/work/demo', undefined, deps)).toBe('http://localhost:3000/local/api');
     });
 
     test('resolveAgentServer lets an explicit --server win over the registry', async () => {
@@ -117,7 +123,7 @@ describe('agent server resolution (1088 R1)', () => {
         // Run from a nested directory: the exact-cwd lookup missed it and silently fell through
         // to the 3000 default, which may be a different project's serve (1088 follow-up).
         expect(await resolveAgentServer('/work/demo/packages/app/src', undefined, deps)).toBe(
-            'http://localhost:4321/api',
+            'http://localhost:3000/demo/api',
         );
         // A path outside the registered tree still falls back.
         expect(await resolveAgentServer('/work/other', undefined, deps)).toBe('http://localhost:3000/api');
@@ -143,7 +149,7 @@ describe('agent server resolution (1088 R1)', () => {
             isLive: async () => false,
             warn: (m) => warnings.push(m),
         });
-        expect(resolved).toBe('http://localhost:3000/api');
+        expect(resolved).toBe('http://localhost:3000/demo/api');
         expect(warnings[0]).toContain('4321');
     });
 
@@ -154,7 +160,7 @@ describe('agent server resolution (1088 R1)', () => {
         const registryFile = join(cwd, 'projects.json');
         try {
             const before = await readFile(registryFile, 'utf8');
-            expect(await resolveAgentServer(cwd)).toBe('http://localhost:3000/api');
+            expect(await resolveAgentServer(cwd)).toBe('http://localhost:3000/demo/api');
             expect(await readFile(registryFile, 'utf8')).toBe(before);
         } finally {
             await cleanup();
@@ -173,7 +179,7 @@ describe('agent server resolution (1088 R1)', () => {
                 });
             }) as typeof fetch);
             expect(await main(['agent', 'status'], { cwd, output: out, dbUrl: ':memory:' })).toBe(0);
-            expect(urls).toEqual([`http://localhost:${REGISTRY_PORT}/api/processes`]);
+            expect(urls).toEqual(['http://localhost:3000/demo/api/processes']);
             expect(
                 out.messages
                     .at(-1)
@@ -218,7 +224,7 @@ describe('agent server resolution (1088 R1)', () => {
         }
     });
 
-    test('agent status with no live registry entry queries port 3000', async () => {
+    test('agent status with a dead registered port keeps the gateway API', async () => {
         const { cwd, out, cleanup } = await makeProject(REGISTRY_PORT, 'available');
         try {
             await seedSpec(cwd, 'planner');
@@ -228,7 +234,7 @@ describe('agent server resolution (1088 R1)', () => {
                 return jsonResponse(200, { processes: [] });
             }) as typeof fetch);
             expect(await main(['agent', 'status'], { cwd, output: out })).toBe(0);
-            expect(urls).toEqual(['http://localhost:3000/api/processes']);
+            expect(urls).toEqual(['http://localhost:3000/demo/api/processes']);
         } finally {
             await cleanup();
         }
@@ -243,9 +249,7 @@ describe('agent server resolution (1088 R1)', () => {
                 return jsonResponse(200, { ok: true });
             }) as typeof fetch);
             expect(await main(['agent', 'stop', 'planner'], { cwd, output: out })).toBe(0);
-            expect(calls).toEqual([
-                { url: `http://localhost:${REGISTRY_PORT}/api/agents/planner/stop`, method: 'POST' },
-            ]);
+            expect(calls).toEqual([{ url: 'http://localhost:3000/demo/api/agents/planner/stop', method: 'POST' }]);
             expect(out.messages.at(-1)).toBe('stopped planner');
         } finally {
             await cleanup();
@@ -263,7 +267,7 @@ describe('agent server resolution (1088 R1)', () => {
             expect(await main(['agent', 'stop', 'planner'], { cwd, output: out })).toBe(0);
             // hono `csrf()` 403s a POST with no Origin/Sec-Fetch-Site; the origin of the
             // resolved server is what a same-origin local caller sends.
-            expect(origins).toEqual([`http://localhost:${REGISTRY_PORT}`]);
+            expect(origins).toEqual(['http://localhost:3000']);
         } finally {
             await cleanup();
         }
@@ -278,7 +282,7 @@ describe('agent server resolution (1088 R1)', () => {
                 return jsonResponse(200, { ok: true, pid: 99, status: 'running' });
             }) as typeof fetch);
             expect(await main(['agent', 'start', 'planner'], { cwd, output: out })).toBe(0);
-            expect(urls).toEqual([`http://localhost:${REGISTRY_PORT}/api/agents/planner/start`]);
+            expect(urls).toEqual(['http://localhost:3000/demo/api/agents/planner/start']);
         } finally {
             await cleanup();
         }
@@ -296,7 +300,7 @@ describe('agent server resolution (1088 R1)', () => {
                 });
             }) as typeof fetch);
             expect(await main(['agent', 'list', '--specs'], { cwd, output: out })).toBe(0);
-            expect(urls).toEqual([`http://localhost:${REGISTRY_PORT}/api/processes`]);
+            expect(urls).toEqual(['http://localhost:3000/demo/api/processes']);
             expect(
                 out.messages
                     .at(-1)

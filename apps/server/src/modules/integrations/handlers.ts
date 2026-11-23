@@ -1,5 +1,11 @@
-import { FleetService, type IntegrationsGatewayProbe, IntegrationsService } from '@gobing-ai/spur-app';
-import { SPUR_ENV_VARS } from '@gobing-ai/spur-config';
+import {
+    FleetService,
+    type IntegrationsGatewayProbe,
+    IntegrationsService,
+    normalizeProjectPath,
+    ProjectRegistry,
+} from '@gobing-ai/spur-app';
+import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl, SPUR_ENV_VARS } from '@gobing-ai/spur-config';
 import { contract, type IntegrationsAuth, integrationsGatewayHealthSchema } from '@gobing-ai/spur-contracts';
 import { implement } from '@orpc/server';
 import type { ServerContext } from '../../context';
@@ -158,11 +164,23 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
     const requestContextOf = (context: unknown) => {
         const request = requestOf(context);
         if (request === undefined) return { origin: '' };
+        const server = buildConfigFromEnv(bearerEnv(ctx)).server;
+        const entry = new ProjectRegistry()
+            .peek()
+            .projects.find(
+                (candidate) =>
+                    isLocalHost(candidate.host) &&
+                    normalizeProjectPath(candidate.path) === normalizeProjectPath(ctx.cwd),
+            );
+        const localGatewayBase = entry
+            ? resolveProjectGatewayUrl(entry, { host: server.host, port: server.gateway.port }, '')
+            : undefined;
         return {
             origin: new URL(request.url).origin,
             forwardedProto: request.headers.get('x-forwarded-proto'),
             forwardedHost: request.headers.get('x-forwarded-host'),
             forwardedPrefix: request.headers.get('x-forwarded-prefix'),
+            ...(localGatewayBase ? { localGatewayBase } : {}),
         };
     };
 

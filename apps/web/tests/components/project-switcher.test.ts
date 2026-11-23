@@ -3,6 +3,8 @@ import {
     directBoardUrl,
     markRemoteLiveness,
     projectDisplayName,
+    projectEndpointLabel,
+    projectIdentity,
     type RegistryProject,
     registryFindingMessages,
 } from '@/components/ProjectSwitcher';
@@ -92,16 +94,53 @@ describe('directBoardUrl behind the gateway (K4 R7)', () => {
         expect(directBoardUrl({ host: 'localhost', port: 0, running: false, prefix: '/kk' }, '/kk/')).toBe('/kk/board');
     });
 
-    it('keeps the per-port URL at the origin root', () => {
-        expect(directBoardUrl({ host: 'localhost', port: 3001, running: true, prefix: '/kk' }, '/')).toBe(
-            'http://localhost:3001/board',
-        );
+    it('uses the absolute canonical gateway URL at the direct origin root', () => {
+        expect(
+            directBoardUrl(
+                {
+                    host: 'localhost',
+                    port: 3001,
+                    running: true,
+                    prefix: '/kk',
+                    url: 'http://localhost:3000/kk/board',
+                },
+                '/',
+            ),
+        ).toBe('http://localhost:3000/kk/board');
+        expect(
+            directBoardUrl(
+                {
+                    host: 'localhost',
+                    port: 0,
+                    running: false,
+                    prefix: '/kk',
+                    url: 'http://localhost:3000/kk/board',
+                },
+                '/',
+            ),
+        ).toBe('http://localhost:3000/kk/board');
     });
 
     it('sends a remote entry to its own host and port even behind the gateway', () => {
         expect(directBoardUrl({ host: '192.168.87.27', port: 3003, running: false, prefix: null }, '/kk/')).toBe(
             'http://192.168.87.27:3003/board',
         );
+    });
+});
+
+describe('project identity and endpoint labels (1444 R8)', () => {
+    it('distinguishes same-path entries by effective host', () => {
+        expect(projectIdentity({ path: '/tmp/kk', host: 'localhost' })).not.toBe(
+            projectIdentity({ path: '/tmp/kk', host: '192.168.87.27' }),
+        );
+        expect(projectIdentity({ path: '/tmp/kk', host: '127.0.0.1' })).toBe(
+            projectIdentity({ path: '/tmp/kk', host: 'localhost' }),
+        );
+    });
+
+    it('shows a local prefix rather than presenting its internal port as the destination', () => {
+        expect(projectEndpointLabel({ prefix: '/kk', port: 3002 })).toBe('/kk');
+        expect(projectEndpointLabel({ prefix: null, port: 3003 })).toBe(':3003');
     });
 });
 

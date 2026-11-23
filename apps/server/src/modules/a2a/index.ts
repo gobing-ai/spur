@@ -1,5 +1,13 @@
 import { join } from 'node:path';
-import { FleetService, type InboxMessage, type InboxService, RequestKeyConflictError } from '@gobing-ai/spur-app';
+import {
+    FleetService,
+    type InboxMessage,
+    type InboxService,
+    normalizeProjectPath,
+    ProjectRegistry,
+    RequestKeyConflictError,
+} from '@gobing-ai/spur-app';
+import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, type CoordinationRunRow } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
@@ -28,6 +36,20 @@ const A2A_SENDER = 'a2a';
 const CARD_SUFFIX = '.well-known/agent-card.json';
 const SEND_PATH = 'message:send';
 const CANCEL_SUFFIX = ':cancel';
+
+/** The fleet seam the inbox module uses: an injected `fleetService()` wins, else resolve locally. */
+/** The canonical gateway base for a direct-root card, or undefined when no local prefix exists. */
+function localCardOrigin(ctx: ServerContext): string | undefined {
+    const entry = new ProjectRegistry()
+        .peek()
+        .projects.find(
+            (candidate) =>
+                isLocalHost(candidate.host) && normalizeProjectPath(candidate.path) === normalizeProjectPath(ctx.cwd),
+        );
+    if (entry === undefined) return undefined;
+    const server = buildConfigFromEnv(bearerEnv(ctx)).server;
+    return resolveProjectGatewayUrl(entry, { host: server.host, port: server.gateway.port }, '') ?? undefined;
+}
 
 /** The fleet seam the inbox module uses: an injected `fleetService()` wins, else resolve locally. */
 interface FleetSeams {
@@ -263,7 +285,7 @@ export const a2aModule: ServerModule = {
                             host: c.req.header('x-forwarded-host'),
                             prefix: c.req.header('x-forwarded-prefix'),
                         },
-                        new URL(c.req.url).origin,
+                        localCardOrigin(ctx) ?? new URL(c.req.url).origin,
                     ),
                     ...(member.role === undefined ? {} : { role: member.role }),
                     ...(member.purpose === undefined ? {} : { purpose: member.purpose }),

@@ -157,14 +157,14 @@ describe('resolveMcpUrl (task 1373 R1: gateway or direct port)', () => {
 
         const url = await resolveMcpUrl(projectRoot, {});
 
-        expect(url).toBe(`http://127.0.0.1:${config.server.gateway.port}/b9/mcp`);
+        expect(url).toBe(`http://localhost:${config.server.gateway.port}/b9/mcp`);
     });
 
-    test('falls back to the registry-recorded live port when no gateway answers', async () => {
+    test('keeps the canonical gateway prefix when no gateway answers', async () => {
         seed([{ name: 'b9', path: projectRoot, host: 'localhost', port: 3101, prefix: '/b9' }]);
 
-        // The entry host is echoed verbatim, matching the `projects list` URL column (K4 R7).
-        expect(await resolveMcpUrl(projectRoot, {})).toBe('http://localhost:3101/mcp');
+        // Availability is separate from URL identity: no direct-port substitution.
+        expect(await resolveMcpUrl(projectRoot, {})).toBe(`http://localhost:${config.server.gateway.port}/b9/mcp`);
     });
 
     test('falls back to server.port for an unregistered project', async () => {

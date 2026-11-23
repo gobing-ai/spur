@@ -38,9 +38,12 @@ import {
     terminateJobChildren,
 } from '@gobing-ai/spur-app';
 import {
+    buildConfigFromEnv,
     getEnvVars,
     IN_MEMORY_DATABASE_URL,
     isBoardModuleConfigError,
+    isLocalHost,
+    resolveProjectGatewayUrl,
     validateBoardModuleDeclarations,
 } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
@@ -1340,7 +1343,23 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     shutdownReady = shutdown;
 
                     const url = `http://${options.host}:${options.port}`;
-                    const boardUrl = webDistPath ? `${url}/board` : null;
+                    const serverConfig = buildConfigFromEnv(env).server;
+                    const registeredEntry = projectRegistry
+                        .peek()
+                        .projects.find(
+                            (entry) =>
+                                isLocalHost(entry.host) &&
+                                normalizeProjectPath(entry.path) === normalizeProjectPath(projectCwd),
+                        );
+                    const boardUrl = webDistPath
+                        ? registeredEntry === undefined
+                            ? `${url}/board`
+                            : resolveProjectGatewayUrl(
+                                  registeredEntry,
+                                  { host: serverConfig.host, port: serverConfig.gateway.port },
+                                  '/board',
+                              )
+                        : null;
 
                     appRt.logger.info('Server started', {
                         port: options.port,
