@@ -196,7 +196,7 @@ describe('task-pipeline evidence chain — graph and pause invariants', () => {
         expect(DEF.terminalStates).toEqual(['done', 'failed']);
         expect(DEF.failureStates).toEqual(['failed']);
         expect(DEF.initialState).toBe('precheck');
-        expect(DEF.version).toBe('9');
+        expect(DEF.version).toBe('10');
     });
 
     test('no state pauses: the only pause in a run is the host executor transform (1232)', () => {
