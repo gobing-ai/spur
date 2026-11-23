@@ -11,7 +11,7 @@ import {
     TimeRangePresets,
 } from '../../components/module-kit';
 import { A2aTab } from './A2aTab';
-import { allSurfacesOff, enablementKeys, USAGE_WINDOWS, type UsageWindow } from './helpers';
+import { allSurfacesOff, enablementKeys, formatUptime, USAGE_WINDOWS, type UsageWindow } from './helpers';
 import { McpTab } from './McpTab';
 import { SummaryTab } from './SummaryTab';
 import { INTEGRATIONS_TABS } from './tabs';
@@ -46,13 +46,24 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
                 title="Integrations"
                 subtitle="MCP and A2A surfaces: what is on, how it is secured, and recent traffic"
                 status={
-                    <span
-                        role="status"
-                        data-testid="integrations-status-chip"
-                        className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${chip.tone}`}
-                    >
-                        {chip.label}
-                    </span>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span
+                            role="status"
+                            data-testid="integrations-status-chip"
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${chip.tone}`}
+                        >
+                            {chip.label}
+                        </span>
+                        {/* Stale-server skew must be visible evidence, not an opaque 400 (task 1437 R6). */}
+                        <span
+                            data-testid="integrations-server-runtime"
+                            className="font-mono text-[11px] text-base-content/50"
+                        >
+                            {data.server === null
+                                ? 'server identity unreadable'
+                                : `server v${data.server.version} \u00b7 up ${formatUptime(data.server.uptimeSeconds)}`}
+                        </span>
+                    </div>
                 }
                 filters={
                     <TimeRangePresets

@@ -1,10 +1,10 @@
 {
     "artifact": "integrations-e2e",
-    "generatedAt": "2026-11-22T07:33:11.348Z",
+    "generatedAt": "2026-11-23T00:56:32.542Z",
     "context": {
-        "port": 56553,
+        "port": 55343,
         "scratch": "(removed)",
-        "member": "spur-integrations-e2e-LmZOIh-coder"
+        "member": "spur-integrations-e2e-z0MVz6-coder"
     },
     "steps": [
         {
@@ -86,19 +86,9 @@
             "status": "passed",
             "expected": "http 200, both surfaces enabled, the auth env NAME present and no token value",
             "evidence": "http 200 mcp=true env=SPUR_MCP_TOKEN tokenPresent=true a2a=true gatewayServed=true"
-        },
-        {
-            "step": "harness",
-            "requirement": "—",
-            "command": "integrations-e2e",
-            "httpStatus": null,
-            "exitCode": 1,
-            "status": "failed",
-            "expected": "the harness completes every step",
-            "evidence": "/api/inbox/requests?limit=100 returned 400: {\"defined\":false,\"code\":\"BAD_REQUEST\",\"status\":400,\"message\":\"Input validation failed\",\"data\":{\"issues\":[{\"expected\":\"number\",\"code\":\"invalid_type\",\"path\":[\"limit\"],\"message\":\"Invalid input: expected number, received string\"}]}}"
         }
     ],
     "passed": 8,
-    "failed": 1,
-    "verdict": "FAIL"
+    "failed": 0,
+    "verdict": "PASS"
 }

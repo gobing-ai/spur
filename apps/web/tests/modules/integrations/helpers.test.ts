@@ -13,6 +13,7 @@ import {
     allSurfacesOff,
     clientSnippet,
     enablementKeys,
+    formatUptime,
     inboxLink,
     projectProtocolEvent,
     requestState,
@@ -182,5 +183,20 @@ describe('1424 — deep links', () => {
             meta.remove();
             resetBasePathForTesting();
         }
+    });
+});
+
+// Task 1437 R6: the header's uptime is the only visible evidence of a long-running (stale) server.
+describe('1437 — server uptime formatting', () => {
+    test('picks the largest two units that fit', () => {
+        expect(formatUptime(45)).toBe('45s');
+        expect(formatUptime(240)).toBe('4m');
+        expect(formatUptime(3 * 3_600 + 12 * 60)).toBe('3h 12m');
+        expect(formatUptime(452_045)).toBe('5d 5h');
+    });
+
+    test('a negative or fractional reading never renders garbage', () => {
+        expect(formatUptime(-1)).toBe('0s');
+        expect(formatUptime(59.9)).toBe('59s');
     });
 });

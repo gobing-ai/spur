@@ -161,6 +161,10 @@ function makeSeams(): IntegrationsSeams {
     /** Answer by path, so the module's own URL shapes are exercised end to end. */
     const fetchHistory = async (request: Request): Promise<Response> => {
         const url = new URL(request.url);
+        // The shell also reads the served build's identity (task 1437 R6).
+        if (url.pathname.endsWith('/health')) {
+            return Response.json({ status: 'ok', service: 'spur', version: '0.4.43', uptime_seconds: 452_045 });
+        }
         const prefix = url.searchParams.get('prefix');
         return Response.json({ events: prefix === 'a2a' ? A2A_EVENTS : MCP_EVENTS });
     };
@@ -207,6 +211,29 @@ describe('1424 — module identity and tabs (R1/R2)', () => {
         expect(view.getByRole('heading', { level: 1, name: 'Integrations' })).toBeTruthy();
         expect(view.getByTestId('integrations-status-chip').textContent).toBe('surfaces on');
         expect(view.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Summary', 'MCP', 'A2A']);
+    });
+
+    // Task 1437 R6: a stale server behind a fresh `dist/web` must be visible, not an opaque error.
+    test('the header names the served build version and uptime', async () => {
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getByTestId('integrations-server-runtime')).toBeTruthy());
+        await waitFor(() =>
+            expect(view.getByTestId('integrations-server-runtime').textContent).toBe('server v0.4.43 · up 5d 5h'),
+        );
+    });
+
+    test('an unreadable health route says so instead of hiding the gap', async () => {
+        const seams: IntegrationsSeams = {
+            ...makeSeams(),
+            fetchHistory: async (request: Request) =>
+                new URL(request.url).pathname.endsWith('/health')
+                    ? Response.json({ error: 'not found' }, { status: 404 })
+                    : Response.json({ events: [] }),
+        };
+        const view = render(<IntegrationsModule seams={seams} />);
+        await waitFor(() =>
+            expect(view.getByTestId('integrations-server-runtime').textContent).toBe('server identity unreadable'),
+        );
     });
 });
 

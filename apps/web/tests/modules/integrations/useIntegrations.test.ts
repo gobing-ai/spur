@@ -73,7 +73,12 @@ function makeSeams(
 ): IntegrationsSeams {
     return {
         fetchHistory: async (request: Request) => {
-            const query = new URL(request.url).searchParams;
+            const url = new URL(request.url);
+            // The health read carries no window and is not an activity list (task 1437 R6).
+            if (url.pathname.endsWith('/health')) {
+                return Response.json({ status: 'ok', service: 'spur', version: '0.4.43', uptime_seconds: 1 });
+            }
+            const query = url.searchParams;
             const prefix = query.get('prefix');
             options.historySince?.push(query.get('since') ?? '');
             // One row per family: `mcp` gets the tool call, `a2a` the intake, `auth` nothing.
@@ -257,5 +262,36 @@ describe('1424 — hook data assembly', () => {
         act(() => result.current.retry());
         await waitFor(() => expect(result.current.error).toBeNull());
         expect(result.current.status?.a2a.enabled).toBe(true);
+    });
+});
+
+// Task 1437 R6: the served build's identity must survive a failed status read, because a stale
+// server IS the failure being reported.
+describe('1437 — served build identity', () => {
+    test('health names the served version and uptime beside the status read', async () => {
+        const seams: IntegrationsSeams = {
+            ...makeSeams(),
+            fetchHistory: async (request: Request) =>
+                new URL(request.url).pathname.endsWith('/health')
+                    ? Response.json({ status: 'ok', service: 'spur', version: '0.4.43', uptime_seconds: 90 })
+                    : Response.json({ events: [] }),
+        };
+        const { result } = renderHook(() => useIntegrations(seams));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.server).toEqual({ version: '0.4.43', uptimeSeconds: 90 });
+    });
+
+    test('an unreadable health route leaves the identity null without failing the module', async () => {
+        const seams: IntegrationsSeams = {
+            ...makeSeams(),
+            fetchHistory: async (request: Request) =>
+                new URL(request.url).pathname.endsWith('/health')
+                    ? Response.json({ error: 'not found' }, { status: 404 })
+                    : Response.json({ events: [] }),
+        };
+        const { result } = renderHook(() => useIntegrations(seams));
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.error).toBeNull();
+        expect(result.current.server).toBeNull();
     });
 });

@@ -146,3 +146,26 @@ export function allSurfacesOff(status: IntegrationsStatus): boolean {
 export function enablementKeys(): string[] {
     return ['server.mcp.enabled + server.mcp.authEnv', 'server.a2a.enabled + server.a2a.authEnv'];
 }
+
+/**
+ * The served build's identity as `/api/health` reports it (task 1437 R6).
+ *
+ * The Board is served from `dist/web` while the process answering it may be an older release, so
+ * the version and uptime are the only visible evidence that a stale server is behind a symptom.
+ */
+export interface ServerRuntime {
+    version: string;
+    uptimeSeconds: number;
+}
+
+/** Compact uptime: `12d 3h`, `3h 12m`, `4m`, `45s`. */
+export function formatUptime(seconds: number): string {
+    const whole = Math.max(0, Math.floor(seconds));
+    const days = Math.floor(whole / 86_400);
+    const hours = Math.floor((whole % 86_400) / 3_600);
+    const minutes = Math.floor((whole % 3_600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${whole}s`;
+}

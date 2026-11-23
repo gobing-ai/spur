@@ -54,6 +54,12 @@ test.skipIf(availableBrowserBinary() === undefined)(
                             { sessionId: page },
                         );
                         expect(error).toBe(true);
+                        // Task 1437 R6: the live page must name the served build, so a stale server is visible.
+                        const runtime = await browser.evaluate<string>(
+                            'document.querySelector("[data-testid=integrations-server-runtime]").textContent',
+                            { sessionId: page },
+                        );
+                        expect(runtime).toMatch(/^server v\d+\.\d+\.\d+ · up /);
                         for (const theme of ['light', 'dark']) {
                             await browser.evaluate(`document.documentElement.setAttribute('data-theme', '${theme}')`, {
                                 sessionId: page,
@@ -66,7 +72,7 @@ test.skipIf(availableBrowserBinary() === undefined)(
                                 Buffer.from(capture.data, 'base64'),
                             );
                         }
-                        return 'four Summary surfaces; MCP token unset is an error and authenticated A2A is on';
+                        return 'four Summary surfaces; MCP token unset is an error and authenticated A2A is on; the served build version and uptime are named';
                     } finally {
                         await browser.close();
                     }

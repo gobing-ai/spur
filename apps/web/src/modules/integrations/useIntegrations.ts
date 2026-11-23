@@ -1,13 +1,14 @@
 import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiClient } from '../../lib/rpc-client';
-import { api, apiFetchWithTimeout } from '../../lib/rpc-client';
+import { api, apiFetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { eventsHistoryUrl } from '../observability/events-history';
 import {
     a2aRequests,
     type InboxRequestRow,
     type ProtocolEventRow,
     projectProtocolEvent,
+    type ServerRuntime,
     sinceForWindow,
     type UsageWindow,
 } from './helpers';
@@ -33,6 +34,8 @@ export interface IntegrationsData {
     requests: InboxRequestRow[];
     /** Outbound receipts, one small list per declared outbound member. */
     receipts: Array<{ member: string; rows: InboxRequestRow[] }>;
+    /** The served build's version + uptime; `null` when `/api/health` cannot be read. */
+    server: ServerRuntime | null;
     loading: boolean;
     error: Error | null;
     window: UsageWindow;
@@ -70,11 +73,29 @@ async function readEvents(
     });
 }
 
+/**
+ * Read the served build's identity (task 1437 R6).
+ *
+ * Deliberately tolerant: a stale or foreign server is exactly the case this must survive, so an
+ * unreadable health route yields `null` instead of failing the module's whole read.
+ */
+async function readServerRuntime(seams: IntegrationsSeams): Promise<ServerRuntime | null> {
+    try {
+        const res = await (seams.fetchHistory ?? apiFetchWithTimeout)(new Request(`${resolveApiUrl()}/health`));
+        if (!res.ok) return null;
+        const body = (await res.json()) as { version?: unknown; uptime_seconds?: unknown };
+        if (typeof body.version !== 'string' || typeof body.uptime_seconds !== 'number') return null;
+        return { version: body.version, uptimeSeconds: body.uptime_seconds };
+    } catch {
+        return null;
+    }
+}
+
 /** Load everything the module needs for one window. */
 async function load(
     window: UsageWindow,
     seams: IntegrationsSeams,
-): Promise<Omit<IntegrationsData, 'loading' | 'error' | 'window' | 'setWindow' | 'retry'>> {
+): Promise<Omit<IntegrationsData, 'server' | 'loading' | 'error' | 'window' | 'setWindow' | 'retry'>> {
     const since = sinceForWindow(window);
     const client = seams.api ?? api;
     const [status, usage, mcpEvents, a2aEvents, authEvents, requestRows] = await Promise.all([
@@ -142,6 +163,7 @@ export function useIntegrations(seams: IntegrationsSeams = {}): IntegrationsData
         a2aEvents: ProtocolEventRow[];
         requests: InboxRequestRow[];
         receipts: Array<{ member: string; rows: InboxRequestRow[] }>;
+        server: ServerRuntime | null;
         loading: boolean;
         error: Error | null;
     }>({
@@ -151,6 +173,7 @@ export function useIntegrations(seams: IntegrationsSeams = {}): IntegrationsData
         a2aEvents: [],
         requests: [],
         receipts: [],
+        server: null,
         loading: true,
         error: null,
     });
@@ -165,9 +188,15 @@ export function useIntegrations(seams: IntegrationsSeams = {}): IntegrationsData
         // A retry bumps `attempt`; this read belongs to that attempt and a superseded one is dropped.
         const forAttempt = attempt;
         setState((previous) => ({ ...previous, loading: true, error: null }));
+        // Identity is read on its own so a failed status read still names the server behind it.
+        void readServerRuntime(seamsRef.current).then((server) => {
+            if (!cancelled && attempt === forAttempt) setState((previous) => ({ ...previous, server }));
+        });
         void load(window, seamsRef.current).then(
             (data) => {
-                if (!cancelled && attempt === forAttempt) setState({ ...data, loading: false, error: null });
+                if (!cancelled && attempt === forAttempt)
+                    // `server` is owned by the identity read above, so the window read must not clear it.
+                    setState((previous) => ({ ...previous, ...data, loading: false, error: null }));
             },
             (error: unknown) => {
                 if (!cancelled && attempt === forAttempt) {
