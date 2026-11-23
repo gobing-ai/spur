@@ -161,6 +161,35 @@ describe('1423 status — surfaces and credentials', () => {
         expect(status.a2a.inbound[0]?.writeFenced).toBe(false);
     });
 
+    test('disabled inbound members are omitted from the published A2A inbound list', async () => {
+        const mixedFleet = {
+            load: async () => ({
+                enabled: true,
+                members: [
+                    { role: 'coder' as const, executor: 'claude', enabled: true },
+                    { id: 'disabled-dev', role: 'coder' as const, executor: 'claude', enabled: false },
+                ],
+            }),
+            memberAddresses: async () => [
+                { instanceId: 'proj-coder', executor: 'claude', enabled: true, role: 'coder' },
+                { instanceId: 'proj-disabled-dev', executor: 'claude', enabled: false, role: 'coder' },
+            ],
+            resolve: async () => ({
+                projectPath: '/proj',
+                enabled: true,
+                missing: [],
+                members: [{ instanceId: 'proj-coder', executor: 'claude', enabled: true, writeCapable: true }],
+            }),
+        };
+        const status = await new IntegrationsService({
+            sources: sources(),
+            fleet: mixedFleet as never,
+            getDb: async () => createMigratedDb({ url: ':memory:' }),
+            projectPath: '/proj',
+        }).status({ origin: 'http://localhost:3007' });
+        expect(status.a2a.inbound.map((entry) => entry.member)).toEqual(['proj-coder']);
+    });
+
     test('no serialized field contains the token value', async () => {
         const status = await service({
             sources: sources({ mcp: { authEnv: 'SPUR_MCP_TOKEN', tokenPresent: true } }),
@@ -195,6 +224,23 @@ describe('1423 status — gateway block', () => {
         expect(status.a2a.inbound[0]?.cardUrl).toBe(
             'http://localhost:3000/tslibs/a2a/members/proj-coder/.well-known/agent-card.json',
         );
+    });
+
+    test('forwardedProto https preserves the public https scheme behind TLS proxies', async () => {
+        const status = await service({ sources: sources({ gateway: { counters } }) }).status({
+            origin: 'http://127.0.0.1:3007',
+            forwardedProto: 'https, http',
+            forwardedHost: 'spur.example.com',
+            forwardedPrefix: '/tslibs',
+        });
+        expect(status.mcp.url).toBe('https://spur.example.com/tslibs/mcp');
+        expect(status.a2a.url).toBe('https://spur.example.com/tslibs/a2a');
+        expect(status.a2a.inbound[0]?.cardUrl).toBe(
+            'https://spur.example.com/tslibs/a2a/members/proj-coder/.well-known/agent-card.json',
+        );
+        if (status.gateway.served) {
+            expect(status.gateway.rootMcpUrl).toBe('https://spur.example.com/mcp');
+        }
     });
 
     test('a failed probe degrades to null counters plus a diagnostic, never a failed read', async () => {

@@ -68,6 +68,8 @@ export interface IntegrationsSources {
 export interface IntegrationsRequestContext {
     /** Scheme + authority the caller used when no gateway headers are present (`https://host[:port]`). */
     origin: string;
+    /** Forwarded scheme (`x-forwarded-proto`), so URLs behind TLS-terminating proxies keep `https://`. */
+    forwardedProto?: string | null;
     /** The gateway's forwarded authority; with the prefix it builds the caller-visible base. */
     forwardedHost?: string | null;
     /** The gateway's mount prefix. A non-empty value is what marks a gateway request. */
@@ -88,6 +90,12 @@ function mountPrefix(prefix: string | null | undefined): string {
     return (prefix ?? '').replace(/\/+$/, '');
 }
 
+/** Extract the first valid forwarded scheme (`http` or `https`), falling back to `http`. */
+function forwardedScheme(proto: string | null | undefined): 'http' | 'https' {
+    const first = proto?.split(',')[0]?.trim().toLowerCase();
+    return first === 'https' ? 'https' : 'http';
+}
+
 /**
  * The base URL the caller used, prefix included. The gateway rewrites `host` to the upstream
  * loopback authority, so the forwarded pair is the caller's real base when both parts are present
@@ -97,7 +105,7 @@ function callerBase(request: IntegrationsRequestContext): string {
     const host = request.forwardedHost?.trim() ?? '';
     const prefix = mountPrefix(request.forwardedPrefix);
     if (host === '' || prefix === '') return request.origin.replace(/\/+$/, '');
-    return `http://${host}${prefix}`;
+    return `${forwardedScheme(request.forwardedProto)}://${host}${prefix}`;
 }
 
 /** The gateway root: the caller's base with its mount prefix stripped. */
@@ -207,8 +215,10 @@ export class IntegrationsService {
         const members = declaration?.members ?? [];
         const inbound = addresses.flatMap((address, index): IntegrationsInboundMember[] => {
             const declared = members[index];
-            // A member addressed by `a2a`/`project` is an outbound peer, not a receiver.
+            // A member addressed by `a2a`/`project` is an outbound peer, not a receiver; disabled
+            // members are refused with 404 by the A2A listener, so omit them here too.
             if (declared === undefined) return [];
+            if (declared.enabled === false || !address.enabled) return [];
             if (declared.a2a !== undefined || declared.project !== undefined) return [];
             return [
                 {

@@ -61,7 +61,7 @@ export function setGatewayProbeFetchForTesting(
     probeFetch = fn;
 }
 
-/** The gateway's fixed public port: `server.gateway.port`, whose default is 3000. */
+/** The gateway's fixed public port: `SPUR_GATEWAY_PORT`, defaulting to 3000. */
 function gatewayPort(env: Record<string, string | undefined>): number {
     const configured = Number(env[SPUR_ENV_VARS.gatewayPort] ?? '');
     return Number.isFinite(configured) && configured > 0 ? configured : 3000;
@@ -128,12 +128,13 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
         return request instanceof Request ? request : undefined;
     };
 
-    /** The caller's origin plus the gateway's forwarded pair, which is all the service reads. */
+    /** The caller's origin plus the gateway's forwarded headers, which is all the service reads. */
     const requestContextOf = (context: unknown) => {
         const request = requestOf(context);
         if (request === undefined) return { origin: '' };
         return {
             origin: new URL(request.url).origin,
+            forwardedProto: request.headers.get('x-forwarded-proto'),
             forwardedHost: request.headers.get('x-forwarded-host'),
             forwardedPrefix: request.headers.get('x-forwarded-prefix'),
         };

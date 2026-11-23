@@ -20,6 +20,7 @@ async function makeCtx(
     boot: {
         mcp?: { enabled: boolean; authEnv: string | null };
         a2a?: { enabled: boolean; authEnv: string | null };
+        env?: Record<string, string | undefined>;
     } = {},
 ): Promise<{ ctx: ServerContext; close: () => Promise<void> }> {
     const db = await createMigratedDb({ url: ':memory:' });
@@ -27,7 +28,7 @@ async function makeCtx(
         cwd: '/tmp/integrations-test',
         fs: createNodeFileSystem('/tmp/integrations-test'),
         // Port 1 stands in for "no gateway is reachable" (and never collides with a real one).
-        env: { SPUR_MCP_TOKEN: MCP_TOKEN, SPUR_A2A_TOKEN: 'a2a-token-value-0000', SPUR_GATEWAY_PORT: '1' },
+        env: boot.env ?? { SPUR_MCP_TOKEN: MCP_TOKEN, SPUR_A2A_TOKEN: 'a2a-token-value-0000', SPUR_GATEWAY_PORT: '1' },
         logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
         getDb: async () => db,
         systemEventDao: async () => new SystemEventDao(db),
@@ -150,6 +151,43 @@ describe('1423 — the gateway block (R5)', () => {
             ).json()) as { gateway: { counters: unknown; diagnostic?: string } };
             expect(body.gateway.counters).toEqual(counters);
             expect(body.gateway.diagnostic).toBeUndefined();
+        } finally {
+            setGatewayProbeFetchForTesting(undefined);
+            await close();
+        }
+    });
+
+    test('gateway probe uses SPUR_GATEWAY_PORT and honors x-forwarded-proto', async () => {
+        const { ctx, close } = await makeCtx({
+            mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+            env: { SPUR_MCP_TOKEN: MCP_TOKEN, SPUR_GATEWAY_PORT: '4123' },
+        });
+        const probedUrls: string[] = [];
+        setGatewayProbeFetchForTesting(async (input) => {
+            probedUrls.push(input);
+            return Response.json({
+                ok: true,
+                gateway: true,
+                counters: {
+                    since: '2026-11-22T00:00:00.000Z',
+                    requests: 1,
+                    status4xx: 0,
+                    status5xx: 0,
+                    upstreamRestarts: {},
+                },
+            });
+        });
+        try {
+            const res = await statusOf(ctx, {
+                'x-forwarded-proto': 'https',
+                'x-forwarded-host': 'spur.example.com',
+                'x-forwarded-prefix': '/tslibs',
+            });
+            expect(res.status).toBe(200);
+            expect(probedUrls[0]).toStartWith('http://localhost:4123/api/health');
+            const body = (await res.json()) as { mcp: { url: string }; gateway: { rootMcpUrl?: string } };
+            expect(body.mcp.url).toBe('https://spur.example.com/tslibs/mcp');
+            expect(body.gateway.rootMcpUrl).toBe('https://spur.example.com/mcp');
         } finally {
             setGatewayProbeFetchForTesting(undefined);
             await close();

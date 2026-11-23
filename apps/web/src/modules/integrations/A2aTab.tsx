@@ -44,9 +44,23 @@ export function A2aTab({
                                             {member.writeFenced ? 'write-fenced' : 'read-only'}
                                         </Badge>
                                     </div>
-                                    <a className="mt-1 block break-all font-mono text-xs link" href={member.cardUrl}>
-                                        {member.cardUrl}
-                                    </a>
+                                    {status.a2a.enabled ? (
+                                        <a
+                                            className="mt-1 block break-all font-mono text-xs link"
+                                            href={member.cardUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            {member.cardUrl}
+                                        </a>
+                                    ) : (
+                                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                                            <code className="block break-all font-mono text-xs text-base-content/60">
+                                                {member.cardUrl}
+                                            </code>
+                                            <span className="text-xs text-base-content/50">(A2A listener off)</span>
+                                        </div>
+                                    )}
                                 </li>
                             ))}
                         </ul>

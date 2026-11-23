@@ -318,6 +318,21 @@ describe('1424 — A2A tab (R5)', () => {
         );
         expect(view.getByTestId('integrations-a2a-outbound').textContent).toContain('proj-peer');
     });
+
+    test('disabled A2A listener renders member card URL as non-clickable text', async () => {
+        overrides.status = () => ({
+            ...STATUS,
+            a2a: { ...STATUS.a2a, enabled: false },
+        });
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getAllByRole('tab').length).toBe(3));
+        fireEvent.click(view.getByRole('tab', { name: 'A2A' }));
+        await waitFor(() => expect(view.getByTestId('integrations-a2a-members')).toBeTruthy());
+        const member = view.getByTestId('integrations-a2a-member-proj-coder');
+        expect(member.querySelector('a')).toBeNull();
+        expect(member.textContent).toContain('agent-card.json');
+        expect(member.textContent).toContain('A2A listener off');
+    });
 });
 
 describe('1424 — states (R7)', () => {
