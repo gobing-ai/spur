@@ -8,6 +8,18 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.45] - 2026-11-23
+
+### Fixed
+- every local project's public URL is now its gateway route — `spur projects list`/`start`, agent supervisor APIs, the MCP bridge, the Board switcher, Integrations and A2A resolve `http://<gateway-host>:<gateway.port>/<prefix>` independent of gateway liveness, same-path local and remote entries stay distinct, and direct-root requests return absolute canonical URLs while forwarded origins are preserved (3e641f1ad)
+  <!-- src: packages/config/src/projects.ts:76, apps/web/src/components/ProjectSwitcher.tsx:60, apps/server/src/modules/health/index.ts:471, apps/cli/src/commands/mcp.ts:152 · confidence: HIGH -->
+- local server startup ignores a same-path remote registry entry when refusing a duplicate server, so a remote routing hint answering on loopback no longer blocks the gateway-spawned serve (8217b2593)
+  <!-- src: packages/app/src/services/project-start.ts:357 · confidence: HIGH -->
+
+### Other
+- add the gateway URL migration and follow-up task records (5bb841fa4)
+- record the canonical URL contract in ADR-151, the architecture notes and the gateway design satellite (8ba1ee762)
+
 ## [0.4.44] - 2026-11-22
 
 ### Added
