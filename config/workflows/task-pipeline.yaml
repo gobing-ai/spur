@@ -62,7 +62,10 @@ name: task-pipeline
 # review's operator decision point; `record` becomes `done`'s deterministic close; and the whole
 # proof chain (proofDigest, `proof.fingerprint`, receipt preconditions, `run.artifact` verdict
 # registration) is removed with the ADR-071 machinery (ADR-140 item 7). A contract change.
-version: "9"
+# v10 (0426 session finding, 2026-11-23): the `escalate` state's `file.read.into-var` passed
+# `file:` where the action contract requires `path:`, so every implement escalation failed the run
+# with `file.read.into-var: path is required` instead of pausing on the operator question (0933).
+version: "10"
 description: "Standard task pipeline: precheck → implement → gate (typed quality gate, tree-hash receipt) → review (verdict + R/AC traceability + operator decision) → done | failed"
 # Task entity lifecycle (owned by task-lifecycle.yaml):
 #   normal: backlog → todo → wip → testing → done
@@ -384,7 +387,7 @@ states:
           # The agent's question, verbatim, becomes the prompt.
           - kind: file.read.into-var
             options:
-                file: .spur/run/${vars.wbs}-question.md
+                path: .spur/run/${vars.wbs}-question.md
                 var: escalationQuestion
           # Ask the operator (no pause declaration: the responder answers, and the answer is
           # written to __hitlInput for the escalate guards).

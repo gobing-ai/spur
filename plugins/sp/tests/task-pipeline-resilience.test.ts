@@ -7,7 +7,16 @@ import { parse } from 'yaml';
 
 interface PipelineAction {
     kind: string;
-    options?: { command?: string; file?: string; var?: string; escalationFile?: string; prompt?: string };
+    // `path` is the file-read key the action contract reads; `file` is kept only so the escalate
+    // regression assertion can prove the wrong key is gone.
+    options?: {
+        command?: string;
+        path?: string;
+        file?: string;
+        var?: string;
+        escalationFile?: string;
+        prompt?: string;
+    };
 }
 
 interface PipelineState {
@@ -463,7 +472,10 @@ describe('0933 operator-question escalation', () => {
         const counter = commandFor('escalate', 0);
         expect(counter).toContain('.spur/run/$wbs-escalation-count');
         const read = escalate?.onEnter?.find((a) => a.kind === 'file.read.into-var');
-        expect(read?.options?.file).toBe(`.spur/run/${tpl('wbs')}-question.md`);
+        // 0426 session finding: the action contract reads `options.path`; this state used to pass
+        // `file:`, so every escalation failed with "path is required" instead of pausing.
+        expect(read?.options?.path).toBe(`.spur/run/${tpl('wbs')}-question.md`);
+        expect(read?.options?.file).toBeUndefined();
         expect(read?.options?.var).toBe('escalationQuestion');
         const pause = escalate?.onEnter?.find((a) => a.kind === 'hitl.input');
         expect(pause?.options?.prompt).toBe(tpl('escalationQuestion'));
