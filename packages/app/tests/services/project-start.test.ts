@@ -687,6 +687,30 @@ it('refuses a live registered server without mutating the registry', async () =>
     });
 });
 
+it('ignores same-path remote entries when checking local server availability', async () => {
+    const remoteFirst = (localPort: number) => ({
+        readRaw: () => ({
+            schema_version: 1 as const,
+            projects: [
+                { name: 'project', path: '/tmp/spur-owner-test', host: '192.168.87.27', port: 3003 },
+                { name: 'project', path: '/tmp/spur-owner-test', host: 'localhost', port: localPort },
+            ],
+        }),
+    });
+    const probed: number[] = [];
+    const isLive = async (port: number) => {
+        probed.push(port);
+        return true;
+    };
+
+    await assertProjectServerAvailable('/tmp/spur-owner-test', { registry: remoteFirst(0), isLive });
+    expect(probed).toEqual([]);
+
+    await expect(
+        assertProjectServerAvailable('/tmp/spur-owner-test', { registry: remoteFirst(3004), isLive }),
+    ).rejects.toThrow('http://127.0.0.1:3004');
+});
+
 describe('listen-port probe parsers (lsof-less Linux fallback)', () => {
     it('parseLsofListenPort reads the first LISTEN port, null otherwise', () => {
         const out =

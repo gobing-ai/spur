@@ -352,7 +352,9 @@ export async function assertProjectServerAvailable(
 ): Promise<void> {
     const registry = options.registry ?? new ProjectRegistry();
     const path = normalizeProjectPath(projectRoot);
-    const existing = registry.readRaw().projects.find((entry) => normalizeProjectPath(entry.path) === path);
+    const existing = registry
+        .readRaw()
+        .projects.find((entry) => isLocalHost(entry.host) && normalizeProjectPath(entry.path) === path);
     if (existing && existing.port > 0 && (await (options.isLive ?? isPortLive)(existing.port))) {
         throw new Error(
             `Project already has a live server at http://127.0.0.1:${existing.port}. Close that server before starting another one.`,
