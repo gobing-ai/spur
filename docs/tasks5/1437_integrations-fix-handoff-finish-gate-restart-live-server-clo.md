@@ -4,7 +4,7 @@ name: "Integrations fix handoff: finish gate, restart live server, close A82 gap
 status: todo
 template: issue
 created_at: 2026-11-22T23:53:57.100Z
-updated_at: "2026-11-23T00:04:27.104Z"
+updated_at: "2026-11-23T01:14:41.472Z"
 feature_id: A82
 
 ---
@@ -102,6 +102,20 @@ Uncommitted changes currently in the working tree:
 - `apps/web/src/modules/integrations/A2aTab.tsx:47-63` — gated clickable `<a>` on `status.a2a.enabled`.
 - `apps/web/src/modules/observability/SystemEventsTab.tsx:19,557-579,785-792,824-832` — extracted `applyNavIntentToFilter()` to seed `searchQuery: intent.eventName, searchScope: 'name'` on initial mount and `navIntent` changes.
 - Added unit/component regression tests in `apps/server/tests/modules/inbox/handlers.test.ts`, `apps/server/tests/modules/integrations/handlers.test.ts`, `packages/app/tests/services/integrations-service.test.ts`, `apps/web/tests/modules/integrations/helpers.test.ts`, `apps/web/tests/modules/integrations/useIntegrations.test.ts`, `apps/web/tests/modules/integrations/integrations-module.test.tsx`, and `apps/web/tests/modules/observability/url-seed.test.ts`.
+
+**This run (1437 R6 — surface server runtime identity):**
+
+| File | What / why |
+| ---- | ---------- |
+| `apps/web/src/modules/integrations/helpers.ts:149-171` | `ServerRuntime` (`/api/health`'s `version` + `uptime_seconds`) and `formatUptime()` — the header's identity text, as one pure projection beside the other Integrations helpers. |
+| `apps/web/src/modules/integrations/useIntegrations.ts:76-93,166-200` | `readServerRuntime()` reads `/api/health` through the same fetch seam, tolerantly: a stale or foreign server is exactly the case that must not fail the module's read. The identity is read on its own effect pass and merged with `previous`, so a failed status read still names the server behind it. |
+| `apps/web/src/modules/integrations/IntegrationsModule.tsx:49-66` | The header's status slot now renders the chip plus `server v<version> · up <uptime>`, or `server identity unreadable` when `/api/health` cannot be read — a stale `dist/web`-vs-server skew is visible evidence instead of an opaque 400. |
+| `apps/web/tests/modules/integrations/helpers.test.ts:188-202` | `formatUptime` unit cases (two largest units, negative and fractional input). |
+| `apps/web/tests/modules/integrations/useIntegrations.test.ts:76-81,267-298` | Health read populates `server`; an unreadable health route leaves it `null` without failing the module, and is not counted as an activity read. |
+| `apps/web/tests/modules/integrations/integrations-module.test.tsx:164-168,215-236` | Header renders `server v0.4.43 · up 5d 5h`; a 404 health route renders `server identity unreadable`. |
+| `apps/web/tests/modules/integrations-browser.heavy.test.ts:57-62` | The live CDP proof asserts the served build version + uptime on the rendered Board page. |
+| `docs/reports/integrations-e2e-receipt.json` | Regenerated: verdict PASS, the `/api/inbox/requests` 400 harness failure gone (R4). |
+| `docs/tasks5/1438…1442_*.md` | R7 follow-ups for design gaps G1–G5, created with `spur task create --feature A82 --skip-ready`. |
 
 ### Testing
 
