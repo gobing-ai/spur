@@ -130,7 +130,7 @@ export default function PlansShell() {
 
     if (error) {
         return (
-            <ModuleShell className="relative h-full overflow-hidden" data-plans-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-plans-shell>
                 <ModuleHeader
                     icon={<ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
                     title="Plans"
@@ -145,7 +145,7 @@ export default function PlansShell() {
 
     if (loadingFiles && files === null) {
         return (
-            <ModuleShell className="relative h-full overflow-hidden" data-plans-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-plans-shell>
                 <ModuleHeader
                     icon={<ModuleIcon id="plans" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
                     title="Plans"
@@ -159,7 +159,7 @@ export default function PlansShell() {
     }
 
     return (
-        <ModuleShell className="relative h-full overflow-hidden" data-plans-shell>
+        <ModuleShell className="relative h-full max-w-none overflow-hidden" data-plans-shell>
             {/* Central Workspace Container */}
             <div
                 className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"

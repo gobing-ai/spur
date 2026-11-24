@@ -39,4 +39,22 @@ describe('1426 R5 — no hand-built header or tablist in the migrated modules', 
             expect(source).toMatch(/<ModuleShell|ModuleShell\b/);
         });
     }
+
+    const THREE_PANE_SHELLS = [
+        'features/FeaturesShell.tsx',
+        'designs/DesignsShell.tsx',
+        'plans/PlansShell.tsx',
+    ] as const;
+
+    for (const relative of THREE_PANE_SHELLS) {
+        test(`${relative} gives ModuleShell h-full and max-w-none so the 3-pane workspace and 3xl floating docks do not collapse or clip`, () => {
+            const source = readFileSync(join(MODULES_ROOT, relative), 'utf8');
+            const matches = source.match(/<ModuleShell[^>]*>/g) ?? [];
+            expect(matches.length).toBeGreaterThanOrEqual(1);
+            for (const tag of matches) {
+                expect(tag).toContain('h-full');
+                expect(tag).toContain('max-w-none');
+            }
+        });
+    }
 });

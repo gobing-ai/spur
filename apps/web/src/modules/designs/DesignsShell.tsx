@@ -135,7 +135,7 @@ export default function DesignsShell() {
 
     if (error) {
         return (
-            <ModuleShell className={'relative p-4 overflow-hidden'} data-designs-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-designs-shell>
                 <ModuleHeader
                     icon={<ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
                     title="Designs"
@@ -150,7 +150,7 @@ export default function DesignsShell() {
 
     if (loadingFiles && files === null) {
         return (
-            <ModuleShell className={'relative p-4 overflow-hidden'} data-designs-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-designs-shell>
                 <ModuleHeader
                     icon={<ModuleIcon id="designs" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
                     title="Designs"
@@ -164,7 +164,7 @@ export default function DesignsShell() {
     }
 
     return (
-        <ModuleShell className="relative p-4 overflow-hidden" data-designs-shell>
+        <ModuleShell className="relative h-full max-w-none overflow-hidden" data-designs-shell>
             {/* Central Workspace Container — matches FeaturesShell layout */}
             <div
                 className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"

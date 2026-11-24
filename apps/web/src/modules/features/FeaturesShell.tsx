@@ -161,7 +161,7 @@ export default function FeaturesShell() {
 
     if (error) {
         return (
-            <ModuleShell className="relative p-4 overflow-hidden" data-features-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-features-shell>
                 <ModuleHeader
                     icon={
                         <ModuleIcon id="features" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
@@ -178,7 +178,7 @@ export default function FeaturesShell() {
 
     if (features === null) {
         return (
-            <ModuleShell className={'relative p-4 overflow-hidden'} data-features-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-features-shell>
                 <ModuleHeader
                     icon={
                         <ModuleIcon id="features" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />
@@ -223,7 +223,7 @@ export default function FeaturesShell() {
 
     return (
         <>
-            <ModuleShell className="relative p-4 overflow-hidden" data-features-shell>
+            <ModuleShell className="relative h-full max-w-none overflow-hidden" data-features-shell>
                 {/* Central Container — contains the module header AND the full-width body. In larger screens (3xl+), it constraints so the header and main body area share the exact same width, while tree and metadata float outside in the left and right margins. In laptop screens (<3xl), it uses the 3-zone in-flow flex layout. */}
                 <div
                     className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"
