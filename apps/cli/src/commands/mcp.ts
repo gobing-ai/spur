@@ -3,7 +3,6 @@ import type { Readable } from 'node:stream';
 import type { Command } from '@commander-js/extra-typings';
 import { isGatewayAnswering, normalizeProjectPath, ProjectRegistry } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl, type SpurConfig } from '@gobing-ai/spur-config';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { bootFree } from '../boot-free-route';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
@@ -45,7 +44,7 @@ function parseRpc(text: string): RpcMessage | undefined {
 }
 
 /** The context slice the bridge reads — the same shape `registerServeCommand` takes. */
-type McpBridgeContext = Pick<CliContext, 'cwd' | 'output' | 'env' | 'setExitCode'>;
+type McpBridgeContext = Pick<CliContext, 'cwd' | 'output' | 'env' | 'setExitCode' | 'loadAgentConfig'>;
 
 /** Injectable IO for {@link runMcpStdioBridge} (tests inject stdin/stdout captures). */
 export interface McpStdioBridgeOptions {
@@ -240,7 +239,9 @@ export function registerMcpCommand(program: Command, context: McpBridgeContext):
                     );
                 }
                 const projectRoot = resolveServeCwd(options.cwd);
-                const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
+                // Threaded from the CLI composition root — a per-slice load here would reintroduce
+                // the split-brain ADR-082 removed (rule: spur-config-loader-only-at-composition-roots).
+                const spurConfig = await context.loadAgentConfig(projectRoot);
                 const config = buildConfigFromEnv(context.env, spurConfig);
                 // --gateway takes ITS OWN token variable: a gateway credential is not a project's.
                 const gatewayTarget =

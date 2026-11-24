@@ -184,6 +184,7 @@ describe('registerMcpCommand wiring (task 1373 R2)', () => {
             output,
             env: { SPUR_MCP_AUTH_ENV: 'SPUR_TEST_TOKEN' },
             setExitCode: (code: number) => exits.push(code),
+            loadAgentConfig: async () => null,
         } as unknown as CliContext;
 
         let action: ((options: { cwd?: string; url?: string }) => Promise<void>) | undefined;
