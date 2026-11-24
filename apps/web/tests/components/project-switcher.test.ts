@@ -1,13 +1,22 @@
-import { describe, expect, it } from 'bun:test';
-import {
+import { afterAll, afterEach, describe, expect, it } from 'bun:test';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
+import ProjectSwitcher, {
     directBoardUrl,
-    markRemoteLiveness,
     projectDisplayName,
     projectEndpointLabel,
     projectIdentity,
-    type RegistryProject,
     registryFindingMessages,
 } from '@/components/ProjectSwitcher';
+import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
+import { registerHappyDom, teardownHappyDom } from '../happy-dom';
+
+registerHappyDom();
+afterEach(() => {
+    cleanup();
+    resetFetchForTesting();
+});
+afterAll(teardownHappyDom);
 
 describe('projectDisplayName', () => {
     it('appends the host for remote entries', () => {
@@ -25,72 +34,23 @@ describe('projectDisplayName', () => {
 });
 
 describe('directBoardUrl', () => {
-    it('navigates to a remote entry even when the server-side probe reports it stopped', () => {
-        // The serving process may be unable to reach the LAN host (macOS Local Network
-        // privacy, firewall) while the browser can; the browser is the authority.
+    it('always resolves local and remote entries without requiring running state', () => {
         expect(directBoardUrl({ host: '192.168.87.27', port: 3003, running: false })).toBe(
             'http://192.168.87.27:3003/board',
         );
-    });
-
-    it('navigates to a running local entry', () => {
+        expect(directBoardUrl({ host: 'localhost', port: 3001, running: false })).toBe('http://localhost:3001/board');
         expect(directBoardUrl({ host: 'localhost', port: 3001, running: true })).toBe('http://localhost:3001/board');
     });
 
-    it('returns null when a start is needed or no port is known', () => {
-        expect(directBoardUrl({ host: 'localhost', port: 3001, running: false })).toBeNull();
+    it('returns null only when no url, no usable prefix, and no valid port exist', () => {
+        expect(directBoardUrl({ host: 'localhost', port: 0, running: false }, '/')).toBeNull();
         expect(directBoardUrl({ host: '192.168.87.27', port: 0, running: false })).toBeNull();
     });
-});
 
-describe('markRemoteLiveness', () => {
-    const entry = (over: Partial<RegistryProject>): RegistryProject => ({
-        name: 'p',
-        path: '/p',
-        host: 'localhost',
-        port: 0,
-        running: false,
-        current: false,
-        ...over,
-    });
-
-    it('marks a remote entry running when the browser can reach it', async () => {
-        const probed: string[] = [];
-        const out = await markRemoteLiveness(
-            [entry({ name: 'kk', host: '192.168.87.27', port: 3003 })],
-            async (url) => {
-                probed.push(url);
-                return true;
-            },
-        );
-        expect(probed).toEqual(['http://192.168.87.27:3003/api/health']);
-        expect(out[0]?.running).toBe(true);
-    });
-
-    it('leaves unreachable remotes stopped and never probes local or portless entries', async () => {
-        const probed: string[] = [];
-        const out = await markRemoteLiveness(
-            [
-                entry({ name: 'down', host: '10.0.0.9', port: 3003 }),
-                entry({ name: 'local', port: 3001 }),
-                entry({ name: 'noport', host: '10.0.0.9' }),
-            ],
-            async (url) => {
-                probed.push(url);
-                return false;
-            },
-        );
-        expect(probed).toEqual(['http://10.0.0.9:3003/api/health']);
-        expect(out.map((p) => p.running)).toEqual([false, false, false]);
-    });
-});
-
-describe('directBoardUrl behind the gateway (K4 R7)', () => {
-    it('navigates a local entry by prefix on the current origin', () => {
+    it('navigates a local entry by prefix on the current origin behind the gateway (K4 R7)', () => {
         expect(directBoardUrl({ host: 'localhost', port: 3001, running: false, prefix: '/kk' }, '/kk/')).toBe(
             '/kk/board',
         );
-        // A stopped entry still navigates: the gateway starts it on the first request.
         expect(directBoardUrl({ host: 'localhost', port: 0, running: false, prefix: '/kk' }, '/kk/')).toBe('/kk/board');
     });
 
@@ -169,5 +129,74 @@ describe('registryFindingMessages (Q R6)', () => {
         expect(registryFindingMessages(undefined)).toEqual([]);
         expect(registryFindingMessages([{ kind: 'prefix-collision' }])).toEqual([]);
         expect(registryFindingMessages('nope')).toEqual([]);
+    });
+});
+
+describe('ProjectSwitcher UI without start/stop logic', () => {
+    it('renders local and remote entries as always-ready with endpoint labels, no stopped badges or status dots, and no remote health probes', async () => {
+        const requestedUrls: string[] = [];
+        const mockFetch: typeof fetch = Object.assign(
+            async (input: string | URL | Request) => {
+                const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+                requestedUrls.push(url);
+                return new Response(
+                    JSON.stringify({
+                        projects: [
+                            {
+                                name: 'spur-new',
+                                path: '/Users/robin/xprojects/spur-new',
+                                host: 'localhost',
+                                port: 3001,
+                                running: true,
+                                current: true,
+                                prefix: '/spur-new',
+                                url: '/spur-new/board',
+                            },
+                            {
+                                name: 'alpha',
+                                path: '/Users/robin/xprojects/alpha',
+                                host: 'localhost',
+                                port: 0,
+                                running: false,
+                                current: false,
+                                prefix: '/alpha',
+                                url: '/alpha/board',
+                            },
+                            {
+                                name: 'knowledge-kit',
+                                path: '/srv/kk',
+                                host: '192.168.87.27',
+                                port: 3003,
+                                running: false,
+                                current: false,
+                                prefix: null,
+                                url: 'http://192.168.87.27:3003/board',
+                            },
+                        ],
+                    }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                );
+            },
+            { preconnect: () => {} },
+        );
+        setFetchForTesting(mockFetch);
+
+        const view = render(createElement(ProjectSwitcher, { currentName: 'spur-new' }));
+        fireEvent.click(view.getByTestId('project-switcher-trigger'));
+
+        await waitFor(() => {
+            expect(view.getByTestId('project-item-alpha')).toBeDefined();
+        });
+
+        // No browser-side remote /api/health probe is fired on menu open
+        expect(requestedUrls).toEqual(['http://localhost:3000/api/projects']);
+
+        const menu = view.getByTestId('project-switcher-menu');
+        expect(menu.textContent).toContain('current');
+        expect(menu.textContent).toContain('/alpha');
+        expect(menu.textContent).toContain(':3003');
+        expect(menu.textContent).not.toContain('stopped');
+        expect(menu.textContent).not.toContain('Starting...');
+        expect(menu.querySelector('[title="Stopped"]')).toBeNull();
     });
 });

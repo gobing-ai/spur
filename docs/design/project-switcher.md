@@ -392,15 +392,11 @@ legacy `refs` key is ignored on load.
 
 **`ProjectSwitcher`** (new component):
 
-- Trigger: expanded sidebar project title becomes a button (`aria-haspopup="menu"`).
-- Menu: list from `GET /api/projects`; each row = status icon + name (+ optional port).
-  - Running: filled/green indicator
-  - Stopped: muted indicator
-  - Current: checkmark / `aria-current`
-- Select running → `window.location.assign(url)` (same path `/board` on target origin).
-- Select stopped → `POST /api/projects/start`, loading state, then navigate to returned `url`.
-- Keyboard: arrows, Enter, Escape; click-outside closes.
-- Collapsed sidebar: keep fold UX; switcher only when expanded (or icon affordance if trivial).
+- Trigger: expanded sidebar project title becomes a button (`aria-haspopup="listbox"`).
+- Menu: list from `GET /api/projects`; each row shows `projectDisplayName(p)` (`name` for local, `name (host)` for remote) and either `current` (for the active local project) or `projectEndpointLabel(p)` (`/<prefix>` for local, `:<port>` for remote). All local and remote projects are always ready for switching without running/stopped dots, `"stopped"` badges, or browser remote liveness probes.
+- Select non-current → navigate directly to `directBoardUrl(project)` (`/<prefix>/board` or canonical gateway URL for local projects, `http://<host>:<port>/board` for remote projects).
+- Keyboard: Escape and click-outside close the menu.
+- Collapsed sidebar: keep fold UX; switcher renders the deterministic project glyph with tooltip.
 
 Hooks: keep `useProjectName()`; add `useProjectList()` with refresh on open.
 

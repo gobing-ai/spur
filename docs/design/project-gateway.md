@@ -321,13 +321,13 @@ Requirement: the gateway is always on. Surface: `spur self install --daemon`, `s
 
 ## 8. Switcher and CLI
 
-- `directBoardUrl()` (`ProjectSwitcher.tsx:44-55`): a local entry navigates to the server-resolved
-  canonical `url` in every base mode — absolute when the Board was opened on a legacy direct port,
-  prefix-relative behind the gateway — so no per-port public fallback remains and a stopped local
-  entry starts through the gateway; remote → `http://<host>:<port>/board` unchanged. React keys and
-  loading state use `projectIdentity()` (effective host + normalized path) and `projectEndpointLabel()`
-  shows the prefix, so same-path local/remote rows stay independent and an internal port is never
-  presented as a destination.
+- `directBoardUrl()` (`ProjectSwitcher.tsx:44-57`): every local and remote entry is always ready for
+  direct navigation without a start call or browser remote health probe — a local entry navigates to
+  the server-resolved canonical `url` in every base mode (absolute when the Board was opened on a
+  legacy direct port, prefix-relative behind the gateway) so the gateway starts it on demand, and a
+  remote entry navigates directly to `http://<host>:<port>/board`. React keys use `projectIdentity()`
+  (effective host + normalized path) and `projectEndpointLabel()` shows the `/<prefix>` or `:<port>`
+  route label for every non-current row without running/stopped dots or `"stopped"` badges.
 - `/api/projects` (`apps/server/src/modules/health/index.ts:437-495`) adds `host`, `prefix` (null for
   remote) and `url`: prefix-relative on a forwarded request (`x-forwarded-prefix`), otherwise the
   absolute canonical gateway URL from `resolveProjectGatewayUrl`; `current` is local-host scoped.

@@ -8,7 +8,7 @@ export interface RegistryProject {
     path: string;
     host?: string;
     port: number;
-    running: boolean;
+    running?: boolean;
     current: boolean;
     /** Gateway path prefix for a local entry (`/kk`); `null` for remote entries (K4 R7). */
     prefix?: string | null;
@@ -36,10 +36,9 @@ function isRemoteHost(host?: string): boolean {
 }
 
 /**
- * Board URL to navigate to without a start call, or null when the entry must be started.
- * Remote entries skip the server's `running` flag: that TCP probe runs in the serving
- * process, which can be denied LAN access (macOS Local Network privacy, firewall) while
- * the browser reaches the host fine — and a remote entry can never be started from here.
+ * Board URL to navigate to for any registered local or remote project.
+ * Under the universal gateway architecture, all local projects are routable by prefix
+ * (started on demand by the gateway) and all remote entries navigate directly to `host:port`.
  */
 export function directBoardUrl(
     project: Pick<RegistryProject, 'host' | 'port' | 'running' | 'prefix' | 'url'>,
@@ -51,12 +50,12 @@ export function directBoardUrl(
         if (project.url !== undefined) return project.url;
         return base !== '/' ? `${project.prefix}/board` : null;
     }
+    if (project.url !== undefined && project.url !== '') return project.url;
     if (project.port <= 0) return null;
-    if (!project.running && !isRemoteHost(project.host)) return null;
     return `http://${project.host?.trim() || 'localhost'}:${project.port}/board`;
 }
 
-/** Stable React/loading identity for local-or-remote rows that share a path or display name. */
+/** Stable React identity for local-or-remote rows that share a path or display name. */
 export function projectIdentity(project: Pick<RegistryProject, 'host' | 'path'>): string {
     const host = isRemoteHost(project.host) ? project.host?.trim().toLowerCase() : 'localhost';
     const path = project.path.trim().replace(/\/+$/, '');
@@ -66,23 +65,6 @@ export function projectIdentity(project: Pick<RegistryProject, 'host' | 'path'>)
 /** Public route label; internal loopback ports are not presented as local destinations. */
 export function projectEndpointLabel(project: Pick<RegistryProject, 'prefix' | 'port'>): string {
     return project.prefix ?? `:${project.port}`;
-}
-
-/**
- * Re-check remote entries the server reported stopped, from the browser. The server's TCP
- * probe can be denied LAN access (see `directBoardUrl`), but the browser is what navigates.
- */
-export async function markRemoteLiveness(
-    projects: RegistryProject[],
-    probe: (url: string) => Promise<boolean>,
-): Promise<RegistryProject[]> {
-    return Promise.all(
-        projects.map(async (p) =>
-            !p.running && p.port > 0 && isRemoteHost(p.host)
-                ? { ...p, running: await probe(`http://${p.host?.trim()}:${p.port}/api/health`) }
-                : p,
-        ),
-    );
 }
 
 /**
@@ -96,16 +78,6 @@ export function registryFindingMessages(raw: unknown): string[] {
         const message = (item as { message?: unknown } | null)?.message;
         return typeof message === 'string' && message !== '' ? [message] : [];
     });
-}
-
-/** Reachability only: a `no-cors` fetch resolves (opaque) on any HTTP answer, rejects on network failure. */
-async function browserProbe(url: string): Promise<boolean> {
-    try {
-        await fetchWithTimeout(new Request(url, { mode: 'no-cors' }), 1500);
-        return true;
-    } catch {
-        return false;
-    }
 }
 
 /**
@@ -280,7 +252,6 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
     const [isOpen, setIsOpen] = useState(false);
     const [projects, setProjects] = useState<RegistryProject[]>([]);
     const [findings, setFindings] = useState<string[]>([]);
-    const [loadingProject, setLoadingProject] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -292,14 +263,12 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
             .then(async (res) => {
                 if (!res.ok) return;
                 const body = (await res.json()) as { projects: RegistryProject[]; findings?: unknown };
-                const list = body.projects ?? [];
+                if (controller.signal.aborted) return;
                 setFindings(registryFindingMessages(body.findings));
-                setProjects(list);
-                const checked = await markRemoteLiveness(list, browserProbe);
-                if (!controller.signal.aborted) setProjects(checked);
+                setProjects(body.projects ?? []);
             })
             .catch(() => {
-                setError('Failed to load projects');
+                if (!controller.signal.aborted) setError('Failed to load projects');
             });
         return () => controller.abort();
     }, [isOpen]);
@@ -323,37 +292,15 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
         };
     }, [isOpen]);
 
-    const handleSelect = async (project: RegistryProject) => {
+    const handleSelect = (project: RegistryProject) => {
         if (project.current) {
             setIsOpen(false);
             return;
         }
 
-        // The server resolves the entry's URL; use it when this origin is the gateway (K4 R7/R8).
         const direct = directBoardUrl(project) ?? (basePath() !== '/' ? (project.url ?? null) : null);
         if (direct) {
             window.location.href = direct;
-            return;
-        }
-
-        // Start stopped project
-        setLoadingProject(projectIdentity(project));
-        try {
-            const res = await fetchWithTimeout(
-                new Request(`${resolveApiUrl()}/projects/start`, {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({ name: project.name, path: project.path, host: project.host }),
-                }),
-            );
-            if (!res.ok) {
-                throw new Error('Failed to start project');
-            }
-            const body = (await res.json()) as { url: string };
-            window.location.href = body.url;
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Start failed');
-            setLoadingProject(null);
         }
     };
 
@@ -473,32 +420,21 @@ export default function ProjectSwitcher({ currentName, collapsed = false }: Proj
                                 type="button"
                                 role="option"
                                 aria-selected={p.current}
-                                disabled={loadingProject === projectIdentity(p)}
                                 onClick={() => handleSelect(p)}
                                 data-testid={`project-item-${p.name}`}
-                                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-xs text-left transition-colors ${
+                                className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-left transition-colors ${
                                     p.current
                                         ? 'bg-spur-accent/15 text-spur-accent font-medium'
                                         : 'text-spur-text hover:bg-spur-border/30'
                                 }`}
                             >
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <span
-                                        className={`h-2 w-2 rounded-full shrink-0 ${
-                                            p.running ? 'bg-green-500' : 'bg-gray-400'
-                                        }`}
-                                        title={p.running ? `Running via ${projectEndpointLabel(p)}` : 'Stopped'}
-                                    />
-                                    <span className="truncate">{projectDisplayName(p)}</span>
-                                </div>
-                                {loadingProject === projectIdentity(p) ? (
-                                    <span className="text-[10px] text-spur-accent animate-pulse">Starting...</span>
-                                ) : p.current ? (
-                                    <span className="text-[10px] font-semibold text-spur-accent">current</span>
-                                ) : p.running ? (
-                                    <span className="text-[10px] text-spur-text-muted">{projectEndpointLabel(p)}</span>
+                                <span className="min-w-0 flex-1 truncate">{projectDisplayName(p)}</span>
+                                {p.current ? (
+                                    <span className="shrink-0 text-[10px] font-semibold text-spur-accent">current</span>
                                 ) : (
-                                    <span className="text-[10px] text-spur-text-muted">stopped</span>
+                                    <span className="shrink-0 text-[10px] text-spur-text-muted">
+                                        {projectEndpointLabel(p)}
+                                    </span>
                                 )}
                             </button>
                         ))

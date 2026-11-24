@@ -19,7 +19,9 @@ describe('renderGatewayIndex', () => {
 
         expect(html).toContain('class="project-grid"');
         expect(html).toContain('href="/alpha/board"');
-        expect(html).toContain('Gateway route');
+        expect(html).not.toContain('card-footer');
+        expect(html).not.toContain('Gateway route');
+        expect(html).not.toContain('Open Board');
         expect(html).not.toContain('Running');
         expect(html).not.toContain('Stopped');
         expect(html).not.toContain('Starts on demand');

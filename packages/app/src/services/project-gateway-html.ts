@@ -151,10 +151,6 @@ export function renderGatewayIndex(input: GatewayIndexInput): string {
                         const targetAttrs = isRemote ? ' target="_blank" rel="noopener noreferrer"' : '';
                         const safeHostAttr = isRemote ? ` data-host="${escapeHtml(host)}"` : '';
                         const remoteBadge = isRemote ? '<span class="remote-pill">Remote</span>' : '';
-                        const routeLabel = isRemote ? 'Direct host' : 'Gateway route';
-                        const openLabel = isRemote
-                            ? 'Open Remote <span class="arrow" aria-hidden="true">&nearr;</span>'
-                            : 'Open Board <span class="arrow" aria-hidden="true">&rarr;</span>';
                         const searchText = `${safeName.toLowerCase()} ${safeTag.toLowerCase()} ${safePath.toLowerCase()} ${isRemote ? 'remote' : 'local'}`;
                         return `<div class="project-card${isRemote ? ' is-remote' : ''}" data-search="${searchText}">
                     <div class="card-top">
@@ -169,10 +165,6 @@ export function renderGatewayIndex(input: GatewayIndexInput): string {
                     <div class="card-meta">
                         <code class="prefix-tag${isRemote ? ' is-remote-tag' : ''}">${safeTag}</code>
                         <span class="path-text" title="${safePath}">${safePath}</span>
-                    </div>
-                    <div class="card-footer">
-                        <span class="route-meta">${routeLabel}</span>
-                        <span class="open-link">${openLabel}</span>
                     </div>
                 </div>`;
                     })
@@ -651,31 +643,6 @@ h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-.card-footer {
-    margin-top: auto;
-    padding-top: 12px;
-    border-top: 1px solid var(--hairline);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: 12px;
-}
-.route-meta {
-    font-family: var(--font-mono);
-    color: var(--ink-tertiary);
-}
-.open-link {
-    color: var(--primary);
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: color 140ms ease;
-}
-.project-card:hover .open-link {
-    color: var(--primary-hover);
 }
 .empty-state {
     max-width: 520px;
