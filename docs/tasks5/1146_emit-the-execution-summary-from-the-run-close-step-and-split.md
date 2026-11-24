@@ -4,7 +4,7 @@ name: Emit the execution summary from the run close step and split time by actor
 status: done
 template: feature-impl
 created_at: 2026-10-09T17:29:05.417Z
-updated_at: "2026-10-10T06:52:57.888Z"
+updated_at: "2026-11-24T20:57:52.976Z"
 feature_id: E5
 
 ac_numbering: task-local
@@ -246,25 +246,24 @@ Tradeoff: the measurement moved from `plugins/sp/scripts/run-summary.ts` into `p
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
+- Verdict: FAIL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `writeCloseSummary` `plugins/sp/lib/run-summary-core.ts:502` writes `<runId>-summary.{md,json}` and never throws; close calls the summarizer after commit and reports `summaryFile` `packages/app/src/services/inline-run-setup.ts:1708-1725`; `--no-summary` guards `plugins/sp/scripts/inline-run-setup.ts:125` and `packages/app/src/services/inline-run-setup.ts:1248`; tests `plugins/sp/tests/run-summary.test.ts:325`, `plugins/sp/tests/run-summary.test.ts:351`, `plugins/sp/tests/inline-run-trace.test.ts:482` |
-| R2 | MET | Contract test `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1175` (close docs carry `summaryFile`) and `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1188` (no `SINCE=`/`--since "$SINCE"`); rg this pass finds no `SINCE=` under plugins/sp/skills |
-| R3 | MET | `renderRollupMarkdown` `plugins/sp/lib/run-summary-core.ts:418`; `--rollup` mode `plugins/sp/scripts/run-summary.ts:44`; tests `plugins/sp/tests/run-summary.test.ts:260`, `plugins/sp/tests/run-summary.test.ts:422` |
-| R4 | MET | `actorSplit` `plugins/sp/lib/run-summary-core.ts:167`; `gateFromReceipt` `plugins/sp/lib/run-summary-core.ts:547`; tests F17–F22 `plugins/sp/tests/run-summary.test.ts:169`, `plugins/sp/tests/run-summary.test.ts:240` |
-| R5 | MET | Reuses `resolveTranscript` `plugins/sp/lib/transcript.ts:244` plus `isCompaction` `plugins/sp/lib/transcript.ts:206`; app receives the summarizer as an injected callback (`packages/app/src/services/inline-run-setup.ts:1234`), no plugin import |
+| R1 | UNMET | Regressed by 1242 (`99c0d7524`): `writeCloseSummary` survives at `packages/app/src/workflow/run-summary-render.ts:160` but has zero production callers (repo-wide search, tests excluded); the deleted `apps/cli/src/commands/workflow/inline.ts` held the only `summarize` wiring. Terminal paths `apps/cli/src/commands/workflow/run.ts:980-990` and `apps/cli/src/commands/workflow/continue.ts:304-314` emit no summary. Runtime: newest `.spur/run/*-summary.md` is 2026-10-17 09:25, before 1242 landed 17:08. Follow-up 1448 |
+| R2 | PARTIAL | `plugins/sp/skills/spur-dev/references/dev-operations.md:169-172` still tells the driver to print `summaryFile` and pass `--no-summary` to `inline close`, a verb 1242 removed; `structured-trace-emission.md` / `inline-pipeline-driver.md` deleted. SINCE removal holds (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1162`) |
+| R3 | PARTIAL | `--rollup` works (`packages/app/src/workflow/run-summary-cli.ts:55-61`, `renderRollupMarkdown` `packages/app/src/workflow/run-summary-render.ts:76`; test `packages/app/tests/workflow/run-summary-cli.test.ts:300`), but no run writes the per-run `<runId>-summary.json` it consumes |
+| R4 | MET | `actorSplit` `packages/app/src/workflow/run-summary.ts:392`, `IDLE_GAP_MS` `packages/app/src/workflow/run-summary.ts:313`, `isCompaction` `packages/app/src/workflow/run-summary.ts:107`, `gateFromReceipt` `packages/app/src/workflow/run-summary-render.ts:215`; F17–F22 `packages/app/tests/workflow/run-summary-cli.test.ts:189-260`; 46/46 green this pass |
+| R5 | MET | Measurement now lives in `packages/app/src/workflow/` (moved by PR-6 `305506463`), so no app import of plugin code; no new transcript format |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A settled inline run writes its own summary at close (req: R1) | MET | test | `plugins/sp/tests/run-summary.test.ts:325`; `plugins/sp/tests/inline-run-trace.test.ts:469` pins `summaryFile` on the close stdout |
-| AC2 — A summary failure never changes the close verdict (req: R1) | MET | test | `plugins/sp/tests/run-summary.test.ts:351` |
-| AC3 — --no-summary suppresses the summary at close (req: R1) | MET | test | Added this pass: `plugins/sp/tests/inline-run-trace.test.ts:482` (no `summaryFile`, no summary files, `--node-enter --no-summary` exits 2); fails with both guards mutated out (Expected 2, Received 0), passes restored (17 pass / 0 fail) |
-| AC4 — The actor split partitions the window and never fakes a zero (req: R4, R5) | MET | test | `plugins/sp/tests/run-summary.test.ts:169`, `plugins/sp/tests/run-summary.test.ts:208`, `plugins/sp/tests/run-summary.test.ts:240` |
-| AC5 — Batch roll-up uses each run's own window (req: R3) | MET | test | `plugins/sp/tests/run-summary.test.ts:260`, `plugins/sp/tests/run-summary.test.ts:452` |
-| AC6 — The print obligation is carried by the close output, not a trailing step (req: R2) | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1175`, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1188` |
+| Scenario: AC1 — A settled inline run writes its own summary at close (req: R1) | UNMET | static-ref | `inline-run-setup --close` / `spur workflow inline close` deleted by 1242; no terminal path calls `writeCloseSummary` (`packages/app/src/workflow/run-summary-render.ts:160`) |
+| Scenario: AC2 — A summary failure never changes the close verdict (req: R1) | PARTIAL | test | n/a-file branch unit-tested `packages/app/tests/workflow/run-summary-render.test.ts:64`; the close-verdict half no longer has a surface |
+| Scenario: AC3 — --no-summary suppresses the summary at close (req: R1) | UNMET | static-ref | the flag's only host (`inline close`) was deleted; the docs still name it at `plugins/sp/skills/spur-dev/references/dev-operations.md:172` |
+| Scenario: AC4 — The actor split partitions the window and never fakes a zero (req: R4, R5) | MET | test | `packages/app/tests/workflow/run-summary-cli.test.ts:189-300`; green this pass |
+| Scenario: AC5 — Batch roll-up uses each run's own window (req: R3) | MET | test | `packages/app/tests/workflow/run-summary-cli.test.ts:300` and `:535`; green this pass |
+| Scenario: AC6 — The print obligation is carried by the close output, not a trailing step (req: R2) | PARTIAL | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1158-1166` pins `--rollup` and no SINCE; the two close docs it named are deleted and the remaining instruction points at a removed verb |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

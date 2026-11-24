@@ -4,7 +4,7 @@ name: Assert the publish trigger after a ts-libs release tag push
 status: done
 template: standard
 created_at: 2026-10-09T16:51:45.274Z
-updated_at: "2026-10-09T22:16:03.714Z"
+updated_at: "2026-11-24T20:57:52.115Z"
 feature_id: A33
 
 ac_numbering: task-local
@@ -186,29 +186,22 @@ All code changes landed upstream in `/Users/robin/xprojects/ts-libs` under the f
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | ts-libs `scripts/lib/release-commands.ts` line 268-282 — local-mode hint prints the branch push, one guarded `refs/tags/<tag>:refs/tags/<tag>` push per package tag with the aggregate tag last, the verify-publish check and the three-tag GitHub limit; no `--tags` form. Asserted by ts-libs `scripts/tests/release-commands.test.ts` line 496-524 (re-run green this pass) |
-| R2 | MET | ts-libs `scripts/lib/release-commands.ts` line 417-445 — verifyPublish returns 0 with run id and URL when found, 1 naming the tag and the `--dispatch` recovery when absent; ts-libs `scripts/builder.ts` line 26-28 wires `verify-publish <tag> [--dispatch]` with usage exit 2. Live evidence this pass: the public GitHub API returns run 37850267092 (Publish, head_branch `@gobing-ai/ts-libs-v0.5.19`, conclusion success); the implementing run recorded verify-publish exit 0 for the same run |
-| R3 | MET | ts-libs `scripts/lib/release-commands.ts` line 306-326 (queryPublishRun, one `gh run list`), line 332-349 (findPublishRun, bounded lookups, never dispatches), line 364-401 (ensurePublishWorkflowRun = find plus dispatch tail); zero-dispatch lookup asserted at ts-libs `scripts/tests/release-commands.test.ts` line 304-319 |
-| R4 | MET | ts-libs `scripts/tests/release-commands.test.ts` — (a) line 496-524, (b) line 304-319, (c) line 320-340, (d) line 341-364, all over a scripted spawn with no network; (e) pre-existing push-path tests (line 525) unmodified. Fresh run this pass: `bun test scripts/tests/` → 92 pass / 0 fail |
-| R5 | MET | ts-libs `docs/PACKAGE_RELEASE.md` line 57-67 and line 203, ts-libs `scripts/README.md` line 10 and line 31 name verify-publish as the post-push check with the `--dispatch` recovery; Testing records the real read-only run (exit 0, run 37850267092) |
+| R1 | MET | ts-libs `scripts/lib/release-commands.ts` line 268-282 — guarded branch push, one guarded `refs/tags/<tag>` push per package tag with the aggregate tag last, three-tag limit line, `verify-publish` hint; no `--tags` (re-read 2026-11-24 at ts-libs HEAD 6b397d8a) |
+| R2 | MET | ts-libs `scripts/lib/release-commands.ts` line 417-445 (`verifyPublish`, recovery text line 443); ts-libs `scripts/builder.ts` line 26-28 (`verify-publish`, usage exit 2) |
+| R3 | MET | ts-libs `scripts/lib/release-commands.ts` line 306 (`queryPublishRun`), line 332 (`findPublishRun`, lookup-only), line 364-391 (`ensurePublishWorkflowRun` = find + dispatch tail) |
+| R4 | MET | ts-libs `scripts/tests/release-commands.test.ts` line 496 (a), 304 (b), 320 (c), 341 (d), 525 push path (e); `bun test scripts/tests/release-commands.test.ts` → 34 pass / 0 fail this pass |
+| R5 | MET | ts-libs `docs/PACKAGE_RELEASE.md` line 57-67 and line 203, `scripts/README.md` line 10 and 31; real read-only run 37850267092 recorded in prior Testing (not re-run: sandbox gh TLS limit) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: AC1 — Local mode prints a safe push sequence (req: R1) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 496-524 — no `--tags`, guarded per-tag refspecs with the aggregate tag last, names verify-publish (re-run green) |
-| Scenario: AC2 — verify-publish reports an existing run without dispatching (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 304-319 — exit 0, id and URL, one `gh run list` and no `gh workflow run` (re-run green); run 37850267092 re-confirmed live via the public GitHub API this pass |
-| Scenario: AC3 — A missing run fails loudly with recovery (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 320-364 — exit 1 naming the tag, recovery text, zero dispatches; `--dispatch` makes exactly one dispatch (re-run green) |
-| Scenario: AC4 — The push path is unchanged and evidence is recorded (req: R4, R5) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 525 push-path test unmodified; `bun test scripts/tests/` → 92 pass / 0 fail this pass; Testing records the real read-only verify-publish (exit 0, run 37850267092) |
+| Scenario: AC1 — Local mode prints a safe push sequence (req: R1) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 496 — re-run green (34/34) |
+| Scenario: AC2 — verify-publish reports an existing run without dispatching (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 304 — re-run green |
+| Scenario: AC3 — A missing run fails loudly with recovery (req: R2, R3) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 320 and 341 — re-run green |
+| Scenario: AC4 — The push path is unchanged and evidence is recorded (req: R4, R5) | MET | test | ts-libs `scripts/tests/release-commands.test.ts` line 525 green; read-only verify-publish run 37850267092 recorded in prior Testing |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Re-verify — 2026-10-09 (`/sp:dev-verifyall --force --fix all`)
-
-- Fresh run: ts-libs `bun test scripts/tests/` → 92 pass / 0 fail.
-- Live evidence: `gh` could not run inside the sandbox because its TLS proxy rejected the certificate (x509 OSStatus -26276), so `verify-publish` exited 1 with `gh run list failed`. That is the correct loud failure, not a false "no run". The same lookup was confirmed independently through the public GitHub API: `GET /repos/gobing-ai/ts-libs/actions/runs/37850267092` → `{"name":"Publish","head_branch":"@gobing-ai/ts-libs-v0.5.19","status":"completed","conclusion":"success"}`.
-- Fix pass: drifted ts-libs line ranges re-read and corrected (queryPublishRun 306-326, findPublishRun 332-349, ensurePublishWorkflowRun 364-401, verifyPublish 417-445; tests 304-364 and 496-524).
 
 ### Review
 

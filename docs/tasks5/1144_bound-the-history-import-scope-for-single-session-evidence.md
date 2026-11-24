@@ -4,7 +4,7 @@ name: Bound the history import scope for single-session evidence
 status: done
 template: standard
 created_at: 2026-10-09T16:51:45.834Z
-updated_at: "2026-10-10T07:25:38.526Z"
+updated_at: "2026-11-24T20:57:52.524Z"
 feature_id: E2
 
 ac_numbering: task-local
@@ -207,22 +207,21 @@ Measured (source-local CLI, `bun apps/cli/src/index.ts`, `--no-logo`; 2026-10-09
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
-- Confidence: HIGH
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `estimateImportScope` `packages/app/src/services/history-service.ts:571`; `formatImportScopeLine` `packages/app/src/services/history-service.ts:606-615`; pre-start emit `packages/app/src/services/history-service.ts:689-707`; scope on coverage entry `packages/app/src/services/history-service.ts:1352`; CLI stderr `apps/cli/src/commands/history.ts:298-301` |
-| R2 | MET | Shared `sourceTimeoutRemedy` `packages/app/src/services/history-service.ts:622-627` and `sourceTimeoutDetail` `packages/app/src/services/history-service.ts:633-639`, used at `packages/app/src/services/history-service.ts:1261`; real run this pass printed the remedy (`--file <path>`, `--root <dir>`, `--source-timeout none`) |
-| R3 | MET | Help sentence `apps/cli/src/commands/history.ts:146-151`; satellite `docs/design/history-cli-contracts.md:67-80`; test `apps/cli/tests/commands/history.test.ts:1436` |
-| R4 | MET | Diff additive; existing history suites green unmodified except the extended abort assertion `packages/app/tests/services/history-service.test.ts:1599` |
-| R5 | MET | Tests `apps/cli/tests/commands/history.test.ts:1355` block and `packages/app/tests/services/history-service.test.ts:1669` block; real-data comparison recorded in Solution and re-observed this pass (pi scope ≈ 4693 files, 2571.9 MB; abort at 2017ms naming the remedy) |
+| R1 | MET | `estimateImportScope` `packages/app/src/services/history-service.ts:610-627`; `formatImportScopeLine` `packages/app/src/services/history-service.ts:645-655`; pre-start emit `packages/app/src/services/history-service.ts:728-746`; scope on coverage entry `packages/app/src/services/history-service.ts:1425`; CLI stderr sink `apps/cli/src/commands/history/import.ts:177` |
+| R2 | MET | `sourceTimeoutRemedy` `packages/app/src/services/history-service.ts:661-666`, `sourceTimeoutDetail` `packages/app/src/services/history-service.ts:672-678`, per-source warning `packages/app/src/services/history-service.ts:1334`, fan-out abort reuses the detail `packages/app/src/services/history-service.ts:1149` |
+| R3 | MET | help sentence `apps/cli/src/commands/history/import.ts:26`; satellite `docs/design/history-cli-contracts.md:67-80` |
+| R4 | MET | history-service suite 72 pass / 0 fail this pass; abort assertion extended `packages/app/tests/services/history-service.test.ts:1715` |
+| R5 | MET | `packages/app/tests/services/history-service.test.ts:1785` block (7 cases incl. 5k-file walk); `apps/cli/tests/commands/history/import.test.ts:443` block; measured comparison recorded in Solution |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Scope is reported before the import starts (req: R1) | MET | test | `apps/cli/tests/commands/history.test.ts:1375` and `apps/cli/tests/commands/history.test.ts:1395`; apps/cli history 54 pass / 0 fail this pass |
-| AC2 — A budget abort names the proportionate form (req: R2) | MET | command | `bun apps/cli/src/index.ts history import --source pi --dry-run --source-timeout 2000 --json` exit 1, stderr names budget and `--file`/`--root`/`--source-timeout none`; test `apps/cli/tests/commands/history.test.ts:1413` |
-| AC3 — Help and design satellite lead with --file for one session (req: R3) | MET | test | `apps/cli/tests/commands/history.test.ts:1436`; `docs/design/history-cli-contracts.md:67-80` |
-| AC4 — Full replay behaviour is unchanged and the comparison is recorded (req: R4, R5) | MET | test | packages/app history-service suite green this pass; comparison (10m03s abort vs 31.5s `--file`) recorded in Solution |
+| AC1 — Scope is reported before the import starts (req: R1) | MET | test | `apps/cli/tests/commands/history/import.test.ts:465` and `apps/cli/tests/commands/history/import.test.ts:485`; CLI history 74 pass / 0 fail this pass |
+| AC2 — A budget abort names the proportionate form (req: R2) | MET | test | `apps/cli/tests/commands/history/import.test.ts:503`; `packages/app/tests/services/history-service.test.ts:1917` |
+| AC3 — Help and design satellite lead with --file for one session (req: R3) | MET | test | `apps/cli/tests/commands/history/import.test.ts:526`; `docs/design/history-cli-contracts.md:67-80` |
+| AC4 — Full replay behaviour is unchanged and the comparison is recorded (req: R4, R5) | MET | test | history-service 72/72 and CLI history 74/74 green this pass; 10m03s vs 31.5 s comparison recorded in Solution |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
