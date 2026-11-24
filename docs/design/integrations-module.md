@@ -21,8 +21,8 @@ records: ADR-148 (A2A, amended 2026-11-21), ADR-152 (MCP), ADR-151 (gateway), AD
 
 | # | Surface | Today | Fix | Where |
 | --- | --- | --- | --- | --- |
-| F1 | MCP | `toolErrorCode` matches only `/ is required$\| must be a map of strings$/`, so "unknown argument", "must be one of", "must be a string/boolean/array" and `invalid_arguments: …` become `tool_error` | The validator throws a typed `InvalidArgumentsError`; `toolErrorCode` checks the type, not message text. `callWorkflowTool` throws the same type | `apps/server/src/modules/mcp/index.ts` |
-| F2 | MCP | Tool descriptors carry no annotations | Each `TOOL_DESCRIPTORS` entry declares `annotations: { readOnlyHint, destructiveHint, idempotentHint }`. Read tools: show, list, feature_check, workflow_status. Write tools: create, update, transition, workflow_run, workflow_continue (`destructiveHint: false`; none deletes). `sp_rule_run` is read-only | same |
+| F1 | MCP | `toolErrorCode` matches only `/ is required$\| must be a map of strings$/`, so "unknown argument", "must be one of", "must be a string/boolean/array" and `invalid_arguments: …` become `tool_error` | The validator throws a typed `InvalidArgumentsError`; `toolErrorCode` checks the type, not message text. `callWorkflowTool` throws the same type | `apps/server/src/modules/mcp/tools-shared.ts` (`toolErrorCode`), `protocol.ts` (`InvalidArgumentsError`) |
+| F2 | MCP | Tool descriptors carry no annotations | Each `TOOL_DESCRIPTORS` entry declares `annotations: { readOnlyHint, destructiveHint, idempotentHint }`. Read tools: show, list, feature_check, workflow_status. Write tools: create, update, transition, workflow_run, workflow_continue (`destructiveHint: false`; none deletes). `sp_rule_run` is read-only. The list is the ten-tool catalog at fix time; the current 25-read/16-write split is in [embedded MCP server](embedded-mcp-server.md#41-built-in-catalog-by-domain) | same |
 | F3 | A2A | The card route calls `authorize(c)`, which contradicts the route comment | The card route skips `authorize`. Every other route keeps it. The comment says that only the card is public | `apps/server/src/modules/a2a/index.ts` |
 | F4 | A2A | `agentCard()` returns `skills: []` | Derive one skill per member from the declaration (`role` → id/name, `description`); a member with no role yields one default `general` skill | `apps/server/src/modules/a2a/projection.ts` |
 | F5 | A2A | `remoteBranch(ctx)` runs git in `ctx.cwd` with its own rule. Today that is correct: A2A keys (`a2a:<instance>:<messageId>`) never match the lane key pattern, so drains run in the project tree | `remoteBranch(ctx, requestKey)` resolves the drain tree with the agent loop's own rule, `laneForRequestKey(ctx.cwd, declaration, requestKey) ?? ctx.cwd`, so the two cannot diverge. A regression lock, not a behavior change; A2A lane routing is out of scope | `apps/server/src/modules/a2a/index.ts` |
@@ -86,6 +86,7 @@ interface IntegrationsStatus {
         served: true; namespace: string; rootMcpUrl: string;
         counters: { since: string; requests: number; status4xx: number; status5xx: number;
             upstreamRestarts: Record<string, number> } | null;   // gateway /api/health (1385)
+        mcp?: { enabled: boolean; auth: { envName: string; tokenPresent: boolean } };  // when the gateway serves /mcp
         diagnostic?: string;
     };
 }

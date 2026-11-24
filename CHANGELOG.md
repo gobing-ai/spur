@@ -181,11 +181,11 @@
 
 ### Added
 - namespace the harness MCP tools behind the project prefix and expose opted-in workflows as tools (6fd0a41de)
-  <!-- src: apps/server/src/modules/mcp/protocol.ts:59 · confidence: HIGH -->
+  <!-- src: apps/server/src/modules/mcp/index.ts:261 · confidence: HIGH -->
 - extract one shared bearer guard for the MCP and A2A surfaces (6751ec767)
   <!-- src: apps/server/src/middleware/bearer-guard.ts:58 · confidence: HIGH -->
 - emit `mcp.tool.called`, resource and `auth.denied` protocol events from the embedded server (8f96e99fd)
-  <!-- src: apps/server/src/modules/mcp/index.ts:290 · confidence: HIGH -->
+  <!-- src: apps/server/src/modules/mcp/index.ts:292 · confidence: HIGH -->
 - emit A2A message intake and cancellation events (336424ee8)
   <!-- src: apps/server/src/modules/a2a/index.ts:249 · confidence: HIGH -->
 - add protocol tool usage to the history-anatomy report (11eed7047)
@@ -207,7 +207,7 @@
 - aggregate MCP tools across registered projects and route calls by project prefix (dc24d4f71)
   <!-- src: apps/server/src/gateway.ts:102 · confidence: HIGH -->
 - add guarded corpus write tools to the MCP server (43cd1738e)
-  <!-- src: apps/server/src/modules/mcp/index.ts:205 · confidence: HIGH -->
+  <!-- src: apps/server/src/modules/mcp/tools-task.ts:199 · confidence: HIGH -->
 - point every agent's gateway MCP entry at the served URL at install time (1d573718f)
   <!-- src: apps/cli/src/commands/mcp.ts:103 · confidence: HIGH -->
 - reuse a feature's verification PASS on an unchanged tree instead of re-running the repo-wide pass (f24538574)
@@ -219,11 +219,11 @@
 
 ### Fixed
 - keep protocol events and `auth.denied` refusals working after the tool rename (bedff0916)
-  <!-- src: apps/server/src/modules/mcp/index.ts:664 · confidence: HIGH -->
+  <!-- src: apps/server/src/modules/mcp/index.ts:441 · confidence: HIGH -->
 - spell the batch schedule `--schedule` on every live surface (a4230c256)
   <!-- src: plugins/sp/commands/dev-run.md:21 · confidence: HIGH -->
 - return the created task path from `sp_task_create` and stop the MCP e2e leaking corpus files (5214733ac)
-  <!-- src: apps/server/src/modules/mcp/index.ts:376 · confidence: HIGH -->
+  <!-- src: apps/server/src/modules/mcp/tools-task.ts:199 · confidence: HIGH -->
 - resolve every tasks folder so one directory has one spelling (ce64f1154)
   <!-- src: packages/app/src/services/task-locator.ts:72 · confidence: HIGH -->
 - anchor served planning folders to the project root so a foreign working directory cannot redirect corpus writes (158fa8203)
@@ -294,7 +294,7 @@
 
 ### Fixed
 - refuse `.` and `..` segments in `spur://` resource uris (6ef7a7f20)
-  <!-- src: apps/server/src/modules/mcp/index.ts:160 · confidence: HIGH -->
+  <!-- src: apps/server/src/modules/mcp/index.ts:355 · confidence: HIGH -->
 - treat an IPv6-only port listener as in-use so a fresh start no longer dials the other process (8524f4ec3)
   <!-- src: packages/app/src/services/project-process.ts:264 · confidence: HIGH -->
 - degrade a failed status daemon probe to an omitted line instead of failing `spur status` (e4b4445dd)
