@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B91"
 name: "MCP plugin-namespaced tools and opt-in workflow tools"
-status: done
+status: active
 priority: P1
 tags: []
 created_at: "2026-11-18T05:29:23.038Z"
-updated_at: "2026-11-19T07:27:24.832Z"
+updated_at: "2026-11-24T05:27:43.629Z"
 ---
 
 # B91: MCP plugin-namespaced tools and opt-in workflow tools
@@ -67,6 +67,7 @@ Feature: MCP plugin-namespaced tools and opt-in workflow tools
 | --- | ---- | ------ |
 | 1379 | Rename built-in MCP harness tools to the sp namespace | done |
 | 1380 | Resolve the project MCP namespace from config or plugin manifest | done |
+| 1447 | Downstream MCP tool registration manifest (mcp-tools.yaml) and enriched workflow exposure across sp, cc, and kk | backlog |
 | 1381 | Expose opted-in workflows as namespaced MCP tools | done |
 <!-- END AUTO-GENERATED -->
 
@@ -81,4 +82,5 @@ Phase 1 of the protocol-surfaces roadmap (2026-11-17 planning session).
 - 2026-11-18T07:48:00.827Z backlog → active (system)
 - 2026-11-19T06:46:14.344Z active → verifying (system)
 - 2026-11-19T07:27:24.832Z verifying → done (system)
+- 2026-11-24T05:27:43.629Z done → active (system)
 
