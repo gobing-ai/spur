@@ -3,7 +3,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { resolveExposedWorkflowTools, workflowToolName } from '../../src/services/mcp-workflow-tools';
+import {
+    resolveExposedWorkflowTools,
+    resolveProjectMcpTools,
+    workflowToolDescriptor,
+    workflowToolName,
+} from '../../src/services/mcp-workflow-tools';
 
 // Task 1381 R2/R4: one resolver derives exposed workflow tools, so `workflow validate`
 // and the MCP `tools/list` can never disagree about a name.
@@ -130,5 +135,116 @@ describe('resolveExposedWorkflowTools', () => {
         const { tools, issues } = await resolve('cc');
         expect(tools.map((tool) => tool.tool)).toEqual(['cc_daily_report']);
         expect(issues).toEqual([]);
+    });
+
+    test('AC5: typed metadata.mcp.params builds allowlisted typed descriptor while legacy opt-in stays unchanged', async () => {
+        const typedYaml = `name: typed-flow
+description: Typed report
+kind: state-machine
+metadata:
+  mcp:
+    expose: true
+    params:
+      mode:
+        type: string
+        enum: [daily, ad-hoc]
+        required: true
+        description: Report mode
+      recompute:
+        type: boolean
+vars:
+  mode: daily
+  recompute: "false"
+  spurBin: spur
+  output: ""
+initialState: start
+states:
+  - id: start
+terminalStates:
+  - start
+`;
+        writeWorkflow(join(root, '.spur', 'workflows'), 'typed.yaml', typedYaml);
+        writeWorkflow(join(root, '.spur', 'workflows'), 'legacy.yaml', EXPOSED('legacy-flow'));
+
+        const { tools, issues } = await resolve('cc');
+        expect(issues).toEqual([]);
+        const typed = tools.find((t) => t.tool === 'cc_typed_flow');
+        const legacy = tools.find((t) => t.tool === 'cc_legacy_flow');
+        if (typed === undefined || legacy === undefined) throw new Error('expected typed and legacy tools');
+
+        const typedDesc = workflowToolDescriptor(typed);
+        expect(typedDesc.inputSchema).toEqual({
+            type: 'object',
+            properties: {
+                mode: { type: 'string', enum: ['daily', 'ad-hoc'], description: 'Report mode' },
+                recompute: { type: 'boolean' },
+            },
+            required: ['mode'],
+            additionalProperties: false,
+        });
+        expect(typedDesc.annotations).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
+
+        const legacyDesc = workflowToolDescriptor(legacy);
+        expect(legacyDesc.inputSchema).toEqual({
+            type: 'object',
+            properties: { target: { type: 'string', default: 'default-target' } },
+            additionalProperties: false,
+        });
+        expect(legacyDesc.annotations).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
+    });
+
+    test('AC5: metadata.mcp.params key absent from vars refuses workflow with invalid-params', async () => {
+        const badParamsYaml = `name: bad-params
+kind: state-machine
+metadata:
+  mcp:
+    expose: true
+    params:
+      ghost:
+        type: string
+vars:
+  real: "1"
+initialState: start
+states:
+  - id: start
+terminalStates:
+  - start
+`;
+        writeWorkflow(join(root, '.spur', 'workflows'), 'bad-params.yaml', badParamsYaml);
+        const { tools, issues } = await resolve('cc');
+        expect(tools).toEqual([]);
+        expect(issues).toHaveLength(1);
+        expect(issues[0]?.reason).toBe('invalid-params');
+        expect(issues[0]?.tool).toBe('cc_bad_params');
+    });
+
+    test('R5: resolveProjectMcpTools combines workflow and manifest tools with workflow winning collisions', async () => {
+        writeWorkflow(join(root, '.spur', 'workflows'), 'shared.yaml', EXPOSED('shared'));
+        mkdirSync(join(root, 'plugins', 'cc'), { recursive: true });
+        writeFileSync(
+            join(root, 'plugins', 'cc', 'mcp-tools.yaml'),
+            `schema_version: 1
+tools:
+  - name: shared
+    description: Clashes with workflow
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [echo, clash]
+  - name: ping
+    description: Manifest ping
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [echo, pong]
+`,
+        );
+        const combined = await resolveProjectMcpTools({
+            cwd: root,
+            config: null,
+            namespace: 'cc',
+            fs: createNodeFileSystem(),
+        });
+        expect(combined.workflowTools.map((t) => t.tool)).toContain('cc_shared');
+        expect(combined.manifestTools.map((t) => t.tool)).toEqual(['cc_ping']);
+        expect(combined.issues).toHaveLength(1);
+        expect(combined.issues[0]?.tool).toBe('cc_shared');
+        expect(combined.issues[0]?.reason).toBe('duplicate');
     });
 });

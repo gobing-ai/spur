@@ -1957,3 +1957,291 @@ describe('1446 R2 — discovery and catalog requests emit one lifecycle event ea
         }
     });
 });
+
+describe('1447 — manifest tools, typed workflow params, and sp dogfood', () => {
+    function makeProjectDir(): string {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-mcp-1447-'));
+        mkdirSync(join(dir, 'plugins', 'zz'), { recursive: true });
+        writeFileSync(join(dir, 'plugins', 'zz', 'plugin.json'), JSON.stringify({ name: 'zz' }));
+        return dir;
+    }
+
+    test('AC1 & AC3: lists manifest tool with typed schema and executes via stub executor without shell', async () => {
+        const dir = makeProjectDir();
+        try {
+            writeFileSync(
+                join(dir, 'plugins', 'zz', 'mcp-tools.yaml'),
+                `schema_version: 1
+tools:
+  - name: echo
+    description: Echo message
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    params:
+      msg: { type: string, required: true, description: Message }
+      loud: { type: boolean }
+    command: [printf, "%s"]
+    args:
+      msg: ["{value}"]
+      loud: ["--loud"]
+    output: text
+`,
+            );
+            const spawned: Array<{ command: string; args?: string[]; cwd?: string }> = [];
+            const { app, events, ctx } = makeHarness(
+                { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+                { SPUR_MCP_TOKEN: TOKEN },
+                null,
+                {
+                    cwd: dir,
+                    processExecutor: () => ({
+                        run: async (opts: { command: string; args?: string[]; cwd?: string }) => {
+                            spawned.push(opts);
+                            return {
+                                command: opts.command,
+                                args: opts.args ?? [],
+                                exitCode: 0,
+                                stdout: 'ok-out',
+                                stderr: '',
+                                durationMs: 1,
+                                outcome: 'exit',
+                            };
+                        },
+                    }),
+                },
+            );
+
+            const catalog = await readMcpCatalog(ctx);
+            expect(catalog.exposureIssues).toEqual([]);
+            expect(catalog.manifestToolNames).toContain('zz_echo');
+            const echoDesc = catalog.tools.find((t) => t.name === 'zz_echo');
+            expect(echoDesc).toMatchObject({
+                name: 'zz_echo',
+                annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+                inputSchema: {
+                    type: 'object',
+                    properties: { msg: { type: 'string', description: 'Message' }, loud: { type: 'boolean' } },
+                    required: ['msg'],
+                    additionalProperties: false,
+                },
+            });
+
+            const callRes = await post(app, {
+                token: TOKEN,
+                body: {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'tools/call',
+                    params: { name: 'zz_echo', arguments: { msg: 'a; rm -rf ~ $(id)', loud: false } },
+                },
+            });
+            expect(callRes.status).toBe(200);
+            const body = (await callRes.json()) as { result: { stdout: string } };
+            expect(body.result).toEqual({ stdout: 'ok-out' });
+            expect(spawned).toHaveLength(1);
+            expect(spawned[0]?.command).toBe('printf');
+            expect(spawned[0]?.args).toEqual(['%s', 'a; rm -rf ~ $(id)']);
+
+            const called = events.find((e) => e.name === 'mcp.tool.called');
+            expect(called?.payload).toMatchObject({ tool: 'zz_echo', origin: 'manifest', access: 'read' });
+
+            // Option-injection guard refuses before spawn
+            const badRes = await post(app, {
+                token: TOKEN,
+                body: {
+                    jsonrpc: '2.0',
+                    id: 2,
+                    method: 'tools/call',
+                    params: { name: 'zz_echo', arguments: { msg: '--evil' } },
+                },
+            });
+            expect(badRes.status).toBe(500);
+            const badBody = (await badRes.json()) as { error: { errorCode?: string } };
+            expect(badBody.error.errorCode).toBe('invalid_arguments');
+            expect(spawned).toHaveLength(1);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC4: real-process JSON output, non-zero exit with stderr tail, timeout, and authEnv blanking', async () => {
+        const dir = makeProjectDir();
+        const runtimeEnv = getEnvVars() as Record<string, string | undefined>;
+        const prevSecret = runtimeEnv.SPUR_TEST_MANIFEST_SECRET;
+        runtimeEnv.SPUR_TEST_MANIFEST_SECRET = 'super-secret-value';
+        try {
+            writeFileSync(
+                join(dir, 'plugins', 'zz', 'mcp-tools.yaml'),
+                `schema_version: 1
+tools:
+  - name: json_ok
+    description: Prints JSON
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [bun, -e, "console.log(JSON.stringify({ ok: true, count: 2 }))"]
+    output: json
+  - name: fail_cmd
+    description: Exits 3 with stderr
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [bun, -e, "console.error('boom-stderr-tail'); process.exit(3)"]
+    output: text
+  - name: slow_cmd
+    description: Times out
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [bun, -e, "setTimeout(() => {}, 5000)"]
+    output: text
+    timeoutMs: 1000
+  - name: env_check
+    description: Prints authEnv
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [bun, -e, "const k='env'; process.stdout.write((globalThis.process[k].SPUR_TEST_MANIFEST_SECRET) ?? '')"]
+    output: text
+`,
+            );
+            const { app } = makeHarness(
+                { enabled: true, authEnv: 'SPUR_TEST_MANIFEST_SECRET' },
+                { SPUR_TEST_MANIFEST_SECRET: 'super-secret-value' },
+                null,
+                { cwd: dir },
+            );
+
+            const okRes = await post(app, {
+                token: 'super-secret-value',
+                body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'zz_json_ok', arguments: {} } },
+            });
+            expect(okRes.status).toBe(200);
+            expect(((await okRes.json()) as { result: unknown }).result).toEqual({ ok: true, count: 2 });
+
+            const failRes = await post(app, {
+                token: 'super-secret-value',
+                body: { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'zz_fail_cmd', arguments: {} } },
+            });
+            expect(failRes.status).toBe(500);
+            const failBody = (await failRes.json()) as { error: { message: string } };
+            expect(failBody.error.message).toContain('exited 3');
+            expect(failBody.error.message).toContain('boom-stderr-tail');
+
+            const slowRes = await post(app, {
+                token: 'super-secret-value',
+                body: { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'zz_slow_cmd', arguments: {} } },
+            });
+            expect(slowRes.status).toBe(500);
+            const slowBody = (await slowRes.json()) as { error: { message: string } };
+            expect(slowBody.error.message).toContain('timed out');
+
+            const envRes = await post(app, {
+                token: 'super-secret-value',
+                body: {
+                    jsonrpc: '2.0',
+                    id: 4,
+                    method: 'tools/call',
+                    params: { name: 'zz_env_check', arguments: {} },
+                },
+            });
+            expect(envRes.status).toBe(200);
+            expect(((await envRes.json()) as { result: { stdout: string } }).result).toEqual({ stdout: '' });
+        } finally {
+            if (prevSecret === undefined) delete runtimeEnv.SPUR_TEST_MANIFEST_SECRET;
+            else runtimeEnv.SPUR_TEST_MANIFEST_SECRET = prevSecret;
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC5: typed workflow call validates enum/allowlist and stringifies booleans for WorkflowService.run', async () => {
+        const dir = makeProjectDir();
+        try {
+            mkdirSync(join(dir, '.spur', 'workflows'), { recursive: true });
+            writeFileSync(
+                join(dir, '.spur', 'workflows', 'typed.yaml'),
+                `name: typed-run
+description: Typed workflow
+kind: state-machine
+metadata:
+  mcp:
+    expose: true
+    params:
+      mode: { type: string, enum: [daily, ad-hoc], required: true }
+      recompute: { type: boolean }
+vars:
+  mode: daily
+  recompute: "false"
+  spurBin: spur
+initialState: start
+states:
+  - id: start
+terminalStates:
+  - start
+`,
+            );
+            const { app, recorder } = makeHarness(
+                { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+                { SPUR_MCP_TOKEN: TOKEN },
+                null,
+                { cwd: dir },
+            );
+
+            const okRes = await post(app, {
+                token: TOKEN,
+                body: {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'tools/call',
+                    params: { name: 'zz_typed_run', arguments: { mode: 'daily', recompute: true } },
+                },
+            });
+            expect(okRes.status).toBe(200);
+            expect(recorder.calls.some((c) => c.includes('"recompute":"true"') && c.includes('"mode":"daily"'))).toBe(
+                true,
+            );
+
+            const badEnum = await post(app, {
+                token: TOKEN,
+                body: {
+                    jsonrpc: '2.0',
+                    id: 2,
+                    method: 'tools/call',
+                    params: { name: 'zz_typed_run', arguments: { mode: 'weekly' } },
+                },
+            });
+            expect(badEnum.status).toBe(500);
+            expect(((await badEnum.json()) as { error: { errorCode?: string } }).error.errorCode).toBe(
+                'invalid_arguments',
+            );
+
+            const undeclared = await post(app, {
+                token: TOKEN,
+                body: {
+                    jsonrpc: '2.0',
+                    id: 3,
+                    method: 'tools/call',
+                    params: { name: 'zz_typed_run', arguments: { mode: 'daily', spurBin: '/evil' } },
+                },
+            });
+            expect(undeclared.status).toBe(500);
+            expect(((await undeclared.json()) as { error: { errorCode?: string } }).error.errorCode).toBe(
+                'invalid_arguments',
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC7: repo-root inventory exposes sp_plugin_smoke and sp_history_anatomy with no exposure issues', async () => {
+        const repoRoot = join(import.meta.dir, '../../../..');
+        const { ctx } = makeHarness({ enabled: true, authEnv: 'SPUR_MCP_TOKEN' }, { SPUR_MCP_TOKEN: TOKEN }, null, {
+            cwd: repoRoot,
+        });
+        const catalog = await readMcpCatalog(ctx);
+        expect(catalog.exposureIssues).toEqual([]);
+        const smoke = catalog.tools.find((t) => t.name === 'sp_plugin_smoke');
+        expect(smoke).toBeDefined();
+        expect(smoke?.annotations?.readOnlyHint).toBe(true);
+        expect(catalog.manifestToolNames).toContain('sp_plugin_smoke');
+
+        const anatomy = catalog.tools.find((t) => t.name === 'sp_history_anatomy');
+        expect(anatomy).toBeDefined();
+        const props = (anatomy?.inputSchema as { properties?: Record<string, unknown> })?.properties ?? {};
+        expect(props.mode).toMatchObject({ type: 'string', enum: ['daily', 'ad-hoc'] });
+        expect(props.recompute).toMatchObject({ type: 'boolean' });
+        expect(props.output).toBeUndefined();
+        expect(props.spurBin).toBeUndefined();
+    });
+});

@@ -328,3 +328,45 @@ for (const mode of ['state-machine', 'transition-flow'] as const) {
         }
     });
 }
+
+describe('task 1448 AC2: host pause publishes summary receipt only after terminal resume', () => {
+    test('paused host run omits summaryFile and writes no files; terminal continue writes pair matching DB window', async () => {
+        const runId = 'host-summary-ac2';
+        const { dir, dbUrl, result } = await runOnHost(runId);
+        try {
+            expect(result.status).toBe('paused');
+            expect(result.summaryFile).toBeUndefined();
+            await expect(readFile(join(dir, '.spur', 'run', `${runId}-summary.md`), 'utf8')).rejects.toThrow();
+            await expect(readFile(join(dir, '.spur', 'run', `${runId}-summary.json`), 'utf8')).rejects.toThrow();
+
+            const out = createCapturedOutput();
+            const exit = await main(['workflow', 'continue', runId, '--yes', '--answer', 'yes', '--json'], {
+                output: out,
+                cwd: dir,
+                dbUrl,
+            });
+            expect(exit).toBe(0);
+            const resumed = JSON.parse(out.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+            expect(resumed.status).toBe('done');
+            expect(resumed.summaryFile).toBe(join('.spur', 'run', `${runId}-summary.md`));
+
+            const md = await readFile(join(dir, '.spur', 'run', `${runId}-summary.md`), 'utf8');
+            expect(md.length).toBeGreaterThan(0);
+            const json = JSON.parse(await readFile(join(dir, '.spur', 'run', `${runId}-summary.json`), 'utf8')) as {
+                runId: string;
+                startedAt: string;
+                completedAt: string;
+            };
+            const db = await createMigratedDb({ url: dbUrl });
+            const row = await db.queryFirst<{ started_at: string; completed_at: string }>(
+                'SELECT started_at, completed_at FROM runs WHERE id = ?',
+                runId,
+            );
+            expect(json.runId).toBe(runId);
+            expect(json.startedAt).toBe(row?.started_at ?? '');
+            expect(json.completedAt).toBe(row?.completed_at ?? '');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});

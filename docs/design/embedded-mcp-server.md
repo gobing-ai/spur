@@ -140,18 +140,33 @@ gateway adds when it re-advertises `TOOL_DESCRIPTORS`.
 The server resolves planning folders against the served project root. Corpus operations use
 that root even when the server process was started from another working directory.
 
-**Workflow tools (task 1381).** `tools/list` additionally advertises every workflow that declares
+**Workflow tools (task 1381, enriched task 1447).** `tools/list` additionally advertises every workflow that declares
 `metadata: { mcp: { expose: true } }`, named `<namespace>_<workflow>` (lowercase, non-alphanumerics
-mapped to `_`), described by the workflow's own `description`, with one optional string property per
-declared `vars` entry carrying its default (`additionalProperties: false`). Roots are the workflow
-layers — project, registered `workflows.paths`, shared. The gateway uses the same inventory
-and schema without starting a project. Register any additional folder in `workflows.paths` so
-its tools are both discoverable and callable. `tools/call` on
-such a name runs the file through `WorkflowService.run(file, { vars })`; an argument outside the
-declared vars is refused with `invalid_arguments`. `listTools` and `spur workflow validate` share
-one resolver (`packages/app/src/services/mcp-workflow-tools.ts`), so a name is never advertised
-while validate rejects it: no project namespace, a collision with a built-in name, or two
-definitions deriving the same name omit the tool and fail validate with the reason and remedy.
+mapped to `_`), described by the workflow's own `description`, with `additionalProperties: false`.
+When `metadata.mcp.params` is omitted, every declared `vars` entry becomes an optional string
+property carrying its default (legacy behavior). When `metadata.mcp.params` is present, it acts as
+a typed allowlist (`string` | `number` | `boolean`, optional `description`, `enum`, `required`):
+only declared params are advertised and accepted, arguments are validated against the typed schema
+and stringified before `WorkflowService.run(file, { vars })`, and every undeclared var keeps its
+YAML default. A `params` key absent from `vars` refuses the workflow with `reason: 'invalid-params'`.
+Workflow annotations remain frozen (`{readOnlyHint: false, destructiveHint: false, idempotentHint: false}`).
+Roots are the workflow layers — project, registered `workflows.paths`, shared. The gateway uses the
+same inventory and schema without starting a project.
+
+**Manifest tools (task 1447).** Projects with a resolved namespace may also declare CLI-backed MCP
+tools in `plugins/<namespace>/mcp-tools.yaml` (strict Zod schema in
+`packages/app/src/services/mcp-manifest-tools.ts`, mirrored by `apps/cli/schemas/mcp-tools.schema.json`).
+Each entry declares `name` (`^[a-z][a-z0-9_]{0,47}$`, exposed as `<namespace>_<name>`),
+`description`, all three `annotations` booleans, optional typed `params`, a fixed `command` argv
+with no placeholders, per-param `args` fragments (`{value}` as one discrete element for
+string/number; no `{value}` for boolean flags), `output` (`text` | `json`, default `text`), and
+`timeoutMs` (`1000..120000`, default `30000`). `resolveProjectMcpTools` combines workflows and
+manifests so built-ins and exposed workflows win collisions (`builtin-collision` / `duplicate`);
+schema or fragment errors emit `invalid-manifest` and refuse the offending entry or file without
+throwing. Execution runs via `NodeProcessExecutor` (no shell), validates arguments before spawn
+(including a 1024-char limit and a leading-`-` option-injection guard on non-enum strings), blanks
+the `server.mcp.authEnv` variable from `childProcessEnv()`, enforces a 1 MiB stdout cap, and
+reports `origin: 'manifest'` in `mcp.tool.called` / `mcp.tool.failed` and the Board McpTab.
 
 **Tool annotations (task 1421 R2).** Every advertised descriptor — the 41 built-ins and every
 exposed workflow tool — carries the three MCP hints. Reads are `{readOnlyHint: true,

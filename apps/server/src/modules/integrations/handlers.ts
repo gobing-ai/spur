@@ -145,6 +145,7 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                         tools: catalog.tools,
                         resources: catalog.resources,
                         builtinToolNames: BUILTIN_TOOL_NAMES,
+                        manifestToolNames: catalog.manifestToolNames,
                         // 1438 R1: the namespace the tools are named under, where it came from, and
                         // the workflows the same resolver refused — carried straight through.
                         namespace: catalog.namespace,

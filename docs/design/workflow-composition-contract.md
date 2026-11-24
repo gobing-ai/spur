@@ -81,9 +81,21 @@ description: build the daily report   # becomes the tool description
 metadata:
   mcp:
     expose: true
+    params:                           # optional typed allowlist (task 1447 R4)
+      mode: { type: string, enum: [daily, ad-hoc], required: true, description: Report mode }
+      recompute: { type: boolean }
 vars:
-  target: default-target             # one optional string property per var, carrying its default
+  mode: daily
+  recompute: "false"
+  spurBin: spur                       # omitted from params → not advertised or settable via MCP
 ```
+
+When `metadata.mcp.params` is omitted, every declared `vars` entry becomes an optional string
+property carrying its default (legacy behavior). When `metadata.mcp.params` is present, it acts as
+an allowlist of `vars` keys with typed schemas (`string` | `number` | `boolean`, optional
+`description`, `enum`, `required`); MCP callers are validated against the typed schema and values
+are stringified for `WorkflowService.run`. Any `params` key not present in `vars` refuses the
+workflow with `reason: 'invalid-params'`. Workflow annotations remain frozen as write/non-idempotent.
 
 `resolveExposedWorkflowTools` (`packages/app/src/services/mcp-workflow-tools.ts`) derives the tool
 name as `<namespace>_<name>` with lowercase and every run of non-alphanumerics mapped to `_`

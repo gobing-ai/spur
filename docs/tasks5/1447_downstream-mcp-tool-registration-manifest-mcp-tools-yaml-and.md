@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Downstream MCP tool registration manifest (mcp-tools.yaml) and enriched workflow exposure across sp, cc, and kk
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-24T05:27:44.333Z
-updated_at: "2026-11-24T05:39:50.878Z"
+updated_at: "2026-11-24T21:41:53.712Z"
 feature_id: B91
 
 dependencies: ["1445", "1446"]
@@ -12,6 +12,8 @@ ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 12
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1447. Downstream MCP tool registration manifest (mcp-tools.yaml) and enriched workflow exposure across sp, cc, and kk
@@ -45,7 +47,7 @@ This leaves three gaps for downstream projects (`/Users/robin/xprojects/superski
 
 ### Requirements
 
-- [ ] R1. Define the manifest contract `plugins/<namespace>/mcp-tools.yaml` as a Zod schema in `packages/app/src/services/mcp-manifest-tools.ts`. Top level: `schema_version: 1` and `tools[]`. Each tool has:
+- [x] R1. Define the manifest contract `plugins/<namespace>/mcp-tools.yaml` as a Zod schema in `packages/app/src/services/mcp-manifest-tools.ts`. Top level: `schema_version: 1` and `tools[]`. Each tool has:
   - `name`, matching `^[a-z][a-z0-9_]{0,47}$` and exposed as `<namespace>_<name>`;
   - `description`;
   - all three `annotations` booleans, required;
@@ -55,26 +57,26 @@ This leaves three gaps for downstream projects (`/Users/robin/xprojects/superski
   - `output` (`json|text`, default `text`);
   - `timeoutMs` (1000–120000, default 30000).
   Unknown keys are rejected (strict).
-- [ ] R2. Resolution and validation. `resolveManifestTools` reads `plugins/<namespace>/mcp-tools.yaml` for the resolved namespace. A missing file means no tools and no issue. It records `McpExposureIssue`s, never throwing, for:
+- [x] R2. Resolution and validation. `resolveManifestTools` reads `plugins/<namespace>/mcp-tools.yaml` for the resolved namespace. A missing file means no tools and no issue. It records `McpExposureIssue`s, never throwing, for:
   - a parse or schema failure: `reason: 'invalid-manifest'`, with the whole file refused;
   - a param without an `args` fragment, or a fragment whose `{value}` rule is wrong: `invalid-manifest`, with that entry refused;
   - a collision with a built-in: `builtin-collision`;
   - a collision with a workflow tool, or a duplicate inside the manifest: `duplicate`.
   Refused entries never appear in `tools/list` and are never callable.
-- [ ] R3. Safe execution. `buildManifestArgv(tool, args)` validates the arguments before any spawn:
+- [x] R3. Safe execution. `buildManifestArgv(tool, args)` validates the arguments before any spawn:
   - unknown keys, wrong types, values outside `enum`, and missing required params raise `InvalidArgumentsError` → `invalid_arguments`;
   - string values longer than 1024 characters, or starting with `-` on a param without `enum`, are refused (option-injection guard).
   The argv is `command` followed by the fragments of the supplied params (or their `default`s), in declaration order. `{value}` is replaced by one argv element. A boolean fragment has no `{value}` and is appended only when the value is `true`. The dispatcher runs it through `NodeProcessExecutor` (no shell) with `cwd = ctx.cwd`, the env from `childProcessEnv()` with the `server.mcp.authEnv` variable blanked, and the tool's `timeoutMs`. Result handling:
   - exit 0 + `json` → the parsed stdout;
   - exit 0 + `text` → `{stdout}`;
   - non-zero exit, timeout, stdout over 1 MiB, or unparseable JSON → a tool error carrying the last 2000 characters of stderr.
-- [ ] R4. Typed workflow params. `metadata.mcp.params` is an optional map from a declared `vars` key to `{type, description?, enum?, required?}`. It feeds `workflowToolDescriptor` (typed properties, a `required` array, descriptions) and `callWorkflowTool`, which validates and then stringifies. When `params` is present it is an allowlist: only the declared vars are advertised and accepted, and every other var keeps its YAML default. Workflows with only `metadata.mcp.expose: true` produce exactly today's descriptor and behavior. A `params` key that is not in `vars` → an `invalid-manifest`-style issue (`reason: 'invalid-params'`), and the workflow is refused. Workflow annotations stay frozen (1421 R2).
-- [ ] R5. Wiring. One resolver, `resolveProjectMcpTools`, combines the workflow and manifest tools and their issues, and feeds:
+- [x] R4. Typed workflow params. `metadata.mcp.params` is an optional map from a declared `vars` key to `{type, description?, enum?, required?}`. It feeds `workflowToolDescriptor` (typed properties, a `required` array, descriptions) and `callWorkflowTool`, which validates and then stringifies. When `params` is present it is an allowlist: only the declared vars are advertised and accepted, and every other var keeps its YAML default. Workflows with only `metadata.mcp.expose: true` produce exactly today's descriptor and behavior. A `params` key that is not in `vars` → an `invalid-manifest`-style issue (`reason: 'invalid-params'`), and the workflow is refused. Workflow annotations stay frozen (1421 R2).
+- [x] R5. Wiring. One resolver, `resolveProjectMcpTools`, combines the workflow and manifest tools and their issues, and feeds:
   - `McpDispatcher.listTools`, `catalog()`, and dispatch (`apps/server/src/modules/mcp/index.ts`);
   - the gateway's `mcpRoutes` (`packages/app/src/services/project-gateway.ts:774-799`), so that name routing (`:889`) finds manifest tools;
   - Integrations status.
   Manifest calls go through the same `callTool` telemetry wrapper with `origin: 'manifest'`, extending 1446's union, so the Board McpTab Origin column shows `manifest`.
-- [ ] R6. Dogfood and docs:
+- [x] R6. Dogfood and docs:
   - `plugins/sp/mcp-tools.yaml` exposes `sp_plugin_smoke` (`["bun","run","plugin-smoke"]`, read-only, idempotent, `timeoutMs: 120000`, `output: text`);
   - `config/workflows/history-anatomy.yaml` opts in with typed `params` covering only `mode` (enum `daily|ad-hoc`, `history-anatomy.yaml:31`), `date`, `since`, `until`, `focus` and `recompute` (boolean). `output` and `spurBin` are deliberately left out (see correction 11);
   - add `apps/cli/schemas/mcp-tools.schema.json`, generated from or kept in parity with the Zod schema;
@@ -217,26 +219,99 @@ metadata:
 
 ### Plan
 
-0. Confirm that 1445 and 1446 are `done` and merged, and rebase. Read 1446's final `origin` union and the shape of `callTool`'s wrapper.
-1. (R1, R2, R3) Write failing tests in `packages/app/tests/services/mcp-manifest-tools.test.ts`: schema strictness, the refusal matrix (AC2), and `buildManifestArgv` binding and guards (AC3). Then implement `mcp-manifest-tools.ts`.
-2. (R4) Write failing tests in `packages/app/tests/services/mcp-workflow-tools.test.ts`: typed descriptor, allowlist, legacy parity, `invalid-params` (AC5 descriptor half). Then extend `mcp-workflow-tools.ts` and add `resolveProjectMcpTools`.
-3. (R3, R4, R5) Write failing tests in `apps/server/tests/modules/mcp-module.test.ts`: list, call through a stub executor (AC1, AC3), real-process results, timeout and env blanking (AC4), typed workflow call stringification (AC5), `origin: 'manifest'` events. Then wire `McpDispatcher` and the ctx executor.
-4. (R5) Gateway and Board: extend `project-gateway-mcp.test.ts` and `integrations-module.test.tsx` (AC6), then update `mcpRoutes`, the contract enum and McpTab.
-5. (R6) Write `plugins/sp/mcp-tools.yaml` and the `history-anatomy.yaml` opt-in; add `apps/cli/schemas/mcp-tools.schema.json` plus a parity test; run the repo-root inventory test (AC7); run `bun run --filter @gobing-ai/spur build:bundle`.
-6. (R6) Docs: the manifest section in `embedded-mcp-server.md`, `metadata.mcp.params` in `workflow-composition-contract.md`, and the ADR-152 amendment (scoped spawn path).
-7. Gate: `bun run spur-check`, then `bun run build`. Manual check: `spur serve` + `spur mcp` → `tools/list` shows `sp_plugin_smoke` and `sp_history_anatomy`; call `sp_plugin_smoke`.
+- [x] 0. Confirm that 1445 and 1446 are `done` and merged, and rebase. Read 1446's final `origin` union and the shape of `callTool`'s wrapper.
+- [x] 1. (R1, R2, R3) Write failing tests in `packages/app/tests/services/mcp-manifest-tools.test.ts`: schema strictness, the refusal matrix (AC2), and `buildManifestArgv` binding and guards (AC3). Then implement `mcp-manifest-tools.ts`.
+- [x] 2. (R4) Write failing tests in `packages/app/tests/services/mcp-workflow-tools.test.ts`: typed descriptor, allowlist, legacy parity, `invalid-params` (AC5 descriptor half). Then extend `mcp-workflow-tools.ts` and add `resolveProjectMcpTools`.
+- [x] 3. (R3, R4, R5) Write failing tests in `apps/server/tests/modules/mcp-module.test.ts`: list, call through a stub executor (AC1, AC3), real-process results, timeout and env blanking (AC4), typed workflow call stringification (AC5), `origin: 'manifest'` events. Then wire `McpDispatcher` and the ctx executor.
+- [x] 4. (R5) Gateway and Board: extend `project-gateway-mcp.test.ts` and `integrations-module.test.tsx` (AC6), then update `mcpRoutes`, the contract enum and McpTab.
+- [x] 5. (R6) Write `plugins/sp/mcp-tools.yaml` and the `history-anatomy.yaml` opt-in; add `apps/cli/schemas/mcp-tools.schema.json` plus a parity test; run the repo-root inventory test (AC7); run `bun run --filter @gobing-ai/spur build:bundle`.
+- [x] 6. (R6) Docs: the manifest section in `embedded-mcp-server.md`, `metadata.mcp.params` in `workflow-composition-contract.md`, and the ADR-152 amendment (scoped spawn path).
+- [x] 7. Gate: `bun run spur-check`, then `bun run build`. Manual check: `spur serve` + `spur mcp` → `tools/list` shows `sp_plugin_smoke` and `sp_history_anatomy`; call `sp_plugin_smoke`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `packages/app/src/services/mcp-manifest-tools.ts:1-425` | Added strict Zod `manifestSchema`, `resolveManifestTools`, `manifestToolDescriptor`, `ManifestInvalidArgumentsError`, and pure `buildManifestArgv` with discrete argv binding, 1024-char limit, and leading-`-` option-injection guard (R1–R3). |
+| `packages/app/src/services/mcp-workflow-tools.ts:1-315` | Extended `McpExposureReason` with `'invalid-manifest' \| 'invalid-params'`, added `metadata.mcp.params` typed allowlist parsing and descriptor generation, preserved legacy all-vars behavior and frozen annotations, and added `resolveProjectMcpTools` combining workflows + manifests with workflows winning collisions (R4–R5). |
+| `packages/app/src/index.ts:629-660` | Re-exported new manifest/workflow MCP symbols and `childProcessEnv`. |
+| `apps/server/src/context.ts:82-775` | Exposed lazy `processExecutor()` backed by the shared `processRegistry()` and reused it in `supervisor()` (R3). |
+| `apps/server/src/modules/mcp/index.ts:1-515` | Wired `McpDispatcher` (`listTools`, `catalog`, `toolIdentity`, `dispatchTool`) onto `resolveProjectMcpTools`, added typed `callWorkflowTool` validation + stringification, added `callManifestTool` with `NodeProcessExecutor`, `authEnv` blanking, 1 MiB stdout cap, stderr tail errors, and `origin: 'manifest'` telemetry (R3–R5). |
+| `packages/app/src/services/project-gateway.ts:10-835` | Updated `mcpRoutes` to list and route both workflow and manifest tools via `resolveProjectMcpTools` (R5). |
+| `packages/contracts/src/integrations.ts:19-90` | Extended `integrationsMcpToolSchema.origin` with `'manifest'` and `integrationsMcpExposureIssueSchema.reason` with `'invalid-manifest'` and `'invalid-params'` (R5). |
+| `packages/app/src/services/integrations-service.ts:41-215` | Added optional `manifestToolNames` on `IntegrationsMcpSource` and mapped manifest tools to `origin: 'manifest'` (R5). |
+| `apps/server/src/modules/integrations/handlers.ts:145-155` | Passed `catalog.manifestToolNames` into `IntegrationsService` (R5). |
+| `apps/web/src/modules/integrations/McpTab.tsx:111-120` | Rendered `manifest` origin badge (`info` variant) in the Tools table (R5). |
+| `plugins/sp/mcp-tools.yaml:1-10` | Added `sp` dogfood manifest exposing `sp_plugin_smoke` (R6). |
+| `config/workflows/history-anatomy.yaml:52-76` | Opted `history-anatomy` into MCP exposure with allowlisted typed `params` (`mode`, `date`, `since`, `until`, `focus`, `recompute`), excluding `output` and `spurBin`, and rebuilt `apps/cli/config/` (R6). |
+| `apps/cli/schemas/mcp-tools.schema.json:1-125` | Added JSON Schema mirroring `manifestSchema` (R6). |
+| `docs/design/embedded-mcp-server.md:143-175` | Documented manifest tools and typed workflow `metadata.mcp.params` (R6). |
+| `docs/design/workflow-composition-contract.md:78-96` | Documented `metadata.mcp.params` typed allowlist and `invalid-params` refusal (R6). |
+| `docs/00_ADR.md:3003-3011` | Added ADR-152 amendment recording the scoped manifest spawn path (R6). |
+| `packages/app/tests/services/mcp-manifest-tools.test.ts:1-265` | Added schema, refusal matrix, `buildManifestArgv`, and dogfood/JSON Schema parity tests (AC1–AC3, AC7). |
+| `packages/app/tests/services/mcp-workflow-tools.test.ts:132-250` | Added typed workflow params, legacy parity, `invalid-params`, and `resolveProjectMcpTools` tests (AC5). |
+| `apps/server/tests/modules/mcp-module.test.ts:1961-2250` | Added manifest list/call, stub executor, real-process JSON/error/timeout/`authEnv` blanking, typed workflow stringification, and repo-root dogfood inventory tests (AC1, AC3–AC5, AC7). |
+| `packages/app/tests/services/project-gateway-mcp.test.ts:515-545` | Added gateway manifest tool discovery and routing test (AC6). |
+| `packages/app/tests/services/integrations-service.test.ts:130-156` | Verified `manifest` origin propagation in `IntegrationsService` (AC6). |
+| `apps/web/tests/modules/integrations/integrations-module.test.tsx:885-911` | Verified `manifest` origin badge in `McpTab` (AC6). |
+| `apps/server/tests/modules/integrations/handlers.test.ts:413-418` | Updated `no-namespace` assertion to account for shared `history-anatomy.yaml` opt-in alongside local exposed workflow. |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/mcp-manifest-tools.ts:23-98`, `packages/app/tests/services/mcp-manifest-tools.test.ts:34-100` |
+| R2 | MET | `packages/app/src/services/mcp-manifest-tools.ts:184-317`, `packages/app/tests/services/mcp-manifest-tools.test.ts:102-235` |
+| R3 | MET | `packages/app/src/services/mcp-manifest-tools.ts:350-421`, `apps/server/src/modules/mcp/index.ts:273-325`, `apps/server/tests/modules/mcp-module.test.ts:1970-2145` |
+| R4 | MET | `packages/app/src/services/mcp-workflow-tools.ts:57-315`, `apps/server/src/modules/mcp/index.ts:199-270`, `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221` |
+| R5 | MET | `packages/app/src/services/mcp-workflow-tools.ts:255-275`, `apps/server/src/modules/mcp/index.ts:130-450`, `packages/app/src/services/project-gateway.ts:806-835`, `packages/contracts/src/integrations.ts:19-90`, `packages/app/src/services/integrations-service.ts:41-215`, `apps/web/src/modules/integrations/McpTab.tsx:111-120` |
+| R6 | MET | `plugins/sp/mcp-tools.yaml:1-10`, `config/workflows/history-anatomy.yaml:52-76`, `apps/cli/schemas/mcp-tools.schema.json:1-125`, `docs/design/embedded-mcp-server.md:143-175`, `docs/design/workflow-composition-contract.md:78-96`, `docs/00_ADR.md:3003-3011` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:45-100`, `apps/server/tests/modules/mcp-module.test.ts:1970-2065` |
+| AC2 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:102-235` |
+| AC3 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:237-285`, `apps/server/tests/modules/mcp-module.test.ts:1970-2065` |
+| AC4 | MET | test | `apps/server/tests/modules/mcp-module.test.ts:2067-2145` |
+| AC5 | MET | test | `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221`, `apps/server/tests/modules/mcp-module.test.ts:2147-2225` |
+| AC6 | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:515-545`, `packages/app/tests/services/integrations-service.test.ts:130-156`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:885-911` |
+| AC7 | MET | test | `apps/server/tests/modules/mcp-module.test.ts:2227-2248`, `packages/app/tests/services/mcp-manifest-tools.test.ts:287-320`, `docs/design/embedded-mcp-server.md:143-175`, `docs/design/workflow-composition-contract.md:78-96`, `docs/00_ADR.md:3003-3011` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Requirements Traceability
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/mcp-manifest-tools.ts:23-98`, `packages/app/tests/services/mcp-manifest-tools.test.ts:34-100` |
+| R2 | MET | `packages/app/src/services/mcp-manifest-tools.ts:184-317`, `packages/app/tests/services/mcp-manifest-tools.test.ts:102-235` |
+| R3 | MET | `packages/app/src/services/mcp-manifest-tools.ts:350-421`, `apps/server/src/modules/mcp/index.ts:273-325`, `apps/server/tests/modules/mcp-module.test.ts:1970-2145` |
+| R4 | MET | `packages/app/src/services/mcp-workflow-tools.ts:57-315`, `apps/server/src/modules/mcp/index.ts:199-270`, `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221` |
+| R5 | MET | `packages/app/src/services/mcp-workflow-tools.ts:255-275`, `apps/server/src/modules/mcp/index.ts:130-450`, `packages/app/src/services/project-gateway.ts:806-835`, `packages/contracts/src/integrations.ts:19-90`, `packages/app/src/services/integrations-service.ts:41-215`, `apps/web/src/modules/integrations/McpTab.tsx:111-120` |
+| R6 | MET | `plugins/sp/mcp-tools.yaml:1-10`, `config/workflows/history-anatomy.yaml:52-76`, `apps/cli/schemas/mcp-tools.schema.json:1-125`, `docs/design/embedded-mcp-server.md:143-175`, `docs/design/workflow-composition-contract.md:78-96`, `docs/00_ADR.md:3003-3011` |
+
+#### Acceptance Criteria
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:45-100`, `apps/server/tests/modules/mcp-module.test.ts:1970-2065` |
+| AC2 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:102-235` |
+| AC3 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:237-285`, `apps/server/tests/modules/mcp-module.test.ts:1970-2065` |
+| AC4 | MET | test | `apps/server/tests/modules/mcp-module.test.ts:2067-2145` |
+| AC5 | MET | test | `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221`, `apps/server/tests/modules/mcp-module.test.ts:2147-2225` |
+| AC6 | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:515-545`, `packages/app/tests/services/integrations-service.test.ts:130-156`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:885-911` |
+| AC7 | MET | test+static-ref | `apps/server/tests/modules/mcp-module.test.ts:2227-2248`, `packages/app/tests/services/mcp-manifest-tools.test.ts:287-320`, `docs/design/embedded-mcp-server.md:143-175`, `docs/design/workflow-composition-contract.md:78-96`, `docs/00_ADR.md:3003-3011` |
+
+#### Findings
+
+None (0 P1, 0 P2, 0 P3, 0 P4). All security invariants (no shell, discrete argv, option-injection guard, 1024-char arg limit, `authEnv` blanking, 1 MiB stdout cap, workflow `params` allowlist) and quality gates pass.
+
+Verdict: PASS
 
 ### References
 
@@ -248,4 +323,7 @@ metadata:
 ### History
 
 - 2026-11-24T05:39:50.878Z backlog → todo (system)
+- 2026-11-24T21:30:12.759Z todo → wip (system)
+- 2026-11-24T21:41:52.085Z wip → testing (system)
+- 2026-11-24T21:41:53.708Z testing → done (system)
 

@@ -1,0 +1,11 @@
+schema_version: 1
+tools:
+  - name: plugin_smoke
+    description: Run the sp plugin install smoke check.
+    annotations:
+      readOnlyHint: true
+      destructiveHint: false
+      idempotentHint: true
+    command: [bun, run, plugin-smoke]
+    output: text
+    timeoutMs: 120000

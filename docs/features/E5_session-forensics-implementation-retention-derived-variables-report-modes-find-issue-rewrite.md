@@ -115,6 +115,7 @@ Feature: Session forensics implementation
 | --- | ---- | ------ |
 | 1258 | Bound project database growth from imported history tables | done |
 | 1151 | Session-timeline must segment operator skill invocations on pi, not count them as injected bodies | done |
+| 1448 | Restore the run-close execution summary on the engine terminal path | done |
 | 1131 | Fix tool-call args digest collisions and attach pi tool durations in history import | done |
 | 1146 | Emit the execution summary from the run close step and split time by actor | done |
 | 1130 | Parse pi transcripts in session-timeline | done |

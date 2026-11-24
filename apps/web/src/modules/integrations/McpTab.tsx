@@ -109,7 +109,13 @@ export function McpTab({
                                             <td className="font-mono text-xs">{tool.name}</td>
                                             <td>
                                                 <Badge
-                                                    variant={tool.origin === 'built-in' ? 'primary' : 'secondary'}
+                                                    variant={
+                                                        tool.origin === 'built-in'
+                                                            ? 'primary'
+                                                            : tool.origin === 'manifest'
+                                                              ? 'info'
+                                                              : 'secondary'
+                                                    }
                                                     size="sm"
                                                 >
                                                     {tool.origin}

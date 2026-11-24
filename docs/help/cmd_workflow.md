@@ -228,7 +228,8 @@ and returns the run id immediately. The worker self-records its pid onto the run
   "status": "done",
   "finalState": "done",
   "transitionsTaken": 3,
-  "reason": null
+  "reason": null,
+  "summaryFile": ".spur/run/4fa7a9a1-...-summary.md"
 }
 ```
 

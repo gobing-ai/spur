@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Restore the run-close execution summary on the engine terminal path
-status: todo
+status: done
 template: issue
 created_at: 2026-11-24T20:57:29.557Z
-updated_at: "2026-11-24T21:04:37.484Z"
+updated_at: "2026-11-24T22:03:51.199Z"
 feature_id: E5
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1448. Restore the run-close execution summary on the engine terminal path
@@ -27,10 +29,10 @@ Task 1146 established per-run execution summaries and batch roll-up. Its 2026-11
 
 ### Requirements
 
-- [ ] R1. A real `spur workflow run` or `spur workflow continue` that settles as `done` or `failed` emits a best-effort summary from that run's persisted `started_at` through `completed_at`. A measured close writes `.spur/run/<runId>-summary.md` and `.json`. A close without measurements may write the existing Markdown-only `Execution summary: n/a (<reason>)` fallback. Summary failure preserves the workflow status, reason, and exit code.
-- [ ] R2. Terminal CLI JSON includes the optional `summaryFile` field with the Markdown path relative to the run's launch project when the writer returns a file. Pauses, interruptions, dry runs, start acknowledgments, and failed writes omit it. Existing JSON envelope and human output behavior are preserved.
-- [ ] R3. The single-run and batch runbooks describe how to display the terminal summary and roll up available per-run JSON receipts. The existing `/sp:dev-run` and batch `--no-summary` option suppresses display. The workflow CLI gains no verb or flag.
-- [ ] R4. Exercise real CLI execution in temporary projects so removing the terminal producer breaks the regression checks.
+- [x] R1. A real `spur workflow run` or `spur workflow continue` that settles as `done` or `failed` emits a best-effort summary from that run's persisted `started_at` through `completed_at`. A measured close writes `.spur/run/<runId>-summary.md` and `.json`. A close without measurements may write the existing Markdown-only `Execution summary: n/a (<reason>)` fallback. Summary failure preserves the workflow status, reason, and exit code.
+- [x] R2. Terminal CLI JSON includes the optional `summaryFile` field with the Markdown path relative to the run's launch project when the writer returns a file. Pauses, interruptions, dry runs, start acknowledgments, and failed writes omit it. Existing JSON envelope and human output behavior are preserved.
+- [x] R3. The single-run and batch runbooks describe how to display the terminal summary and roll up available per-run JSON receipts. The existing `/sp:dev-run` and batch `--no-summary` option suppresses display. The workflow CLI gains no verb or flag.
+- [x] R4. Exercise real CLI execution in temporary projects so removing the terminal producer breaks the regression checks.
 
 Out of scope: engine-package changes, workflow YAML edits, changes to measurement or transcript formats, summary backfill, cancellation/cleanup commands, and cross-worktree persistence changes.
 
@@ -82,11 +84,11 @@ Then it reads the returned `summaryFile` for display, skips missing JSON receipt
 
 ### Plan
 
-- [ ] 0. Confirm the implementation checkout uses the lockfile's engine version and root manifest's Bun version. Refine found engine 0.8.4 matching the lockfile; the CLI workspace test resolved Bun 1.4.4 while the root pins 1.4.3. Use the pinned Bun for implementation gates.
-- [ ] 1. Before production edits, extend `apps/cli/tests/commands/workflow/host-operator-pause.test.ts` for AC2 and `apps/cli/tests/commands/workflow/run.test.ts` for AC1 and AC3, using the real CLI `main`, an isolated on-disk DB, and real filesystem writes. Use the async spawn test harness to force only the launch to throw and assert the synchronous fallback result includes its own receipt. Record the failing receipt assertions before the fix.
-- [ ] 2. Add the app reporting seam and invoke it from all three CLI terminal result paths as specified in Design. Keep the reporting error boundary outside the workflow result/error handling. (R1, R2)
-- [ ] 3. Update single-run, batch, and workflow CLI docs for the terminal field and display switch. Keep the batch receipt contract test consistent with the documented roll-up command. (R3)
-- [ ] 4. Rerun both CLI test files from `apps/cli`, the existing `run-summary-render.test.ts` and `run-summary-cli.test.ts` suites from `packages/app`, the `execution-batch-contract.test.ts` suite from `plugins/sp`, and the task gate. Record reproducible commands, results, and observed terminal JSON/file assertions through normal task verification. (R1–R4)
+- [x] 0. Confirm the implementation checkout uses the lockfile's engine version and root manifest's Bun version. Refine found engine 0.8.4 matching the lockfile; the CLI workspace test resolved Bun 1.4.4 while the root pins 1.4.3. Use the pinned Bun for implementation gates.
+- [x] 1. Before production edits, extend `apps/cli/tests/commands/workflow/host-operator-pause.test.ts` for AC2 and `apps/cli/tests/commands/workflow/run.test.ts` for AC1 and AC3, using the real CLI `main`, an isolated on-disk DB, and real filesystem writes. Use the async spawn test harness to force only the launch to throw and assert the synchronous fallback result includes its own receipt. Record the failing receipt assertions before the fix.
+- [x] 2. Add the app reporting seam and invoke it from all three CLI terminal result paths as specified in Design. Keep the reporting error boundary outside the workflow result/error handling. (R1, R2)
+- [x] 3. Update single-run, batch, and workflow CLI docs for the terminal field and display switch. Keep the batch receipt contract test consistent with the documented roll-up command. (R3)
+- [x] 4. Rerun both CLI test files from `apps/cli`, the existing `run-summary-render.test.ts` and `run-summary-cli.test.ts` suites from `packages/app`, the `execution-batch-contract.test.ts` suite from `plugins/sp`, and the task gate. Record reproducible commands, results, and observed terminal JSON/file assertions through normal task verification. (R1–R4)
 
 ### Root Cause
 
@@ -94,15 +96,64 @@ Then it reads the returned `summaryFile` for display, skips missing JSON receipt
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `packages/app/src/workflow/run-summary-render.ts:15-268` | Hardened `writeRunCloseSummary` to validate `runId` against `SAFE_RUN_ID_RE`, require a persisted terminal row (`done`/`failed`) with non-empty `completed_at`, resolve the run's launch working directory from `metadata_json.definitionSource.workdir` (falling back to CLI `cwd`), and pass the exact persisted `[started_at, completed_at]` window (R1). |
+| `apps/cli/src/commands/workflow/shared.ts:216-242` | Tightened `withCloseSummary` to skip dry runs before opening the DB (`options?.dryRun === true`) and accept only terminal `done`/`failed` statuses, keeping summary errors isolated from the workflow verdict and exit code (R1, R2). |
+| `apps/cli/src/commands/workflow/run.ts:591-594,983-986` | Threaded `{ dryRun: options.dryRun === true }` into `withCloseSummary` on both the async-spawn fallback and synchronous run terminal paths (R1, R2). |
+| `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186` | Replaced the stale `inline close` reference with the terminal-close `summaryFile` contract, launch-project/worktree resolution, missing-JSON roll-up skipping, and display-only `--no-summary` semantics (R3). |
+| `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156` | Updated batch roll-up docs to resolve `summaryFile` and sibling `.json` from each run's project/worktree, skip missing JSON receipts, and treat `--no-summary` as display-only (R3). |
+| `docs/help/cmd_workflow.md:220-239` | Documented optional `summaryFile` in the `workflow run`/`continue` terminal JSON reference and its omission rules (R3). |
+| `apps/cli/tests/commands/workflow/run.test.ts:443-552` | Extended real-CLI tests for AC1 (persisted DB `started_at`/`completed_at` window equality, `--dry-run` exclusion, async-spawn fallback receipt) and AC3 (directory-at-path I/O failure on both `done` and `failed` runs preserving status, reason, exit code, and single JSON output) (R1, R2, R4). |
+| `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` | Added AC2 real-CLI host-pause regression test verifying paused runs omit `summaryFile` and write no files, while terminal `continue --answer yes --json` emits `summaryFile` and sibling JSON matching persisted DB timestamps (R1, R2, R4). |
+| `packages/app/tests/workflow/run-summary-render.test.ts:175-238` | Added direct unit tests for `writeRunCloseSummary` covering unsafe run IDs, missing/paused rows, `metadata_json.definitionSource.workdir` resolution, and legacy metadata fallback (R1, R4). |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/run-summary-render.ts:210-268`, `apps/cli/src/commands/workflow/shared.ts:216-242`, `apps/cli/tests/commands/workflow/run.test.ts:445-552` |
+| R2 | MET | `apps/cli/src/commands/workflow/shared.ts:216-242`, `apps/cli/src/commands/workflow/run.ts:591-594,983-986`, `apps/cli/src/commands/workflow/continue.ts:305-311`, `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`, `docs/help/cmd_workflow.md:220-239` |
+| R4 | MET | `apps/cli/tests/commands/workflow/run.test.ts:445-552`, `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328`, `packages/app/tests/workflow/run-summary-render.test.ts:175-238` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:445-518` |
+| AC2 | MET | test | `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` |
+| AC3 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:520-552` |
+| AC4 | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`, `docs/help/cmd_workflow.md:220-239`, `plugins/sp/tests/skill-structure.test.ts` (0 `inline close` matches via `rg`) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Requirements Traceability**
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/workflow/run-summary-render.ts:210-268`, `apps/cli/src/commands/workflow/shared.ts:216-242`, `apps/cli/tests/commands/workflow/run.test.ts:445-552` |
+| R2 | MET | `apps/cli/src/commands/workflow/shared.ts:216-242`, `apps/cli/src/commands/workflow/run.ts:591-594,983-986`, `apps/cli/src/commands/workflow/continue.ts:305-311`, `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`, `docs/help/cmd_workflow.md:220-239` |
+| R4 | MET | `apps/cli/tests/commands/workflow/run.test.ts:445-552`, `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328`, `packages/app/tests/workflow/run-summary-render.test.ts:175-238` |
+
+**Acceptance Criteria**
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:445-518` |
+| AC2 | MET | test | `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` |
+| AC3 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:520-552` |
+| AC4 | MET | command+static-ref | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`, `docs/help/cmd_workflow.md:220-239`, `plugins/sp/tests/skill-structure.test.ts` (0 `inline close` matches via `rg`) |
+
+**Findings**
+
+None (0 P1, 0 P2, 0 P3, 0 P4). All 10/10 light gate checks (biome, 52 pre-check rules, TSDoc post-check, CLI/server/app typechecks, CLI/app/plugin tests and coverage) passed.
+
+Verdict: PASS
 
 ### References
 
@@ -111,3 +162,8 @@ Then it reads the returned `summaryFile` for display, skips missing JSON receipt
 - Host CLI fixture: `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:68`. Batch driver: `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144`.
 
 ### History
+
+- 2026-11-24T21:45:47.253Z todo → wip (system)
+- 2026-11-24T22:03:40.716Z wip → testing (system)
+- 2026-11-24T22:03:51.194Z testing → done (system)
+

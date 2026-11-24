@@ -67,7 +67,7 @@ Feature: MCP plugin-namespaced tools and opt-in workflow tools
 | --- | ---- | ------ |
 | 1379 | Rename built-in MCP harness tools to the sp namespace | done |
 | 1380 | Resolve the project MCP namespace from config or plugin manifest | done |
-| 1447 | Downstream MCP tool registration manifest (mcp-tools.yaml) and enriched workflow exposure across sp, cc, and kk | backlog |
+| 1447 | Downstream MCP tool registration manifest (mcp-tools.yaml) and enriched workflow exposure across sp, cc, and kk | done |
 | 1381 | Expose opted-in workflows as namespaced MCP tools | done |
 <!-- END AUTO-GENERATED -->
 

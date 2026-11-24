@@ -79,7 +79,7 @@ import {
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus, JobQueue, Logger, SchedulerAdapter } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
-import type { FileSystem, ProcessRegistry } from '@gobing-ai/ts-runtime';
+import type { FileSystem, ProcessExecutor, ProcessRegistry } from '@gobing-ai/ts-runtime';
 import { createInMemoryProcessRegistry, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { ServerBootConfig } from './bootstrap';
 
@@ -247,6 +247,9 @@ export interface ServerContext {
 
     /** Lazy, cached SupervisorService (process supervision, task 0195/0207). */
     supervisor(): SupervisorService;
+
+    /** Lazy, cached ProcessExecutor backed by this server's ProcessRegistry (task 1447 R3). */
+    processExecutor?(): ProcessExecutor;
 
     /**
      * Lazy, cached serve-rooted process inventory (task 0243).
@@ -459,6 +462,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     };
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;
+    let processExecutorSvc: ProcessExecutor | undefined;
     let dbClosing = false;
     let closeDbPromise: Promise<void> | undefined;
     let taskSvc: TaskService | undefined;
@@ -755,11 +759,16 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             return processRegistrySvc;
         },
 
+        processExecutor(): ProcessExecutor {
+            processExecutorSvc ??= new NodeProcessExecutor({ registry: this.processRegistry() });
+            return processExecutorSvc;
+        },
+
         supervisor(): SupervisorService {
             if (!supervisorSvc) {
-                const pe = new NodeProcessExecutor({ registry: this.processRegistry() });
+                processExecutorSvc ??= new NodeProcessExecutor({ registry: this.processRegistry() });
                 supervisorSvc = new SupervisorServiceImpl({
-                    processExecutor: pe,
+                    processExecutor: processExecutorSvc,
                     eventBus: bridgeEventBus(eventsBus),
                     configDir: `${cwd}/.spur/agents`,
                 });

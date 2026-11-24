@@ -7,8 +7,9 @@ import {
 } from '@gobing-ai/spur-config';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
+import { manifestToolDescriptor } from './mcp-manifest-tools';
 import { resolveMcpNamespace } from './mcp-namespace';
-import { resolveProjectWorkflowTools, workflowToolDescriptor } from './mcp-workflow-tools';
+import { resolveProjectMcpTools, workflowToolDescriptor } from './mcp-workflow-tools';
 import {
     GATEWAY_FAVICON_SVG,
     type GatewayIndexDiagnostic,
@@ -811,10 +812,10 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 projectRoot: entry.path,
                 fs,
             });
-            const { tools } =
+            const resolved =
                 namespace === null
-                    ? { tools: [] }
-                    : await resolveProjectWorkflowTools({
+                    ? { workflowTools: [], manifestTools: [] }
+                    : await resolveProjectMcpTools({
                           cwd: entry.path,
                           config: (await deps.loadProjectConfig?.(entry.path)) ?? null,
                           namespace,
@@ -824,7 +825,10 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 entry,
                 prefix,
                 namespace,
-                tools: tools.map(workflowToolDescriptor),
+                tools: [
+                    ...resolved.workflowTools.map(workflowToolDescriptor),
+                    ...resolved.manifestTools.map(manifestToolDescriptor),
+                ],
             });
         }
         return routes;
