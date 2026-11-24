@@ -19,11 +19,14 @@
 import { spawnSync } from 'node:child_process';
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import type { BuilderConfig } from '@gobing-ai/spur-config';
 import { ArtifactDao, createId } from '@gobing-ai/spur-domain';
 import { DbWorkflowPersistenceAdapter } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
 import { openInlineRunProjectDb } from '../services/inline-run-attribution';
+import { type CheckReceipt, captureGateGitTree, RECEIPT_SCHEMA_VERSION } from '../services/quality-gate';
+import { type ResolvedAction, resolveAction } from '../services/sdlc-actions';
 import { withRunIdentityRecording, workflowVersionLiteral } from '../services/workflow-run-recording';
 import {
     captureFeatureReceiptDigest,
@@ -143,6 +146,10 @@ export interface FeatureVerificationRunInput {
     resolveFeatureSpec?: FeatureSpecLookup;
     readLearnings?: (workdir: string) => Promise<string | undefined>;
     registerArtifact?: (input: { runId: string; path: string; kind: string }) => Promise<void>;
+    /** Project builder config (SDLC action map), used to check `check-feature` vs `check` equivalence for full-gate receipt reuse. */
+    builder?: BuilderConfig;
+    /** Git tree capture seam for full-gate receipt reuse (defaults to {@link captureGateGitTree}). */
+    captureGitTree?: typeof captureGateGitTree;
 }
 
 /** The pass outcome: its status plus the paths and message the caller reports. */
@@ -286,6 +293,66 @@ async function writeFailedStatus(input: FeatureVerificationRunInput): Promise<vo
     }
 }
 
+/** Normalize a resolved SDLC action to a comparable shell command string, or null when unbound/parallel. */
+function actionCommandString(resolved: ResolvedAction): string | null {
+    if (resolved.kind === 'command') return resolved.command.trim();
+    if (resolved.kind === 'composite') return resolved.steps.join(' && ').trim();
+    return null;
+}
+
+/**
+ * Reuse a fresh `tier: "full"` PASS quality-gate receipt on the exact same git tree when it
+ * already ran the equivalent check (`check-feature` resolves to the same command as `check`, or
+ * the receipt's own check command matches `check-feature`). Never reuses light-tier receipts,
+ * different trees, or narrower `check` receipts when `check-feature` is a distinct wider command.
+ */
+async function findReusableFullGatePass(
+    fileSystem: FileSystem,
+    runDir: string,
+    workdir: string,
+    builder: BuilderConfig | undefined,
+    captureTree: typeof captureGateGitTree,
+): Promise<{ runId: string; receiptFile: string; completedAt: string; tree: string } | null> {
+    const checkFeatureCmd = actionCommandString(resolveAction(builder, 'check-feature'));
+    if (checkFeatureCmd === null || checkFeatureCmd === '') return null;
+    const checkCmd = actionCommandString(resolveAction(builder, 'check'));
+    const sameAsCheck = checkCmd !== null && checkCmd === checkFeatureCmd;
+
+    const capture = captureTree(workdir);
+    if (!capture.ok || capture.tree.length === 0) return null;
+    if (!(await fileSystem.exists(runDir))) return null;
+
+    const names = (await fileSystem.readDir(runDir)).filter((name) => name.endsWith('-check-receipt.json')).sort();
+    for (const name of names) {
+        try {
+            const parsed = JSON.parse(await fileSystem.readFile(join(runDir, name))) as Partial<CheckReceipt>;
+            if (
+                parsed.schemaVersion !== RECEIPT_SCHEMA_VERSION ||
+                parsed.tier !== 'full' ||
+                parsed.status !== 'PASS' ||
+                parsed.inputDigest !== capture.tree ||
+                typeof parsed.runId !== 'string' ||
+                parsed.runId.length === 0
+            ) {
+                continue;
+            }
+            const ranFeatureCmd =
+                Array.isArray(parsed.checks) &&
+                parsed.checks.some((row) => typeof row.cmd === 'string' && row.cmd.trim() === checkFeatureCmd);
+            if (!sameAsCheck && !ranFeatureCmd) continue;
+            return {
+                runId: parsed.runId,
+                receiptFile: name,
+                completedAt: typeof parsed.completedAt === 'string' ? parsed.completedAt : '',
+                tree: capture.tree,
+            };
+        } catch {
+            // Unreadable or malformed receipt — ignore and continue scanning.
+        }
+    }
+    return null;
+}
+
 /** The pass itself — {@link runFeatureVerification} owns the run row and cannot-run status. */
 async function runFeatureVerificationPass(
     input: FeatureVerificationRunInput,
@@ -353,6 +420,16 @@ async function runFeatureVerificationPass(
                   verificationCmd: effectiveCmd,
                   verifier,
               });
+    const reusableGate =
+        reusable === null && effectiveCmd === DEFAULT_FEATURE_VERIFICATION_CMD
+            ? await findReusableFullGatePass(
+                  fileSystem,
+                  runDir,
+                  input.workdir,
+                  input.builder,
+                  input.captureGitTree ?? captureGateGitTree,
+              )
+            : null;
     const receipt: FeatureVerificationReceipt = await receipts.start(fileSystem, runDir, {
         featureId: input.featureId,
         runId: input.runId,
@@ -383,6 +460,26 @@ async function runFeatureVerificationPass(
             ...base,
             status: 'PASS',
             message: `verification PASS (reused run ${reusable.runId} on the same tree; run ${input.runId}, log ${logPath})`,
+        };
+    }
+
+    // 2c. A full-tier quality-gate PASS on the exact same git tree already ran the equivalent
+    // command (`check-feature` === `check`, or the receipt ran `check-feature`): certify without
+    // paying a duplicate full-suite pass.
+    if (reusableGate !== null) {
+        await fileSystem.writeFile(
+            logPath,
+            `reused full-tier gate PASS from ${reusableGate.receiptFile} (run ${reusableGate.runId}, completed ${reusableGate.completedAt}) — same git tree ${reusableGate.tree}; nothing re-run\n`,
+        );
+        await receipts.complete(fileSystem, runDir, receipt, {
+            status: 'PASS',
+            inputDigest: beforeDigest,
+            reusedFromRunId: reusableGate.runId,
+        });
+        return {
+            ...base,
+            status: 'PASS',
+            message: `verification PASS (reused full-tier gate run ${reusableGate.runId} on the same tree; run ${input.runId}, log ${logPath})`,
         };
     }
 

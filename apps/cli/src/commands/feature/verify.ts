@@ -41,6 +41,7 @@ export function registerFeatureVerifyCommand(feature: Command, context: CliConte
                     featureId,
                     runId: options.runId || env.__runId || '',
                     cmdOverride: options.cmd || env.verificationCmd || '',
+                    builder: context.spurConfig?.builder,
                 });
                 context.output.write(`feature verify: ${featureId} ${result.message}`);
             } catch (err) {

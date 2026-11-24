@@ -10,9 +10,10 @@
  */
 
 import { afterAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { BuilderConfigSchema } from '@gobing-ai/spur-config';
 import { RunDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { openInlineRunProjectDb } from '../../src/services/inline-run-attribution';
@@ -410,5 +411,116 @@ describe('runFeatureVerification — tree-keyed reuse', () => {
         };
         expect((await runFeatureVerification(b.h.input)).status).toBe('PASS');
         expect(b.launches()).toBe(1);
+    });
+
+    describe('full-tier quality-gate receipt reuse', () => {
+        const TREE = 'a'.repeat(40);
+        const sameCheckBuilder = BuilderConfigSchema.parse({
+            preset: 'bun',
+            actions: { 'check-feature': 'bun run spur-check' },
+        });
+
+        function writeGateReceipt(workdir: string, file: string, receipt: Record<string, unknown>): void {
+            const runDir = join(workdir, '.spur', 'run');
+            mkdirSync(runDir, { recursive: true });
+            writeFileSync(join(runDir, file), JSON.stringify(receipt, null, 2));
+        }
+
+        test('reuses a tier-full PASS check-receipt on the same git tree when check-feature equals check', async () => {
+            const a = reuseHarness('G61', 'run-g61');
+            writeGateReceipt(a.h.workdir, '0423-check-receipt.json', {
+                schemaVersion: 'check-receipt/v1',
+                wbs: '0423',
+                runId: 'gate-run-0423',
+                tier: 'full',
+                inputDigest: TREE,
+                checks: [
+                    {
+                        id: 'full-gate',
+                        cmd: 'bun run spur-check',
+                        status: 'PASS',
+                        durationMs: 1000,
+                        logPath: '.spur/run/0423.log',
+                    },
+                ],
+                status: 'PASS',
+                completedAt: '2026-11-24T01:02:10Z',
+            });
+            a.h.input.builder = sameCheckBuilder;
+            a.h.input.captureGitTree = () => ({ ok: true, tree: TREE });
+
+            const result = await runFeatureVerification(a.h.input);
+            expect(result.status).toBe('PASS');
+            expect(result.message).toContain('reused full-tier gate run gate-run-0423');
+            expect(a.launches()).toBe(0);
+            expect(receiptOf(a.h.workdir, 'G61', 'run-g61').reusedFromRunId).toBe('gate-run-0423');
+        });
+
+        test('does not reuse a narrower check receipt when check-feature is a distinct wider command', async () => {
+            const a = reuseHarness('G61', 'run-g61');
+            writeGateReceipt(a.h.workdir, '0423-check-receipt.json', {
+                schemaVersion: 'check-receipt/v1',
+                wbs: '0423',
+                runId: 'gate-run-0423',
+                tier: 'full',
+                inputDigest: TREE,
+                checks: [
+                    {
+                        id: 'full-gate',
+                        cmd: 'bun run spur-check',
+                        status: 'PASS',
+                        durationMs: 1000,
+                        logPath: '.spur/run/0423.log',
+                    },
+                ],
+                status: 'PASS',
+                completedAt: '2026-11-24T01:02:10Z',
+            });
+            // Default bun preset has check='bun run spur-check' != check-feature='bun run spur-check-feature'.
+            a.h.input.builder = BuilderConfigSchema.parse({ preset: 'bun' });
+            a.h.input.captureGitTree = () => ({ ok: true, tree: TREE });
+
+            const result = await runFeatureVerification(a.h.input);
+            expect(result.status).toBe('PASS');
+            expect(a.launches()).toBe(1);
+        });
+
+        test('never reuses a light-tier receipt or a receipt from a different git tree', async () => {
+            const a = reuseHarness('G61', 'run-g61');
+            writeGateReceipt(a.h.workdir, '0423-check-receipt.json', {
+                schemaVersion: 'check-receipt/v1',
+                wbs: '0423',
+                runId: 'light-run-0423',
+                tier: 'light',
+                inputDigest: TREE,
+                checks: [],
+                status: 'PASS',
+                completedAt: '2026-11-24T01:02:10Z',
+            });
+            writeGateReceipt(a.h.workdir, '0424-check-receipt.json', {
+                schemaVersion: 'check-receipt/v1',
+                wbs: '0424',
+                runId: 'stale-run-0424',
+                tier: 'full',
+                inputDigest: 'b'.repeat(40),
+                checks: [
+                    {
+                        id: 'full-gate',
+                        cmd: 'bun run spur-check',
+                        status: 'PASS',
+                        durationMs: 1000,
+                        logPath: '.spur/run/0424.log',
+                    },
+                ],
+                status: 'PASS',
+                completedAt: '2026-11-24T01:02:10Z',
+            });
+            a.h.input.builder = sameCheckBuilder;
+            a.h.input.captureGitTree = () => ({ ok: true, tree: TREE });
+
+            const result = await runFeatureVerification(a.h.input);
+            expect(result.status).toBe('PASS');
+            expect(a.launches()).toBe(1);
+        });
     });
 });
