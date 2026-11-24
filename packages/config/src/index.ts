@@ -22,6 +22,7 @@ export const SPUR_ENV_VARS = {
     mcpAuthEnv: 'SPUR_MCP_AUTH_ENV',
     mcpNamespace: 'SPUR_MCP_NAMESPACE',
     gatewayPort: 'SPUR_GATEWAY_PORT',
+    gatewayAllowedHosts: 'SPUR_GATEWAY_ALLOWED_HOSTS',
     gatewayMcpEnabled: 'SPUR_GATEWAY_MCP_ENABLED',
     gatewayMcpAuthEnv: 'SPUR_GATEWAY_MCP_AUTH_ENV',
 } as const;
@@ -1511,6 +1512,18 @@ export function parseEnvBoolean(value: string | undefined): boolean | undefined 
     throw new Error(`Invalid boolean environment value: expected true/false, received ${value}`);
 }
 
+/**
+ * Parse a comma-separated hostname list (`SPUR_GATEWAY_ALLOWED_HOSTS`). Blank entries are dropped so
+ * a trailing comma or a spaces-only value degrades to the loopback-only default instead of a
+ * schema error at boot.
+ */
+export function parseAllowedHosts(value: string | undefined): string[] {
+    return (value ?? '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== '');
+}
+
 /** Read process-like bindings without coupling config parsing to Node globals. */
 export function buildConfigFromEnv(env: Record<string, string | undefined> = getEnvVars()): Config {
     return configSchema.parse({
@@ -1531,6 +1544,7 @@ export function buildConfigFromEnv(env: Record<string, string | undefined> = get
             },
             gateway: {
                 port: env[SPUR_ENV_VARS.gatewayPort],
+                allowedHosts: parseAllowedHosts(env[SPUR_ENV_VARS.gatewayAllowedHosts]),
                 mcp: {
                     enabled: parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]),
                     authEnv: env[SPUR_ENV_VARS.gatewayMcpAuthEnv],

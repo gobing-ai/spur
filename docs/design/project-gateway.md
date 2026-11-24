@@ -74,7 +74,8 @@ forwarded scheme/host. Remote entries and internal start/diagnostic URLs are unc
 
 Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**,
 set with `SPUR_GATEWAY_PORT` for both the gateway and MCP bridge),
-`server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`) and, since task 1382,
+`server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`, mapped from the
+comma-separated `SPUR_GATEWAY_ALLOWED_HOSTS`) and, since task 1382,
 `server.gateway.mcp: { enabled: boolean (default false), authEnv?: string }` mapped from
 `SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`. `enabled` without `authEnv` fails the
 config load with the same message shape as `server.mcp`. `allocatePort()` skips the gateway port;

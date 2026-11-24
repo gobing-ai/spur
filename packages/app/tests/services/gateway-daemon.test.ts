@@ -139,6 +139,28 @@ describe('renderGatewayPlist (K4 R9)', () => {
         expect(plist).toContain('/weird&amp;path/&lt;bin&gt;');
         expect(plist).not.toContain('/weird&path/<bin>');
     });
+
+    it('bakes the tunnel host allowlist into the agent environment', () => {
+        // `spur self serve` is boot-free and env-derived: the plist is the only place a tunnel
+        // hostname can survive a launchd restart, so the installer must emit it.
+        const plist = renderGatewayPlist({
+            home: '/Users/tester',
+            path: '/usr/bin',
+            spurArgv: ['/opt/spur'],
+            port: 3070,
+            allowedHosts: ['spur.example.net', 'gw.example.net'],
+        });
+        expect(plist).toContain('<key>SPUR_GATEWAY_ALLOWED_HOSTS</key>');
+        expect(plist).toContain('<string>spur.example.net,gw.example.net</string>');
+
+        const loopbackOnly = renderGatewayPlist({
+            home: '/Users/tester',
+            path: '/usr/bin',
+            spurArgv: ['/opt/spur'],
+            port: 3070,
+        });
+        expect(loopbackOnly).not.toContain('SPUR_GATEWAY_ALLOWED_HOSTS');
+    });
 });
 
 describe('installGatewayDaemon (K4 R9/R10)', () => {

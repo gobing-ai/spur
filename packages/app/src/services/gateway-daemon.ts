@@ -24,6 +24,12 @@ export interface GatewayDaemonDeps {
     spurArgv: string[];
     /** `server.gateway.port`. */
     port: number;
+    /**
+     * `server.gateway.allowedHosts` — the tunnel hostnames the gateway's host guard admits.
+     * Baked into the plist as `SPUR_GATEWAY_ALLOWED_HOSTS`, the only input path the env-derived
+     * serve config has for it.
+     */
+    allowedHosts?: string[];
     exec: ProcessExecutor;
     fs: FileSystem;
     /** `gateway` = our own listener, `foreign` = something else owns the port, `free`. */
@@ -77,10 +83,13 @@ function xmlEscape(value: string): string {
  * compares bytes to decide `unchanged`), and every value is XML-escaped — a PATH with `&` or `<`
  * must not produce an unparseable plist.
  */
-export function renderGatewayPlist(deps: Pick<GatewayDaemonDeps, 'home' | 'path' | 'spurArgv' | 'port'>): string {
+export function renderGatewayPlist(
+    deps: Pick<GatewayDaemonDeps, 'home' | 'path' | 'spurArgv' | 'port' | 'allowedHosts'>,
+): string {
     const logs = gatewayLogPaths(deps.home);
     const programArguments = [...deps.spurArgv, 'self', 'serve', '--gateway', '--port', String(deps.port), '--no-open'];
     const args = programArguments.map((arg) => `        <string>${xmlEscape(arg)}</string>`).join('\n');
+    const allowedHosts = deps.allowedHosts ?? [];
     return [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
@@ -96,6 +105,12 @@ export function renderGatewayPlist(deps: Pick<GatewayDaemonDeps, 'home' | 'path'
         '    <dict>',
         '        <key>PATH</key>',
         `        <string>${xmlEscape(deps.path)}</string>`,
+        ...(allowedHosts.length === 0
+            ? []
+            : [
+                  '        <key>SPUR_GATEWAY_ALLOWED_HOSTS</key>',
+                  `        <string>${xmlEscape(allowedHosts.join(','))}</string>`,
+              ]),
         '    </dict>',
         '    <key>RunAtLoad</key>',
         '    <true/>',

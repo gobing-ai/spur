@@ -18,6 +18,7 @@
 | `PORT` | apps/cli (`serve`), apps/server | HTTP port for `spur self serve` | `3000` (`.env.example` sets `3111`) |
 | `HOST` | apps/cli (`serve`), apps/server | Bind address for `spur self serve` | `localhost` (`.env.example` sets `127.0.0.1`) |
 | `SPUR_CORS_ORIGINS` | apps/server (pipeline middleware, worker app) | Comma-separated CORS allow-list for the served web app | empty = same-origin only |
+| `SPUR_GATEWAY_ALLOWED_HOSTS` | apps/cli (`serve --gateway`, `self install --daemon`) | Comma-separated public hostnames the one-port gateway admits through its host guard; `spur self install --daemon` bakes the value into the LaunchAgent, so a tunnel hostname survives restarts | empty = loopback and the bind host only (every other Host is 421) |
 | `SPUR_LOG_LEVEL` | apps/cli, apps/server | Server log level (`trace`…`fatal`) | `info` |
 | `SPUR_TELEMETRY_ENABLED` | apps/cli | Anonymous usage telemetry opt-in | `false` |
 | `SPUR_TELEMETRY_ENDPOINT` | apps/cli | Telemetry collector (only when enabled) | empty |

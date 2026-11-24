@@ -26,13 +26,17 @@ export function resolveDaemonDeps(
     port: number | undefined,
     overrides: Partial<GatewayDaemonDeps> = {},
 ): GatewayDaemonDeps {
+    // `SPUR_GATEWAY_ALLOWED_HOSTS` reaches the gateway only through this env-derived config, so the
+    // installer has to bake it into the plist or the public hostnames stay refused with 421.
+    const config = buildConfigFromEnv(getEnvVars());
     return {
         platform: process.platform,
         uid: typeof process.getuid === 'function' ? process.getuid() : 0,
         home: homedir(),
         path: getEnvVar('PATH') ?? '/usr/local/bin:/usr/bin:/bin',
         spurArgv: resolveSpurArgv(),
-        port: port ?? buildConfigFromEnv(getEnvVars()).server.gateway.port,
+        port: port ?? config.server.gateway.port,
+        allowedHosts: config.server.gateway.allowedHosts,
         exec: new NodeProcessExecutor(),
         fs: createNodeFileSystem(process.cwd()),
         probeGateway: probeGatewayPort,

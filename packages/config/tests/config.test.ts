@@ -3,6 +3,7 @@ import {
     buildConfigFromEnv,
     configSchema,
     ExecutorDisabledError,
+    parseAllowedHosts,
     parseEnvBoolean,
     resolveBuilderBumpVerConfig,
 } from '../src';
@@ -168,5 +169,23 @@ describe('server.gateway.mcp (task 1382 R1)', () => {
         });
         expect(cfg.server.mcp.authEnv).toBe('PROJECT_TOKEN');
         expect(cfg.server.gateway.mcp.authEnv).toBe('GATEWAY_TOKEN');
+    });
+});
+
+describe('server.gateway.allowedHosts (tunnel hostnames)', () => {
+    test('is empty by default — loopback and the bind host only', () => {
+        expect(buildConfigFromEnv({}).server.gateway.allowedHosts).toEqual([]);
+    });
+
+    test('maps the comma-separated SPUR_GATEWAY_ALLOWED_HOSTS list', () => {
+        const cfg = buildConfigFromEnv({ SPUR_GATEWAY_ALLOWED_HOSTS: 'spur.example.net, gw.example.net ' });
+        expect(cfg.server.gateway.allowedHosts).toEqual(['spur.example.net', 'gw.example.net']);
+    });
+
+    test('drops blank entries instead of failing the schema on them', () => {
+        // `spur self install --daemon` bakes whatever env it sees into the plist; a stray comma must
+        // degrade to the loopback-only default, not crash the gateway at boot.
+        expect(parseAllowedHosts(' , ')).toEqual([]);
+        expect(parseAllowedHosts(undefined)).toEqual([]);
     });
 });
