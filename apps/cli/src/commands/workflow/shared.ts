@@ -7,7 +7,9 @@ import {
     WorkflowAppService,
     type WorkflowObservabilityBus,
 } from '@gobing-ai/spur-app';
+import { writeRunCloseSummary } from '@gobing-ai/spur-app/close-summary';
 import { getAppOptions, getEnvVar, getEnvVars, removeEnvVar, type SpurConfig } from '@gobing-ai/spur-config';
+import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { EMBEDDED_SPUR_SCHEMAS } from '../../config/embedded-schemas';
 import type { CliContext } from '../../context';
@@ -209,4 +211,29 @@ export function makeWorkflowService(context: CliContext, json?: boolean, bus?: W
               }
             : {}),
     });
+}
+
+/**
+ * 1448 R1/R2: a run that reached a terminal status writes `.spur/run/<runId>-summary.{md,json}` and
+ * reports `summaryFile`. A paused/running result is not a close and passes through untouched; a summary
+ * failure omits the key and never changes the verdict.
+ */
+export async function withCloseSummary<T extends { readonly status: string; readonly runId?: unknown }>(
+    context: Pick<CliContext, 'cwd' | 'env' | 'getDb'>,
+    runId: string,
+    result: T,
+    workflowDef?: WorkflowDef,
+): Promise<T & { summaryFile?: string }> {
+    if (result.status === 'paused' || result.status === 'running') return result;
+    try {
+        const summaryFile = await writeRunCloseSummary(runId, {
+            db: await context.getDb(),
+            cwd: context.cwd,
+            env: context.env,
+            ...(workflowDef ? { workflowDef } : {}),
+        });
+        return summaryFile === undefined ? result : { ...result, summaryFile };
+    } catch {
+        return result;
+    }
 }

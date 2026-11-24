@@ -440,6 +440,51 @@ terminalStates: [done]
         expect(output.messages.some((message) => message.startsWith('plan ('))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
+    // 1448 R1/R2/R4: the engine's terminal close writes the run summary and reports `summaryFile`, so the
+    // producer cannot be orphaned again the way 1242 orphaned it (no `<runId>-summary.md` after 2026-10-17).
+    test('a terminal run writes its own execution summary and reports summaryFile (1448 R1/R4)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, compositionFixture(1));
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'run', '--run-id', 'sum-run', workflowFile, '--json'], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(0);
+        const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+        expect(result.status).toBe('done');
+        expect(result.summaryFile).toBe(join('.spur', 'run', 'sum-run-summary.md'));
+        const md = await readFile(join(dir, '.spur', 'run', 'sum-run-summary.md'), 'utf8');
+        expect(md).toContain('start');
+        const json = JSON.parse(await readFile(join(dir, '.spur', 'run', 'sum-run-summary.json'), 'utf8')) as {
+            runId: string;
+            startedAt: string;
+            completedAt: string;
+        };
+        expect(json.runId).toBe('sum-run');
+        expect(Date.parse(json.startedAt)).toBeLessThanOrEqual(Date.parse(json.completedAt));
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('a failed terminal run still writes its summary and keeps its non-zero exit (1448 R1)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, FAILURE_TERMINAL_YAML);
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'run', '--run-id', 'sum-fail', workflowFile, '--json'], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+        expect(result.status).toBe('failed');
+        expect(await exists(join(dir, String(result.summaryFile)))).toBe(true);
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run landing in a failure terminal exits non-zero and reports status failed (0425 R2)', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'fail-term.yaml');

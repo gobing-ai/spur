@@ -9,7 +9,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
-import type { WorkflowProgressProjection } from './progress-projection';
+import type { DbAdapter } from '@gobing-ai/spur-domain';
+import { RunDao } from '@gobing-ai/spur-domain';
+import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
+import { projectWorkflowProgress, type WorkflowProgressProjection } from './progress-projection';
 import {
     type ActorSplit,
     buildRunSummary,
@@ -199,6 +202,49 @@ export function writeCloseSummary(
         return rel;
     } catch (error) {
         return na(error instanceof Error ? error.message : String(error));
+    }
+}
+
+/**
+ * 1448 R1: the engine's terminal close (`spur workflow run` / `continue` reaching a terminal status)
+ * writes the run's summary, windowed by the committed `runs.started_at` → `completed_at`. Restores the
+ * producer 1242 orphaned when it deleted `inline close`, its only caller. Best-effort: `undefined` when
+ * the run row is unreadable, so the command's exit code and JSON verdict never depend on it.
+ */
+export async function writeRunCloseSummary(
+    runId: string,
+    opts: {
+        db: DbAdapter;
+        cwd: string;
+        env?: Record<string, string | undefined>;
+        projectsRoot?: string;
+        /** The definition the run executed; an ad-hoc path is not name-resolvable from the run row. */
+        workflowDef?: WorkflowDef;
+    },
+): Promise<string | undefined> {
+    try {
+        const row = await new RunDao(opts.db).traceRowById(runId);
+        if (row === undefined) return undefined;
+        const progress = await projectWorkflowProgress(runId, {
+            db: opts.db,
+            projectRoot: opts.cwd,
+            ...(opts.workflowDef ? { workflowDef: opts.workflowDef } : {}),
+        });
+        return writeCloseSummary(
+            {
+                runId,
+                startedAt: row.started_at,
+                completedAt: row.completed_at ?? new Date().toISOString(),
+                progress,
+            },
+            {
+                cwd: opts.cwd,
+                ...(opts.env ? { env: opts.env } : {}),
+                ...(opts.projectsRoot ? { projectsRoot: opts.projectsRoot } : {}),
+            },
+        );
+    } catch {
+        return undefined;
     }
 }
 

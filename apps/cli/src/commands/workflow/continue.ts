@@ -25,6 +25,7 @@ import {
     makeWorkflowService,
     spawnAsyncWorkflowWorker,
     takeAsyncWorkerEnv,
+    withCloseSummary,
 } from './shared';
 
 /**
@@ -301,9 +302,10 @@ export function registerWorkflowContinueCommand(workflow: Command, context: CliC
                     }
                 })();
                 if (result === undefined) return; // async path already reported and set the exit code.
+                const closed = await withCloseSummary(context, targetId, result);
                 context.output.write(
                     json
-                        ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope })
+                        ? toEnvelopeJson(closed, { enveloped: options.jsonEnvelope })
                         : `workflow ${result.status}: ${result.workflowName} -> ${result.finalState}`,
                 );
                 context.setExitCode(result.status === 'done' ? 0 : 1);

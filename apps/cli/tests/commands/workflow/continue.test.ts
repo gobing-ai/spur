@@ -3,7 +3,7 @@
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { _resetAgentServiceShimsForTest } from '@gobing-ai/spur-app';
@@ -245,11 +245,14 @@ terminalStates:
         await mkdir(wfDir, { recursive: true });
         await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_WORKFLOW_YAML);
         const dbUrl = join(dir, 'spur.db');
+        const paused = createCapturedOutput();
         await main(['workflow', 'run', '--run-id', 'cli-p2', join(wfDir, 'pauser.yaml'), '--json'], {
-            output: nullOutput(),
+            output: paused,
             cwd: dir,
             dbUrl,
         });
+        expect(JSON.parse(paused.messages.at(-1) ?? '{}').summaryFile).toBeUndefined();
+        expect(existsSync(join(dir, '.spur', 'run', 'cli-p2-summary.md'))).toBe(false);
         const out = createCapturedOutput();
         const exitCode = await main(['workflow', 'continue', 'cli-p2', '--answer', 'yes', '--json'], {
             output: out,
@@ -257,7 +260,11 @@ terminalStates:
             dbUrl,
         });
         expect(exitCode).toBe(0);
-        expect(JSON.parse(out.messages.at(-1) ?? '{}').status).toBe('done');
+        const resumed = JSON.parse(out.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+        expect(resumed.status).toBe('done');
+        // 1448 R1: the pause is not a close (no summary); the terminal continue writes it.
+        expect(resumed.summaryFile).toBe(join('.spur', 'run', 'cli-p2-summary.md'));
+        expect(existsSync(join(dir, '.spur', 'run', 'cli-p2-summary.md'))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
     test('continue keeps run identity: appends only new record sections, repeats no side effect, settles state (0926 AC1)', async () => {
