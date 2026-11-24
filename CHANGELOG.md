@@ -8,6 +8,64 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.47] - 2026-11-24
+
+### Added
+- `spur feature verify` reuses a full-gate `PASS` receipt on the exact same git tree, so an unchanged tree no longer pays a second full gate (6af47d8d9)
+  <!-- src: packages/app/src/workflow/feature-verification-run.ts:304 · confidence: HIGH -->
+- `spur workflow run` and `continue` accept `--no-summary` to skip writing the terminal execution summary (81626e4da)
+  <!-- src: apps/cli/src/commands/workflow/run.ts:378 · confidence: HIGH -->
+- a project can expose downstream CLI tools to MCP through `plugins/<namespace>/mcp-tools.yaml`, with built-in and workflow tool names reserved and typed workflow params (fc315c9fc)
+  <!-- src: packages/app/src/services/mcp-workflow-tools.ts:275 · confidence: HIGH -->
+- a workflow that reaches a terminal state writes its run summary, so `run` and `continue` share one close-summary path (d337d88a9)
+  <!-- src: packages/app/src/workflow/run-summary-render.ts:165 · confidence: HIGH -->
+- the built-in MCP tool catalog covers the manifest, task and workflow surfaces and every tool call is observable (1b24bb6f3)
+  <!-- src: apps/server/src/modules/mcp/index.ts:33 · confidence: HIGH -->
+- the gateway root serves a self-contained Spur favicon at `/favicon.svg` (93198b650)
+  <!-- src: packages/app/src/services/project-gateway-html.ts:210 · confidence: HIGH -->
+- the project switcher no longer calls start or probes liveness; every entry navigates directly to its URL (517e7906b)
+  <!-- src: apps/web/src/components/ProjectSwitcher.tsx:41 · confidence: HIGH -->
+- MCP and A2A read their enablement, auth and exposure from project config instead of flags alone (2dab80022)
+  <!-- src: apps/cli/schemas/spur-config.schema.json:526 · confidence: HIGH -->
+- the tunnel host allowlist is baked into the gateway daemon plist, so allowed hostnames survive a reinstall (982a67240)
+  <!-- src: packages/app/src/services/gateway-daemon.ts:108 · confidence: HIGH -->
+
+### Fixed
+- a project without a namespace skips the shared manifest tool layer instead of refusing every exposure as `no-namespace` (0badc7ee4)
+  <!-- src: packages/app/src/services/mcp-workflow-tools.ts:291 · confidence: HIGH -->
+- persisting a worktree copies run-directory subdirectories, not only its top-level files (9885c6161)
+  <!-- src: packages/app/src/services/worktree-persist.ts:294 · confidence: HIGH -->
+- terminal close summaries write the receipt and render through one shared path, so a paused or failed run no longer reports a half-written summary (dfb82d3cd)
+  <!-- src: apps/cli/src/commands/workflow/shared.ts:221 · confidence: HIGH -->
+- only done and failed runs close, and they close in the launch project rather than the current directory (433e6d71f)
+  <!-- src: apps/cli/src/commands/workflow/run.ts:595 · confidence: HIGH -->
+- `spur mcp` reads project config through the threaded loader, so a nested or worktree project no longer serves another project's tools (890cbc9f8)
+  <!-- src: apps/cli/src/commands/mcp.ts:5 · confidence: HIGH -->
+- the three-pane Designs, Features and Plans shells keep full width inside `ModuleShell` (45ca69da7)
+  <!-- src: apps/web/src/modules/designs/DesignsShell.tsx:138 · confidence: HIGH -->
+- the host probe caps each agent binary at 2500 ms, so a wedged binary cannot hang `spur agent doctor-hosts` (dd34fd708)
+  <!-- src: packages/app/src/agent/host-probe.ts:38 · confidence: HIGH -->
+
+### Changed
+- the light gate tier no longer runs the workspace-wide coverage scan, which stays on the full gate (662092b31)
+  <!-- src: packages/app/src/services/quality-gate.ts:280 · confidence: HIGH -->
+- `listRunDirFiles` is hoisted above its caller in the worktree persister, with no behavior change (19368bbc5)
+  <!-- src: packages/app/src/services/worktree-persist.ts:88 · confidence: HIGH -->
+
+### Other
+- assert removing an unregistered project returns false (32f04650c)
+- unset an ambient `SPUR_GATEWAY_PORT` in the test setup (876785a5d)
+- drop the duplicated pause-summary case from the host pause suite (bce557609)
+- close out the 1447/1448 run (07f0ac995)
+- merge the 1447/1448 run (fb9ba17d3)
+- re-verify 1143, 1144 and 1146 and file 1448 (914bb4a3f)
+- advance B92 to verifying after 1445 and 1446 landed (b3ce2bc58)
+- cover the serve debug-stack and tolerant-config paths (949e38231)
+- merge the 1445/1446 tool-catalog run (752ef5829)
+- close out the 1445/1446 run (4c7eda68b)
+- file the 1447 downstream-tool manifest task (1aa43b1ca)
+- read the split MCP modules in the tool-map parity test (976d56ae8)
+
 ## [0.4.46] - 2026-11-23
 
 ### Fixed
