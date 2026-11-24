@@ -3,7 +3,7 @@
  * `persist-check` call before teardown (task 1242 flattened them out of the deleted
  * `workflow inline` group; the capability and its semantics are unchanged).
  */
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
     listRunIdRows,
     MarkdownDocument,
@@ -124,6 +124,28 @@ async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
  * before any target write) throws — the caller routes to WT-5 and the worktree is retained,
  * so a green run can never destroy its own evidence.
  */
+/**
+ * Recursively list regular files under `dir` as paths relative to `dir` (sorted). Symlinks and
+ * special files are ignored; an absent root returns `[]` while other listing errors propagate.
+ */
+async function listRunDirFiles(dir: string, relPrefix = ''): Promise<string[]> {
+    const entries = await readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT' && relPrefix === '') return null;
+        throw error;
+    });
+    if (entries === null) return [];
+    const out: string[] = [];
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        const rel = relPrefix === '' ? entry.name : join(relPrefix, entry.name);
+        if (entry.isDirectory()) {
+            out.push(...(await listRunDirFiles(join(dir, entry.name), rel)));
+        } else if (entry.isFile()) {
+            out.push(rel);
+        }
+    }
+    return out;
+}
+
 export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Promise<PersistWorktreeRunsSuccess> {
     const fromDir = resolve(input.fromWorkdir);
     const toDir = resolve(input.toWorkdir);
@@ -267,17 +289,17 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         }
         // 1012 R4: only an absent evidence dir means "nothing owned"; any other listing failure
         // (ENOTDIR, EACCES, …) propagates here, before the first invoking-tree write.
-        const entries = await readdir(fromRunDir).catch((error: NodeJS.ErrnoException) => {
-            if (error.code === 'ENOENT') return [] as string[];
-            throw error;
-        });
+        // Walk subdirectories too (matching `persist-check.ts`): host-executor runs write owned
+        // files under `.spur/run/<runId>/`, which a flat scan left behind and blocked teardown.
+        const entries = await listRunDirFiles(fromRunDir);
         // 1034 R1: each owner (task WBS / run row) has its own MAX_CITED_RUN_FILES budget, so the
         // bound scales with the batch's row count instead of a single union cap that ~3+ tasks
         // outgrow; one runaway owner still refuses, naming itself, before any write (R2).
         const ownedCounts = new Map<string, number>();
-        for (const name of entries.sort()) {
-            if (recordNames.has(name)) continue;
-            const owner = prefixes.find((prefix) => name.startsWith(prefix));
+        for (const rel of entries) {
+            const base = basename(rel);
+            if (rel === base && recordNames.has(base)) continue;
+            const owner = prefixes.find((prefix) => base.startsWith(prefix));
             if (owner === undefined) continue;
             const count = (ownedCounts.get(owner) ?? 0) + 1;
             if (count > MAX_CITED_RUN_FILES) {
@@ -287,7 +309,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                 );
             }
             ownedCounts.set(owner, count);
-            citedNames.add(name);
+            citedNames.add(rel);
         }
     }
     const citedCopies: Array<{ name: string; sourcePath: string; targetPath: string }> = [];
@@ -440,6 +462,7 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                         }
                         continue; // byte-identical — idempotent no-op
                     }
+                    mkdirSync(dirname(cited.targetPath), { recursive: true });
                     writeFileSync(cited.targetPath, sourceBytes, { flag: 'wx' });
                 }
                 // 1026 R7: carry the durable per-run dirs (the record pair lives inside;

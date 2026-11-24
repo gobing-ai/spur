@@ -1268,6 +1268,34 @@ describe('persistWorktreeRuns non-ENOENT abort + external-key conflict (task 104
         }
     });
 
+    test('owned files inside .spur/run/<runId>/ subdirectories are copied so persist-check passes', async () => {
+        const from = makeDir('persist-subdir-from-');
+        const to = makeDir('persist-subdir-to-');
+        try {
+            await seedWorktree(from.dir, 'runall-L4-5c3f-0426', 'task-pipeline');
+            const taskRel = 'docs/tasks/0426_example.md';
+            mkdirSync(join(to.dir, 'docs', 'tasks'), { recursive: true });
+            writeFileSync(join(to.dir, taskRel), '# 0426\n');
+            mkdirSync(join(from.dir, '.spur', 'run', 'runall-L4-5c3f'), { recursive: true });
+            writeFileSync(join(from.dir, '.spur', 'run', 'runall-L4-5c3f', '0426-solution.md'), 'solution\n');
+            writeFileSync(join(from.dir, '.spur', 'run', '0426-gate.log'), 'PASS\n');
+
+            const res = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskRel],
+            });
+            expect(res.ok).toBe(true);
+            expect(readFileSync(join(to.dir, '.spur', 'run', 'runall-L4-5c3f', '0426-solution.md'), 'utf8')).toBe(
+                'solution\n',
+            );
+            expect(readFileSync(join(to.dir, '.spur', 'run', '0426-gate.log'), 'utf8')).toBe('PASS\n');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('a nonexistent --from fails closed before the source DB creates a stray tree', async () => {
         const { dir, cleanup } = makeDir('persist-out-missing-from-');
         try {
