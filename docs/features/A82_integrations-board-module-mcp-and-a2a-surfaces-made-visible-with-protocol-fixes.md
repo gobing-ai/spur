@@ -186,7 +186,7 @@ Feature: Integrations Board module with MCP and A2A protocol fixes
 | 1438 | MCP namespace and exposure diagnostics on the Integrations MCP tab | done |
 | 1423 | Integrations status and usage oRPC contract | done |
 | 1439 | Render per-tool protocol telemetry and the mcp/a2a/auth prefix colors | done |
-| 1446 | MCP tool call observability: enrich mcp.* events, capture gateway per-tool telemetry, and render per-tool call counters in McpTab | backlog |
+| 1446 | MCP tool call observability: enrich mcp.* events, capture gateway per-tool telemetry, and render per-tool call counters in McpTab | done |
 | 1441 | Badge A2A, cross-project and MCP-exposed members in Settings and Projects | done |
 | 1424 | Integrations Board module on the module-kit shell | done |
 | 1442 | Gateway root page: MCP status, live counters, per-project namespaces and discover diagnostics | done |

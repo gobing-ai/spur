@@ -119,6 +119,8 @@ Feature: Executor availability lifecycle
 | 0890 | Executor availability ownership: widen agent.executors[].disabled to carry owner/since/reason, normalize readers, and enforce owner precedence in the B5 drain | done |
 | 1134 | Executor fail-fast: a host-quota pre-dispatch failure must shift executors, not consume the host session | done |
 | 1260 | Fail over to the next eligible executor when an executor hits quota or auth failure | done |
+| 1418 | Classify provider subscription-lapse 400 as executor unavailability so the ladder advances | done |
+| 1419 | Report executors whose provider is unreported by the usage source | done |
 | 0892 | Add spur agent usage: run-once codexbar usage producer with snapshot file, provider-to-executor mapping, dry run, fail-closed exit, and the ADR-051 consent row | done |
 <!-- END AUTO-GENERATED -->
 

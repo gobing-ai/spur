@@ -149,9 +149,11 @@ Feature: One-port project gateway with path prefixes and launchd daemon
 | --- | ---- | ------ |
 | 1358 | Runtime base path for the Board | done |
 | 1359 | Gateway routes local prefixes on one fixed port | done |
+| 1444 | Canonicalize all local project URLs on the gateway | done |
 | 1363 | Accept ADR-151 and sync gateway docs | done |
 | 1357 | Registry prefix contract for local projects | done |
 | 1361 | Switcher and project list resolve gateway URLs | done |
+| 1443 | Fix local startup beside same-path remote registry entries | done |
 | 1362 | Gateway LaunchAgent install, uninstall and status | done |
 | 1360 | Gateway origin, CSRF and forwarded-header trust | done |
 <!-- END AUTO-GENERATED -->
