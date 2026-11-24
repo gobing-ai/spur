@@ -83,6 +83,7 @@ describe('spur self serve --gateway (K4 R3)', () => {
         const options = launched[0] as StartGatewayOptions;
         expect(options.port).toBe(3312);
         expect(await options.deps.listProjects()).toEqual([]);
+        expect(await options.deps.removeProject?.(join(tempDir, 'ghost'), 'localhost')).toBe(false);
         expect(options.deps.port).toBe(3312);
         expect(writes.join('\n')).toContain('Spur gateway listening on http://127.0.0.1:3312');
 
