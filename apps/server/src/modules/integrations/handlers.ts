@@ -28,19 +28,32 @@ const os = implement(contract);
  */
 
 /** The MCP listener switch, token variable name and configured namespace (`server.mcp.*`). */
-function mcpSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null } {
+function mcpSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null; allowUnauthenticated: boolean } {
     const mcp = typeof ctx.bootConfig === 'function' ? ctx.bootConfig()?.mcp : undefined;
-    return { enabled: mcp?.enabled === true, authEnv: mcp?.authEnv ?? null };
+    return {
+        enabled: mcp?.enabled === true,
+        authEnv: mcp?.authEnv ?? null,
+        allowUnauthenticated: mcp?.allowUnauthenticated === true,
+    };
 }
 
 /** The A2A listener switch and token variable name (`server.a2a.*`). */
-function a2aSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null } {
+function a2aSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null; allowUnauthenticated: boolean } {
     const a2a = typeof ctx.bootConfig === 'function' ? ctx.bootConfig()?.a2a : undefined;
-    return { enabled: a2a?.enabled === true, authEnv: a2a?.authEnv ?? null };
+    return {
+        enabled: a2a?.enabled === true,
+        authEnv: a2a?.authEnv ?? null,
+        allowUnauthenticated: a2a?.allowUnauthenticated === true,
+    };
 }
 
-/** True when the configured env variable resolves to a non-empty value; the value is discarded. */
-function tokenPresent(env: Record<string, string | undefined>, authEnv: string | null): boolean {
+/** True when the configured env variable resolves to a non-empty value (or unauthenticated access is explicitly allowed); the value is discarded. */
+function tokenPresent(
+    env: Record<string, string | undefined>,
+    authEnv: string | null,
+    allowUnauthenticated = false,
+): boolean {
+    if (allowUnauthenticated) return true;
     if (authEnv === null) return false;
     const value = env[authEnv];
     return value !== undefined && value !== '';
@@ -127,7 +140,7 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                     return {
                         enabled: settings.enabled,
                         authEnv: settings.authEnv,
-                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv),
+                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv, settings.allowUnauthenticated),
                         protocolVersion: MIN_MCP_PROTOCOL_VERSION,
                         tools: catalog.tools,
                         resources: catalog.resources,
@@ -144,7 +157,7 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                     return {
                         enabled: settings.enabled,
                         authEnv: settings.authEnv,
-                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv),
+                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv, settings.allowUnauthenticated),
                         outboundAuth: await outboundAuthOf(ctx, fleet),
                     };
                 },

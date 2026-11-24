@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { createJsonlEventSink, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { type StartGatewayOptions, startGateway, startServer } from '@gobing-ai/spur-server';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { bootFree } from '../../boot-free-route';
@@ -87,8 +88,12 @@ export function registerServeCommand(
                 const config = buildConfigFromEnv(env);
 
                 if (options.gateway) {
-                    const gatewayPort = options.port ?? config.server.gateway.port;
-                    const gatewayHost = options.host ?? config.server.host;
+                    const spurConfig = options.json
+                        ? null
+                        : await (registration.loadProjectConfig ?? loadSpurConfig)(context.cwd).catch(() => null);
+                    const gatewayConfig = buildConfigFromEnv(env, spurConfig);
+                    const gatewayPort = options.port ?? gatewayConfig.server.gateway.port;
+                    const gatewayHost = options.host ?? gatewayConfig.server.host;
                     if (options.json) {
                         // Dry probe, like the project serve: nothing is bound, so nothing is running.
                         context.output.write(
@@ -108,7 +113,12 @@ export function registerServeCommand(
                     const handle = launchGateway({
                         port: gatewayPort,
                         host: gatewayHost,
-                        mcp: { ...config.server.gateway.mcp, projectTokenEnv: config.server.mcp.authEnv, env },
+                        mcp: {
+                            ...gatewayConfig.server.gateway.mcp,
+                            projectTokenEnv: gatewayConfig.server.mcp.authEnv,
+                            projectAllowUnauthenticated: gatewayConfig.server.mcp.allowUnauthenticated,
+                            env,
+                        },
                         deps: {
                             loadProjectConfig: registration.loadProjectConfig,
                             // Read-only snapshot: routing must not heal, purge or probe on every request.
@@ -124,7 +134,7 @@ export function registerServeCommand(
                                     })
                                 ).port,
                             port: gatewayPort,
-                            edge: { bindHost: gatewayHost, allowedHosts: config.server.gateway.allowedHosts },
+                            edge: { bindHost: gatewayHost, allowedHosts: gatewayConfig.server.gateway.allowedHosts },
                             onEvent: createJsonlEventSink({ path: gatewayEventLogPath(), fs: createNodeFileSystem() }),
                         },
                     });

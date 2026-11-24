@@ -905,7 +905,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             const route: GatewayMcpRoute = target;
 
             const token = deps.projectMcpToken?.();
-            if (token === undefined || token === '') {
+            if (token === undefined) {
                 throw toolError(
                     `cannot call project "${route.entry.name}": the gateway has no project MCP token; set the variable named by server.mcp.authEnv for this project`,
                 );
@@ -930,7 +930,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                             ...(deps.mcpProtocolVersion !== undefined
                                 ? { 'mcp-protocol-version': deps.mcpProtocolVersion }
                                 : {}),
-                            authorization: `Bearer ${token}`,
+                            ...(token !== '' ? { authorization: `Bearer ${token}` } : {}),
                         },
                         body: JSON.stringify({
                             jsonrpc: '2.0',
@@ -958,7 +958,9 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             const refusal = body?.jsonrpc === '2.0' ? body.error?.message : undefined;
             if (typeof refusal === 'string') {
                 throw toolError(
-                    `project "${route.entry.name}" refused tool "${name}": ${refusal.replaceAll(token, '[redacted]')}`,
+                    `project "${route.entry.name}" refused tool "${name}": ${
+                        token !== '' ? refusal.replaceAll(token, '[redacted]') : refusal
+                    }`,
                 );
             }
             if (!response.ok) {

@@ -2,7 +2,8 @@ import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import type { Command } from '@commander-js/extra-typings';
 import { isGatewayAnswering, normalizeProjectPath, ProjectRegistry } from '@gobing-ai/spur-app';
-import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl, type SpurConfig } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { bootFree } from '../boot-free-route';
 import { CLI_CONFIG } from '../config';
 import type { CliContext } from '../context';
@@ -169,21 +170,21 @@ export async function resolveMcpUrl(projectRoot: string, env: Record<string, str
  */
 export async function resolveGatewayMcpUrl(
     env: Record<string, string | undefined>,
-): Promise<{ url: string; authEnv: string }> {
-    const config = buildConfigFromEnv(env);
+    spurConfig?: Pick<SpurConfig, 'server'> | null,
+): Promise<{ url: string; authEnv: string | undefined; allowUnauthenticated: boolean }> {
+    const config = buildConfigFromEnv(env, spurConfig);
     const gateway = config.server.gateway;
     if (!gateway.mcp.enabled) {
         throw new CommandError(
             'the gateway MCP entry is disabled; set server.gateway.mcp.enabled true (SPUR_GATEWAY_MCP_ENABLED) and name its token variable with server.gateway.mcp.authEnv',
         );
     }
-    // `enabled` without `authEnv` never reaches here: the config schema refuses that load, so this
-    // branch would be dead code. The variable it names is read below.
-    const authEnv = gateway.mcp.authEnv as string;
-    const value = env[authEnv];
-    if (value === undefined || value === '') {
+    const authEnv = gateway.mcp.authEnv;
+    const allowUnauthenticated = gateway.mcp.allowUnauthenticated === true;
+    const value = authEnv !== undefined ? env[authEnv] : undefined;
+    if ((value === undefined || value === '') && !allowUnauthenticated) {
         throw new CommandError(
-            `server.gateway.mcp.authEnv names "${authEnv}" but that variable is unset or empty; the gateway would refuse every request`,
+            `server.gateway.mcp.authEnv names "${authEnv ?? ''}" but that variable is unset or empty; the gateway would refuse every request`,
         );
     }
     if (!(await isGatewayAnswering(gateway.port))) {
@@ -191,7 +192,7 @@ export async function resolveGatewayMcpUrl(
             `no gateway is answering on port ${gateway.port}; start it with \`spur self serve --gateway\` (or pass --url for a direct project endpoint)`,
         );
     }
-    return { url: `http://localhost:${gateway.port}/mcp`, authEnv };
+    return { url: `http://localhost:${gateway.port}/mcp`, authEnv, allowUnauthenticated };
 }
 
 /** Find this project's registry entry over `peek()` — the read-only snapshot never heals, purges
@@ -204,11 +205,16 @@ function findRegisteredEntry(projectRoot: string) {
 }
 
 /** The bearer token for the variable `server.mcp.authEnv` names (R2). Unset/empty is a loud
- * misconfiguration: the endpoint would refuse every request (same posture as task 1372). */
-function bearerToken(authEnv: string | undefined, env: Record<string, string | undefined>): string | null {
+ * misconfiguration unless `allowUnauthenticated` is true. */
+function bearerToken(
+    authEnv: string | undefined,
+    env: Record<string, string | undefined>,
+    allowUnauthenticated = false,
+): string | null {
     if (authEnv === undefined) return null;
     const value = env[authEnv];
     if (value === undefined || value === '') {
+        if (allowUnauthenticated) return null;
         throw new CommandError(
             `server.mcp.authEnv names "${authEnv}" but that variable is unset or empty; the endpoint would refuse every request`,
         );
@@ -234,13 +240,19 @@ export function registerMcpCommand(program: Command, context: McpBridgeContext):
                     );
                 }
                 const projectRoot = resolveServeCwd(options.cwd);
-                const config = buildConfigFromEnv(context.env);
+                const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
+                const config = buildConfigFromEnv(context.env, spurConfig);
                 // --gateway takes ITS OWN token variable: a gateway credential is not a project's.
-                const gatewayTarget = options.gateway === true ? await resolveGatewayMcpUrl(context.env) : undefined;
+                const gatewayTarget =
+                    options.gateway === true ? await resolveGatewayMcpUrl(context.env, spurConfig) : undefined;
                 const token =
                     gatewayTarget !== undefined
-                        ? bearerToken(gatewayTarget.authEnv, context.env)
-                        : bearerToken(config.server.mcp.authEnv, context.env);
+                        ? bearerToken(gatewayTarget.authEnv, context.env, gatewayTarget.allowUnauthenticated)
+                        : bearerToken(
+                              config.server.mcp.authEnv,
+                              context.env,
+                              config.server.mcp.allowUnauthenticated === true,
+                          );
                 const url = gatewayTarget?.url ?? options.url ?? (await resolveMcpUrl(projectRoot, context.env));
                 const exit = await runMcpStdioBridge({
                     url,

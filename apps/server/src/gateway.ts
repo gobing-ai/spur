@@ -29,9 +29,11 @@ export interface StartGatewayOptions {
     mcp?: {
         enabled: boolean;
         authEnv?: string;
+        allowUnauthenticated?: boolean;
         env?: Record<string, string | undefined>;
         /** NAME of the variable holding the per-project MCP token the gateway forwards on calls. */
         projectTokenEnv?: string;
+        projectAllowUnauthenticated?: boolean;
     };
 }
 
@@ -77,6 +79,7 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
     const guard = bearerGuard({
         realm: 'spur-gateway-mcp',
         authEnv: mcp.authEnv ?? null,
+        allowUnauthenticated: mcp.allowUnauthenticated === true,
         env,
         unauthenticated: () => ({ error: { code: 'UNAUTHENTICATED', message: 'a bearer token is required' } }),
         unconfigured: () => ({
@@ -88,19 +91,21 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
         }),
     });
     const projectTokenEnv = mcp.projectTokenEnv;
+    const projectAllowUnauthenticated = mcp.projectAllowUnauthenticated === true;
     return {
         ...deps,
         mcpAuth: {
             envName: mcp.authEnv ?? '',
-            tokenPresent: Boolean(mcp.authEnv && env[mcp.authEnv]),
+            tokenPresent: Boolean((mcp.authEnv && env[mcp.authEnv]) || mcp.allowUnauthenticated === true),
         },
         // Task 1383 R1/R3: the five `sp_*` descriptors and the upstream protocol version.
         builtinTools: () => TOOL_DESCRIPTORS,
         projectMcpNamespace: env[SPUR_ENV_VARS.mcpNamespace],
         projectMcpToken: () => {
-            if (projectTokenEnv === undefined) return undefined;
+            if (projectTokenEnv === undefined) return projectAllowUnauthenticated ? '' : undefined;
             const value = env[projectTokenEnv];
-            return value === '' ? undefined : value;
+            if (value === undefined || value === '') return projectAllowUnauthenticated ? '' : undefined;
+            return value;
         },
         mcpProtocolVersion: MIN_MCP_PROTOCOL_VERSION,
         mcp: async (req: Request, registry: McpGatewayRegistry): Promise<Response> => {

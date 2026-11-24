@@ -782,9 +782,19 @@ function stringRecord(args: Record<string, unknown>, key: string): Record<string
 }
 
 /** The listener switch, token variable name (never the value), and optional configured namespace. */
-function mcpSettings(ctx: ServerContext): { enabled: boolean; authEnv: string | null; namespace: string | undefined } {
+function mcpSettings(ctx: ServerContext): {
+    enabled: boolean;
+    authEnv: string | null;
+    allowUnauthenticated: boolean;
+    namespace: string | undefined;
+} {
     const mcp = typeof ctx.bootConfig === 'function' ? ctx.bootConfig()?.mcp : undefined;
-    return { enabled: mcp?.enabled === true, authEnv: mcp?.authEnv ?? null, namespace: mcp?.namespace ?? undefined };
+    return {
+        enabled: mcp?.enabled === true,
+        authEnv: mcp?.authEnv ?? null,
+        allowUnauthenticated: mcp?.allowUnauthenticated === true,
+        namespace: mcp?.namespace ?? undefined,
+    };
 }
 
 /** The embedded MCP endpoint module: mounts nothing unless `server.mcp.enabled` is on (R1/AC1). */
@@ -803,6 +813,7 @@ export const mcpModule: ServerModule = {
         const guard = bearerGuard({
             realm: 'spur-mcp',
             authEnv: settings.authEnv,
+            allowUnauthenticated: settings.allowUnauthenticated,
             env: bearerEnv(ctx),
             unauthenticated: () => ({ error: { code: 'UNAUTHENTICATED', message: 'a bearer token is required' } }),
             unconfigured: () => ({

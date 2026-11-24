@@ -19,12 +19,17 @@ export interface ServerBootConfig {
      * token variable's NAME (`SPUR_A2A_AUTH_ENV`) rather than its value — the module resolves the
      * value through the env funnel at mount and never stores it.
      */
-    a2a?: { enabled: boolean; authEnv: string | null };
+    a2a?: { enabled: boolean; authEnv: string | null; allowUnauthenticated?: boolean };
     /**
      * Embedded MCP 2.0+ server switch (feature B9, task 1370): same contract as `a2a` — off unless
      * `SPUR_MCP_ENABLED` is set, and the token variable's NAME (`SPUR_MCP_AUTH_ENV`), never its value.
      */
-    mcp?: { enabled: boolean; authEnv: string | null; namespace?: string | null };
+    mcp?: {
+        enabled: boolean;
+        authEnv: string | null;
+        allowUnauthenticated?: boolean;
+        namespace?: string | null;
+    };
 }
 
 /**
@@ -41,12 +46,12 @@ export interface ServerBootConfig {
  */
 export function serverBootstrapConfig(
     env: Record<string, string | undefined>,
-    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined = null,
+    spurConfig: Pick<SpurConfig, 'bootstrap' | 'server'> | null | undefined = null,
 ): ServerBootConfig {
     const isTest = env.NODE_ENV === 'test';
     const retentionDefault = readNonNegativeIntOption(spurConfig, 'eventRetentionDefault');
     const retentionPrefixes = readRetentionPrefixes(spurConfig);
-    const appConfig = buildConfigFromEnv(env);
+    const appConfig = buildConfigFromEnv(env, spurConfig);
 
     return {
         logging: { enabled: !isTest, level: appConfig.logging.level, console: false },
@@ -64,10 +69,12 @@ export function serverBootstrapConfig(
         a2a: {
             enabled: appConfig.server.a2a.enabled,
             authEnv: appConfig.server.a2a.authEnv ?? null,
+            allowUnauthenticated: appConfig.server.a2a.allowUnauthenticated,
         },
         mcp: {
             enabled: appConfig.server.mcp.enabled,
             authEnv: appConfig.server.mcp.authEnv ?? null,
+            allowUnauthenticated: appConfig.server.mcp.allowUnauthenticated,
             namespace: appConfig.server.mcp.namespace ?? null,
         },
     };

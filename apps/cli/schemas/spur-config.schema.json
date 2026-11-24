@@ -491,6 +491,95 @@
                     "description": "Feature files directory. Default: docs/features."
                 }
             }
+        },
+        "server": {
+            "type": "object",
+            "description": "Server protocol surfaces (MCP, A2A, Gateway). Environment variables override these values.",
+            "properties": {
+                "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Direct server listen port (env: PORT)."
+                },
+                "host": {
+                    "type": "string",
+                    "description": "Server bind address (env: HOST)."
+                },
+                "a2a": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable the A2A listener (env: SPUR_A2A_ENABLED)."
+                        },
+                        "authEnv": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Environment variable NAME holding the A2A bearer token (env: SPUR_A2A_AUTH_ENV)."
+                        },
+                        "allowUnauthenticated": {
+                            "type": "boolean",
+                            "description": "Permit requests without a bearer token when authEnv is unset in the environment."
+                        }
+                    }
+                },
+                "mcp": {
+                    "type": "object",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Enable the embedded MCP 2.0+ server (env: SPUR_MCP_ENABLED)."
+                        },
+                        "authEnv": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Environment variable NAME holding the MCP bearer token (env: SPUR_MCP_AUTH_ENV)."
+                        },
+                        "allowUnauthenticated": {
+                            "type": "boolean",
+                            "description": "Permit requests without a bearer token when authEnv is unset in the environment."
+                        },
+                        "namespace": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9]{1,15}$",
+                            "description": "Project MCP namespace for exposed workflow tools (env: SPUR_MCP_NAMESPACE)."
+                        }
+                    }
+                },
+                "gateway": {
+                    "type": "object",
+                    "properties": {
+                        "port": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "One-port gateway listen port (env: SPUR_GATEWAY_PORT)."
+                        },
+                        "allowedHosts": {
+                            "type": "array",
+                            "items": { "type": "string", "minLength": 1 },
+                            "description": "Tunnel hostnames admitted by the gateway host guard (env: SPUR_GATEWAY_ALLOWED_HOSTS)."
+                        },
+                        "mcp": {
+                            "type": "object",
+                            "properties": {
+                                "enabled": {
+                                    "type": "boolean",
+                                    "description": "Enable the gateway-root /mcp endpoint (env: SPUR_GATEWAY_MCP_ENABLED)."
+                                },
+                                "authEnv": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "Environment variable NAME holding the gateway MCP bearer token (env: SPUR_GATEWAY_MCP_AUTH_ENV)."
+                                },
+                                "allowUnauthenticated": {
+                                    "type": "boolean",
+                                    "description": "Permit requests without a bearer token when authEnv is unset in the environment."
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

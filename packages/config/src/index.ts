@@ -1283,6 +1283,87 @@ export const bootstrapSectionSchema = bootstrapOptionsSchema.extend({
 export type BootstrapSection = z.infer<typeof bootstrapSectionSchema>;
 
 /**
+ * Optional `server:` block in `.spur/config.yaml` / `~/.config/spur/config.yaml` for protocol
+ * surface switches (`mcp`, `a2a`, `gateway`). Environment variables (`SPUR_MCP_*`, `SPUR_A2A_*`,
+ * `SPUR_GATEWAY_*`) override these values in {@link buildConfigFromEnv}.
+ */
+export const serverProtocolConfigSchema = z
+    .object({
+        port: z.coerce.number().int().positive().optional(),
+        host: z.string().optional(),
+        a2a: z
+            .object({
+                enabled: z.boolean().optional(),
+                authEnv: z.string().min(1).optional(),
+                allowUnauthenticated: z.boolean().optional(),
+            })
+            .optional(),
+        mcp: z
+            .object({
+                enabled: z.boolean().optional(),
+                authEnv: z.string().min(1).optional(),
+                allowUnauthenticated: z.boolean().optional(),
+                namespace: z
+                    .string()
+                    .regex(
+                        MCP_NAMESPACE_PATTERN,
+                        `invalid ${SPUR_ENV_VARS.mcpNamespace}: expected ${MCP_NAMESPACE_PATTERN.toString()}`,
+                    )
+                    .optional(),
+            })
+            .optional(),
+        gateway: z
+            .object({
+                port: z.coerce.number().int().positive().optional(),
+                allowedHosts: z.array(z.string().min(1)).optional(),
+                mcp: z
+                    .object({
+                        enabled: z.boolean().optional(),
+                        authEnv: z.string().min(1).optional(),
+                        allowUnauthenticated: z.boolean().optional(),
+                    })
+                    .optional(),
+            })
+            .optional(),
+    })
+    .superRefine((server, ctx) => {
+        if (
+            server.a2a?.enabled === true &&
+            server.a2a.authEnv === undefined &&
+            server.a2a.allowUnauthenticated !== true
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['a2a', 'authEnv'],
+                message: 'is required when server.a2a.enabled is true — name the variable holding the bearer token',
+            });
+        }
+        if (
+            server.gateway?.mcp?.enabled === true &&
+            server.gateway.mcp.authEnv === undefined &&
+            server.gateway.mcp.allowUnauthenticated !== true
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['gateway', 'mcp', 'authEnv'],
+                message:
+                    'is required when server.gateway.mcp.enabled is true — name the variable holding the bearer token',
+            });
+        }
+        if (
+            server.mcp?.enabled === true &&
+            server.mcp.authEnv === undefined &&
+            server.mcp.allowUnauthenticated !== true
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['mcp', 'authEnv'],
+                message: 'is required when server.mcp.enabled is true — name the variable holding the bearer token',
+            });
+        }
+    });
+
+/**
  * Root schema for a merged `.spur/config.yaml` document (global + project layers,
  * loaded exclusively by {@link loadSpurConfig} per ADR-027).
  */
@@ -1290,6 +1371,7 @@ export const spurConfigSchema = z.object({
     version: z.string().optional(),
     name: z.string().optional(),
     bootstrap: bootstrapSectionSchema.optional(),
+    server: serverProtocolConfigSchema.optional(),
     agent: AgentConfigSchema.optional(),
     rules: RulesConfigSchema.optional(),
     workflows: WorkflowsConfigSchema.optional(),
@@ -1410,6 +1492,7 @@ export const configSchema = z.object({
                 .object({
                     enabled: z.boolean().default(false),
                     authEnv: z.string().min(1).optional(),
+                    allowUnauthenticated: z.boolean().optional(),
                 })
                 .default({ enabled: false }),
             /**
@@ -1420,6 +1503,7 @@ export const configSchema = z.object({
                 .object({
                     enabled: z.boolean().default(false),
                     authEnv: z.string().min(1).optional(),
+                    allowUnauthenticated: z.boolean().optional(),
                     namespace: z
                         .string()
                         .regex(
@@ -1445,10 +1529,15 @@ export const configSchema = z.object({
                         .object({
                             enabled: z.boolean().default(false),
                             authEnv: z.string().min(1).optional(),
+                            allowUnauthenticated: z.boolean().optional(),
                         })
                         .default({ enabled: false }),
                 })
-                .default({ port: 3000, allowedHosts: [], mcp: { enabled: false } }),
+                .default({
+                    port: 3000,
+                    allowedHosts: [],
+                    mcp: { enabled: false },
+                }),
         })
         .default({
             port: 3000,
@@ -1462,14 +1551,18 @@ export const configSchema = z.object({
         .superRefine((server, ctx) => {
             // Fail the load, not the first request: an enabled endpoint with no token variable can
             // only ever reject every caller.
-            if (server.a2a.enabled && server.a2a.authEnv === undefined) {
+            if (server.a2a.enabled && server.a2a.authEnv === undefined && server.a2a.allowUnauthenticated !== true) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
                     path: ['a2a', 'authEnv'],
                     message: 'is required when server.a2a.enabled is true — name the variable holding the bearer token',
                 });
             }
-            if (server.gateway.mcp.enabled && server.gateway.mcp.authEnv === undefined) {
+            if (
+                server.gateway.mcp.enabled &&
+                server.gateway.mcp.authEnv === undefined &&
+                server.gateway.mcp.allowUnauthenticated !== true
+            ) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
                     path: ['gateway', 'mcp', 'authEnv'],
@@ -1477,7 +1570,7 @@ export const configSchema = z.object({
                         'is required when server.gateway.mcp.enabled is true — name the variable holding the bearer token',
                 });
             }
-            if (server.mcp.enabled && server.mcp.authEnv === undefined) {
+            if (server.mcp.enabled && server.mcp.authEnv === undefined && server.mcp.allowUnauthenticated !== true) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
                     path: ['mcp', 'authEnv'],
@@ -1525,29 +1618,37 @@ export function parseAllowedHosts(value: string | undefined): string[] {
 }
 
 /** Read process-like bindings without coupling config parsing to Node globals. */
-export function buildConfigFromEnv(env: Record<string, string | undefined> = getEnvVars()): Config {
+export function buildConfigFromEnv(
+    env: Record<string, string | undefined> = getEnvVars(),
+    spurConfig?: Pick<SpurConfig, 'server'> | null,
+): Config {
+    const fileServer = spurConfig?.server;
+    const envAllowedHosts = parseAllowedHosts(env[SPUR_ENV_VARS.gatewayAllowedHosts]);
     return configSchema.parse({
         database: {
             url: env[SPUR_ENV_VARS.databaseUrl],
         },
         server: {
-            port: env[SPUR_ENV_VARS.port],
-            host: env[SPUR_ENV_VARS.host],
+            port: env[SPUR_ENV_VARS.port] ?? fileServer?.port,
+            host: env[SPUR_ENV_VARS.host] ?? fileServer?.host,
             a2a: {
-                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.a2aEnabled]),
-                authEnv: env[SPUR_ENV_VARS.a2aAuthEnv],
+                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.a2aEnabled]) ?? fileServer?.a2a?.enabled,
+                authEnv: env[SPUR_ENV_VARS.a2aAuthEnv] ?? fileServer?.a2a?.authEnv,
+                allowUnauthenticated: fileServer?.a2a?.allowUnauthenticated,
             },
             mcp: {
-                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]),
-                authEnv: env[SPUR_ENV_VARS.mcpAuthEnv],
-                namespace: env[SPUR_ENV_VARS.mcpNamespace],
+                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]) ?? fileServer?.mcp?.enabled,
+                authEnv: env[SPUR_ENV_VARS.mcpAuthEnv] ?? fileServer?.mcp?.authEnv,
+                allowUnauthenticated: fileServer?.mcp?.allowUnauthenticated,
+                namespace: env[SPUR_ENV_VARS.mcpNamespace] ?? fileServer?.mcp?.namespace,
             },
             gateway: {
-                port: env[SPUR_ENV_VARS.gatewayPort],
-                allowedHosts: parseAllowedHosts(env[SPUR_ENV_VARS.gatewayAllowedHosts]),
+                port: env[SPUR_ENV_VARS.gatewayPort] ?? fileServer?.gateway?.port,
+                allowedHosts: envAllowedHosts.length > 0 ? envAllowedHosts : (fileServer?.gateway?.allowedHosts ?? []),
                 mcp: {
-                    enabled: parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]),
-                    authEnv: env[SPUR_ENV_VARS.gatewayMcpAuthEnv],
+                    enabled: parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]) ?? fileServer?.gateway?.mcp?.enabled,
+                    authEnv: env[SPUR_ENV_VARS.gatewayMcpAuthEnv] ?? fileServer?.gateway?.mcp?.authEnv,
+                    allowUnauthenticated: fileServer?.gateway?.mcp?.allowUnauthenticated,
                 },
             },
         },

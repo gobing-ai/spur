@@ -181,3 +181,21 @@ decisions:
         failure-class:
             fix: [fixed]
             stop: [not-fixed]
+
+# Machine-wide agent protocol surfaces (B9 MCP, G9 A2A, K4/K41 Gateway).
+# `authEnv` names the environment variable holding the bearer token — never the token value.
+# Set `enabled: false` on any surface to turn it off; process env vars (SPUR_MCP_ENABLED, etc.) override.
+server:
+    mcp:
+        enabled: true
+        authEnv: SPUR_MCP_TOKEN
+        allowUnauthenticated: true
+    a2a:
+        enabled: true
+        authEnv: SPUR_A2A_TOKEN
+        allowUnauthenticated: true
+    gateway:
+        mcp:
+            enabled: true
+            authEnv: SPUR_GATEWAY_MCP_TOKEN
+            allowUnauthenticated: true

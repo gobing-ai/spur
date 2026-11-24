@@ -16,6 +16,8 @@ export interface BearerGuardOptions {
     realm: string;
     /** The NAME of the variable holding the token — never the value itself. */
     authEnv: string | null;
+    /** When true, an unset token variable permits unauthenticated requests instead of failing closed with 500. */
+    allowUnauthenticated?: boolean;
     /** The map the variable is read from: `bearerEnv(ctx)` at the call site. */
     env: Record<string, string | undefined>;
     /** The surface's 401 body builder (its own error envelope). */
@@ -57,11 +59,13 @@ function sameToken(provided: string | undefined, expected: string): boolean {
 /** Build the bearer guard for one protocol surface: reads the token once, refuses per route with the surface's envelopes. */
 export function bearerGuard(options: BearerGuardOptions): BearerGuard {
     const token = requiredToken(options.authEnv, options.env);
+    const allowUnauthenticated = options.allowUnauthenticated === true;
     return {
-        configured: token !== null,
+        configured: token !== null || allowUnauthenticated,
         authorize: (c) => {
             const path = c.req.path;
             if (token === null) {
+                if (allowUnauthenticated) return null;
                 options.onDenied?.({ reason: 'unset', path });
                 return Response.json(options.unconfigured(), { status: 500 });
             }

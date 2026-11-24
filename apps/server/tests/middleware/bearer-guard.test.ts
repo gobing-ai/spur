@@ -50,4 +50,33 @@ describe('bearerGuard', () => {
         expect(res?.status).toBe(500);
         expect(denied.at(-1)).toBe('unset');
     });
+
+    test('allowUnauthenticated: true permits requests when token variable is unset, but still enforces token when set', () => {
+        const unauthOpen = bearerGuard({
+            realm: 'spur-test',
+            authEnv: 'SPUR_MISSING_TOKEN',
+            allowUnauthenticated: true,
+            env: {},
+            unauthenticated: () => ({ error: { code: 401, message: 'unauthorized' } }),
+            unconfigured: () => ({ error: { code: 500, message: 'misconfigured' } }),
+            onDenied: (d) => denied.push(d.reason),
+        });
+        expect(unauthOpen.configured).toBe(true);
+        expect(unauthOpen.authorize(authz(undefined))).toBeNull();
+        expect(unauthOpen.authorize(authz('Bearer anything'))).toBeNull();
+
+        const tokenPresent = bearerGuard({
+            realm: 'spur-test',
+            authEnv: 'SPUR_TEST_TOKEN',
+            allowUnauthenticated: true,
+            env: { SPUR_TEST_TOKEN: 'sekret' },
+            unauthenticated: () => ({ error: { code: 401, message: 'unauthorized' } }),
+            unconfigured: () => ({ error: { code: 500, message: 'misconfigured' } }),
+            onDenied: (d) => denied.push(d.reason),
+        });
+        expect(tokenPresent.configured).toBe(true);
+        expect(tokenPresent.authorize(authz(undefined))?.status).toBe(401);
+        expect(tokenPresent.authorize(authz('Bearer wrong'))?.status).toBe(401);
+        expect(tokenPresent.authorize(authz('Bearer sekret'))).toBeNull();
+    });
 });
