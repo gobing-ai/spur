@@ -13,6 +13,7 @@ import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { RunDao } from '@gobing-ai/spur-domain';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { projectWorkflowProgress, type WorkflowProgressProjection } from './progress-projection';
+import { SAFE_RUN_ID_RE } from './run-citation';
 import {
     type ActorSplit,
     buildRunSummary,
@@ -26,6 +27,7 @@ import {
     zeroTokens,
 } from './run-summary';
 import { parseTranscriptRows, resolveTranscript } from './transcript';
+import { resolveWorkflowDefinition } from './workflow-resolver';
 
 /** The per-stage + per-actor Markdown tables of one run's measured summary. */
 export function renderSummaryMarkdown(summary: RunSummary): string {
@@ -206,46 +208,59 @@ export function writeCloseSummary(
 }
 
 /**
- * 1448 R1: the engine's terminal close (`spur workflow run` / `continue` reaching a terminal status)
- * writes the run's summary, windowed by the committed `runs.started_at` → `completed_at`. Restores the
- * producer 1242 orphaned when it deleted `inline close`, its only caller. Best-effort: `undefined` when
- * the run row is unreadable, so the command's exit code and JSON verdict never depend on it.
+ * 1448 R1: the engine's terminal close (`spur workflow run` / `continue` settling `done`/`failed`) writes the
+ * run's summary over the persisted `started_at` → `completed_at` window, into the run's launch project
+ * (`definitionSource.workdir`; legacy rows fall back to `cwd`). Restores the producer 1242 orphaned when it
+ * deleted `inline close`. `undefined` when the id is unsafe or the row is missing or unsettled; I/O errors
+ * propagate to the caller's guard.
  */
 export async function writeRunCloseSummary(
     runId: string,
-    opts: {
-        db: DbAdapter;
-        cwd: string;
-        env?: Record<string, string | undefined>;
-        projectsRoot?: string;
-        /** The definition the run executed; an ad-hoc path is not name-resolvable from the run row. */
-        workflowDef?: WorkflowDef;
-    },
+    opts: { db: DbAdapter; cwd: string; env?: Record<string, string | undefined>; projectsRoot?: string },
 ): Promise<string | undefined> {
-    try {
-        const row = await new RunDao(opts.db).traceRowById(runId);
-        if (row === undefined) return undefined;
-        const progress = await projectWorkflowProgress(runId, {
-            db: opts.db,
-            projectRoot: opts.cwd,
-            ...(opts.workflowDef ? { workflowDef: opts.workflowDef } : {}),
-        });
-        return writeCloseSummary(
-            {
-                runId,
-                startedAt: row.started_at,
-                completedAt: row.completed_at ?? new Date().toISOString(),
-                progress,
-            },
-            {
-                cwd: opts.cwd,
-                ...(opts.env ? { env: opts.env } : {}),
-                ...(opts.projectsRoot ? { projectsRoot: opts.projectsRoot } : {}),
-            },
-        );
-    } catch {
-        return undefined;
+    if (!SAFE_RUN_ID_RE.test(runId) || runId.includes('..')) return undefined;
+    const row = await new RunDao(opts.db).traceRowById(runId);
+    if (row === undefined || row.completed_at === null || row.completed_at === undefined) return undefined;
+    const source = launchSource(row.metadata_json);
+    const cwd = source.workdir ?? opts.cwd;
+    let workflowDef: WorkflowDef | undefined;
+    if (source.path !== undefined) {
+        // The run row stores only the workflow name; an ad-hoc file path is not name-resolvable.
+        workflowDef = await resolveWorkflowDefinition(cwd, source.path, { validateSchema: true })
+            .then((resolved) => resolved.workflow)
+            .catch(() => undefined);
     }
+    const progress = await projectWorkflowProgress(runId, {
+        db: opts.db,
+        projectRoot: cwd,
+        ...(workflowDef !== undefined ? { workflowDef } : {}),
+    });
+    return writeCloseSummary(
+        { runId, startedAt: isoTime(row.started_at), completedAt: isoTime(row.completed_at), progress },
+        {
+            cwd,
+            ...(opts.env ? { env: opts.env } : {}),
+            ...(opts.projectsRoot ? { projectsRoot: opts.projectsRoot } : {}),
+        },
+    );
+}
+
+function launchSource(metadataJson: string): { path?: string; workdir?: string } {
+    try {
+        const source = (JSON.parse(metadataJson) as { definitionSource?: { path?: unknown; workdir?: unknown } })
+            .definitionSource;
+        return {
+            ...(typeof source?.path === 'string' ? { path: source.path } : {}),
+            ...(typeof source?.workdir === 'string' ? { workdir: source.workdir } : {}),
+        };
+    } catch {
+        return {};
+    }
+}
+
+/** Run timestamps are ISO text on engine rows and epoch ms on some fixtures; normalize to ISO. */
+function isoTime(value: string | number): string {
+    return typeof value === 'number' ? new Date(value).toISOString() : value;
 }
 
 /**

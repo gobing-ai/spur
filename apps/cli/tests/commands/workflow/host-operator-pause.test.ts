@@ -9,9 +9,9 @@
  * action — without replaying the gate.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createMigratedDb } from '@gobing-ai/spur-domain';
+import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
 import { main } from '../../../src/index';
 import { createCapturedOutput, createTempProject } from '../../helpers';
 
@@ -117,6 +117,33 @@ describe('task 1248 AC1: an interactive operator pause on a host run waits for a
         expect(resumed.finalState).toBe('approved');
         // The shell AFTER the gate ran exactly once, with the operator's answer — no gate replay.
         expect((await readFile(join(dir, 'answer.txt'), 'utf8')).trim()).toBe('yes');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('the pause writes no summary; the terminal continue publishes it for the original run (1448 AC2)', async () => {
+        const { dir, dbUrl, result } = await runOnHost('host-gate-sum');
+        const md = join(dir, '.spur', 'run', 'host-gate-sum-summary.md');
+        const json = join(dir, '.spur', 'run', 'host-gate-sum-summary.json');
+        expect(result.status).toBe('paused');
+        expect('summaryFile' in result).toBe(false);
+        expect(access(md)).rejects.toThrow();
+        expect(access(json)).rejects.toThrow();
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'host-gate-sum', '--yes', '--answer', 'yes', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(exit).toBe(0);
+        const resumed = JSON.parse(out.messages.at(-1) ?? '{}');
+        expect(resumed.status).toBe('done');
+        expect(resumed.summaryFile).toBe(join('.spur', 'run', 'host-gate-sum-summary.md'));
+        await access(md);
+        const receipt = JSON.parse(await readFile(json, 'utf8'));
+        const row = await new RunDao(await createMigratedDb({ url: dbUrl })).traceRowById('host-gate-sum');
+        expect(receipt.runId).toBe('host-gate-sum');
+        expect(Date.parse(receipt.startedAt)).toBe(new Date(row?.started_at ?? '').getTime());
+        expect(Date.parse(receipt.completedAt)).toBe(new Date(row?.completed_at ?? '').getTime());
         await rm(dir, { recursive: true, force: true });
     });
 

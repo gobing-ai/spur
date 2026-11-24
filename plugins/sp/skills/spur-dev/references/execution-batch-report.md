@@ -18,7 +18,8 @@ one or more tasks sit on an operator question (escalate, 0933) or an approval ga
 output; it does not mutate the corpus (the pipeline's `done` state already recorded per-task
 results). A `paused` task is non-terminal — the report marks it `paused` (never `done`) and names
 the resume command. Unless `--no-summary`, follow it with the measured
-[execution summary](dev-operations.md#execution-summary), one `--progress <wbs>=<file>` per attempted run.
+[execution summary](dev-operations.md#execution-summary): each attempted run's own `summaryFile`, then the
+batch roll-up below.
 
 Under `--auto` the report's mode field reads `Mode: --auto (keep-going)`, and `--auto` implies `--keep-going`:
 an unattended batch never stops for a human (1318 R1). For an `--agent auto` or
@@ -143,7 +144,8 @@ invoking tree shows the merged run `done` with its per-action rows.
 
 **Batch roll-up (1146 R3).** After the last run closes, print one `### Execution summary` block per run
 (each from that run's own `summaryFile`, so each window is its own `runs.started_at` → close time), then
-the batch roll-up built from the per-run files:
+the batch roll-up built from the per-run JSON receipts that exist (a run whose close wrote only the Markdown
+`n/a` fallback, or no `summaryFile`, is skipped — never fabricated):
 
 ```bash
 spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.json

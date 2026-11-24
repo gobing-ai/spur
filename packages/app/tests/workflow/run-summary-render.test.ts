@@ -2,12 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { buildRunSummary } from '../../src/workflow/run-summary';
-import { type CloseSummaryRun, renderSummaryMarkdown, writeCloseSummary } from '../../src/workflow/run-summary-render';
+import {
+    type CloseSummaryRun,
+    renderSummaryMarkdown,
+    writeCloseSummary,
+    writeRunCloseSummary,
+} from '../../src/workflow/run-summary-render';
 import { parseTranscriptRows } from '../../src/workflow/transcript';
 
 /**
- * 1146 R1/AC1/AC2: the close-step execution summary the engine's terminal `spur workflow continue` writes, plus the
+ * 1146 R1/AC1/AC2: the close-step execution summary the engine's terminal `spur workflow run`/`continue` writes (via `writeRunCloseSummary`, 1448), plus the
  * transcript adapter it reads (1138 R1). Ported from `plugins/sp/tests/run-summary.test.ts` when the
  * close callback moved into the app (script-absorption PR-4). The transcript adapter has its own
  * suite (`transcript.test.ts`).
@@ -160,5 +166,48 @@ describe('renderSummaryMarkdown', () => {
         });
         expect(empty).toContain('| model | 2:00 | n/a |');
         expect(empty).toContain('|   of which gate (informational) | 0:01 | — |');
+    });
+});
+
+describe('writeRunCloseSummary (1448 R1)', () => {
+    test('an unknown run yields no summary and never throws, so the close verdict is untouched', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const cwd = mkdtempSync(join(tmpdir(), 'close-sum-'));
+        try {
+            expect(await writeRunCloseSummary('no-such-run', { db, cwd })).toBeUndefined();
+            expect(existsSync(join(cwd, '.spur', 'run', 'no-such-run-summary.md'))).toBe(false);
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('an unsafe id or an unsettled row yields nothing; legacy metadata falls back to the CLI cwd', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const cwd = mkdtempSync(join(tmpdir(), 'close-sum-'));
+        const insert = (id: string, completedAt: string | null, meta: string) =>
+            db.run(
+                'INSERT INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    id,
+                    'wf',
+                    'sync',
+                    completedAt ? 'done' : 'running',
+                    '2026-01-01T00:00:00.000Z',
+                    completedAt,
+                    meta,
+                    0,
+                    0,
+                ],
+            );
+        try {
+            expect(await writeRunCloseSummary('../escape', { db, cwd })).toBeUndefined();
+            await insert('still-running', null, '{}');
+            expect(await writeRunCloseSummary('still-running', { db, cwd })).toBeUndefined();
+            await insert('legacy', '2026-01-01T00:00:05.000Z', 'not json');
+            expect(await writeRunCloseSummary('legacy', { db, cwd })).toBe(join('.spur', 'run', 'legacy-summary.md'));
+            expect(existsSync(join(cwd, '.spur', 'run', 'legacy-summary.md'))).toBe(true);
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 });

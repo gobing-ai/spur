@@ -166,10 +166,12 @@ must not be changed without updating the backing skill.
 
 #### Execution summary
 
-Produced by the run's own terminal close (1146 R1), not by a trailing step: the close writes
-`.spur/run/<runId>-summary.md` + `.json` and reports `summaryFile` in its stdout JSON. The driver's only
-job is to print that file's contents under an `### Execution summary` heading, and to pass `--no-summary`
-through to `inline close`. `--no-summary` is an `inline close` flag: anywhere else it is a usage error.
+Produced by the run's own terminal close (1146 R1, restored by 1448), not by a trailing step: when
+`spur workflow run` or `spur workflow continue` reaches a terminal status it writes
+`.spur/run/<runId>-summary.md` + `.json` and reports `summaryFile` in its `--json` result (a paused run writes
+none; a summary failure omits the key and never changes the exit code). The driver's only job is to print that
+file's contents (resolved against the run's project or worktree) under an `### Execution summary` heading.
+`--no-summary` is a driver display toggle: it skips that print, never the file; the workflow CLI has no opt-out.
 
 `/sp:dev-run --all` shows one summary per run — each produced by that run's own close, so each window is its own
 `runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:

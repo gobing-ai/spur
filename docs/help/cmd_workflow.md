@@ -237,6 +237,12 @@ finalizes as `status: "failed"` with `reason: "terminal:<state>"` and `finalStat
 terminal. Without `failureStates`, every terminal still reports `status: "done"` (backward
 compatible). Use `finalState` only to see *which* terminal was reached after checking `status`.
 
+**Execution summary (1146 R1 / 1448):** a run or `continue` that settles `done` or `failed` writes
+`.spur/run/<runId>-summary.md` (plus `.json` when measured) into the run's launch project and adds
+`"summaryFile": ".spur/run/<runId>-summary.md"` to the JSON result. Dry runs, pauses, interruptions and
+summary write failures omit the field; the status and exit code never change. Roll up the `.json` receipts
+with `spur workflow summary --rollup`.
+
 **Run-scoped artifacts:** non-entity-scoped files under `.spur/run/` are often prefixed with the
 run id (e.g. `.spur/run/<runId>-…`). `__runId` is injected by every `spur workflow run`. Entity-scoped
 paths (`.spur/run/<wbs>-*`) are unchanged.

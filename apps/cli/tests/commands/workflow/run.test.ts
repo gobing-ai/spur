@@ -11,7 +11,7 @@ import {
     WorkflowSteeringController,
 } from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
-import { createMigratedDb } from '@gobing-ai/spur-domain';
+import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
     asyncRegisterTimeoutMs,
@@ -442,15 +442,16 @@ terminalStates: [done]
     });
     // 1448 R1/R2/R4: the engine's terminal close writes the run summary and reports `summaryFile`, so the
     // producer cannot be orphaned again the way 1242 orphaned it (no `<runId>-summary.md` after 2026-10-17).
-    test('a terminal run writes its own execution summary and reports summaryFile (1448 R1/R4)', async () => {
+    test('a terminal run writes its own execution summary and reports summaryFile (1448 AC1)', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, compositionFixture(1));
+        const dbUrl = join(dir, 'spur.db');
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'run', '--run-id', 'sum-run', workflowFile, '--json'], {
             output,
             cwd: dir,
-            dbUrl: ':memory:',
+            dbUrl,
         });
         expect(exitCode).toBe(0);
         const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
@@ -464,7 +465,28 @@ terminalStates: [done]
             completedAt: string;
         };
         expect(json.runId).toBe('sum-run');
-        expect(Date.parse(json.startedAt)).toBeLessThanOrEqual(Date.parse(json.completedAt));
+        // The measurement window is exactly the persisted run row's start → completion.
+        const row = await new RunDao(await createMigratedDb({ url: dbUrl })).traceRowById('sum-run');
+        expect(Date.parse(json.startedAt)).toBe(new Date(row?.started_at ?? '').getTime());
+        expect(Date.parse(json.completedAt)).toBe(new Date(row?.completed_at ?? '').getTime());
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('a dry run is not a close: no summaryFile and no summary files (1448 AC1)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, compositionFixture(1));
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'run', '--run-id', 'sum-dry', workflowFile, '--dry-run', '--json'], {
+            output,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(0);
+        const result = JSON.parse(output.messages.at(-1) ?? '{}') as { summaryFile?: string };
+        expect(result.summaryFile).toBeUndefined();
+        expect(await exists(join(dir, '.spur', 'run', 'sum-dry-summary.md'))).toBe(false);
+        expect(await exists(join(dir, '.spur', 'run', 'sum-dry-summary.json'))).toBe(false);
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -484,6 +506,57 @@ terminalStates: [done]
         expect(await exists(join(dir, String(result.summaryFile)))).toBe(true);
         await rm(dir, { recursive: true, force: true });
     });
+
+    test('an async launch that throws falls back to a sync run that writes its own summary (1448 R1)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, compositionFixture(1));
+        // Only the detached launch throws; any later process the run itself starts is real.
+        const runSpy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementationOnce(async () => {
+            throw new Error('spawn refused');
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['workflow', 'run', '--async', '--run-id', 'sum-fb', workflowFile, '--json'], {
+                output,
+                cwd: dir,
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(0);
+            const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+            expect(result.status).toBe('done');
+            expect(result.summaryFile).toBe(join('.spur', 'run', 'sum-fb-summary.md'));
+            expect(await exists(join(dir, '.spur', 'run', 'sum-fb-summary.md'))).toBe(true);
+        } finally {
+            runSpy.mockRestore();
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    for (const [label, yaml, wantExit, wantStatus] of [
+        ['successful', compositionFixture(1), 0, 'done'],
+        ['failed', FAILURE_TERMINAL_YAML, 1, 'failed'],
+    ] as const) {
+        test(`a summary write failure keeps the ${label} run's verdict and omits summaryFile (1448 AC3)`, async () => {
+            const dir = await createTempProject();
+            const workflowFile = join(dir, 'workflow.yaml');
+            await writeFile(workflowFile, yaml);
+            // A directory squatting on the Markdown path makes every summary write fail.
+            await mkdir(join(dir, '.spur', 'run', 'sum-io-summary.md'), { recursive: true });
+            const output = createCapturedOutput();
+            const exitCode = await main(['workflow', 'run', '--run-id', 'sum-io', workflowFile, '--json'], {
+                output,
+                cwd: dir,
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(wantExit);
+            expect(output.messages).toHaveLength(1);
+            const result = JSON.parse(output.messages[0] ?? '{}') as { status: string; summaryFile?: string };
+            expect(result.status).toBe(wantStatus);
+            expect('summaryFile' in result).toBe(false);
+            await rm(dir, { recursive: true, force: true });
+        });
+    }
 
     test('run landing in a failure terminal exits non-zero and reports status failed (0425 R2)', async () => {
         const dir = await createTempProject();
