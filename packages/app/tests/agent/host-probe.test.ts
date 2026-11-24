@@ -11,7 +11,7 @@
  * of the report's contract is decided by the functions this file pins.
  */
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -19,10 +19,12 @@ import {
     classifyHostWake,
     HOST_PROBE_AGENTS,
     HOST_PROBE_MODES,
+    HOST_PROBE_TIMEOUT_MS,
     type HostCapabilityReport,
     hostProbeReportPath,
     hostReportViolations,
     redactProbeOutput,
+    runHostBinary,
     runHostProbe,
 } from '../../src/agent/host-probe';
 
@@ -163,6 +165,64 @@ describe('redactProbeOutput (1280 R1 — recorded verbatim, redacted)', () => {
     });
 });
 
+describe('runHostBinary (task 1414 — bounded probe)', () => {
+    /** A fake host: `body` runs instead of a real CLI, so the test owns the timing. */
+    function fakeHost(body: string): string {
+        const root = mkdtempSync(join(tmpdir(), 'spur-host-bin-'));
+        const script = join(root, 'host');
+        writeFileSync(script, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+        return script;
+    }
+
+    test('a binary that never answers is cut at its budget instead of hanging the probe', async () => {
+        // The failure this pins: unbounded spawnSync let a wedged host (codex 0.171.0 on macOS)
+        // hang `spur agent doctor-hosts` until the caller's timeout killed it.
+        const script = fakeHost('sleep 30');
+        try {
+            const startedAt = Date.now();
+            const result = await runHostBinary(script, ['--help'], 300);
+            expect(result.timedOut).toBe(true);
+            expect(result.output.trim()).toBe('');
+            expect(Date.now() - startedAt).toBeLessThan(5_000);
+        } finally {
+            rmSync(join(script, '..'), { recursive: true, force: true });
+        }
+    }, 15_000);
+
+    test('a healthy binary reports its output inside the budget', async () => {
+        const script = fakeHost('echo "Usage: host [options]"');
+        try {
+            const result = await runHostBinary(script, ['--help'], HOST_PROBE_TIMEOUT_MS);
+            expect(result.timedOut).toBe(false);
+            expect(result.exitCode).toBe(0);
+            expect(result.output).toContain('Usage: host [options]');
+        } finally {
+            rmSync(join(script, '..'), { recursive: true, force: true });
+        }
+    });
+});
+
+describe('buildHostRow probe failure', () => {
+    test('a binary that blew its deadline is pull-only with the deadline as its reason', () => {
+        // Empty help text would otherwise be explained as "names no channel", which hides the real
+        // cause: the host never answered.
+        const row = buildHostRow({
+            agent: 'codex',
+            mode: 'interactive',
+            binary: { path: '/opt/homebrew/bin/codex', version: 'unknown' },
+            helpText: '',
+            evidence: null,
+            probeFailure: 'codex --help did not answer within 2500ms — pull-only until it does',
+        });
+        expect(row.wake).toBe('pull-only');
+        expect(row.evidence).toBeNull();
+        expect(row.reason ?? '').toContain('did not answer within');
+        expect(
+            hostReportViolations({ schemaVersion: 1, generatedAt: '2026-11-23T00:00:00.000Z', hosts: [row] }),
+        ).toContain('missing row for codex:headless');
+    });
+});
+
 describe('runHostProbe', () => {
     test('an unknown --agents entry is refused before any host work', async () => {
         const outcome = await runHostProbe({ cwd: process.cwd(), agents: ['wizard'] });
@@ -186,7 +246,9 @@ describe('runHostProbe', () => {
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
-    });
+        // The probe reads whatever binaries this machine has; one wedged host burns its whole
+        // per-run budget (2 runs × HOST_PROBE_TIMEOUT_MS), so the wall clock is not bun's 5s default.
+    }, 30_000);
 
     test('the report path honours --out and the default', () => {
         expect(hostProbeReportPath('/p')).toBe('/p/docs/reports/fleet-host-capabilities.json');

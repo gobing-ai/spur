@@ -12,7 +12,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { getEnvVar } from '@gobing-ai/spur-config';
-import { NodeSyncProcessExecutor } from '@gobing-ai/ts-runtime';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 
 // ── Host capability probe (G75 R2, task 1280) ─────────────────────────────────────
 //
@@ -28,6 +28,14 @@ export const HOST_PROBE_AGENTS = ['codex', 'claude', 'pi'] as const;
 
 /** The two modes a host is probed in; they have different wake surfaces. */
 export const HOST_PROBE_MODES = ['interactive', 'headless'] as const;
+
+/**
+ * Budget for one `--version` / `--help` invocation. A diagnostic must degrade, never wait: an
+ * installed binary can wedge for reasons this probe cannot see (a first-run Gatekeeper scan of a
+ * 300 MB single-file release, an update check on a dead network, an uninterruptible lock). Unbounded
+ * `spawnSync` let one such binary hang the whole verb — codex 0.171.0 on macOS did exactly that.
+ */
+export const HOST_PROBE_TIMEOUT_MS = 2500;
 
 /** Where the capability report lands, relative to the project root. */
 export const HOST_PROBE_REPORT_RELATIVE_PATH = join('docs', 'reports', 'fleet-host-capabilities.json');
@@ -115,6 +123,8 @@ export function buildHostRow(input: {
     helpText: string;
     evidence: { command: string; output: string } | null;
     e2e?: { status: 'passed' | 'failed'; detail: string };
+    /** Why the binary could not be probed (a deadline, not a missing surface) — overrides classification. */
+    probeFailure?: string;
 }): HostCapabilityRow {
     const e2e = input.e2e === undefined ? {} : { e2e: input.e2e };
     if (input.binary === null) {
@@ -129,6 +139,17 @@ export function buildHostRow(input: {
         };
     }
     const binary = { path: redactProbeOutput(input.binary.path), version: redactProbeOutput(input.binary.version) };
+    if (input.probeFailure !== undefined) {
+        return {
+            agent: input.agent,
+            mode: input.mode,
+            binary,
+            wake: 'pull-only',
+            evidence: null,
+            reason: input.probeFailure,
+            ...e2e,
+        };
+    }
     const classified = classifyHostWake({ mode: input.mode, helpText: input.helpText });
     const evidence =
         input.evidence === null
@@ -200,17 +221,21 @@ function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-/** Run one host binary with a bounded budget; a missing or failing binary reads as empty output. */
-function runHostBinary(path: string, args: string[]): { exitCode: number; output: string } {
+/** Run one host binary within its budget; a missing, failing or wedged binary reports as empty output. */
+export async function runHostBinary(
+    path: string,
+    args: string[],
+    timeoutMs = HOST_PROBE_TIMEOUT_MS,
+): Promise<{ exitCode: number; output: string; timedOut: boolean }> {
     try {
-        const proc = new NodeSyncProcessExecutor().runSync({ command: path, args });
+        const proc = await new NodeProcessExecutor({ defaultTimeout: timeoutMs }).run({ command: path, args });
         const stdout = proc.stdout ?? '';
         const stderr = proc.stderr ?? '';
         // Full text: the capability line can sit anywhere in a 200-line `--help`. The REPORT
         // records only the matched line, so this is not a size risk in the artifact.
-        return { exitCode: proc.exitCode ?? 1, output: `${stdout}\n${stderr}` };
+        return { exitCode: proc.exitCode ?? 1, output: `${stdout}\n${stderr}`, timedOut: proc.outcome === 'timeout' };
     } catch (error) {
-        return { exitCode: 1, output: trimmed(errorMessage(error), 200) };
+        return { exitCode: 1, output: trimmed(errorMessage(error), 200), timedOut: false };
     }
 }
 
@@ -230,29 +255,34 @@ export function wakeEvidenceLine(helpText: string, wake: HostWake): string | nul
     return chosen === undefined ? null : trimmed(chosen, 300);
 }
 
-/** Probe one installed binary: path, version line, and the help text the wake class comes from. */
-function probeHostBinary(agent: string): {
+/** One installed binary as the probe saw it: path, version line, help text, and any deadline failure. */
+interface HostBinaryProbe {
     binary: { path: string; version: string } | null;
     helpText: string;
     helpCommand: string;
-} {
+    failure?: string;
+}
+
+/** Probe one installed binary: path, version line, and the help text the wake class comes from. */
+async function probeHostBinary(agent: string): Promise<HostBinaryProbe> {
     const path = Bun.which(agent);
     if (path === null) return { binary: null, helpText: '', helpCommand: `${agent} --help` };
-    const version = runHostBinary(path, ['--version']);
-    const help = runHostBinary(path, ['--help']);
+    const [version, help] = await Promise.all([runHostBinary(path, ['--version']), runHostBinary(path, ['--help'])]);
     const versionLine = version.output.split('\n')[0]?.trim() ?? '';
     return {
         binary: { path, version: versionLine === '' ? 'unknown' : versionLine },
         helpText: help.exitCode === 0 ? help.output : '',
         helpCommand: `${agent} --help`,
+        // A wedged binary outweighs any classification: say why the row is unproven, not that its
+        // (empty) help text names no channel.
+        ...(help.timedOut
+            ? { failure: `${agent} --help did not answer within ${HOST_PROBE_TIMEOUT_MS}ms — pull-only until it does` }
+            : {}),
     };
 }
 
 /** Evidence for one host×mode row: the matched help line, or null when nothing proves a channel. */
-function probeEvidence(
-    probe: ReturnType<typeof probeHostBinary>,
-    mode: HostMode,
-): { command: string; output: string } | null {
+function probeEvidence(probe: HostBinaryProbe, mode: HostMode): { command: string; output: string } | null {
     const { wake } = classifyHostWake({ mode, helpText: probe.helpText });
     const line = wakeEvidenceLine(probe.helpText, wake);
     return line === null ? null : { command: probe.helpCommand, output: line };
@@ -301,7 +331,7 @@ export async function runHostProbe(options: HostProbeOptions): Promise<HostProbe
     }
     const rows: HostCapabilityRow[] = [];
     for (const agent of HOST_PROBE_AGENTS) {
-        const probe = probeHostBinary(agent);
+        const probe = await probeHostBinary(agent);
         for (const mode of HOST_PROBE_MODES) {
             rows.push(
                 buildHostRow({
@@ -310,6 +340,7 @@ export async function runHostProbe(options: HostProbeOptions): Promise<HostProbe
                     binary: probe.binary,
                     helpText: probe.helpText,
                     evidence: probeEvidence(probe, mode),
+                    ...(probe.failure === undefined ? {} : { probeFailure: probe.failure }),
                 }),
             );
         }
