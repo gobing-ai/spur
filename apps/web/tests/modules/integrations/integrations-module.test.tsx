@@ -82,6 +82,7 @@ const USAGE: IntegrationsUsage = {
             p50Ms: 4,
             p95Ms: 9,
             durationUnmeasured: 0,
+            lastCalledAt: '2026-11-22T01:30:00.000Z',
         },
     ],
     resources: [],
@@ -566,6 +567,7 @@ const ALL_USAGE: IntegrationsUsage = {
             p50Ms: null,
             p95Ms: null,
             durationUnmeasured: 4,
+            lastCalledAt: '2026-11-22T02:00:00.000Z',
         },
     ],
     resources: [{ uri: 'spur://runs/{id}', reads: 2, failures: 1 }],
@@ -592,6 +594,68 @@ const ALL_USAGE: IntegrationsUsage = {
 function usageByWindow(): void {
     overrides.usage = (input) => (input.since === undefined ? ALL_USAGE : USAGE);
 }
+
+// ─── 1446 R5: the catalog table joins the window's counters, and nothing hides an unadvertised tool ─
+// The failure modes: a registered tool with no calls vanishing from the table, a zero rendered as
+// "unavailable", and a tool that still runs but is no longer advertised disappearing entirely.
+
+describe('1446 — per-tool call counters in the Tools table (R5)', () => {
+    /** `sp_task_list` is advertised and busy; `ops_daily_report` is advertised and never called. */
+    const CALLED_AND_UNCALLED: IntegrationsUsage = {
+        ...USAGE,
+        tools: [
+            {
+                tool: 'sp_task_list',
+                calls: 3,
+                failures: 1,
+                failureRate: 0.25,
+                p50Ms: 4,
+                p95Ms: 9,
+                durationUnmeasured: 0,
+                lastCalledAt: '2026-11-22T01:30:00.000Z',
+            },
+            // Called in this window but no longer advertised: the usage table must keep it.
+            {
+                tool: 'sp_retired_tool',
+                calls: 2,
+                failures: 0,
+                failureRate: 0,
+                p50Ms: 7,
+                p95Ms: 7,
+                durationUnmeasured: 0,
+                lastCalledAt: '2026-11-22T01:20:00.000Z',
+            },
+        ],
+    };
+
+    test('a called tool, an uncalled tool and an unadvertised tool are all visible', async () => {
+        overrides.usage = () => CALLED_AND_UNCALLED;
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getAllByRole('tab').length).toBe(3));
+        fireEvent.click(view.getByRole('tab', { name: 'MCP' }));
+        await waitFor(() => expect(view.getByTestId('integrations-mcp-tools')).toBeTruthy());
+
+        const called = view.getByTestId('integrations-tool-sp_task_list').querySelectorAll('td');
+        expect(called[3]?.textContent).toBe('3');
+        expect(called[4]?.textContent).toBe('1');
+        expect(called[5]?.textContent).toBe('4ms / 9ms');
+        expect(called[6]?.textContent).toBe(new Date('2026-11-22T01:30:00.000Z').toLocaleString());
+
+        // An uncalled but advertised tool is a real zero, not an em dash — only the latency columns are unavailable.
+        const uncalled = view.getByTestId('integrations-tool-ops_daily_report').querySelectorAll('td');
+        expect(uncalled[3]?.textContent).toBe('0');
+        expect(uncalled[4]?.textContent).toBe('0');
+        expect(uncalled[5]?.textContent).toBe('—');
+        expect(uncalled[6]?.textContent).toBe('—');
+
+        // Attempts in the window: 3 + 1 failures on the listed tool, 2 on the retired one.
+        expect(view.getByTestId('integrations-mcp-total-calls').textContent).toBe('6 calls');
+
+        const retired = view.getByTestId('integrations-mcp-usage-tools').textContent ?? '';
+        expect(retired).toContain('sp_retired_tool');
+        expect(retired).not.toContain('sp_task_list');
+    });
+});
 
 describe('1439 — selected-window usage detail (R1)', () => {
     test('Summary shows all six slices, with empty states where a slice is empty', async () => {

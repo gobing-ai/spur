@@ -17,6 +17,7 @@ import { createApp } from '../../../src/bootstrap';
 import type { ServerContext } from '../../../src/context';
 import { integrationsModule } from '../../../src/modules/integrations';
 import { setGatewayProbeFetchForTesting } from '../../../src/modules/integrations/handlers';
+import { BUILTIN_TOOL_NAMES } from '../../../src/modules/mcp';
 
 const MCP_TOKEN = 'integrations-mcp-token-value-4321';
 
@@ -131,7 +132,8 @@ describe('1423 — no token value in the payload (R2)', () => {
             const body = (await (await statusOf(ctx)).json()) as {
                 mcp: { tools: Array<{ name: string; origin: string; annotations: unknown }> };
             };
-            expect(body.mcp.tools).toHaveLength(10);
+            // The descriptor count, not a fixed number: every catalog addition grows both sides.
+            expect(body.mcp.tools).toHaveLength(BUILTIN_TOOL_NAMES.length);
             expect(body.mcp.tools.every((tool) => tool.origin === 'built-in')).toBe(true);
             expect(body.mcp.tools.every((tool) => tool.annotations !== null)).toBe(true);
         } finally {

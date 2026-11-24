@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.77.0
+version: 1.78.0
 owner: Robin Min
 updated_at: 2026-11-23
 read_before: any structural change; before diverging from a decision
@@ -3007,11 +3007,10 @@ re-import pressure this entry already records).
   self-contained — no `initialize` handshake, no `Mcp-Session-Id` session store, no persistent SSE;
   answers are `application/json` or one request-scoped SSE frame. Bearer auth reads the token from
   the environment variable `server.mcp.authEnv` names (required at config load when enabled; only
-  the NAME is configuration, the value is never persisted). Five tools (`sp_task_show`,
-  `sp_task_list`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue` — the `sp`
-  namespace rename is task 1379) and three `spur://` resources
-  (tasks/features/context) delegate directly to `@gobing-ai/spur-app` services — no CLI spawn, no
-  second workflow state machine. Stdio-only agents reach the endpoint through the thin `spur mcp`
+  the NAME is configuration, the value is never persisted). The `sp_*` built-in tool catalog — 41
+  tools over eight domains since 1445, every name in the `sp` namespace (task 1379) — and three
+  `spur://` resources (tasks/features/context) delegate directly to `@gobing-ai/spur-app` services —
+  no CLI spawn, no second workflow state machine. Stdio-only agents reach the endpoint through the thin `spur mcp`
   NDJSON→HTTP bridge, which is transport-only (it forwards protocol headers and the bearer token and
   never duplicates tool execution). The gateway exempts `/<prefix>/mcp` from browser-origin CSRF —
   bearer-authenticated routes a cross-site simple request cannot produce — while keeping the host

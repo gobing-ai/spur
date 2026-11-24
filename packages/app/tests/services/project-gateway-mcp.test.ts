@@ -2,7 +2,12 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createGatewayHandler, type McpGatewayRegistry, type McpGatewayTool } from '../../src/services/project-gateway';
+import {
+    createGatewayHandler,
+    type GatewayEvent,
+    type McpGatewayRegistry,
+    type McpGatewayTool,
+} from '../../src/services/project-gateway';
 
 /**
  * Task 1383 at the owning layer: the gateway's MCP route table, resolution rules and refusals.
@@ -386,5 +391,125 @@ describe('1442 — gateway root page', () => {
         expect(html).toContain('data-gateway-routing="requests"');
         expect(html).toContain('data-gateway-mcp="on"');
         rmSync(beta, { recursive: true, force: true });
+    });
+});
+
+// ─── 1446 R3: per-tool counters include refusals, and the upstream sees the gateway hop ──────
+describe('1446 — gateway per-tool telemetry', () => {
+    /**
+     * The failure modes: a call refused before any upstream disappearing from the counters, an
+     * `mcp.call.failed` event quoting request data (a project selector, a header), and the upstream
+     * being told the call was direct instead of gateway.
+     */
+    interface Deployed {
+        handler: (req: Request) => Promise<Response>;
+        registry: McpGatewayRegistry;
+        headers: Array<Record<string, string>>;
+        events: GatewayEvent[];
+    }
+
+    async function deploy(paths: { alpha: string; beta: string }): Promise<Deployed> {
+        const events: GatewayEvent[] = [];
+        const headers: Array<Record<string, string>> = [];
+        const holder: { registry?: McpGatewayRegistry } = {};
+        const names = (path: string): string => path.split('-').slice(-2).join('-');
+        const handler = createGatewayHandler({
+            listProjects: async () =>
+                [
+                    { name: names(paths.alpha), path: paths.alpha },
+                    { name: names(paths.beta), path: paths.beta },
+                ] as never,
+            ensureUpstream: async (entry) => {
+                if (entry.path === paths.beta) throw new Error('serve exited before listening');
+                return 4000;
+            },
+            port: 3000,
+            builtinTools: () => BUILTINS,
+            projectMcpToken: () => TOKEN,
+            mcpProtocolVersion: '2026-08-01',
+            onEvent: (event) => events.push(event),
+            fetchUpstream: (async (_url: string, init: RequestInit) => {
+                headers.push(init.headers as Record<string, string>);
+                return Response.json({ jsonrpc: '2.0', result: { ok: true } });
+            }) as unknown as typeof fetch,
+            mcp: async (_req, registry) => {
+                holder.registry = registry;
+                return Response.json({ ok: true });
+            },
+        });
+        await handler(new Request('http://localhost/mcp', { method: 'POST', body: '{}' }));
+        if (holder.registry === undefined) throw new Error('registry not captured');
+        return { handler, registry: holder.registry, headers, events };
+    }
+
+    it('counts every routed tools/call, including refusals made before any upstream', async () => {
+        const alpha = project('alpha');
+        const beta = project('beta');
+        const name = (path: string): string => path.split('-').slice(-2).join('-');
+        const deployed = await deploy({ alpha, beta });
+        try {
+            await deployed.registry.callTool(
+                'sp_task_show',
+                { project: name(alpha), wbs: '1446' },
+                { via: 'direct', actor: 'claude-code' },
+            );
+            await expect(
+                deployed.registry.callTool('sp_task_show', { project: name(beta), wbs: '1446' }),
+            ).rejects.toThrow(/could not start project/);
+            await expect(
+                deployed.registry.callTool('sp_task_show', { project: 'ghost-project', wbs: '1446' }),
+            ).rejects.toThrow(/unknown project/);
+
+            const health = await deployed.handler(new Request('http://localhost/api/health'));
+            const body = (await health.json()) as {
+                mcpActivity: {
+                    byTool: Record<string, { calls: number; failures: number; lastCall: string | null }>;
+                };
+            };
+            const counted = body.mcpActivity.byTool.sp_task_show;
+            if (counted === undefined) throw new Error('expected sp_task_show counters');
+            expect(counted.calls).toBe(3);
+            expect(counted.failures).toBe(2);
+            expect(Number.isNaN(Date.parse(counted.lastCall ?? ''))).toBe(false);
+
+            // One event per refusal, and neither quotes the selector, a header or an argument value.
+            const refusals = deployed.events.filter((event) => event.kind === 'mcp.call.failed');
+            expect(refusals.map((event) => event.reason)).toEqual(['upstream-start-failed', 'unknown-project']);
+            expect(refusals.every((event) => event.name === 'sp_task_show')).toBe(true);
+            const serialized = JSON.stringify(refusals);
+            expect(serialized).not.toContain('ghost-project');
+            expect(serialized).not.toContain('claude-code');
+            expect(serialized).not.toContain('authorization');
+
+            // The surviving call reached the project stamped as the gateway hop, with the actor.
+            expect(deployed.headers).toHaveLength(1);
+            expect(deployed.headers[0]?.['x-spur-mcp-via']).toBe('gateway');
+            expect(deployed.headers[0]?.['x-spur-actor']).toBe('claude-code');
+        } finally {
+            rmSync(alpha, { recursive: true, force: true });
+            rmSync(beta, { recursive: true, force: true });
+        }
+    });
+
+    it('drops an actor outside the bound charset instead of forwarding it', async () => {
+        const alpha = project('alpha');
+        const beta = project('beta');
+        const name = alpha.split('-').slice(-2).join('-');
+        const deployed = await deploy({ alpha, beta });
+        try {
+            await deployed.registry.callTool(
+                'sp_task_show',
+                { project: name, wbs: '1446' },
+                {
+                    via: 'direct',
+                    actor: 'bad actor\nX-Injected: 1',
+                },
+            );
+            expect(deployed.headers[0]?.['x-spur-actor']).toBeUndefined();
+            expect(deployed.headers[0]?.['x-spur-mcp-via']).toBe('gateway');
+        } finally {
+            rmSync(alpha, { recursive: true, force: true });
+            rmSync(beta, { recursive: true, force: true });
+        }
     });
 });

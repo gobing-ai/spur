@@ -7,6 +7,7 @@ import {
     discoverProbe,
     filterTools,
     formatLatency,
+    formatWhen,
     gatewayMcpCommand,
     type ProtocolEventRow,
     projectMcpCommand,
@@ -16,10 +17,13 @@ import {
 /**
  * Integrations › MCP (task 1424 R4; namespace and exposure diagnostics 1438 R2).
  *
- * The advertised catalog (origin + read/write badges, a schema drawer), the workflow namespace and
- * the exposures the resolver refused with their remedies, the `spur://` resource templates, the
- * window's recent calls, and the copyable client config, command and probe — each naming the
- * variable holding the token, never the token itself.
+ * The advertised catalog (origin + read/write badges, the window's call counters and latency, a
+ * schema drawer), the workflow namespace and the exposures the resolver refused with their
+ * remedies, the `spur://` resource templates, the window's recent calls, and the copyable client
+ * config, command and probe — each naming the variable holding the token, never the token itself.
+ *
+ * The call columns join `usage.tools` by name (1446 R5); an uncalled tool reads `0`/`0`/`—`/`—`, and
+ * the separate latency table keeps only the usage rows the catalog does not advertise.
  */
 export function McpTab({
     status,
@@ -35,6 +39,11 @@ export function McpTab({
     const tools = filterTools(status.mcp.tools, query);
     const issues = status.mcp.exposureIssues ?? [];
     const toolUsage = usage?.tools ?? [];
+    const usageByName = new Map(toolUsage.map((row) => [row.tool, row]));
+    const advertised = new Set(status.mcp.tools.map((tool) => tool.name));
+    const unadvertisedUsage = toolUsage.filter((row) => !advertised.has(row.tool));
+    // Attempts in the window, so a failing tool still reads as traffic (1446 R5).
+    const totalCalls = toolUsage.reduce((sum, row) => sum + row.calls + row.failures, 0);
     const resourceUsage = usage?.resources ?? [];
     const clusters = usage?.failureClusters ?? [];
     const command = projectMcpCommand(status);
@@ -51,7 +60,12 @@ export function McpTab({
                 <CardBody>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <div>
-                            <h2 className="text-sm font-semibold">Tools</h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-sm font-semibold">Tools</h2>
+                                <Badge variant="ghost" size="sm" data-testid="integrations-mcp-total-calls">
+                                    {totalCalls} calls
+                                </Badge>
+                            </div>
                             {status.mcp.namespace === undefined ? null : (
                                 <p className="text-xs text-base-content/70" data-testid="integrations-mcp-namespace">
                                     namespace {status.mcp.namespace ?? 'none'} · from{' '}
@@ -80,39 +94,54 @@ export function McpTab({
                                     <th scope="col">Tool</th>
                                     <th scope="col">Origin</th>
                                     <th scope="col">Access</th>
+                                    <th scope="col">Calls</th>
+                                    <th scope="col">Failures</th>
+                                    <th scope="col">p50 / p95</th>
+                                    <th scope="col">Last call</th>
                                     <th scope="col">Schema</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {tools.map((tool) => (
-                                    <tr key={tool.name} data-testid={`integrations-tool-${tool.name}`}>
-                                        <td className="font-mono text-xs">{tool.name}</td>
-                                        <td>
-                                            <Badge
-                                                variant={tool.origin === 'built-in' ? 'primary' : 'secondary'}
-                                                size="sm"
-                                            >
-                                                {tool.origin}
-                                            </Badge>
-                                        </td>
-                                        <td>
-                                            <Badge
-                                                variant={tool.annotations.readOnlyHint ? 'success' : 'warning'}
-                                                size="sm"
-                                            >
-                                                {tool.annotations.readOnlyHint ? 'read' : 'write'}
-                                            </Badge>
-                                        </td>
-                                        <td>
-                                            <details>
-                                                <summary className="cursor-pointer text-xs">input schema</summary>
-                                                <pre className="mt-1 max-h-64 overflow-auto rounded bg-base-200 p-2 text-xs">
-                                                    {JSON.stringify(tool.inputSchema, null, 2)}
-                                                </pre>
-                                            </details>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {tools.map((tool) => {
+                                    const row = usageByName.get(tool.name);
+                                    return (
+                                        <tr key={tool.name} data-testid={`integrations-tool-${tool.name}`}>
+                                            <td className="font-mono text-xs">{tool.name}</td>
+                                            <td>
+                                                <Badge
+                                                    variant={tool.origin === 'built-in' ? 'primary' : 'secondary'}
+                                                    size="sm"
+                                                >
+                                                    {tool.origin}
+                                                </Badge>
+                                            </td>
+                                            <td>
+                                                <Badge
+                                                    variant={tool.annotations.readOnlyHint ? 'success' : 'warning'}
+                                                    size="sm"
+                                                >
+                                                    {tool.annotations.readOnlyHint ? 'read' : 'write'}
+                                                </Badge>
+                                            </td>
+                                            <td>{row?.calls ?? 0}</td>
+                                            <td>{row?.failures ?? 0}</td>
+                                            <td>
+                                                {row === undefined
+                                                    ? '—'
+                                                    : `${formatLatency(row.p50Ms)} / ${formatLatency(row.p95Ms)}`}
+                                            </td>
+                                            <td>{formatWhen(row?.lastCalledAt ?? null)}</td>
+                                            <td>
+                                                <details>
+                                                    <summary className="cursor-pointer text-xs">input schema</summary>
+                                                    <pre className="mt-1 max-h-64 overflow-auto rounded bg-base-200 p-2 text-xs">
+                                                        {JSON.stringify(tool.inputSchema, null, 2)}
+                                                    </pre>
+                                                </details>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     )}
@@ -168,10 +197,10 @@ export function McpTab({
 
             <Card>
                 <CardBody>
-                    <h2 className="text-sm font-semibold mb-2">Tool latency</h2>
-                    {toolUsage.length === 0 ? (
+                    <h2 className="text-sm font-semibold mb-2">Unadvertised tool usage</h2>
+                    {unadvertisedUsage.length === 0 ? (
                         <p className="text-sm text-base-content/70" data-testid="integrations-mcp-usage-tools-empty">
-                            No MCP tool calls in this window.
+                            No calls to a tool outside the advertised catalog in this window.
                         </p>
                     ) : (
                         <table className="table table-sm w-full" data-testid="integrations-mcp-usage-tools">
@@ -186,7 +215,7 @@ export function McpTab({
                                 </tr>
                             </thead>
                             <tbody>
-                                {toolUsage.map((tool) => (
+                                {unadvertisedUsage.map((tool) => (
                                     <tr key={tool.tool}>
                                         <td className="font-mono text-xs">{tool.tool}</td>
                                         <td>{tool.calls}</td>

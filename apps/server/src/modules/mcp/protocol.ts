@@ -63,19 +63,46 @@ export interface McpResourceDescriptor {
 }
 
 /**
+ * Transport facts one request carries into the registry (1446 R1/R2): the method the client asked
+ * for, which hop delivered it, and who it claims to be. Built once per request by
+ * {@link handleMcpHttpRequest}; optional on every registry method so existing registries compile.
+ */
+export interface McpRequestMeta {
+    /** JSON-RPC method of this request (`server/discover`, `tools/list`, `tools/call`, …). */
+    method: string;
+    /** Delivering hop from `X-Spur-Mcp-Via`; absent or invalid is `direct`. */
+    via: 'direct' | 'gateway' | 'stdio';
+    /** Sanitized `X-Spur-Actor`, or `null` — the raw header value is never carried. */
+    actor: string | null;
+}
+
+/** Bound charset for `X-Spur-Actor`: it reaches a ledger row, so control characters never pass. */
+const ACTOR_SHAPE = /^[A-Za-z0-9._:@-]{1,64}$/;
+
+function requestMeta(req: Request, method: string): McpRequestMeta {
+    const via = req.headers.get('X-Spur-Mcp-Via')?.trim() ?? '';
+    const actor = req.headers.get('X-Spur-Actor')?.trim() ?? '';
+    return {
+        method,
+        via: via === 'gateway' || via === 'stdio' ? via : 'direct',
+        actor: ACTOR_SHAPE.test(actor) ? actor : null,
+    };
+}
+
+/**
  * The tool/resource seam `handleMcpHttpRequest` dispatches over. The adapter never imports
  * `@gobing-ai/spur-app` directly, so tests and the task-1372 dispatcher each inject their own
  * implementation; a registry rejection becomes an INTERNAL_ERROR response, not a crash.
  */
 export interface McpHandlerRegistry {
     /** Tools advertised by `server/discover` and listed by `tools/list`. */
-    listTools(): Promise<McpToolDescriptor[]>;
+    listTools(meta?: McpRequestMeta): Promise<McpToolDescriptor[]>;
     /** Execute one named tool; the value is serialized as the call result verbatim. */
-    callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+    callTool(name: string, args: Record<string, unknown>, meta?: McpRequestMeta): Promise<unknown>;
     /** Resources advertised by `server/discover` and listed by `resources/list`. */
-    listResources(): Promise<McpResourceDescriptor[]>;
+    listResources(meta?: McpRequestMeta): Promise<McpResourceDescriptor[]>;
     /** Read one resource body by URI; the value is serialized as the read result verbatim. */
-    readResource(uri: string): Promise<unknown>;
+    readResource(uri: string, meta?: McpRequestMeta): Promise<unknown>;
     /** Resolved project namespace for tools exposed by this server, or `null` when none applies. */
     namespace(): string | null;
     /**
@@ -214,11 +241,17 @@ async function parseCall(req: Request): Promise<McpCall> {
 }
 
 /** Route one parsed call to the registry. Unknown methods are METHOD_NOT_FOUND, never guessed. */
-async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Request, version: string): Promise<unknown> {
+async function dispatch(
+    registry: McpHandlerRegistry,
+    call: McpCall,
+    req: Request,
+    version: string,
+    meta: McpRequestMeta,
+): Promise<unknown> {
     switch (call.method) {
         case 'server/discover': {
-            const tools = await registry.listTools();
-            const resources = await registry.listResources();
+            const tools = await registry.listTools(meta);
+            const resources = await registry.listResources(meta);
             const ns = registry.namespace();
             const extras = await registry.discoverExtras?.();
             return {
@@ -233,7 +266,7 @@ async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Reques
             };
         }
         case 'tools/list':
-            return { tools: await registry.listTools() };
+            return { tools: await registry.listTools(meta) };
         case 'tools/call': {
             const name = req.headers.get('Mcp-Name')?.trim() || stringParam(call.params, 'name');
             if (name === undefined) {
@@ -244,10 +277,10 @@ async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Reques
                     'tools/call needs a tool name: the Mcp-Name header or params.name',
                 );
             }
-            return registry.callTool(name, isRecord(call.params.arguments) ? call.params.arguments : {});
+            return registry.callTool(name, isRecord(call.params.arguments) ? call.params.arguments : {}, meta);
         }
         case 'resources/list':
-            return { resources: await registry.listResources() };
+            return { resources: await registry.listResources(meta) };
         case 'resources/read': {
             const uri = req.headers.get('Mcp-Name')?.trim() || stringParam(call.params, 'uri');
             if (uri === undefined) {
@@ -258,7 +291,7 @@ async function dispatch(registry: McpHandlerRegistry, call: McpCall, req: Reques
                     'resources/read needs a resource URI: the Mcp-Name header or params.uri',
                 );
             }
-            return registry.readResource(uri);
+            return registry.readResource(uri, meta);
         }
         default:
             throw fail(
@@ -356,7 +389,7 @@ export async function handleMcpHttpRequest(req: Request, registry: McpHandlerReg
     try {
         const version = await validateVersion(req);
         call = await parseCall(req);
-        const payload = await dispatch(registry, call, req, version);
+        const payload = await dispatch(registry, call, req, version, requestMeta(req, call.method));
         // A JSON-RPC request gets the JSON-RPC result envelope; a header-form request gets the bare value.
         const body = call.envelope ? { jsonrpc: '2.0', id: call.id ?? null, result: payload } : payload;
         return wantsSse(req) ? sseResponse(body) : jsonResponse(body, 200);

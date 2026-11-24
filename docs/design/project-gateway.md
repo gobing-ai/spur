@@ -104,10 +104,19 @@ every request — no cache, and **listing never starts a project**.
 | --- | --- |
 | `tools/list` | the `sp_*` built-ins exactly once, each input schema extended with a required `project` selector. Workflow tools use the same inventory and argument schemas as the project endpoint. |
 | Resolution | a built-in routes by its `project` argument (stripped before forwarding); a workflow tool routes by the namespace that owns it |
-| Upstream call | the gateway starts the project through the shared `ensureUpstream` (de-duplicated) and POSTs `tools/call` to the project's loopback `/mcp` route with the project's bearer token and `MIN_MCP_PROTOCOL_VERSION`. It uses the same loopback family selection as the proxy and returns the upstream `result` unchanged. |
+| Upstream call | the gateway starts the project through the shared `ensureUpstream` (de-duplicated) and POSTs `tools/call` to the project's loopback `/mcp` route with the project's bearer token, `MIN_MCP_PROTOCOL_VERSION`, `X-Spur-Mcp-Via: gateway` and the sanitized inbound `X-Spur-Actor` (1446 R3) — the upstream ledger then records `via: gateway` and the caller. It uses the same loopback family selection as the proxy and returns the upstream `result` unchanged. |
 | Namespace collision | a namespace claimed by 2+ local projects is reported in discover `diagnostics` (`namespace-collision`), its tools are withheld from `tools/list`, and a call to one is refused naming both projects |
 | Refusals | unknown or ambiguous `project`, missing project token, and upstream HTTP errors produce a tool error. JSON-RPC refusals preserve the project's error details and redact its token. |
 | Resources | `resources/list` is `[]` at the gateway root, by scope |
+| Per-tool counters | every routed `tools/call` increments `{ calls, failures, lastCall }` for its tool name, a refusal before any upstream included, so `calls - failures` is that tool's reachable volume. Reported as `mcpActivity.byTool` on `GET /api/health` (1446 R3). |
+
+The per-tool counters are cumulative since the gateway handler started — like the routing counters,
+a restart resets them, and durable history stays in each project's ledger. A refusal emits one
+`mcp.call.failed` event whose `reason` is a code (`missing-project`, `unknown-project`,
+`ambiguous-project`, `namespace-collision`, `unknown-tool`, `missing-token`, `upstream-unreachable`,
+`upstream-start-failed`, `upstream-unauthorized`, `upstream-refused`, `upstream-error`,
+`upstream-no-result`), never the error text: the text quotes the `project` selector, and an event
+must not carry an argument value.
 
 The gateway forwards one shared project token. The CLI passes `server.mcp.authEnv`
 (`SPUR_MCP_AUTH_ENV`) as `projectTokenEnv`, and project servers started by the gateway inherit those
@@ -136,8 +145,11 @@ use the same namespace setting as the gateway would use to discover it.
    With MCP off the popover shows the off state and performs no discovery read. A discovery failure shows an explicit
    "Discovery unavailable" row and keeps the cards, counters and removal action usable.
    `GET /api/health`
-   → `{ ok, gateway: true, port, projects: [{name, prefix, running}], counters }` (read by
-   `spur self status` and its machine-scoped `gateway` section). `counters` is additive (1385):
+   → `{ ok, gateway: true, port, projects: [{name, prefix, running}], counters }` plus, when the
+   gateway serves `/mcp`, `mcp: { enabled, auth }` and `mcpActivity: { calls, failures, authDenials,
+   lastCall, byTool }` — `byTool` keyed by tool name and cumulative regardless of `mcpSince` (1446
+   R3), while the four windowed fields respect it (read by `spur self status` and its
+   machine-scoped `gateway` section). `counters` is additive (1385):
    `{ since, requests, status4xx, status5xx, upstreamRestarts }`, counted in memory since handler
    creation at the response boundary — every final status including guard refusals and 502s, and
    `upstreamRestarts` keyed by prefix because registry names are not unique. A health read reports
@@ -202,10 +214,13 @@ the stat→rotate→append chain cannot starve rotation.
 | `route.collision` | 409: two project entries share the routed prefix | `prefix`, `names` |
 | `guard.host` | 421 host-guard refusal, before any upstream contact | `path`, `status` |
 | `guard.csrf` | 403 cross-origin refusal, before any upstream contact | `path`, `status` |
+| `mcp.call.failed` | root `/mcp` `tools/call` refused: missing/unknown/ambiguous `project`, namespace collision, unknown tool, missing gateway token, project start failure, unreachable project, 401, JSON-RPC refusal, or an answer with no `result` | `name` (the tool), `prefix` (the project, once resolved), `reason` (code) |
 
 Every event carries `ts` (ISO-8601). Request data is limited to the URL **pathname** — the event
 log never records request headers, query strings or bodies, so credentials and secrets cannot
-leak into a diagnostic file.
+leak into a diagnostic file. `mcp.call.failed` extends the same rule to tool arguments: it names the
+tool and the project, and classifies the refusal, but never quotes the `project` selector or an
+argument value (the refusal message the caller receives still does).
 
 ## 5. Board base path (critical path)
 

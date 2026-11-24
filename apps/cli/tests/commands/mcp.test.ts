@@ -76,6 +76,61 @@ describe('runMcpStdioBridge (task 1373 R1/R2)', () => {
         upstream.stop();
     });
 
+    test('forwards X-Spur-Mcp-Via: stdio and the client name as X-Spur-Actor after initialize (1446 AC3)', async () => {
+        const upstream = mockMcpUpstream(() => ({
+            status: 200,
+            body: '{"jsonrpc":"2.0","id":1,"result":{}}',
+        }));
+        const { output } = captureOutput();
+        const init =
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"codex","version":"1.0.0"}}}';
+        const call =
+            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sp_task_show","arguments":{"wbs":"1446"}}}';
+
+        const exit = await runMcpStdioBridge({
+            url: upstream.url,
+            token: null,
+            input: Readable.from([`${init}\n`, `${call}\n`]),
+            output,
+        });
+
+        expect(exit).toBe(0);
+        expect(upstream.requests[0]?.headers.get('X-Spur-Mcp-Via')).toBe('stdio');
+        expect(upstream.requests[0]?.headers.get('X-Spur-Actor')).toBe('codex');
+        // The cached name survives the initialize: the forwarded call keeps both headers.
+        expect(upstream.requests[1]?.headers.get('X-Spur-Mcp-Via')).toBe('stdio');
+        expect(upstream.requests[1]?.headers.get('X-Spur-Actor')).toBe('codex');
+        expect(upstream.requests[1]?.body).toBe(call);
+        upstream.stop();
+    });
+
+    test('drops a client name that cannot be a header value instead of killing the session (1446 P3)', async () => {
+        const upstream = mockMcpUpstream(() => ({
+            status: 200,
+            body: '{"jsonrpc":"2.0","id":1,"result":{}}',
+        }));
+        const { output } = captureOutput();
+        // A JSON-escaped newline survives JSON.parse as a control character inside the name.
+        const init =
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"bad\\nactor","version":"1.0.0"}}}';
+        const call =
+            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sp_task_show","arguments":{"wbs":"1446"}}}';
+
+        const exit = await runMcpStdioBridge({
+            url: upstream.url,
+            token: null,
+            input: Readable.from([`${init}\n`, `${call}\n`]),
+            output,
+        });
+
+        expect(exit).toBe(0);
+        expect(upstream.requests).toHaveLength(2);
+        expect(upstream.requests[0]?.headers.get('X-Spur-Mcp-Via')).toBe('stdio');
+        expect(upstream.requests[0]?.headers.get('X-Spur-Actor')).toBeNull();
+        expect(upstream.requests[1]?.headers.get('X-Spur-Actor')).toBeNull();
+        upstream.stop();
+    });
+
     test('sends no Authorization header when no token is configured', async () => {
         const upstream = mockMcpUpstream(() => ({ status: 200, body: '{"ok":true}' }));
         const exit = await runMcpStdioBridge({
@@ -236,6 +291,9 @@ describe('probe: spur mcp end-to-end over the real CLI dispatch (task 1373 AC1)'
         // No project config in the temp dir → no authEnv → no Authorization header end-to-end.
         expect(upstream.requests[0]?.headers.get('Authorization')).toBeNull();
         expect(upstream.requests[0]?.headers.get('Mcp-Protocol-Version')).toBe(MCP_PROTOCOL_VERSION);
+        // 1446 AC3: every forwarded request names the stdio hop; no client name was initialized.
+        expect(upstream.requests[0]?.headers.get('X-Spur-Mcp-Via')).toBe('stdio');
+        expect(upstream.requests[0]?.headers.get('X-Spur-Actor')).toBeNull();
         // Boot-free dispatch: a full boot would have created the project DB at <cwd>/.spur/spur.db.
         expect(existsSync(join(tempDir, '.spur', 'spur.db'))).toBe(false);
         upstream.stop();

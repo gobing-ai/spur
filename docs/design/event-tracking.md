@@ -371,9 +371,12 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `bus.handler.error` | `event`, `handlers`, `durationMs`, `error` | `[bus] {event} handler error` | `error` |
 | `bus.handler.async.enqueued` | `event`, `handlers` | `[bus] {event} handlers enqueued` | `handlers` |
 | `decision.start` | `decisionId`, `type`, `maker`, `makerSource`, `catalogLayer`, `minConfidence` | `[decision] {decisionId} asking {maker}` | unsupported |
-| `mcp.tool.called` | `tool`, `argKeys` (names only), `durationMs`, `outcome`, `runId`, `wbs` | `[mcp] {tool} ok {durationMs}ms` | `outcome` |
-| `mcp.tool.failed` | `tool`, `argKeys`, `durationMs`, `outcome`, `errorCode`, `error` (redacted), `runId`, `wbs` | `[mcp] {tool} failed {durationMs}ms` | `errorCode` |
+| `mcp.tool.called` | `tool`, `argKeys` (names only), `durationMs`, `outcome`, `origin` (`built-in`/`workflow`/`unknown`), `access` (`read`/`write`), `via` (`direct`/`gateway`/`stdio`), `actor` (sanitized `X-Spur-Actor`), `runId`, `wbs` | `[mcp] {tool} ok {durationMs}ms` | `outcome` |
+| `mcp.tool.failed` | `tool`, `argKeys`, `durationMs`, `outcome`, `errorCode`, `error` (redacted), `origin`, `access`, `via`, `actor`, `runId`, `wbs` | `[mcp] {tool} failed {durationMs}ms` | `errorCode` |
 | `mcp.resource.read` | `uri`, `durationMs`, `outcome`, `errorCode` | `[mcp] read {uri} {durationMs}ms` | `outcome` |
+| `mcp.server.discovered` | `namespace`, `via`, `actor`, `durationMs` (diagnostic tier; once per `server/discover`) | `[mcp] discovered via {via} {durationMs}ms` | — |
+| `mcp.tools.listed` | `toolCount`, `builtinCount`, `workflowCount`, `namespace`, `via`, `actor`, `durationMs` (diagnostic tier; once per `tools/list`) | `[mcp] listed {toolCount} tools {durationMs}ms` | — |
+| `mcp.resources.listed` | `resourceCount`, `via`, `actor`, `durationMs` (diagnostic tier; once per `resources/list`) | `[mcp] listed {resourceCount} resources` | — |
 | `auth.denied` | `surface`, `reason`, `path` | `[auth] {surface} denied ({reason})` | `reason` |
 | `a2a.message.received` | `member`, `messageId`, `requestKey`, `outcome`, `inboxMessageId` | `[a2a] {member} received {messageId} ({outcome})` | `outcome` |
 | `a2a.task.cancelled` | `member`, `taskId`, `runStopped` | `[a2a] {member} cancelled {taskId} ({runStopped})` | `taskId` |

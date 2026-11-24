@@ -79,12 +79,23 @@ export interface GatewayMcpRoute {
 }
 
 /**
+ * The request facts the server adapter parsed for one call (1446 R3), structurally the transport's
+ * `McpRequestMeta` — `packages/app` owns no `apps/server` import.
+ */
+export interface GatewayMcpRequestMeta {
+    /** Delivering hop; the gateway only ever forwards its own `gateway` and the actor. */
+    via: 'direct' | 'gateway' | 'stdio';
+    /** Already-sanitized `X-Spur-Actor`, or `null`. Re-checked before it becomes a header. */
+    actor: string | null;
+}
+
+/**
  * The gateway's own MCP registry (task 1383). Structurally the server's `McpHandlerRegistry`, plus
  * the route table `tools/call` needs; declared here so `packages/app` owns no server import.
  */
 export interface McpGatewayRegistry {
     listTools(): Promise<McpGatewayTool[]>;
-    callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+    callTool(name: string, args: Record<string, unknown>, meta?: GatewayMcpRequestMeta): Promise<unknown>;
     listResources(): Promise<unknown[]>;
     readResource(uri: string): Promise<unknown>;
     namespace(): string | null;
@@ -98,7 +109,8 @@ export type GatewayEventKind =
     | 'proxy.unreachable'
     | 'route.collision'
     | 'guard.host'
-    | 'guard.csrf';
+    | 'guard.csrf'
+    | 'mcp.call.failed';
 
 /**
  * One gateway occurrence handed to `GatewayDeps.onEvent`.
@@ -460,6 +472,14 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
     };
     const mcpTimes = new Map<number, { calls: number; failures: number; authDenials: number; lastCall: number }>();
     const mcpTotal = { calls: 0, failures: 0, authDenials: 0, lastCall: 0 };
+    /**
+     * Per-tool `tools/call` counters, incremented for every routed call including a refusal before
+     * any upstream, so `calls - failures` is the tool's reachable volume (1446 R3).
+     *
+     * shortcut: cumulative since handler creation (a restart resets them), not windowed — per-tool
+     * per-second buckets only if operators ask for gateway tool rates over time.
+     */
+    const toolCalls = new Map<string, { calls: number; failures: number; lastCall: number }>();
     const maxMcpWindowSeconds = 7 * 24 * 60 * 60;
 
     function mcpActivity(since: string | null) {
@@ -490,6 +510,16 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             if (oldest >= second - maxMcpWindowSeconds) break;
             mcpTimes.delete(oldest);
         }
+    }
+
+    /** The per-tool counters as `/api/health` reports them: ISO timestamps, never a window. */
+    function toolActivity(): Record<string, { calls: number; failures: number; lastCall: string | null }> {
+        return Object.fromEntries(
+            [...toolCalls].map(([tool, entry]) => [
+                tool,
+                { calls: entry.calls, failures: entry.failures, lastCall: new Date(entry.lastCall).toISOString() },
+            ]),
+        );
     }
 
     /** Registry identity of an entry: path *and* host, so two hosts never share gateway state. */
@@ -594,7 +624,7 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
                 ? {}
                 : {
                       mcp: { enabled: true, auth: deps.mcpAuth ?? { envName: '', tokenPresent: false } },
-                      mcpActivity: mcpActivity(mcpSince),
+                      mcpActivity: { ...mcpActivity(mcpSince), byTool: toolActivity() },
                   }),
         });
     }
@@ -812,9 +842,183 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         return new Map([...byNamespace].filter(([, names]) => names.length > 1));
     }
 
+    /** A `tools/call` refusal: `reason` is a stable code, so the event never carries request data. */
+    class McpCallRefusal extends Error {
+        constructor(
+            message: string,
+            readonly reason: string,
+            readonly prefix?: string,
+        ) {
+            super(message);
+            this.name = 'McpCallRefusal';
+        }
+    }
+
     /** A tool error names the cause and the remedy; it never carries a token value (task 1383 R5). */
-    function toolError(message: string): Error {
-        return new Error(message);
+    function toolError(message: string, reason: string, prefix?: string): Error {
+        return new McpCallRefusal(message, reason, prefix);
+    }
+
+    /** `X-Spur-Actor`'s bound charset, re-checked here before it becomes an upstream header (1446 R3). */
+    const ACTOR_SHAPE = /^[A-Za-z0-9._:@-]{1,64}$/;
+
+    /** Resolve one `tools/call` to its project server and forward it unchanged (task 1383 R3). */
+    async function routeTool(
+        name: string,
+        args: Record<string, unknown>,
+        meta?: GatewayMcpRequestMeta,
+    ): Promise<unknown> {
+        const fs = createNodeFileSystem();
+        const routes = await mcpRoutes(fs);
+        const collisions = collidingNamespaces(routes);
+
+        let target: GatewayMcpRoute | undefined;
+        let forwarded = args;
+        const isBuiltin = (deps.builtinTools?.() ?? []).some((tool) => tool.name === name);
+        if (isBuiltin) {
+            const requested = typeof args.project === 'string' ? args.project.trim() : '';
+            if (requested === '') {
+                throw toolError(
+                    `tool "${name}" needs a "project" argument naming a registered project (spur projects list)`,
+                    'missing-project',
+                );
+            }
+            const matches = routes.filter(
+                (route) => route.entry.name === requested || route.prefix === `/${requested.replace(/^\//, '')}`,
+            );
+            if (matches.length === 0) {
+                const known = routes.map((route) => route.entry.name).join(', ') || '(none registered)';
+                throw toolError(
+                    `unknown project "${requested}" for tool "${name}"; registered projects: ${known}`,
+                    'unknown-project',
+                );
+            }
+            if (matches.length > 1) {
+                throw toolError(
+                    `project "${requested}" is ambiguous for tool "${name}": ${matches
+                        .map((route) => route.entry.name)
+                        .join(' and ')}; call it by its registered name`,
+                    'ambiguous-project',
+                );
+            }
+            target = matches[0];
+            // The upstream expects the tool's own arguments only (R3).
+            const { project: _project, ...rest } = args;
+            forwarded = rest;
+        } else {
+            const owners = routes.filter((route) => route.tools.some((tool) => tool.name === name));
+            const colliding = owners.filter((route) => route.namespace !== null && collisions.has(route.namespace));
+            if (colliding.length > 0) {
+                const names = colliding.map((route) => route.entry.name).join(' and ');
+                throw toolError(
+                    `tool "${name}" is not callable: its namespace "${colliding[0]?.namespace ?? ''}" is claimed by ${names}; give one project a distinct plugin manifest name`,
+                    'namespace-collision',
+                    colliding[0]?.prefix,
+                );
+            }
+            if (owners.length === 0) {
+                throw toolError(
+                    `unknown tool "${name}"; tools/list lists the built-ins (with a "project" argument) and each local project's namespaced workflow tools`,
+                    'unknown-tool',
+                );
+            }
+            target = owners[0];
+        }
+        if (target === undefined) throw toolError(`tool "${name}" is not routable`, 'not-routable');
+        const route: GatewayMcpRoute = target;
+
+        const token = deps.projectMcpToken?.();
+        if (token === undefined) {
+            throw toolError(
+                `cannot call project "${route.entry.name}": the gateway has no project MCP token; set the variable named by server.mcp.authEnv for this project`,
+                'missing-token',
+                route.prefix,
+            );
+        }
+
+        let port: number;
+        try {
+            port = await ensureUpstream(route.entry);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            throw toolError(
+                `could not start project "${route.entry.name}" for tool "${name}": ${message}`,
+                'upstream-start-failed',
+                route.prefix,
+            );
+        }
+
+        let response: Response;
+        try {
+            response = await dialUpstream(identityKey(route.entry), port, (authority) =>
+                fetchUpstream(`http://${authority}/mcp`, {
+                    method: 'POST',
+                    redirect: 'manual',
+                    headers: {
+                        'content-type': 'application/json',
+                        // 1446 R3: the upstream ledger records `via: gateway` and the actor.
+                        'x-spur-mcp-via': 'gateway',
+                        ...(meta?.actor != null && ACTOR_SHAPE.test(meta.actor) ? { 'x-spur-actor': meta.actor } : {}),
+                        ...(deps.mcpProtocolVersion !== undefined
+                            ? { 'mcp-protocol-version': deps.mcpProtocolVersion }
+                            : {}),
+                        ...(token !== '' ? { authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: name,
+                        method: 'tools/call',
+                        params: { name, arguments: forwarded },
+                    }),
+                }),
+            );
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            throw toolError(
+                `project "${route.entry.name}" is unreachable for tool "${name}": ${message}`,
+                'upstream-unreachable',
+                route.prefix,
+            );
+        }
+
+        if (response.status === 401) {
+            throw toolError(
+                `project "${route.entry.name}" refused the gateway's MCP token (401); point the gateway at this project's token variable (server.mcp.authEnv)`,
+                'upstream-unauthorized',
+                route.prefix,
+            );
+        }
+        const body = (await response.json().catch(() => null)) as {
+            jsonrpc?: unknown;
+            result?: unknown;
+            error?: { message?: string } | null;
+        } | null;
+        const refusal = body?.jsonrpc === '2.0' ? body.error?.message : undefined;
+        if (typeof refusal === 'string') {
+            throw toolError(
+                `project "${route.entry.name}" refused tool "${name}": ${
+                    token !== '' ? refusal.replaceAll(token, '[redacted]') : refusal
+                }`,
+                'upstream-refused',
+                route.prefix,
+            );
+        }
+        if (!response.ok) {
+            throw toolError(
+                `project "${route.entry.name}" failed to answer tool "${name}" (${response.status}); check its serve log`,
+                'upstream-error',
+                route.prefix,
+            );
+        }
+        if (body === null || !Object.hasOwn(body, 'result')) {
+            throw toolError(
+                `project "${route.entry.name}" returned no result for tool "${name}"`,
+                'upstream-no-result',
+                route.prefix,
+            );
+        }
+        // The upstream result travels unchanged (R3): the gateway never reshapes a project's answer.
+        return body.result;
     }
 
     const mcpRegistry = {
@@ -853,127 +1057,28 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
             ];
         },
 
-        async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-            const fs = createNodeFileSystem();
-            const routes = await mcpRoutes(fs);
-            const collisions = collidingNamespaces(routes);
-
-            let target: GatewayMcpRoute | undefined;
-            let forwarded = args;
-            const isBuiltin = (deps.builtinTools?.() ?? []).some((tool) => tool.name === name);
-            if (isBuiltin) {
-                const requested = typeof args.project === 'string' ? args.project.trim() : '';
-                if (requested === '') {
-                    throw toolError(
-                        `tool "${name}" needs a "project" argument naming a registered project (spur projects list)`,
-                    );
-                }
-                const matches = routes.filter(
-                    (route) => route.entry.name === requested || route.prefix === `/${requested.replace(/^\//, '')}`,
-                );
-                if (matches.length === 0) {
-                    const known = routes.map((route) => route.entry.name).join(', ') || '(none registered)';
-                    throw toolError(`unknown project "${requested}" for tool "${name}"; registered projects: ${known}`);
-                }
-                if (matches.length > 1) {
-                    throw toolError(
-                        `project "${requested}" is ambiguous for tool "${name}": ${matches
-                            .map((route) => route.entry.name)
-                            .join(' and ')}; call it by its registered name`,
-                    );
-                }
-                target = matches[0];
-                // The upstream expects the tool's own arguments only (R3).
-                const { project: _project, ...rest } = args;
-                forwarded = rest;
-            } else {
-                const owners = routes.filter((route) => route.tools.some((tool) => tool.name === name));
-                const colliding = owners.filter((route) => route.namespace !== null && collisions.has(route.namespace));
-                if (colliding.length > 0) {
-                    const names = colliding.map((route) => route.entry.name).join(' and ');
-                    throw toolError(
-                        `tool "${name}" is not callable: its namespace "${colliding[0]?.namespace ?? ''}" is claimed by ${names}; give one project a distinct plugin manifest name`,
-                    );
-                }
-                if (owners.length === 0) {
-                    throw toolError(
-                        `unknown tool "${name}"; tools/list lists the built-ins (with a "project" argument) and each local project's namespaced workflow tools`,
-                    );
-                }
-                target = owners[0];
-            }
-            if (target === undefined) throw toolError(`tool "${name}" is not routable`);
-            const route: GatewayMcpRoute = target;
-
-            const token = deps.projectMcpToken?.();
-            if (token === undefined) {
-                throw toolError(
-                    `cannot call project "${route.entry.name}": the gateway has no project MCP token; set the variable named by server.mcp.authEnv for this project`,
-                );
-            }
-
-            let port: number;
+        /**
+         * Every routed `tools/call` is counted once, refusals included (1446 R3): `calls` is the
+         * attempt count, `failures` the ones that threw — before or after reaching a project.
+         */
+        async callTool(name: string, args: Record<string, unknown>, meta?: GatewayMcpRequestMeta): Promise<unknown> {
+            const counted = toolCalls.get(name) ?? { calls: 0, failures: 0, lastCall: 0 };
+            counted.calls += 1;
+            counted.lastCall = Date.now();
+            toolCalls.set(name, counted);
             try {
-                port = await ensureUpstream(route.entry);
+                return await routeTool(name, args, meta);
             } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
-                throw toolError(`could not start project "${route.entry.name}" for tool "${name}": ${message}`);
+                counted.failures += 1;
+                const refusal = err instanceof McpCallRefusal ? err : null;
+                emit({
+                    kind: 'mcp.call.failed',
+                    name,
+                    ...(refusal?.prefix !== undefined ? { prefix: refusal.prefix } : {}),
+                    reason: refusal?.reason ?? 'tool-error',
+                });
+                throw err;
             }
-
-            let response: Response;
-            try {
-                response = await dialUpstream(identityKey(route.entry), port, (authority) =>
-                    fetchUpstream(`http://${authority}/mcp`, {
-                        method: 'POST',
-                        redirect: 'manual',
-                        headers: {
-                            'content-type': 'application/json',
-                            ...(deps.mcpProtocolVersion !== undefined
-                                ? { 'mcp-protocol-version': deps.mcpProtocolVersion }
-                                : {}),
-                            ...(token !== '' ? { authorization: `Bearer ${token}` } : {}),
-                        },
-                        body: JSON.stringify({
-                            jsonrpc: '2.0',
-                            id: name,
-                            method: 'tools/call',
-                            params: { name, arguments: forwarded },
-                        }),
-                    }),
-                );
-            } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
-                throw toolError(`project "${route.entry.name}" is unreachable for tool "${name}": ${message}`);
-            }
-
-            if (response.status === 401) {
-                throw toolError(
-                    `project "${route.entry.name}" refused the gateway's MCP token (401); point the gateway at this project's token variable (server.mcp.authEnv)`,
-                );
-            }
-            const body = (await response.json().catch(() => null)) as {
-                jsonrpc?: unknown;
-                result?: unknown;
-                error?: { message?: string } | null;
-            } | null;
-            const refusal = body?.jsonrpc === '2.0' ? body.error?.message : undefined;
-            if (typeof refusal === 'string') {
-                throw toolError(
-                    `project "${route.entry.name}" refused tool "${name}": ${
-                        token !== '' ? refusal.replaceAll(token, '[redacted]') : refusal
-                    }`,
-                );
-            }
-            if (!response.ok) {
-                throw toolError(
-                    `project "${route.entry.name}" failed to answer tool "${name}" (${response.status}); check its serve log`,
-                );
-            }
-            if (body === null || !Object.hasOwn(body, 'result')) {
-                throw toolError(`project "${route.entry.name}" returned no result for tool "${name}"`);
-            }
-            // The upstream result travels unchanged (R3): the gateway never reshapes a project's answer.
-            return body.result;
         },
 
         async listResources(): Promise<unknown[]> {
@@ -981,7 +1086,10 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         },
 
         async readResource(uri: string): Promise<unknown> {
-            throw toolError(`unknown resource "${uri}": the gateway exposes no resources (resources/list is empty)`);
+            throw toolError(
+                `unknown resource "${uri}": the gateway exposes no resources (resources/list is empty)`,
+                'unknown-resource',
+            );
         },
 
         namespace(): string | null {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MCP_BUILTIN_TOOL_NAMES } from '@gobing-ai/spur-app';
 import { startGateway } from '../src/gateway';
 import { MIN_MCP_PROTOCOL_VERSION } from '../src/modules/mcp/protocol';
 
@@ -139,6 +140,34 @@ describe('gateway MCP entry (task 1382)', () => {
             });
             const listBody = (await list.json()) as { result: { resources: unknown[] } };
             expect(listBody.result.resources).toEqual([]);
+        });
+    });
+
+    test('tools/list re-advertises every built-in with a required project selector (1445 R7)', async () => {
+        // The gateway re-advertises `TOOL_DESCRIPTORS` by construction, so this is the regression
+        // test that the expanded catalog reaches the root surface with a `project` selector.
+        await withGateway({ mcp: ENABLED, projects: [project('alpha')] }, async (url) => {
+            const res = await fetch(`${url}/mcp`, {
+                method: 'POST',
+                headers: headers(TOKEN),
+                body: JSON.stringify(rpc('tools/list')),
+            });
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                result: {
+                    tools: Array<{
+                        name: string;
+                        inputSchema: { properties: Record<string, unknown>; required: string[] };
+                    }>;
+                };
+            };
+            const byName = new Map(body.result.tools.map((tool) => [tool.name, tool]));
+            for (const name of MCP_BUILTIN_TOOL_NAMES) {
+                const tool = byName.get(name);
+                expect(tool, name).toBeDefined();
+                expect(tool?.inputSchema.required[0], name).toBe('project');
+                expect(Object.keys(tool?.inputSchema.properties ?? {})[0], name).toBe('project');
+            }
         });
     });
 

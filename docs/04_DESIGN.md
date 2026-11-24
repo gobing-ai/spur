@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.99.0
+version: 1.100.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-11-16
+updated_at: 2026-11-23
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -88,7 +88,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Fleet task turns and measured warm execution (G74, ADR-145; implemented — `fleet-e2e --perf --modes` lane comparison) | [fleet-task-turn-execution.md](design/fleet-task-turn-execution.md) |
 | Named-agent dispatch with A2A as a hidden member transport (G8 sender 1333–1335; G9 listener 1336; two-install dispatch and write fencing 1337); project-addressed members through the gateway, refresh-on-read receipts and the shipped delegation workflows (1395–1397; ADR-148) | [a2a-member-transport.md](design/a2a-member-transport.md) |
-| Embedded MCP 2.0+ server in spur self serve — stateless Streamable HTTP `POST /mcp`, bearer auth, `spur://` resources, `spur mcp` stdio bridge (B9, ADR-152; implemented by 1370–1374) | [embedded-mcp-server](design/embedded-mcp-server.md) |
+| Embedded MCP 2.0+ server in spur self serve — stateless Streamable HTTP `POST /mcp`, bearer auth, 41 built-in `sp_*` tools over eight domains, `spur://` resources, tool-call telemetry with hop/caller headers, `spur mcp` stdio bridge (B9, ADR-152; implemented by 1370–1374, 1445–1446) | [embedded-mcp-server](design/embedded-mcp-server.md) |
 | Which agents can consume the embedded MCP server, over which transport, with sources and verdicts (B92, task 1393) | [mcp-agent-adoption](design/mcp-agent-adoption.md) |
 | Verified attached fleet occupants (G75, ADR-146; §3 guest renewal + §4 `join --member` implemented by 1279/1281, §5 attached stages + drain by 1282, probe report `docs/reports/fleet-host-capabilities.json` by 1280) | [fleet-attached-occupants.md](design/fleet-attached-occupants.md) |
 | Parallel fleet orchestration — worktree lanes, lane admission and the gated merge queue (G76, ADR-149; implemented by 1341–1346 — `'integrate'` claim slot, `fleet.task.integrated` admission, lane `cwd` in the fleet work-item envelope, remote `sp/remote-*` landing, `--perf --modes batch`) | [fleet-orchestration-lanes.md](design/fleet-orchestration-lanes.md) |

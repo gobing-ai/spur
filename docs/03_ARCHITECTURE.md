@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.82.0
+version: 1.83.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-11-23
@@ -1438,15 +1438,25 @@ freshness and confinement correctness. The durable plane is kept git-proof-inert
 (ADR-131 invariant). Exact lifetimes, confinement, compatibility and failure behavior:
 [disposable run storage](design/disposable-run-storage.md).
 
-## 33. Embedded MCP 2.0+ Server (ADR-152; feature B9, tasks 1370–1374)
+## 33. Embedded MCP 2.0+ Server (ADR-152; feature B9, tasks 1370–1374, 1445–1446)
 
 `spur self serve` mounts `mcpModule` (`apps/server/src/modules/mcp/`, registered in the server module
 registry) on `POST /mcp` only when `server.mcp.enabled` is true (default off; enabled without
 `server.mcp.authEnv` fails the config load), speaking stateless MCP 2.0+ Streamable HTTP: a
 `2026-07-28` protocol-version floor rejects legacy versions and sessions instead of negotiating
 them, and every request is self-contained (`application/json` or one request-scoped SSE frame).
-The `sp_*` harness tools and three `spur://` resources delegate directly to `@gobing-ai/spur-app`
-services. The `spur mcp` bridge (`apps/cli/src/commands/mcp.ts`) adapts legacy stdio tool clients
+The `sp_*` built-in catalog (41 tools over eight domains: task, feature, workflow, rule, decision,
+coordination, builder, self) and three `spur://` resources delegate directly to `@gobing-ai/spur-app`
+services, so a call is one service invocation and never a CLI spawn. `index.ts` is protocol
+composition only: `TOOL_DESCRIPTORS` and the handler map each merge one module per domain
+(`tools-<domain>.ts`), while argument readers, the annotation pair, the inline-section bridge and
+the error classification live once in `tools-shared.ts`. Corpus facts behind the preflight tool are
+read in `packages/app` beside the CLI's own reader, keeping the CLI thin (ADR-021) while both
+surfaces share one seam. Tool-call telemetry (`mcp.*` events) carries the tool's origin and access
+class plus the transport hop and a sanitized caller, which the adapter parses once per request from
+`X-Spur-Mcp-Via` / `X-Spur-Actor` — so a project ledger attributes the caller whether the request
+arrived directly, through `spur mcp`, or through the gateway. The `spur mcp` bridge
+(`apps/cli/src/commands/mcp.ts`) adapts legacy stdio tool clients
 and sends stateless HTTP requests with the configured bearer. Tool and resource execution stays
 on the server. The gateway
 treats `/<prefix>/mcp` like `/<prefix>/a2a`: CSRF-exempt (bearer-authenticated), host allowlist

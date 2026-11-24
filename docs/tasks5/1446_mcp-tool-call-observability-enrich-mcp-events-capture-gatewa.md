@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: "MCP tool call observability: enrich mcp.* events, capture gateway per-tool telemetry, and render per-tool call counters in McpTab"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-24T04:02:50.638Z
-updated_at: "2026-11-24T04:48:46.530Z"
+updated_at: "2026-11-24T06:49:12.201Z"
 
 feature_id: A82
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 8
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1446. MCP tool call observability: enrich mcp.* events, capture gateway per-tool telemetry, and render per-tool call counters in McpTab
@@ -41,11 +43,11 @@ Currently MCP tool observability has four concrete gaps:
 
 ### Requirements
 
-- [ ] R1. `mcp.tool.called` / `mcp.tool.failed` payloads gain `origin` (`'built-in' | 'workflow'`), `access` (`'read' | 'write'`, from `annotations.readOnlyHint`), `via` (`'direct' | 'gateway' | 'stdio'`) and `actor` (sanitized `X-Spur-Actor`, else omitted so the ledger actor stays null); catalog `fields` list them. Unknown tools record `origin: 'unknown'` and no `access`.
-- [ ] R2. Diagnostic-tier, metadata-only catalog events `mcp.server.discovered` `{namespace, via, actor?, durationMs}`, `mcp.tools.listed` `{toolCount, builtinCount, workflowCount, namespace, via, actor?, durationMs}`, `mcp.resources.listed` `{resourceCount, via, actor?, durationMs}`, emitted once per protocol request by method; board status reads emit none.
-- [ ] R3. Gateway root `/mcp`: forwards `X-Spur-Mcp-Via: gateway` and the sanitized inbound `X-Spur-Actor` upstream on `tools/call`; keeps per-tool `{calls, failures, lastCall}` counters (cumulative since gateway start) for every routed `tools/call`, including calls refused before an upstream (missing/unknown/ambiguous `project`, collision, missing token, unreachable, 401); emits `GatewayEvent` `kind: 'mcp.call.failed'` `{name: <tool>, prefix?, reason}` for each refusal; exposes counters as `mcpActivity.byTool` on `GET /api/health` and `integrationsActivitySchema.byTool` (optional).
-- [ ] R4. `ProtocolToolUsage.lastCalledAt: string | null` (max `occurred_at` over called + failed rows per tool in the window) in `packages/domain/src/analytics/protocol-usage.ts` and `integrationsToolUsageSchema` in `packages/contracts/src/integrations.ts`.
-- [ ] R5. `McpTab.tsx` main Tools table (`data-testid="integrations-mcp-tools"`) columns become `Tool | Origin | Access | Calls | Failures | p50 / p95 | Last call | Schema`, joined from `usage.tools` by name (uncalled → `0`, `0`, `—`, `—`); the Tools card header shows a total-calls badge; usage rows for tools not in the catalog stay visible in the existing latency table, which is otherwise removed.
+- [x] R1. `mcp.tool.called` / `mcp.tool.failed` payloads gain `origin` (`'built-in' | 'workflow'`), `access` (`'read' | 'write'`, from `annotations.readOnlyHint`), `via` (`'direct' | 'gateway' | 'stdio'`) and `actor` (sanitized `X-Spur-Actor`, else omitted so the ledger actor stays null); catalog `fields` list them. Unknown tools record `origin: 'unknown'` and no `access`.
+- [x] R2. Diagnostic-tier, metadata-only catalog events `mcp.server.discovered` `{namespace, via, actor?, durationMs}`, `mcp.tools.listed` `{toolCount, builtinCount, workflowCount, namespace, via, actor?, durationMs}`, `mcp.resources.listed` `{resourceCount, via, actor?, durationMs}`, emitted once per protocol request by method; board status reads emit none.
+- [x] R3. Gateway root `/mcp`: forwards `X-Spur-Mcp-Via: gateway` and the sanitized inbound `X-Spur-Actor` upstream on `tools/call`; keeps per-tool `{calls, failures, lastCall}` counters (cumulative since gateway start) for every routed `tools/call`, including calls refused before an upstream (missing/unknown/ambiguous `project`, collision, missing token, unreachable, 401); emits `GatewayEvent` `kind: 'mcp.call.failed'` `{name: <tool>, prefix?, reason}` for each refusal; exposes counters as `mcpActivity.byTool` on `GET /api/health` and `integrationsActivitySchema.byTool` (optional).
+- [x] R4. `ProtocolToolUsage.lastCalledAt: string | null` (max `occurred_at` over called + failed rows per tool in the window) in `packages/domain/src/analytics/protocol-usage.ts` and `integrationsToolUsageSchema` in `packages/contracts/src/integrations.ts`.
+- [x] R5. `McpTab.tsx` main Tools table (`data-testid="integrations-mcp-tools"`) columns become `Tool | Origin | Access | Calls | Failures | p50 / p95 | Last call | Schema`, joined from `usage.tools` by name (uncalled → `0`, `0`, `—`, `—`); the Tools card header shows a total-calls badge; usage rows for tools not in the catalog stay visible in the existing latency table, which is otherwise removed.
 
 **Out of scope:** A2A event enrichment; a new ledger table or rollup; windowing gateway `byTool` by `mcpSince`; MCP `initialize` support on the HTTP server; any new CLI flag (`spur mcp --actor` is not added).
 
@@ -134,15 +136,72 @@ Scenario: AC6 — the Tools table shows per-tool counters for every registered t
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Made MCP tool calls observable end to end: every call now carries its origin, access class, transport hop and sanitized caller; the protocol emits one diagnostic lifecycle event per list/discover request; the gateway keeps per-tool counters (refusals included) and forwards the hop/caller headers upstream; tool usage reports a last-call timestamp; and the Board's Tools table joins catalog rows with those counters.
+
+| Requirement | Change | Anchor |
+| --- | --- | --- |
+| R1 | `McpRequestMeta` type plus the header parser (invalid `via` reads as `direct`, an unsanitized actor is dropped) | `apps/server/src/modules/mcp/protocol.ts:63` |
+| R1 | Every registry method takes the optional meta the protocol adapter forwards | `apps/server/src/modules/mcp/protocol.ts:96` |
+| R1 | `callTool` derives origin/access and puts via/actor on both the called and failed payloads | `apps/server/src/modules/mcp/index.ts:247` |
+| R2 | `listTools` emits `mcp.server.discovered` or `mcp.tools.listed`, keyed on the JSON-RPC method | `apps/server/src/modules/mcp/index.ts:121` |
+| R2 | Three diagnostic, metadata-only catalog events with their field lists and presenters | `packages/app/src/services/event-names.ts:428` |
+| R1 | `mcp.tool.called` / `mcp.tool.failed` field lists gain origin, access, via and actor (no rename) | `packages/app/src/services/event-names.ts:1980` |
+| R1 | stdio bridge caches `clientInfo.name` and forwards the hop and caller headers | `apps/cli/src/commands/mcp.ts:101` |
+| R3 | Per-tool cumulative `{calls, failures, lastCall}` map behind the gateway registry | `packages/app/src/services/project-gateway.ts:481` |
+| R3 | Gateway `callTool` counts every attempt, emits `mcp.call.failed` per refusal, forwards `gateway` + actor | `packages/app/src/services/project-gateway.ts:1063` |
+| R3 | `mcpActivity.byTool` exposed on the health surface | `packages/app/src/services/project-gateway.ts:626` |
+| R4 | `lastCalledAt` is the newest called-or-failed timestamp per tool in the window | `packages/domain/src/analytics/protocol-usage.ts:170` |
+| R4 | Contract field for the new timestamp | `packages/contracts/src/integrations.ts:164` |
+| R3 | Optional `byTool` on the integrations activity schema | `packages/contracts/src/integrations.ts:217` |
+| R5 | Tools table joins catalog rows with usage by name and shows origin/access/counters/latency/last call | `apps/web/src/modules/integrations/McpTab.tsx:94` |
+| R5 | One shared timestamp formatter for the joined rows and the summary tab | `apps/web/src/modules/integrations/helpers.ts:117` |
+| Docs | Gateway counters and hop headers recorded in the design satellite | `docs/design/project-gateway.md:111` |
+| Docs | Embedded server headers, meta plumbing and lifecycle events | `docs/design/embedded-mcp-server.md:68` |
+| Docs | Integrations module surface updated for the joined Tools table | `docs/design/integrations-module.md:144` |
+| Gate fix | The stdio bridge rejects a client name that cannot be a header value instead of dying | `apps/cli/src/commands/mcp.ts:47` |
+| Gate fix | Regression test proving a control-character client name sends no actor header | `apps/cli/tests/commands/mcp.test.ts:107` |
+
+No new CLI flag, noun or verb. No ledger table and no second event bus: the sanitized actor is the only header value that reaches an event payload, and argument values, query strings and bodies never do. `mcp.tool.*` field names are unchanged, so the 1445 catalog telemetry keeps parsing.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `McpRequestMeta` + header parse/sanitize `apps/server/src/modules/mcp/protocol.ts:71-88`, forwarded by the adapter at `protocol.ts:244,268,280,294`; `callTool` derives `origin`/`access` and appends `via`/`actor` to both payloads `apps/server/src/modules/mcp/index.ts:243-282` (`toolIdentity` at `:222-237`); catalog fields `packages/app/src/services/event-names.ts:1983-1991` + `:2014`; stdio bridge cache/forward `apps/cli/src/commands/mcp.ts:76-78,94,102`; unknown tool → `origin: 'unknown'`, no `access` (`index.ts:236`), asserted `apps/server/tests/modules/mcp-module.test.ts:1810-1818` |
+| R2 | MET | Method-keyed emission `apps/server/src/modules/mcp/index.ts:121-145` (`mcp.server.discovered` / `mcp.tools.listed`, counts `toolCount`/`builtinCount`/`workflowCount`) and `index.ts:207-215` (`mcp.resources.listed`); three `metadata-only`/`diagnostic` catalog entries `packages/app/src/services/event-names.ts:426-431`; `catalog()` passes no meta → silent `apps/server/src/modules/mcp/index.ts:380-388`; verified one-event-per-method and tier/policy at `apps/server/tests/modules/mcp-module.test.ts:1882-1975`; catalog rows in `docs/design/event-tracking.md:374-378` |
+| R3 | MET | Per-tool map `packages/app/src/services/project-gateway.ts:481` + `toolActivity()` `:515-524`; counted-before-routing and `mcp.call.failed` per refusal `:1059-1079`; refusal taxonomy via `McpCallRefusal` `:845-931`; forwarded headers `:960`; health surface `:626`; contract `packages/contracts/src/integrations.ts:213-220`; `GatewayEventKind` `:112`; verified `packages/app/tests/services/project-gateway-mcp.test.ts:398-518` (3 calls / 2 failures / two events / no request data / `x-spur-mcp-via: gateway`) |
+| R4 | MET | `ProtocolToolUsage.lastCalledAt` `packages/domain/src/analytics/protocol-usage.ts:30-31`, max over called+failed in-window rows `:215-217`, emitted `:288`; contract `packages/contracts/src/integrations.ts:163-164`; verified `packages/domain/tests/analytics/protocol-usage.test.ts:193-213` incl. `integrationsToolUsageSchema.parse` |
+| R5 | MET | Joined columns `apps/web/src/modules/integrations/McpTab.tsx:97-101` (headers) and `:118-133` (rows, `calls`/`failures`/`p50 / p95`/`formatWhen(lastCalledAt)`), total-calls badge `:63-67`, unadvertised-only latency table `:200-220`; shared formatter `apps/web/src/modules/integrations/helpers.ts:117-122` (duplicate removed from `SummaryTab.tsx`); verified `apps/web/tests/modules/integrations/integrations-module.test.tsx:602-651`; surface doc `docs/design/integrations-module.md:144` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — tool-call events carry origin, access, via and actor | MET | test | `apps/server/tests/modules/mcp-module.test.ts:1743` (5 tests: stdio+actor, invalid actor dropped, invalid `via`→`direct`, unknown tool→`origin: 'unknown'`+no access, workflow tool→`workflow`/`write`/no actor) |
+| AC2 — discovery and list requests emit one lifecycle event each, status reads none | MET | test | `apps/server/tests/modules/mcp-module.test.ts:1882` (one event per method with matching counts, transport identity, `readMcpCatalog` emits nothing, tier `diagnostic` + policy `metadata-only`) |
+| AC3 — the stdio bridge forwards via and client identity | MET | test | `apps/cli/tests/commands/mcp.test.ts:79` (initialize with `clientInfo.name: "codex"` → both headers on the forwarded `tools/call`; absent name → no actor, `X-Spur-Mcp-Via: stdio` at `:266`) |
+| AC4 — gateway counts per tool, including refusals, and forwards headers | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:445` (`{calls: 3, failures: 2, lastCall}` in `mcpActivity.byTool.sp_task_show`, two `mcp.call.failed` with no selector/headers/argument values, upstream `x-spur-mcp-via: gateway` + `x-spur-actor`), `:492` (out-of-charset actor dropped) |
+| AC5 — tool usage reports lastCalledAt | MET | test | `packages/domain/tests/analytics/protocol-usage.test.ts:193` (t2 wins over t1, out-of-window row ignored, `integrationsToolUsageSchema.parse` round-trips) |
+| AC6 — the Tools table shows per-tool counters for every registered tool | MET | test | `apps/web/tests/modules/integrations/integrations-module.test.tsx:629` (row A `3`/`1`/`4ms / 9ms`/last call, row B `0`/`0`/`—`/`—`, badge `6 calls`, unadvertised `sp_retired_tool` retained while `sp_task_list` leaves that table) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Reviewer: independent pass over task 1446's change set (sp-super-reviewer, fresh context). Verdict: PASS — R1–R5 and AC1–AC6 all MET with executable evidence the reviewer re-ran itself; no P1 or P2.
+
+| Severity | Location | Finding | Disposition |
+| --- | --- | --- | --- |
+| P3 (minor) | `apps/cli/src/commands/mcp.ts:47` | The stdio bridge forwarded `clientInfo.name` verbatim as `X-Spur-Actor` after only a trim, so a name carrying an interior control character made the bridge's own `fetch` throw and the session die with a misleading "cannot reach" error. | FIXED in this run: the bridge now applies the same `^[A-Za-z0-9._:@-]{1,64}$` test the server uses and sends no actor header when the name fails it (`apps/cli/src/commands/mcp.ts:47`), with a regression test (`apps/cli/tests/commands/mcp.test.ts:107`). The tree was re-certified afterwards: `spur task gate 1446 light` PASS. |
+| P4 | `docs/design/project-gateway.md:115` | The documented `mcp.call.failed` reason vocabulary reads as exhaustive but omits `not-routable`, `unknown-resource` and `tool-error`. | ACCEPTED — no behaviour is wrong, only the documented enum is short. |
+| P4 | `packages/app/src/services/event-names.ts:2014` | `actor` is a displayed tooltip field on `mcp.tool.called` but retain-only on `mcp.tool.failed`, driven by the eight-field display cap. | ACCEPTED — payload and metadata keep every field; the ledger loses nothing. |
+
+SECUA checks the reviewer performed on the diff: no argument values, bodies or query strings in any emitted payload; the actor is sanitized before storage and dropped (not escaped) when out of charset; a refusal emits exactly one `mcp.call.failed`; the Board `catalog()` read emits nothing; no new CLI flag, noun or verb; no `mcp.tool.*` field renamed.
+
+Recorded residual risks: `via` collapses to `gateway` at the gateway hop by design; `X-Spur-Actor` is client-asserted for direct HTTP callers (accepted in the task Q&A); AC1's literal CR/LF header cannot travel through `fetch`, so the module test substitutes `bad actor!` and the transport-level variant is the P3 now fixed.
+
+Verdict: PASS
 
 ### References
 
@@ -153,4 +212,7 @@ Scenario: AC6 — the Tools table shows per-tool counters for every registered t
 ### History
 
 - 2026-11-24T04:48:46.530Z backlog → todo (system)
+- 2026-11-24T06:25:43.638Z todo → wip (system)
+- 2026-11-24T06:49:10.388Z wip → testing (system)
+- 2026-11-24T06:49:12.196Z testing → done (system)
 

@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadSectionMatrix, registerSystemEventTap } from '@gobing-ai/spur-app';
+import { loadSectionMatrix, MCP_BUILTIN_TOOL_NAMES, registerSystemEventTap } from '@gobing-ai/spur-app';
 import { getEnvVars, type ProjectEntry, setEnvVar } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { SystemEventDao } from '@gobing-ai/spur-domain';
@@ -54,6 +54,16 @@ beforeAll(async () => {
     writeFileSync(
         join(root, 'docs', 'tasks', '9001_e2e-probe.md'),
         '---\nname: e2e probe\nstatus: todo\n---\n\nE2E probe task body.\n',
+    );
+    // 1445 R7: AC1's fixture pair — a backlog task to mutate and a second task to hang a
+    // dependency on. Both are real corpus files, so every write below is asserted on disk.
+    writeFileSync(
+        join(root, 'docs', 'tasks', '0001_e2e-task-one.md'),
+        '---\nschema_version: 1\nname: e2e task one\nstatus: backlog\ncreated_at: 2026-11-23T00:00:00.000Z\nupdated_at: 2026-11-23T00:00:00.000Z\n---\n\n### Plan\nplaceholder\n',
+    );
+    writeFileSync(
+        join(root, 'docs', 'tasks', '0002_e2e-task-two.md'),
+        '---\nschema_version: 1\nname: e2e task two\nstatus: backlog\ncreated_at: 2026-11-23T00:00:00.000Z\nupdated_at: 2026-11-23T00:00:00.000Z\n---\n\n### Background\nsecond task\n',
     );
     writeFileSync(join(root, '.spur', 'context', 'learnings.md'), 'indexed context body\n');
     mkdirSync(join(root, 'docs', 'features'), { recursive: true });
@@ -499,22 +509,22 @@ terminalStates:
     });
 });
 
+/** One row per emitted name, parsed down to the persisted `data` (the v2 envelope's payload). */
+async function rowsFor(name: string): Promise<Array<{ payload: Record<string, unknown>; raw: string }>> {
+    const rows = await eventDao.query({ name, limit: 20 });
+    return rows.map((row) => {
+        const raw = row.payload_json ?? '';
+        const parsed = JSON.parse(raw === '' ? '{}' : raw) as { data?: Record<string, unknown> };
+        return { payload: parsed.data ?? {}, raw };
+    });
+}
+
 /**
  * 1376 — the embedded MCP surface is observable: every tool call, resource read and auth refusal
  * lands one cataloged row in the `system_events` ledger through the real tap (no mocked bus).
  * Payload assertions double as the R5 leak check: argument values and the token never appear.
  */
 describe('1376: mcp events reach the system_events ledger', () => {
-    /** One row per emitted name, parsed down to the persisted `data` (the v2 envelope's payload). */
-    async function rowsFor(name: string): Promise<Array<{ payload: Record<string, unknown>; raw: string }>> {
-        const rows = await eventDao.query({ name, limit: 20 });
-        return rows.map((row) => {
-            const raw = row.payload_json ?? '';
-            const parsed = JSON.parse(raw === '' ? '{}' : raw) as { data?: Record<string, unknown> };
-            return { payload: parsed.data ?? {}, raw };
-        });
-    }
-
     test('a successful tool call emits mcp.tool.called with metadata only (R2, R5)', async () => {
         // 1379/1380 namespaced the harness tools: `task_show` → `sp_task_show`.
         const res = await mcpPost(
@@ -717,5 +727,119 @@ describe('1392: guarded corpus write tools', () => {
         // The refusal is a refusal: the task did not move.
         const after = await call('sp_task_show', { wbs });
         expect((after.body.result as { frontmatter: { status: string } }).frontmatter.status).not.toBe('done');
+    });
+});
+
+/**
+ * 1445 R7 (wave D) — the expanded catalog over the real transport. AC1's "over POST /mcp" clause:
+ * the task tools answer with the value `spur task … --json` prints, and their section, dependency
+ * and append writes are asserted on the corpus file itself. AC7's telemetry clause: a new tool's
+ * valid call and an undeclared argument each land one `system_events` row with the argument code.
+ */
+describe('1445 R7 — expanded built-in tools over POST /mcp', () => {
+    async function call(name: string, args: Record<string, unknown>) {
+        const res = await mcpPost(rpc('tools/call', { name, arguments: args }), authHeaders());
+        return {
+            status: res.status,
+            body: (await res.json()) as { result?: unknown; error?: { code: string; message: string } },
+        };
+    }
+
+    const taskOneFile = () => join(root, 'docs', 'tasks', '0001_e2e-task-one.md');
+    const taskTwoFile = () => join(root, 'docs', 'tasks', '0002_e2e-task-two.md');
+
+    test('tools/list advertises exactly the built-in names the app layer reserves (AC7)', async () => {
+        const res = await mcpPost(rpc('tools/list'), authHeaders());
+        expect(res.status).toBe(200);
+        const body = await jsonBody<{ result: { tools: Array<{ name: string }> } }>(res);
+        expect(body.result.tools.map((tool) => tool.name).sort()).toEqual([...MCP_BUILTIN_TOOL_NAMES].sort());
+    });
+
+    test('sp_task_check answers the one-entry result list `spur task check <wbs> --json` prints', async () => {
+        const { status, body } = await call('sp_task_check', { wbs: '0001', as: 'todo' });
+        expect(status).toBe(200);
+        const results = body.result as Array<{ wbs: string; pass: boolean; findings: unknown[] }>;
+        expect(results).toHaveLength(1);
+        expect(results[0]?.wbs).toBe('0001');
+        expect(typeof results[0]?.pass).toBe('boolean');
+        expect(Array.isArray(results[0]?.findings)).toBe(true);
+    });
+
+    test('sp_task_sections op=add writes the canonical heading into the task file', async () => {
+        const { status, body } = await call('sp_task_sections', { wbs: '0001', op: 'add', section: 'Notes' });
+        expect(status, JSON.stringify(body)).toBe(200);
+        const result = body.result as { op: string; added: string[] };
+        expect(result.op).toBe('add');
+        expect(result.added).toEqual(['Notes']);
+        expect(readFileSync(taskOneFile(), 'utf8')).toContain('### Notes');
+    });
+
+    test('sp_task_deps op=add writes the dependency edge into the frontmatter', async () => {
+        const { status, body } = await call('sp_task_deps', { wbs: '0002', op: 'add', values: ['0001'] });
+        expect(status, JSON.stringify(body)).toBe(200);
+        const result = body.result as { dependencies: string[]; eventName: string | null };
+        expect(result.dependencies).toEqual(['0001']);
+        expect(readFileSync(taskTwoFile(), 'utf8')).toContain('0001');
+    });
+
+    test('sp_task_preflight answers the preflight JSON for the corpus task', async () => {
+        const { status, body } = await call('sp_task_preflight', { wbs: '0002' });
+        expect(status, JSON.stringify(body)).toBe(200);
+        const result = body.result as { exitCode: number; result: { action: string } };
+        expect(typeof result.exitCode).toBe('number');
+        expect(typeof result.result.action).toBe('string');
+    });
+
+    test('sp_task_batch_plan projects an inline task list without reading a caller path', async () => {
+        const tasks = JSON.stringify([{ wbs: '0002', dependencies: ['0001'] }, { wbs: '0001' }]);
+        const { status, body } = await call('sp_task_batch_plan', { mode: 'order', tasks });
+        expect(status, JSON.stringify(body)).toBe(200);
+        expect((body.result as { order: string[] }).order).toEqual(['0001', '0002']);
+    });
+
+    test('sp_task_update append adds to the section body instead of replacing it', async () => {
+        const replaced = await call('sp_task_update', { wbs: '0001', section: 'Plan', content: 'first' });
+        expect(replaced.status, JSON.stringify(replaced.body)).toBe(200);
+
+        const appended = await call('sp_task_update', {
+            wbs: '0001',
+            section: 'Plan',
+            content: 'second',
+            append: true,
+        });
+        expect(appended.status, JSON.stringify(appended.body)).toBe(200);
+        expect(appended.body.result).toMatchObject({ wbs: '0001', section: 'Plan' });
+
+        const written = readFileSync(taskOneFile(), 'utf8');
+        expect(written).not.toContain('placeholder');
+        expect(written).toContain('first');
+        expect(written).toContain('second');
+    });
+
+    test('sp_task_update refuses append together with field as invalid_arguments', async () => {
+        const { status, body } = await call('sp_task_update', {
+            wbs: '0001',
+            field: 'priority',
+            value: 'P1',
+            append: true,
+        });
+        expect(status).toBe(500);
+        expect(body.error?.message).toContain('append is only valid with section+content');
+    });
+
+    test('AC7: a valid call on a new tool records mcp.tool.called, an undeclared argument mcp.tool.failed', async () => {
+        const valid = await call('sp_task_sections', { wbs: '0001', op: 'list' });
+        expect(valid.status, JSON.stringify(valid.body)).toBe(200);
+        const called = (await rowsFor('mcp.tool.called')).find((row) => row.payload.tool === 'sp_task_sections');
+        if (called === undefined) throw new Error('expected an mcp.tool.called row for sp_task_sections');
+        expect(called.payload.outcome).toBe('ok');
+        expect(called.payload.argKeys).toEqual(['op', 'wbs']);
+
+        const refused = await call('sp_task_sections', { wbs: '0001', op: 'list', bogus: true });
+        expect(refused.status).toBe(500);
+        const failed = (await rowsFor('mcp.tool.failed')).find((row) => row.payload.tool === 'sp_task_sections');
+        if (failed === undefined) throw new Error('expected an mcp.tool.failed row for sp_task_sections');
+        expect(failed.payload.errorCode).toBe('invalid_arguments');
+        expect(failed.payload.outcome).toBe('error');
     });
 });

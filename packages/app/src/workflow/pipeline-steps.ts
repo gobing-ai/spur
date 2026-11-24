@@ -6,11 +6,14 @@
  */
 
 export {
+    type CorpusFacts,
+    type CorpusFactsSource,
     PREFLIGHT_USAGE,
     type PreflightOutcome,
     type PreflightRequest,
     parseCommaList,
     parseDepStatuses,
+    readCorpusFacts,
     recoveryHint,
     runPreflight,
 } from '../services/planning-preflight';
