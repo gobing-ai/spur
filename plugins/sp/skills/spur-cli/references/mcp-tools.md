@@ -90,7 +90,7 @@ construction rather than by discipline. Run the CLI verb for them:
 - **task `migrate` / `record` / `verdict`** — corpus repairs and pipeline evidence bookkeeping stay operator commands.
 - **`spur feature move` / `spur feature verify`** — a subtree cascade rename and a bound PASS/FAIL receipt.
 - **`spur workflow clean` / `spur workflow promote-*`** — bulk reclamation and release promotion.
-- **rule files (`--file`) and `--fix-mode auto`** — presets and project-confined files only, so a remote caller cannot point the engine at an arbitrary path or rewrite a source; `suggest` exists, `auto` does not.
+- **rule files (`--file`) and the auto-fix mode (`--fix-mode auto`)** — presets and project-confined files only, so a remote caller cannot point the engine at an arbitrary path or rewrite a source; `suggest` exists, `auto` does not.
 - **decision evidence paths** — `evidence` is an inline instructions string; a caller-named file is never read.
 - **`spur agent start|stop|loop`** — process lifecycle stays with the operator.
 - **builder `bump-ver` / `drop-tags` / `publish` / `build-*`** — release and build actions are not agent operations.

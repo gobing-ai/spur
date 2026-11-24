@@ -1,23 +1,29 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
  * Task 1394 R4 — the MCP tool map in `references/mcp-tools.md` must name exactly the tools the
- * server advertises. The server module is read as TEXT (never imported): the plugin ships
- * standalone (ADR-065), so a value import of `apps/server` would break installation.
+ * server advertises. The server modules are read as TEXT (never imported): the plugin ships
+ * standalone (ADR-065), so a value import of `apps/server` would break installation. Since task
+ * 1445 the descriptors live one file per domain; `index.ts` only composes them.
  */
 const PLUGIN_ROOT = join(import.meta.dir, '..');
 const MAP_PATH = join(PLUGIN_ROOT, 'skills', 'spur-cli', 'references', 'mcp-tools.md');
-const DESCRIPTORS_PATH = join(PLUGIN_ROOT, '..', '..', 'apps', 'server', 'src', 'modules', 'mcp', 'index.ts');
+const SERVER_DIR = join(PLUGIN_ROOT, '..', '..', 'apps', 'server', 'src', 'modules', 'mcp');
 
-/** Tool names the server advertises, in descriptor order. */
+/** Tool names the server advertises, in descriptor order across the per-domain modules. */
 function serverToolNames(): string[] {
-    const source = readFileSync(DESCRIPTORS_PATH, 'utf8');
+    const sources = readdirSync(SERVER_DIR)
+        .filter((name) => name === 'index.ts' || /^tools-[a-z-]+\.ts$/.test(name))
+        .sort();
     const names: string[] = [];
-    for (const match of source.matchAll(/name:\s*'(sp_[a-z_]+)'/g)) {
-        const name = match[1];
-        if (name !== undefined && !names.includes(name)) names.push(name);
+    for (const file of sources) {
+        const source = readFileSync(join(SERVER_DIR, file), 'utf8');
+        for (const match of source.matchAll(/name:\s*'(sp_[a-z_]+)'/g)) {
+            const name = match[1];
+            if (name !== undefined && !names.includes(name)) names.push(name);
+        }
     }
     return names;
 }
