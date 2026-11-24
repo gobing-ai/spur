@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { renderGatewayIndex } from '../../src/services/project-gateway-html';
+import { GATEWAY_FAVICON_SVG, renderGatewayIndex } from '../../src/services/project-gateway-html';
 
 describe('renderGatewayIndex', () => {
     it('renders local project cards without running/stopped tags and remote cards with host:port tags', () => {
@@ -18,6 +18,8 @@ describe('renderGatewayIndex', () => {
         });
 
         expect(html).toContain('class="project-grid"');
+        expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+        expect(html).toContain('<meta name="theme-color" content="#031f3c">');
         expect(html).toContain('href="/alpha/board"');
         expect(html).not.toContain('card-footer');
         expect(html).not.toContain('Gateway route');
@@ -76,6 +78,12 @@ describe('renderGatewayIndex', () => {
         expect(html).toContain('Edge (0.0.0.0)');
         expect(html).toContain('gw.example.com');
         expect(html).toContain('id="project-filter"');
+    });
+
+    it('exports a self-contained theme-aware Spur SVG favicon', () => {
+        expect(GATEWAY_FAVICON_SVG).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+        expect(GATEWAY_FAVICON_SVG).toContain('<title>Spur</title>');
+        expect(GATEWAY_FAVICON_SVG).toContain('@media (prefers-color-scheme: dark)');
     });
 });
 

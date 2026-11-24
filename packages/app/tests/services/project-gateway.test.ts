@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { type ProjectEntry, projectEntrySchema, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { createGatewayHandler, type GatewayDeps, isGatewayAnswering } from '../../src/services/project-gateway';
+import { GATEWAY_FAVICON_SVG } from '../../src/services/project-gateway-html';
 import { ProjectRegistry, setPortProbeForTests } from '../../src/services/project-registry';
 
 const encoder = new TextEncoder();
@@ -287,6 +288,32 @@ describe('gateway handler (K4 R3/R4/R5)', () => {
         // Names come from directory basenames — never render them as markup.
         expect(html).not.toContain('<script>x');
         expect(html).toContain('&#60;script&#62;');
+    });
+
+    it('serves /favicon.svg and redirects /favicon.ico at the gateway root', async () => {
+        const handler = createGatewayHandler(
+            deps({
+                listProjects: async () => [entry('alpha', '/tmp/alpha')],
+                ensureUpstream: async () => 0,
+            }),
+        );
+
+        const svgRes = await handler(new Request('http://gw.test/favicon.svg'));
+        expect(svgRes.status).toBe(200);
+        expect(svgRes.headers.get('content-type')).toContain('image/svg+xml');
+        expect(await svgRes.text()).toBe(GATEWAY_FAVICON_SVG);
+
+        const headRes = await handler(new Request('http://gw.test/favicon.svg', { method: 'HEAD' }));
+        expect(headRes.status).toBe(200);
+        expect(await headRes.text()).toBe('');
+
+        const icoRes = await handler(new Request('http://gw.test/favicon.ico'));
+        expect(icoRes.status).toBe(302);
+        expect(icoRes.headers.get('location')).toBe('/favicon.svg');
+
+        const postRes = await handler(new Request('http://gw.test/favicon.svg', { method: 'POST' }));
+        expect(postRes.status).toBe(405);
+        expect(postRes.headers.get('allow')).toBe('GET, HEAD');
     });
 
     it('reports windowed root MCP activity independently of gateway traffic', async () => {

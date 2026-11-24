@@ -10,6 +10,7 @@ import { allowedHostnames, isAllowedHost, rejectHost } from './host-guard';
 import { resolveMcpNamespace } from './mcp-namespace';
 import { resolveProjectWorkflowTools, workflowToolDescriptor } from './mcp-workflow-tools';
 import {
+    GATEWAY_FAVICON_SVG,
     type GatewayIndexDiagnostic,
     type GatewayIndexMcp,
     type GatewayIndexNamespace,
@@ -1017,6 +1018,26 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         },
     } satisfies McpGatewayRegistry;
 
+    /** Serve `/favicon.svg` and redirect `/favicon.ico` on GET/HEAD so browsers resolve the Spur icon cleanly. */
+    function faviconResponse(method: string, pathname: string): Response {
+        if (method !== 'GET' && method !== 'HEAD') {
+            return new Response('Method Not Allowed\n', {
+                status: 405,
+                headers: { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' },
+            });
+        }
+        if (pathname === '/favicon.ico') {
+            return new Response(null, {
+                status: 302,
+                headers: { location: '/favicon.svg', 'cache-control': 'public, max-age=86400' },
+            });
+        }
+        return new Response(method === 'HEAD' ? null : GATEWAY_FAVICON_SVG, {
+            status: 200,
+            headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=86400' },
+        });
+    }
+
     /** Count every final response once, so refusals and upstream failures are not invisible (R1). */
     const handle = async (req: Request): Promise<Response> => {
         const url = new URL(req.url);
@@ -1033,6 +1054,9 @@ export function createGatewayHandler(deps: GatewayDeps): (req: Request) => Promi
         }
         if (url.pathname === '/' || url.pathname === '') {
             return index();
+        }
+        if (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico') {
+            return faviconResponse(req.method, url.pathname);
         }
         // Before prefix matching: `/mcp` is the gateway's own MCP entry, never a project prefix.
         if (url.pathname === '/mcp') {
