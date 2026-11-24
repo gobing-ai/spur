@@ -97,7 +97,7 @@ spur workflow promote-resolve <id> --decision <promote|retire|hold> [--candidate
 ```bash
 spur workflow run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async]
 spur workflow run [--no-plan] [--quiet] [--silent] [--verbose] [--detail <level>]
-spur workflow run [--trace-file] [--no-log] [--steer] [--json]
+spur workflow run [--trace-file] [--no-log] [--no-summary] [--steer] [--json]
 ```
 
 | Flag | Description |
@@ -115,6 +115,7 @@ spur workflow run [--trace-file] [--no-log] [--steer] [--json]
 | `--detail <level>` | Human detail: `minimal` \| `invocation` \| `full` |
 | `--trace-file` | Append a redacted JSONL trace under `.spur/workflow/` |
 | `--no-log` | Skip the consolidated `.spur/run/<RUNID>.log` |
+| `--no-summary` | Skip the terminal execution summary `.spur/run/<RUNID>-summary.{md,json}` |
 | `--steer` | Accept in-process steering commands on stdin at action boundaries |
 
 ```bash
@@ -152,14 +153,14 @@ finds it via its project-then-bundled name probe.
 ## spur workflow continue
 
 ```bash
-spur workflow continue [run-id] [--yes] [--force] [--answer <yes|no|cancel>] [--answer-text <text>] [--json]
+spur workflow continue [run-id] [--yes] [--force] [--answer <yes|no|cancel>] [--answer-text <text>] [--no-summary] [--json]
 ```
 
 Resume a paused (HITL) run; omit the id to take the most recent paused run. The three flags do
 different jobs: `--yes` skips only the CLI confirmation, `--answer` injects the HITL gate answer
 before guards re-evaluate (it does **not** imply `--yes`; `--answer-text` answers a pending
 input gate with free text), and `--force` proceeds despite
-workflow-definition drift.
+workflow-definition drift. `--no-summary` skips the terminal execution summary for the resumed run.
 
 ```bash
 spur workflow continue <run-id> --yes --answer yes

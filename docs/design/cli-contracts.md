@@ -1124,7 +1124,8 @@ expansion. Windows batch launchers (`.cmd` / `.bat`) and NUL-containing argument
   1146 R1 / 1448: a `run` or `continue` that reaches a terminal status (not `paused`) writes
   `.spur/run/<run-id>-summary.md` + `.json` (`writeRunCloseSummary`) and adds `summaryFile` to the
   `--json` result, relative to the run's launch project; a dry run, pause or summary failure omits the key
-  and never changes the exit code. No flag disables it (driver `--no-summary` only skips display).
+  and never changes the exit code. `--no-summary` on either verb (forwarded to the `--async` worker) skips the
+  files and the field (1146 AC3).
 - `continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--no-log]` — resume a paused or
   interrupted (0901 R2) HITL run (E3, design §6 / D04). Omit `run-id` to
   discover the most-recent paused run and confirm (skipped with `--yes`). A headless resume

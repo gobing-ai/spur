@@ -490,6 +490,24 @@ terminalStates: [done]
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('--no-summary skips the terminal summary without changing the verdict (1146 AC3)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, compositionFixture(1));
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['workflow', 'run', '--run-id', 'sum-off', workflowFile, '--no-summary', '--json'],
+            { output, cwd: dir, dbUrl: ':memory:' },
+        );
+        expect(exitCode).toBe(0);
+        const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string };
+        expect(result.status).toBe('done');
+        expect('summaryFile' in result).toBe(false);
+        expect(await exists(join(dir, '.spur', 'run', 'sum-off-summary.md'))).toBe(false);
+        expect(await exists(join(dir, '.spur', 'run', 'sum-off-summary.json'))).toBe(false);
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('a failed terminal run still writes its summary and keeps its non-zero exit (1448 R1)', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
@@ -1250,7 +1268,7 @@ terminalStates: [done]
         }
         await rm(dir, { recursive: true, force: true });
     });
-    test('run --async propagates --no-log to the detached worker argv (0427 R3)', async () => {
+    test('run --async propagates --no-log and --no-summary to the detached worker argv (0427 R3, 1146 AC3)', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
@@ -1258,7 +1276,7 @@ terminalStates: [done]
         const { db, runSpy } = await spawnRegistersRun('async-seeded-6');
         try {
             const exitCode = await main(
-                ['workflow', 'run', '--async', '--no-log', '--run-id', 'async-seeded-6', workflowFile],
+                ['workflow', 'run', '--async', '--no-log', '--no-summary', '--run-id', 'async-seeded-6', workflowFile],
                 { output, cwd: dir, db },
             );
             expect(exitCode).toBe(0);
@@ -1266,6 +1284,7 @@ terminalStates: [done]
             expect(runSpy).toHaveBeenCalledTimes(1);
             const args = runSpy.mock.calls[0]?.[0]?.args as string[] | undefined;
             expect(args?.join(' ')).toContain('--no-log');
+            expect(args?.join(' ')).toContain('--no-summary');
         } finally {
             runSpy.mockRestore();
         }

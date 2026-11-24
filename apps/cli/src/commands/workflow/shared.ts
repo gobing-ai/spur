@@ -216,14 +216,17 @@ export function makeWorkflowService(context: CliContext, json?: boolean, bus?: W
  * 1448 R1/R2: a `done`/`failed` run writes its summary and reports `summaryFile`, the path relative to the
  * run's launch project. Pauses, interruptions and dry runs are not closes and pass through untouched. Guards
  * DB access, projection and writing here: any failure omits the key and never changes the verdict.
+ * `--no-summary` (`summary: false`, 1146 AC3) skips the write and the key.
  */
 export async function withCloseSummary<T extends { readonly status: string }>(
     context: Pick<CliContext, 'cwd' | 'env' | 'getDb'>,
     runId: string,
     result: T,
-    opts: { dryRun?: boolean } = {},
+    opts: { dryRun?: boolean; summary?: boolean } = {},
 ): Promise<T & { summaryFile?: string }> {
-    if ((result.status !== 'done' && result.status !== 'failed') || opts.dryRun === true) return result;
+    if ((result.status !== 'done' && result.status !== 'failed') || opts.dryRun === true || opts.summary === false) {
+        return result;
+    }
     try {
         const summaryFile = await writeRunCloseSummary(runId, {
             db: await context.getDb(),

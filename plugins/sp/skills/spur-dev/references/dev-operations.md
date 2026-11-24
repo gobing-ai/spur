@@ -171,7 +171,8 @@ Produced by the run's own terminal close (1146 R1, restored by 1448), not by a t
 `.spur/run/<runId>-summary.md` + `.json` and reports `summaryFile` in its `--json` result (a paused run writes
 none; a summary failure omits the key and never changes the exit code). The driver's only job is to print that
 file's contents (resolved against the run's project or worktree) under an `### Execution summary` heading.
-`--no-summary` is a driver display toggle: it skips that print, never the file; the workflow CLI has no opt-out.
+`--no-summary` is a driver display toggle: it skips that print, never the file. Skipping the file is the workflow CLI's
+own `spur workflow run|continue --no-summary`.
 
 `/sp:dev-run --all` shows one summary per run — each produced by that run's own close, so each window is its own
 `runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:

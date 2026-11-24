@@ -147,6 +147,21 @@ describe('task 1248 AC1: an interactive operator pause on a host run waits for a
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('continue --no-summary closes the resumed run without a summary (1146 AC3)', async () => {
+        const { dir, dbUrl } = await runOnHost('host-gate-nosum');
+        const out = createCapturedOutput();
+        const exit = await main(
+            ['workflow', 'continue', 'host-gate-nosum', '--yes', '--answer', 'yes', '--no-summary', '--json'],
+            { output: out, cwd: dir, dbUrl },
+        );
+        expect(exit).toBe(0);
+        const resumed = JSON.parse(out.messages.at(-1) ?? '{}');
+        expect(resumed.status).toBe('done');
+        expect('summaryFile' in resumed).toBe(false);
+        expect(access(join(dir, '.spur', 'run', 'host-gate-nosum-summary.md'))).rejects.toThrow();
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('--answer no resumes to the rejected branch (R2)', async () => {
         const { dir, dbUrl } = await runOnHost('host-gate-3');
         const out = createCapturedOutput();

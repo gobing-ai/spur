@@ -375,6 +375,7 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
         .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
         .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/workflow/')
         .option('--no-log', 'Opt out of writing the two-file run record .spur/memory/runs/<RUNID>.md + .state.json')
+        .option('--no-summary', 'Skip writing the terminal execution summary .spur/run/<RUNID>-summary.{md,json}')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -506,6 +507,9 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                 if (options.log === false) {
                     cmd.push('--no-log');
                 }
+                if (options.summary === false) {
+                    cmd.push('--no-summary');
+                }
                 // 1072 R6: the worker re-validates and re-resolves from these flags, so
                 // the continued run's start point and lineage cross the process boundary.
                 if (options.from !== undefined) {
@@ -588,7 +592,10 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                     } finally {
                         clearWorkflowRunActive();
                     }
-                    result = await withCloseSummary(context, runId, result, { dryRun: options.dryRun === true });
+                    result = await withCloseSummary(context, runId, result, {
+                        dryRun: options.dryRun === true,
+                        summary: options.summary,
+                    });
                     if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     else if (!silent) {
                         context.output.write(
@@ -978,7 +985,10 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                 quotaPersistence.unsubscribe();
                 steeringInput?.close();
             }
-            result = await withCloseSummary(context, runId, result, { dryRun: options.dryRun === true });
+            result = await withCloseSummary(context, runId, result, {
+                dryRun: options.dryRun === true,
+                summary: options.summary,
+            });
             if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             else if (!silent) {
                 context.output.write(

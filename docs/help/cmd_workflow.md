@@ -164,6 +164,7 @@ spur workflow run [options] <file>
 | `--detail <level>` | Human detail: `minimal` \| `invocation` (default) \| `full` |
 | `--trace-file` | Append a redacted schema-versioned JSONL trace under `.spur/workflow/` |
 | `--no-log` | Opt out of writing the consolidated `.spur/run/<RUNID>.log` (written+retained by default) |
+| `--no-summary` | Skip the terminal execution summary `.spur/run/<RUNID>-summary.{md,json}` and the `summaryFile` field (propagates to `--async`; 1146 AC3) |
 | `--steer` | Accept in-process steering commands on stdin at declared action boundaries (sync only) |
 | `--json` | Output machine-readable JSON |
 
@@ -240,7 +241,7 @@ compatible). Use `finalState` only to see *which* terminal was reached after che
 **Execution summary (1146 R1 / 1448):** a run or `continue` that settles `done` or `failed` writes
 `.spur/run/<runId>-summary.md` (plus `.json` when measured) into the run's launch project and adds
 `"summaryFile": ".spur/run/<runId>-summary.md"` to the JSON result. Dry runs, pauses, interruptions and
-summary write failures omit the field; the status and exit code never change. Roll up the `.json` receipts
+summary write failures omit the field, and `--no-summary` skips both the files and the field; the status and exit code never change. Roll up the `.json` receipts
 with `spur workflow summary --rollup`.
 
 **Run-scoped artifacts:** non-entity-scoped files under `.spur/run/` are often prefixed with the
@@ -265,6 +266,7 @@ spur workflow continue [options] [run-id]
 | `--answer-text <text>` | Answer a pending `hitl.input` gate with free text (H1 R27): the text lands in the gate's answer var (`options.var`, else `__hitlInput`) before guards re-evaluate. Mutually exclusive with `--answer` (exit `2`); each answer flag is validated against the pending gate kind, so a mismatch exits `2` with the run still paused. Counts toward the headless guard (0901 R3); forwarded by `--async`. |
 | `--async` | Detach the resume into a background worker process and report started/failed after the worker claims the run (0901 R4). |
 | `--no-log` | Skip writing the consolidated run log for the resumed run (0901 R6). |
+| `--no-summary` | Skip the terminal execution summary and the `summaryFile` field for the resumed run (1146 AC3). |
 | `--json` | Output machine-readable JSON |
 
 Resume a paused (HITL) run. Omit `run-id` to discover the most-recent paused run and confirm

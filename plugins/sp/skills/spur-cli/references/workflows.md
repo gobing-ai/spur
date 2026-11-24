@@ -110,8 +110,8 @@ The skill's logic divides by **whether the LLM adds value**:
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
 | `show` | `spur workflow show` (CLI) | `<file> [--format <mermaid\|todo>] [--json]` | Rendered definition: the FSM diagram or the declared-step checklist |
-| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
-| `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes] [--answer <yes\|no\|cancel>] [--answer-text <text>] [--async] [--no-log]` | Resume a paused or interrupted run (omit id -> most recent resumable); `--answer` injects a confirm/select gate answer and `--answer-text` answers an input gate with free text (H1 R27), both before guard re-evaluation; one of them is required headless (0901 R3) and each is validated against the pending gate kind; `--async` detaches the resume (0901 R4) |
+| `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--no-summary] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
+| `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes] [--answer <yes\|no\|cancel>] [--answer-text <text>] [--async] [--no-log] [--no-summary]` | Resume a paused or interrupted run (omit id -> most recent resumable); `--answer` injects a confirm/select gate answer and `--answer-text` answers an input gate with free text (H1 R27), both before guard re-evaluation; one of them is required headless (0901 R3) and each is validated against the pending gate kind; `--async` detaches the resume (0901 R4) |
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
 | `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflows.logRetentionDays` (30d default) |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
@@ -226,6 +226,7 @@ spur workflow run ./workflows/approval.yaml --steer                # interactive
 - **`--no-log`** opts out of writing the two-file run record (`.spur/memory/runs/<RUNID>.md` + `.state.json`).
   By default the record is written **and retained** after the run ends; this flag skips it entirely
   (propagates to the `--async` detached worker). No `--keep-log` / delete-by-default exists.
+- **`--no-summary`** (run and continue, forwarded to `--async`) skips the terminal execution summary `.spur/run/<RUNID>-summary.{md,json}` and the `summaryFile` result field (1146 AC3).
 - **`--steer`** is synchronous and in-process: it cannot combine with `--json` or `--async` (exit `2`).
   It accepts steering commands on stdin at declared action boundaries for interactive control.
 

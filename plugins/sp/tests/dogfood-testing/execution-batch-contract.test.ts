@@ -1159,6 +1159,16 @@ describe('1146 — execution summary is a close product (AC6)', () => {
         expect(report).toContain('wall-span');
     });
 
+    test('the drivers print the run close output summaryFile, never a removed close verb', () => {
+        const ops = ref('dev-operations.md');
+        expect(ops).toContain('summaryFile');
+        expect(ops).toContain('### Execution summary');
+        expect(ref('execution-batch-report.md')).toContain('summaryFile');
+        for (const name of ['dev-operations.md', 'execution-batch-report.md']) {
+            expect(ref(name)).not.toContain('inline close');
+        }
+    });
+
     test('no execution-summary reference records SINCE or measures with --since', () => {
         for (const name of ['dev-operations.md', 'execution-batch-report.md']) {
             const body = ref(name);

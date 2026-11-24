@@ -74,6 +74,7 @@ export function registerWorkflowContinueCommand(workflow: Command, context: CliC
             '--no-log',
             'Opt out of appending to the two-file run record .spur/memory/runs/<RUNID>.md + .state.json',
         )
+        .option('--no-summary', 'Skip writing the terminal execution summary .spur/run/<RUNID>-summary.{md,json}')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
@@ -226,6 +227,7 @@ export function registerWorkflowContinueCommand(workflow: Command, context: CliC
                         if (json) cmd.push('--json');
                         if (options.jsonEnvelope === true) cmd.push('--json-envelope');
                         if (options.log === false) cmd.push('--no-log');
+                        if (options.summary === false) cmd.push('--no-summary');
                         await spawnAsyncWorkflowWorker(resolveSpurArgv(), cmd);
                         const started = await waitForResumeClaim(
                             svc,
@@ -302,7 +304,7 @@ export function registerWorkflowContinueCommand(workflow: Command, context: CliC
                     }
                 })();
                 if (result === undefined) return; // async path already reported and set the exit code.
-                const closed = await withCloseSummary(context, targetId, result);
+                const closed = await withCloseSummary(context, targetId, result, { summary: options.summary });
                 context.output.write(
                     json
                         ? toEnvelopeJson(closed, { enveloped: options.jsonEnvelope })
