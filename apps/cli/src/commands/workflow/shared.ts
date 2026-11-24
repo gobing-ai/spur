@@ -214,17 +214,20 @@ export function makeWorkflowService(context: CliContext, json?: boolean, bus?: W
 }
 
 /**
- * 1448 R1/R2: a run that reached a terminal status writes `.spur/run/<runId>-summary.{md,json}` and
- * reports `summaryFile`. A paused/running result is not a close and passes through untouched; a summary
- * failure omits the key and never changes the verdict.
+ * 1448 R1/R2: a real run that reached a terminal status (`done` or `failed`) writes
+ * `.spur/run/<runId>-summary.{md,json}` and reports `summaryFile`. Dry runs, pauses, interruptions,
+ * and non-terminal results return untouched before opening the DB; a summary failure omits the key
+ * and never changes the verdict.
  */
 export async function withCloseSummary<T extends { readonly status: string; readonly runId?: unknown }>(
     context: Pick<CliContext, 'cwd' | 'env' | 'getDb'>,
     runId: string,
     result: T,
     workflowDef?: WorkflowDef,
+    options?: { dryRun?: boolean },
 ): Promise<T & { summaryFile?: string }> {
-    if (result.status === 'paused' || result.status === 'running') return result;
+    if (options?.dryRun === true) return result;
+    if (result.status !== 'done' && result.status !== 'failed') return result;
     try {
         const summaryFile = await writeRunCloseSummary(runId, {
             db: await context.getDb(),

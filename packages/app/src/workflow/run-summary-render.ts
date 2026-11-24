@@ -13,6 +13,7 @@ import type { DbAdapter } from '@gobing-ai/spur-domain';
 import { RunDao } from '@gobing-ai/spur-domain';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { projectWorkflowProgress, type WorkflowProgressProjection } from './progress-projection';
+import { SAFE_RUN_ID_RE } from './run-citation';
 import {
     type ActorSplit,
     buildRunSummary,
@@ -205,11 +206,24 @@ export function writeCloseSummary(
     }
 }
 
+/** Extract the run's launch working directory from persisted `metadata_json`, falling back to `fallbackCwd`. */
+function launchWorkdirFromMetadata(metadataJson: string | null | undefined, fallbackCwd: string): string {
+    if (!metadataJson) return fallbackCwd;
+    try {
+        const parsed = JSON.parse(metadataJson) as { definitionSource?: { workdir?: unknown } };
+        const workdir = parsed?.definitionSource?.workdir;
+        return typeof workdir === 'string' && workdir.trim() !== '' ? workdir : fallbackCwd;
+    } catch {
+        return fallbackCwd;
+    }
+}
+
 /**
- * 1448 R1: the engine's terminal close (`spur workflow run` / `continue` reaching a terminal status)
+ * 1448 R1: the engine's terminal close (`spur workflow run` / `continue` reaching `done` or `failed`)
  * writes the run's summary, windowed by the committed `runs.started_at` → `completed_at`. Restores the
  * producer 1242 orphaned when it deleted `inline close`, its only caller. Best-effort: `undefined` when
- * the run row is unreadable, so the command's exit code and JSON verdict never depend on it.
+ * the run ID is unsafe, the persisted terminal row lacks `completed_at`, or writing fails, so the
+ * command's exit code and JSON verdict never depend on it.
  */
 export async function writeRunCloseSummary(
     runId: string,
@@ -222,23 +236,27 @@ export async function writeRunCloseSummary(
         workflowDef?: WorkflowDef;
     },
 ): Promise<string | undefined> {
+    if (!SAFE_RUN_ID_RE.test(runId) || runId.includes('..')) return undefined;
     try {
         const row = await new RunDao(opts.db).traceRowById(runId);
         if (row === undefined) return undefined;
+        if (row.status !== 'done' && row.status !== 'failed') return undefined;
+        if (typeof row.completed_at !== 'string' || row.completed_at === '') return undefined;
+        const launchCwd = launchWorkdirFromMetadata(row.metadata_json, opts.cwd);
         const progress = await projectWorkflowProgress(runId, {
             db: opts.db,
-            projectRoot: opts.cwd,
+            projectRoot: launchCwd,
             ...(opts.workflowDef ? { workflowDef: opts.workflowDef } : {}),
         });
         return writeCloseSummary(
             {
                 runId,
                 startedAt: row.started_at,
-                completedAt: row.completed_at ?? new Date().toISOString(),
+                completedAt: row.completed_at,
                 progress,
             },
             {
-                cwd: opts.cwd,
+                cwd: launchCwd,
                 ...(opts.env ? { env: opts.env } : {}),
                 ...(opts.projectsRoot ? { projectsRoot: opts.projectsRoot } : {}),
             },

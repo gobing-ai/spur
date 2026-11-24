@@ -141,9 +141,11 @@ routes to **WT-5** — worktree and branch retained — the same copy-out-first 
 verdict persistence above. After a green persist-out, `spur workflow progress --json` in the
 invoking tree shows the merged run `done` with its per-action rows.
 
-**Batch roll-up (1146 R3).** After the last run closes, print one `### Execution summary` block per run
-(each from that run's own `summaryFile`, so each window is its own `runs.started_at` → close time), then
-the batch roll-up built from the per-run files:
+**Batch roll-up (1146 R3, 1448 R3).** After the last run closes, print one `### Execution summary` block per run
+(reading each run's returned `summaryFile` against its launch project or worktree, so each window is its own
+`runs.started_at` → `completed_at`), then run the batch roll-up over the available sibling `.json` receipts
+resolved from the same root (skipping any run without a sibling `.json` receipt; `--no-summary` suppresses
+printing only):
 
 ```bash
 spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.json

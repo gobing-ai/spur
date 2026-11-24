@@ -588,7 +588,9 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                     } finally {
                         clearWorkflowRunActive();
                     }
-                    result = await withCloseSummary(context, runId, result, resolvedDefinition.workflow);
+                    result = await withCloseSummary(context, runId, result, resolvedDefinition.workflow, {
+                        dryRun: options.dryRun === true,
+                    });
                     if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     else if (!silent) {
                         context.output.write(
@@ -978,7 +980,9 @@ export function registerWorkflowRunCommand(workflow: Command, context: CliContex
                 quotaPersistence.unsubscribe();
                 steeringInput?.close();
             }
-            result = await withCloseSummary(context, runId, result, resolvedDefinition?.workflow);
+            result = await withCloseSummary(context, runId, result, resolvedDefinition?.workflow, {
+                dryRun: options.dryRun === true,
+            });
             if (json) context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
             else if (!silent) {
                 context.output.write(

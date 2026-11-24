@@ -2,8 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { buildRunSummary } from '../../src/workflow/run-summary';
-import { type CloseSummaryRun, renderSummaryMarkdown, writeCloseSummary } from '../../src/workflow/run-summary-render';
+import {
+    type CloseSummaryRun,
+    renderSummaryMarkdown,
+    writeCloseSummary,
+    writeRunCloseSummary,
+} from '../../src/workflow/run-summary-render';
 import { parseTranscriptRows } from '../../src/workflow/transcript';
 
 /**
@@ -160,5 +166,65 @@ describe('renderSummaryMarkdown', () => {
         });
         expect(empty).toContain('| model | 2:00 | n/a |');
         expect(empty).toContain('|   of which gate (informational) | 0:01 | — |');
+    });
+});
+
+describe('1448 — writeRunCloseSummary', () => {
+    test('rejects unsafe runId, missing rows, non-terminal rows, and rows without completed_at', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            expect(await writeRunCloseSummary('../escape', { db, cwd: tmpdir() })).toBeUndefined();
+            expect(await writeRunCloseSummary('missing-id', { db, cwd: tmpdir() })).toBeUndefined();
+
+            await db.run(
+                'INSERT INTO runs (id, workflow_name, status, started_at, completed_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
+                'paused-1',
+                'wf',
+                'paused',
+                '2026-11-24T00:00:00.000Z',
+                null,
+                '{}',
+            );
+            expect(await writeRunCloseSummary('paused-1', { db, cwd: tmpdir() })).toBeUndefined();
+        } finally {
+            await db.close();
+        }
+    });
+
+    test('writes summary in launch workdir from metadata_json and falls back to opts.cwd on legacy/malformed metadata', async () => {
+        const launchDir = mkdtempSync(join(tmpdir(), 'close-summary-launch-'));
+        const fallbackDir = mkdtempSync(join(tmpdir(), 'close-summary-fallback-'));
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.run(
+                'INSERT INTO runs (id, workflow_name, status, started_at, completed_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
+                'done-launch',
+                'wf',
+                'done',
+                '2026-11-24T00:00:00.000Z',
+                '2026-11-24T00:01:00.000Z',
+                JSON.stringify({ definitionSource: { workdir: launchDir } }),
+            );
+            const relLaunch = await writeRunCloseSummary('done-launch', { db, cwd: fallbackDir, env: {} });
+            expect(relLaunch).toBe(join('.spur', 'run', 'done-launch-summary.md'));
+            expect(existsSync(join(launchDir, '.spur', 'run', 'done-launch-summary.md'))).toBe(true);
+
+            await db.run(
+                'INSERT INTO runs (id, workflow_name, status, started_at, completed_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?)',
+                'done-legacy',
+                'wf',
+                'done',
+                '2026-11-24T00:00:00.000Z',
+                '2026-11-24T00:01:00.000Z',
+                '{not-json',
+            );
+            const relFallback = await writeRunCloseSummary('done-legacy', { db, cwd: fallbackDir, env: {} });
+            expect(relFallback).toBe(join('.spur', 'run', 'done-legacy-summary.md'));
+            expect(existsSync(join(fallbackDir, '.spur', 'run', 'done-legacy-summary.md'))).toBe(true);
+        } finally {
+            await db.close();
+            rmSync(launchDir, { recursive: true, force: true });
+            rmSync(fallbackDir, { recursive: true, force: true });
+        }
     });
 });

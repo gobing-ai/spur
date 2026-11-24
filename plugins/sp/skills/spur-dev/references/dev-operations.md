@@ -166,13 +166,19 @@ must not be changed without updating the backing skill.
 
 #### Execution summary
 
-Produced by the run's own terminal close (1146 R1), not by a trailing step: the close writes
-`.spur/run/<runId>-summary.md` + `.json` and reports `summaryFile` in its stdout JSON. The driver's only
-job is to print that file's contents under an `### Execution summary` heading, and to pass `--no-summary`
-through to `inline close`. `--no-summary` is an `inline close` flag: anywhere else it is a usage error.
+Produced automatically by the engine's terminal close on `spur workflow run` and `spur workflow continue`
+when a real run settles as `done` or `failed` (1146 R1, 1448 R1/R2): the close writes
+`.spur/run/<runId>-summary.md` (and `.json` when measured) in the run's launch project or worktree and
+reports `summaryFile` in its terminal JSON output. Pauses, interruptions, dry runs, async launch
+acknowledgments, and failed summary writes omit `summaryFile`. The driver reads the returned `summaryFile`
+relative to the run's project or worktree and prints its contents under an `### Execution summary` heading;
+`--no-summary` on `/sp:dev-run` and `/sp:dev-run --all` suppresses that display only (the workflow CLI
+takes no summary opt-out flag).
 
-`/sp:dev-run --all` shows one summary per run — each produced by that run's own close, so each window is its own
-`runs.started_at` → close time and no block reuses a batch-wide window — plus one batch roll-up:
+`/sp:dev-run --all` shows one summary per run — each produced by that run's own terminal close, so each
+window is its own `runs.started_at` → `completed_at` and no block reuses a batch-wide window — plus one
+batch roll-up over the available sibling `.json` receipts resolved from the same project/worktree root
+(skipping any run whose `.json` receipt is absent):
 
 ```
 spur workflow summary --rollup <runId>-summary.json --rollup <runId2>-summary.json

@@ -227,9 +227,16 @@ and returns the run id immediately. The worker self-records its pid onto the run
   "status": "done",
   "finalState": "done",
   "transitionsTaken": 3,
-  "reason": null
+  "reason": null,
+  "summaryFile": ".spur/run/4fa7a9a1-...-summary.md"
 }
 ```
+
+**Terminal execution summary (1448):** when a real `workflow run` or `workflow continue` settles as `done` or
+`failed`, it writes `.spur/run/<runId>-summary.md` (and `.json` when measured) in the run's launch project
+and includes the optional `summaryFile` field relative to that root. Dry runs, pauses, interruptions, async
+launch acknowledgments, and failed summary writes omit `summaryFile` without affecting the workflow verdict
+or exit code.
 
 **Pass/fail:** `status` is authoritative. `done` → exit 0; `failed` / `paused` / other non-done
 → non-zero. Workflows may declare `failureStates` (a subset of `terminalStates`); landing in one

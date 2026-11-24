@@ -442,15 +442,18 @@ terminalStates: [done]
     });
     // 1448 R1/R2/R4: the engine's terminal close writes the run summary and reports `summaryFile`, so the
     // producer cannot be orphaned again the way 1242 orphaned it (no `<runId>-summary.md` after 2026-10-17).
-    test('a terminal run writes its own execution summary and reports summaryFile (1448 R1/R4)', async () => {
+    test('AC1: a terminal run writes its measured summary matching persisted DB timestamps, and dry-run omits it (1448 R1/R2/R4)', async () => {
         const dir = await createTempProject();
+        const dbUrl = join(dir, 'spur.db');
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, compositionFixture(1));
+
+        // Real terminal run
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'run', '--run-id', 'sum-run', workflowFile, '--json'], {
             output,
             cwd: dir,
-            dbUrl: ':memory:',
+            dbUrl,
         });
         expect(exitCode).toBe(0);
         const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
@@ -463,8 +466,104 @@ terminalStates: [done]
             startedAt: string;
             completedAt: string;
         };
+        const db = await createMigratedDb({ url: dbUrl });
+        const row = await db.queryFirst<{ started_at: string; completed_at: string }>(
+            'SELECT started_at, completed_at FROM runs WHERE id = ?',
+            'sum-run',
+        );
         expect(json.runId).toBe('sum-run');
-        expect(Date.parse(json.startedAt)).toBeLessThanOrEqual(Date.parse(json.completedAt));
+        expect(json.startedAt).toBe(row?.started_at ?? '');
+        expect(json.completedAt).toBe(row?.completed_at ?? '');
+
+        // Dry run creates neither summary file and omits summaryFile
+        const dryOut = createCapturedOutput();
+        const dryExit = await main(['workflow', 'run', '--run-id', 'sum-dry', workflowFile, '--dry-run', '--json'], {
+            output: dryOut,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(dryExit).toBe(0);
+        const dryResult = JSON.parse(dryOut.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+        expect(dryResult.summaryFile).toBeUndefined();
+        expect(await exists(join(dir, '.spur', 'run', 'sum-dry-summary.md'))).toBe(false);
+        expect(await exists(join(dir, '.spur', 'run', 'sum-dry-summary.json'))).toBe(false);
+
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('AC1 (async-spawn fallback): forcing async launch to throw falls back sync and emits its own summary receipt (1448 R1/R2)', async () => {
+        const dir = await createTempProject();
+        const dbUrl = join(dir, 'spur.db');
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, compositionFixture(1));
+        const originalRun = NodeProcessExecutor.prototype.run;
+        const spy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementation(function (
+            this: NodeProcessExecutor,
+            opts,
+        ) {
+            if (opts.env?.SPUR_ASYNC_WORKER === '1') {
+                return Promise.reject(new Error('simulated async launch failure'));
+            }
+            return originalRun.call(this, opts);
+        });
+        try {
+            const output = createCapturedOutput();
+            const exitCode = await main(['workflow', 'run', '--run-id', 'sum-fb', workflowFile, '--async', '--json'], {
+                output,
+                cwd: dir,
+                dbUrl,
+            });
+            expect(exitCode).toBe(0);
+            const result = JSON.parse(output.messages.at(-1) ?? '{}') as { status: string; summaryFile?: string };
+            expect(result.status).toBe('done');
+            expect(result.summaryFile).toBe(join('.spur', 'run', 'sum-fb-summary.md'));
+            expect(await exists(join(dir, '.spur', 'run', 'sum-fb-summary.md'))).toBe(true);
+            expect(await exists(join(dir, '.spur', 'run', 'sum-fb-summary.json'))).toBe(true);
+        } finally {
+            spy.mockRestore();
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('AC3: summary I/O failure (directory at Markdown path) preserves done/failed verdicts, exit codes, and single JSON output (1448 R1/R2/R4)', async () => {
+        const dir = await createTempProject();
+        const dbUrl = join(dir, 'spur.db');
+        const okWf = join(dir, 'ok.yaml');
+        const failWf = join(dir, 'fail.yaml');
+        await writeFile(okWf, compositionFixture(1));
+        await writeFile(failWf, FAILURE_TERMINAL_YAML);
+        await mkdir(join(dir, '.spur', 'run', 'sum-io-ok-summary.md'), { recursive: true });
+        await mkdir(join(dir, '.spur', 'run', 'sum-io-fail-summary.md'), { recursive: true });
+
+        const okOut = createCapturedOutput();
+        const okExit = await main(['workflow', 'run', '--run-id', 'sum-io-ok', okWf, '--json'], {
+            output: okOut,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(okExit).toBe(0);
+        expect(okOut.messages).toHaveLength(1);
+        const okResult = JSON.parse(okOut.messages[0] ?? '{}') as { status: string; summaryFile?: string };
+        expect(okResult.status).toBe('done');
+        expect(okResult.summaryFile).toBeUndefined();
+
+        const failOut = createCapturedOutput();
+        const failExit = await main(['workflow', 'run', '--run-id', 'sum-io-fail', failWf, '--json'], {
+            output: failOut,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(failExit).toBe(1);
+        expect(failOut.messages).toHaveLength(1);
+        const failResult = JSON.parse(failOut.messages[0] ?? '{}') as {
+            status: string;
+            reason?: string;
+            summaryFile?: string;
+        };
+        expect(failResult.status).toBe('failed');
+        expect(failResult.reason).toBe('terminal:failed');
+        expect(failResult.summaryFile).toBeUndefined();
+
         await rm(dir, { recursive: true, force: true });
     });
 
