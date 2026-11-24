@@ -12,6 +12,10 @@
         "kind": {
             "const": "state-machine"
         },
+        "metadata": {
+            "type": "object",
+            "description": "Generic, engine-opaque metadata (e.g. `mcp` exposure, tasks 1381/1447). Consumers validate their own keys."
+        },
         "name": {
             "type": "string",
             "minLength": 1

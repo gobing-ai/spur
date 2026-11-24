@@ -4,7 +4,7 @@ name: Downstream MCP tool registration manifest (mcp-tools.yaml) and enriched wo
 status: done
 template: feature-impl
 created_at: 2026-11-24T05:27:44.333Z
-updated_at: "2026-11-24T21:41:53.712Z"
+updated_at: "2026-11-24T22:45:52.761Z"
 feature_id: B91
 
 dependencies: ["1445", "1446"]
@@ -264,22 +264,22 @@ metadata:
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/mcp-manifest-tools.ts:23-98`, `packages/app/tests/services/mcp-manifest-tools.test.ts:34-100` |
-| R2 | MET | `packages/app/src/services/mcp-manifest-tools.ts:184-317`, `packages/app/tests/services/mcp-manifest-tools.test.ts:102-235` |
-| R3 | MET | `packages/app/src/services/mcp-manifest-tools.ts:350-421`, `apps/server/src/modules/mcp/index.ts:273-325`, `apps/server/tests/modules/mcp-module.test.ts:1970-2145` |
-| R4 | MET | `packages/app/src/services/mcp-workflow-tools.ts:57-315`, `apps/server/src/modules/mcp/index.ts:199-270`, `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221` |
-| R5 | MET | `packages/app/src/services/mcp-workflow-tools.ts:255-275`, `apps/server/src/modules/mcp/index.ts:130-450`, `packages/app/src/services/project-gateway.ts:806-835`, `packages/contracts/src/integrations.ts:19-90`, `packages/app/src/services/integrations-service.ts:41-215`, `apps/web/src/modules/integrations/McpTab.tsx:111-120` |
-| R6 | MET | `plugins/sp/mcp-tools.yaml:1-10`, `config/workflows/history-anatomy.yaml:52-76`, `apps/cli/schemas/mcp-tools.schema.json:1-125`, `docs/design/embedded-mcp-server.md:143-175`, `docs/design/workflow-composition-contract.md:78-96`, `docs/00_ADR.md:3003-3011` |
+| R1 | MET | `packages/app/src/services/mcp-manifest-tools.ts:8-11` (limits), strict Zod manifest schema; `apps/cli/schemas/mcp-tools.schema.json`; `packages/app/tests/services/mcp-manifest-tools.test.ts` |
+| R2 | MET | `resolveManifestTools` issue paths (invalid-manifest, builtin-collision, duplicate); `packages/app/tests/services/mcp-manifest-tools.test.ts`; `packages/app/tests/services/mcp-workflow-tools.test.ts` |
+| R3 | MET | `buildManifestArgv` leading-`-` guard `packages/app/src/services/mcp-manifest-tools.ts:389`; `apps/server/src/modules/mcp/index.ts:272-320` (no shell, `childProcessEnv()`, authEnv blanked :284-288, stdout cap :310) |
+| R4 | MET | `packages/app/src/services/mcp-workflow-tools.ts:84-110` params validation; `workflowToolDescriptor`; `apps/cli/schemas/state-machine-workflow.schema.json:15` now admits root `metadata` (fixed) |
+| R5 | MET | `resolveProjectMcpTools` `packages/app/src/services/mcp-workflow-tools.ts`; `apps/server/src/modules/mcp/index.ts:365` origin `manifest`; `packages/app/src/services/project-gateway.ts:818` |
+| R6 | MET | `plugins/sp/mcp-tools.yaml`; `config/workflows/history-anatomy.yaml:53-76` (now validates and runs); `docs/design/embedded-mcp-server.md:143-175`; `docs/design/workflow-composition-contract.md:73-110` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:45-100`, `apps/server/tests/modules/mcp-module.test.ts:1970-2065` |
-| AC2 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:102-235` |
-| AC3 | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts:237-285`, `apps/server/tests/modules/mcp-module.test.ts:1970-2065` |
-| AC4 | MET | test | `apps/server/tests/modules/mcp-module.test.ts:2067-2145` |
-| AC5 | MET | test | `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221`, `apps/server/tests/modules/mcp-module.test.ts:2147-2225` |
-| AC6 | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:515-545`, `packages/app/tests/services/integrations-service.test.ts:130-156`, `apps/web/tests/modules/integrations/integrations-module.test.tsx:885-911` |
-| AC7 | MET | test | `apps/server/tests/modules/mcp-module.test.ts:2227-2248`, `packages/app/tests/services/mcp-manifest-tools.test.ts:287-320`, `docs/design/embedded-mcp-server.md:143-175`, `docs/design/workflow-composition-contract.md:78-96`, `docs/00_ADR.md:3003-3011` |
+| AC1 — a valid manifest tool is listed with its typed schema and annotations | MET | test | `apps/server/tests/modules/mcp-module.test.ts:1970-2248`; `packages/app/tests/services/mcp-manifest-tools.test.ts` |
+| AC2 — invalid and colliding entries are refused with diagnostics | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts`; `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221` |
+| AC3 — arguments bind as discrete argv elements and never reach a shell | MET | test | `packages/app/tests/services/mcp-manifest-tools.test.ts` (buildManifestArgv); `apps/server/tests/modules/mcp-module.test.ts` |
+| AC4 — execution results, failures and the environment are handled | MET | test | `apps/server/tests/modules/mcp-module.test.ts:1970-2248` (exit, stderr tail, cap, authEnv blank) |
+| AC5 — typed workflow params are advertised, validated and stringified, and legacy opt-ins are unchanged | MET | test | `packages/app/tests/services/mcp-workflow-tools.test.ts:139-221` |
+| AC6 — manifest tools reach the gateway and the Board with origin `manifest` | MET | test | `packages/app/tests/services/project-gateway-mcp.test.ts:515-545`; `packages/app/tests/services/integrations-service.test.ts:130-156`; `apps/web/tests/modules/integrations/integrations-module.test.tsx:885-911` |
+| AC7 — Spur dogfoods both paths and the contract is documented | MET | test | `apps/cli/tests/commands/workflow/index.test.ts:72-81` bundled `history-anatomy.yaml validates` now passes (failed before fix); docs above |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

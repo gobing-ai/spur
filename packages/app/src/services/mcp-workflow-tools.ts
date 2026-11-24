@@ -170,9 +170,15 @@ export async function resolveExposedWorkflowTools(input: {
     namespace: string | null;
     reserved: readonly string[];
     roots: string[];
+    /**
+     * Roots of Spur-shipped (shared-layer) workflows. Without a namespace their opt-ins are skipped
+     * silently — not exposed, but not the operator's misconfiguration either (e.g. `history-anatomy`).
+     */
+    sharedRoots?: readonly string[];
     fs: FileSystem;
 }): Promise<{ tools: ExposedWorkflowTool[]; issues: McpExposureIssue[] }> {
     const exposed: Array<{ tool: string; file: string; raw: RawExposure }> = [];
+    const shared = new Set(input.sharedRoots ?? []);
     for (const root of input.roots) {
         for (const file of await walkWorkflowFiles(input.fs, root)) {
             let parsed: unknown;
@@ -182,6 +188,7 @@ export async function resolveExposedWorkflowTools(input: {
                 continue; // An unparseable definition is `workflow validate`'s finding, not ours.
             }
             const raw = readExposure(parsed);
+            if (raw !== null && input.namespace === null && shared.has(root)) continue;
             if (raw !== null) {
                 exposed.push({ tool: workflowToolName(input.namespace ?? '<none>', raw.name), file, raw });
             }
@@ -250,13 +257,12 @@ export function resolveProjectWorkflowTools(input: {
     namespace: string | null;
     fs: FileSystem;
 }): ReturnType<typeof resolveExposedWorkflowTools> {
+    const layers = workflowLayers({ cwd: input.cwd, registered: registeredWorkflowPaths(input.config) });
     return resolveExposedWorkflowTools({
         namespace: input.namespace,
         reserved: MCP_BUILTIN_TOOL_NAMES,
-        roots: workflowLayers({
-            cwd: input.cwd,
-            registered: registeredWorkflowPaths(input.config),
-        }).map(({ path }) => path),
+        roots: layers.map(({ path }) => path),
+        sharedRoots: layers.filter(({ id }) => id === 'shared').map(({ path }) => path),
         fs: input.fs,
     });
 }

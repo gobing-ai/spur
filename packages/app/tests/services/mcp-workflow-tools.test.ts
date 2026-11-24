@@ -105,6 +105,22 @@ describe('resolveExposedWorkflowTools', () => {
         expect(issues[0]?.remedy).toContain('SPUR_MCP_NAMESPACE');
     });
 
+    test('R4(a): a shared-layer opt-in without a namespace is skipped silently; a project one is still refused', async () => {
+        writeWorkflow(shared, 'anatomy.yaml', EXPOSED('history-anatomy'));
+        writeWorkflow(join(root, '.spur', 'workflows'), 'daily.yaml', EXPOSED('daily-report'));
+        const { tools, issues } = await resolveExposedWorkflowTools({
+            namespace: null,
+            reserved: [],
+            roots: [join(root, '.spur', 'workflows'), shared],
+            sharedRoots: [shared],
+            fs: createNodeFileSystem(),
+        });
+        expect(tools).toEqual([]);
+        expect(issues).toHaveLength(1);
+        expect(issues[0]?.file.endsWith('daily.yaml')).toBe(true);
+        expect(issues[0]?.reason).toBe('no-namespace');
+    });
+
     test('R4(b): a tool name equal to a built-in is refused with the reason and both names', async () => {
         writeWorkflow(join(root, '.spur', 'workflows'), 'task-show.yaml', EXPOSED('task-show'));
         const { tools, issues } = await resolve('cc', ['cc_task_show', 'sp_task_show']);

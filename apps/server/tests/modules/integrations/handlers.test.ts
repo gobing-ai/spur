@@ -411,10 +411,12 @@ describe('1438 — namespace provenance and refused exposures (R1)', () => {
             expect(body.mcp.namespace).toBeNull();
             expect(body.mcp.namespaceSource).toBe('none');
             const issues = body.mcp.exposureIssues ?? [];
-            const reportIssue = issues.find((issue) => issue.file.endsWith('report.yaml'));
-            expect(reportIssue?.reason).toBe('no-namespace');
-            expect(reportIssue?.remedy).toContain('SPUR_MCP_NAMESPACE');
-            expect(issues.every((issue) => issue.reason === 'no-namespace')).toBe(true);
+            // Only the project's own opt-in is refused; a Spur-shipped shared-layer opt-in
+            // (history-anatomy) is not the operator's misconfiguration and stays silent.
+            expect(issues).toHaveLength(1);
+            expect(issues[0]?.file.endsWith('report.yaml')).toBe(true);
+            expect(issues[0]?.reason).toBe('no-namespace');
+            expect(issues[0]?.remedy).toContain('SPUR_MCP_NAMESPACE');
             expect(body.mcp.tools.map((tool) => tool.name)).not.toContain('report');
             expect((body.mcp.tools.map((tool) => tool.name) as string[]).sort()).toEqual(await listedToolNames(ctx));
         } finally {

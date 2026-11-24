@@ -103,6 +103,9 @@ name as `<namespace>_<name>` with lowercase and every run of non-alphanumerics m
 `tools/list` and `spur workflow validate` call that one resolver, so a name cannot be advertised
 while validate rejects it: a project with no namespace, a name equal to a built-in `sp_*` tool, or
 two exposed workflows deriving the same name all fail validate and are omitted from `tools/list`.
+Exception: a Spur-shipped shared-layer opt-in (e.g. `history-anatomy`) in a project with no
+namespace is skipped silently — omitted from `tools/list`, no issue, validate passes — because it
+is not the operator's misconfiguration. Project and registered layers keep the refusal.
 Exposure is opt-in per file; nothing is exposed by default.
 
 ## Stable action identity and effects
