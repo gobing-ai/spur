@@ -200,6 +200,37 @@ describe('registerServeCommand', () => {
         expect(errors.some((e) => e.includes('bind failed'))).toBe(true);
     });
 
+    test('adds the raw stack after the classified message when SPUR_DEBUG=1', async () => {
+        const { ctx, errors, exit } = makeCtx({ env: { SPUR_DEBUG: '1' } });
+        const { action } = captureServe(ctx, {
+            startServer: (async () => {
+                throw new Error('bind failed');
+            }) as RegisterServeOptions['startServer'],
+        });
+
+        await action({ port: 3000, host: 'localhost', open: false, json: false });
+
+        expect(exit).toContain(1);
+        // The classified message comes first, then the raw stack for a debugger.
+        expect(errors.join('\n')).toContain('bind failed');
+        expect(errors.join('\n')).toContain('at startServer');
+    });
+
+    test('still launches when the injected project-config loader rejects (tolerant load)', async () => {
+        const { ctx, exit } = makeCtx();
+        const { action, launched } = captureServe(ctx, {
+            loadProjectConfig: async () => {
+                throw new Error('unreadable config');
+            },
+        });
+
+        await action({ port: 3000, host: 'localhost', open: false, json: false });
+
+        // A broken .spur/config.yaml must not stop the listener: the port falls back to defaults.
+        expect(exit).toEqual([]);
+        expect(launched).toHaveLength(1);
+    });
+
     test('classifies a SQLITE_BUSY startup failure with the busy remediation (2026-09-08)', async () => {
         const { ctx, errors, exit } = makeCtx();
         // bun:sqlite busy failure shape, verified live: message "database is locked", code SQLITE_BUSY.
