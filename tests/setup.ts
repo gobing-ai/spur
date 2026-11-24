@@ -153,3 +153,8 @@ delete process.env.SPUR_ROLE;
 // explicitly (inline-run-setup, status.test), so drop the operator's credentials here.
 delete process.env.TYPESAFE_API_KEY;
 delete process.env.TYPESAFE_BASE_URL;
+
+// Gateway-port hermeticity: an agent/gateway session may export SPUR_GATEWAY_PORT (e.g. 3070),
+// which overrides the default port 3000 in buildConfigFromEnv and breaks tests that assert
+// canonical localhost:3000 URLs. Tests that need a custom port set SPUR_GATEWAY_PORT explicitly.
+delete process.env.SPUR_GATEWAY_PORT;
