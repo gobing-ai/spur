@@ -82,6 +82,28 @@ async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
 }
 
 /**
+ * Recursively list regular files under `dir` as paths relative to `dir` (sorted). Symlinks and
+ * special files are ignored; an absent root returns `[]` while other listing errors propagate.
+ */
+async function listRunDirFiles(dir: string, relPrefix = ''): Promise<string[]> {
+    const entries = await readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT' && relPrefix === '') return null;
+        throw error;
+    });
+    if (entries === null) return [];
+    const out: string[] = [];
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        const rel = relPrefix === '' ? entry.name : join(relPrefix, entry.name);
+        if (entry.isDirectory()) {
+            out.push(...(await listRunDirFiles(join(dir, entry.name), rel)));
+        } else if (entry.isFile()) {
+            out.push(rel);
+        }
+    }
+    return out;
+}
+
+/**
  * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1; citations
  * per 0984): transfer the `runs` row plus its `action_runs` / `phase_runs` /
  * `transition_runs` / `workflow_states` children with {@link transferRunTables}, then copy
@@ -124,28 +146,6 @@ async function readExistingRunFile(path: string): Promise<Buffer | undefined> {
  * before any target write) throws — the caller routes to WT-5 and the worktree is retained,
  * so a green run can never destroy its own evidence.
  */
-/**
- * Recursively list regular files under `dir` as paths relative to `dir` (sorted). Symlinks and
- * special files are ignored; an absent root returns `[]` while other listing errors propagate.
- */
-async function listRunDirFiles(dir: string, relPrefix = ''): Promise<string[]> {
-    const entries = await readdir(dir, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT' && relPrefix === '') return null;
-        throw error;
-    });
-    if (entries === null) return [];
-    const out: string[] = [];
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-        const rel = relPrefix === '' ? entry.name : join(relPrefix, entry.name);
-        if (entry.isDirectory()) {
-            out.push(...(await listRunDirFiles(join(dir, entry.name), rel)));
-        } else if (entry.isFile()) {
-            out.push(rel);
-        }
-    }
-    return out;
-}
-
 export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Promise<PersistWorktreeRunsSuccess> {
     const fromDir = resolve(input.fromWorkdir);
     const toDir = resolve(input.toWorkdir);
