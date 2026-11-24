@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { integrationsToolUsageSchema } from '@gobing-ai/spur-contracts';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { protocolUsageSummary } from '../../src/analytics/protocol-usage';
 import { applyCliMigrations, SystemEventDao } from '../../src/index';
@@ -184,6 +185,30 @@ describe('protocolUsageSummary (1398 R1/R2)', () => {
             expect(cluster.sampleEventIds).toHaveLength(5);
             expect(cluster.firstAt).toBe('2026-11-17T10:00:00.000Z');
             expect(cluster.lastAt).toBe('2026-11-17T10:06:00.000Z');
+        } finally {
+            await db.close();
+        }
+    });
+
+    test('lastCalledAt is the newest called or failed row in the window (1446 R4)', async () => {
+        const db = await setupDb();
+        try {
+            await emit(db, 'l1', 'mcp.tool.called', T1, { tool: 'sp_task_show', durationMs: 5, outcome: 'ok' });
+            // A failure is still a call: the later one wins the timestamp.
+            await emit(db, 'l2', 'mcp.tool.failed', T2, { tool: 'sp_task_show', errorCode: 'tool_error' });
+            // Outside the window: it must not move the timestamp forward.
+            await emit(db, 'l3', 'mcp.tool.called', OUTSIDE, { tool: 'sp_task_show', durationMs: 5, outcome: 'ok' });
+
+            const usage = await protocolUsageSummary(db, { since: '2026-11-17T00:00:00.000Z', until: T3 });
+            const row = usage.tools.find((tool) => tool.tool === 'sp_task_show');
+            if (row === undefined) throw new Error('expected a sp_task_show row');
+            expect(row.lastCalledAt).toBe(T2);
+
+            // The contract the Board reads carries the field, unchanged.
+            const parsed = integrationsToolUsageSchema.parse(row);
+            expect(parsed.lastCalledAt).toBe(T2);
+            expect(parsed.calls).toBe(1);
+            expect(parsed.failures).toBe(1);
         } finally {
             await db.close();
         }

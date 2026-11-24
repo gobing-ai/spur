@@ -65,12 +65,19 @@ resolves the project namespace once when `McpDispatcher` constructs:
   variable `server.mcp.authEnv` names. Missing/wrong → `401` with
   `WWW-Authenticate: Bearer realm="spur-mcp"`; unset token variable at request time fails closed
   (`500`, no challenge).
+- **Hop and caller headers (task 1446 R1).** `X-Spur-Mcp-Via` (`direct` | `gateway` | `stdio`;
+  absent or invalid → `direct`) and `X-Spur-Actor` (client identity, sanitized to
+  `^[A-Za-z0-9._:@-]{1,64}$`, otherwise dropped). The adapter parses both once per request into
+  `McpRequestMeta` (`protocol.ts`) and hands them to every registry call; a registry that ignores
+  the optional argument behaves exactly as before. `spur mcp` sends `stdio` plus the
+  `initialize.params.clientInfo.name` it cached (`X-Spur-Actor`), and the gateway's root `/mcp`
+  sends `gateway` plus the actor it received, so a project ledger attributes the caller either way.
+  The actor is the only header value that reaches a payload — never the raw header.
 
 ## 4. Tools and resources
 
-Five tools delegate directly to `@gobing-ai/spur-app` services (no CLI spawn, no second workflow
-state machine): `sp_task_show`, `sp_task_list` (`TaskService`), `sp_workflow_status`,
-`sp_workflow_run`, `sp_workflow_continue` (`WorkflowService`). Built-ins always carry the `sp`
+`tools/list` advertises 41 built-in `sp_*` tools, each one call into an existing `@gobing-ai/spur-app`
+service (no CLI spawn, no second workflow state machine). Built-ins always carry the `sp`
 namespace (task 1379, breaking rename, no alias period): a call to an old unprefixed name is
 refused with `tool "<name>" was renamed to "<sp-name>"`. Names use `[a-z0-9_]` — deliberately
 narrower than the MCP 2026-07-28 spec allows, which SHOULD-permits `A-Z a-z 0-9 _ - .` (see
@@ -81,6 +88,36 @@ the restriction is chosen on purpose for greppability and collision safety. Thre
 confinement: traversal is refused, an unknown feature id is an error (not empty), an unknown scheme
 is refused.
 
+**Where the catalog lives (task 1445 R7).** `apps/server/src/modules/mcp/index.ts` owns the
+protocol wiring (`McpDispatcher`, `callTool` telemetry, resources) and composes
+`TOOL_DESCRIPTORS` and one `TOOL_HANDLERS` map from the per-domain modules — `tools-task.ts`,
+`tools-feature.ts`, `tools-workflow.ts`, `tools-rule.ts`, `tools-decision.ts`,
+`tools-coordination.ts`, `tools-builder.ts`, `tools-self.ts` — each exporting `{ descriptors,
+dispatch }`. Argument readers, the annotation pair, the inline-section bridge and the error shims
+live once in `tools-shared.ts`. `BUILTIN_TOOL_NAMES` and `MCP_BUILTIN_TOOL_NAMES`
+(`packages/app/src/services/mcp-builtin-tools.ts`) stay in parity by test.
+
+### 4.1 Built-in catalog, by domain
+
+| Domain | Tools |
+| --- | --- |
+| Task | `sp_task_show`, `sp_task_list`, `sp_task_create`, `sp_task_update` (+ `append`), `sp_task_transition`, `sp_task_check`, `sp_task_sections`, `sp_task_deps`, `sp_task_preflight`, `sp_task_batch_plan` |
+| Feature | `sp_feature_check`, `sp_feature_show`, `sp_feature_list`, `sp_feature_create`, `sp_feature_update`, `sp_feature_transition`, `sp_feature_sync`, `sp_feature_refresh` |
+| Workflow | `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue`, `sp_workflow_list`, `sp_workflow_show`, `sp_workflow_validate`, `sp_workflow_cancel` |
+| Rule | `sp_rule_run`, `sp_rule_list`, `sp_rule_validate` |
+| Decision | `sp_decision_list`, `sp_decision_show`, `sp_decision_status`, `sp_decision_run` |
+| Coordination | `sp_agent_status`, `sp_message_send`, `sp_message_inbox`, `sp_message_reply` |
+| Builder | `sp_builder_check_deps`, `sp_builder_show_branches` |
+| Self | `sp_self_status`, `sp_self_search`, `sp_self_actions` |
+
+The CLI-only boundary (task 1445 Design table), with no tool by construction: `task --force-done` /
+`--provenance-bypass` / `migrate` / `record` / `verdict`; `feature move` / `feature verify`;
+`workflow clean` / `workflow promote-*`; `rule --fix-mode auto` and an arbitrary `--file`; decision
+evidence file paths (the inline `evidence` string only); `agent start|stop|loop`; builder `bump-ver` /
+`drop-tags` / `publish` / `build-*`; `self serve|install|uninstall|init|maintain|migrate` and any
+shell execution, including running a resolved action; gateway-daemon status (a CLI-local probe).
+Per-tool CLI parity: `plugins/sp/skills/spur-cli/references/mcp-tools.md`.
+
 **Corpus write tools (task 1392).** Five more built-ins make the corpus rules hold by
 construction: each is one call into an existing guarded service, and each schema sets
 `additionalProperties: false` with enums for closed values.
@@ -88,7 +125,7 @@ construction: each is one call into an existing guarded service, and each schema
 | Tool | Seam | Deliberately absent vs the CLI |
 | --- | --- | --- |
 | `sp_task_create` | `TaskService.create` | ready-prep (a server tool never dispatches a model), dedupe flags |
-| `sp_task_update` | `section`+`content` → `updateSection`, `field`+`value` → `updateField`, `addTags`/`removeTags` → `updateTags` | `status` (the enum has no such value), `--from-file` (content is inline) |
+| `sp_task_update` | `section`+`content` → `updateSection` (with `append`), `field`+`value` → `updateField`, `addTags`/`removeTags` → `updateTags` | `status` (the enum has no such value), `--from-file` (content is inline) |
 | `sp_task_transition` | `ctx.transitionTask` → `transitionTaskGuarded` | `forceDone`, `reason` |
 | `sp_feature_check` | `FeatureCheckService.check` with the HTTP handler's folders | none |
 | `sp_rule_run` | `RuleService.evaluate({ emit: false })` | `file` (presets and rule ids only), `fixMode: auto`, `stopOnFirst`, `verbose` |
@@ -97,8 +134,8 @@ The schema is enforced at the dispatcher before any service runs, so an undeclar
 refused rather than ignored. A guard refusal travels with the code the CLI reports
 (`GUARD_DENIED: <same message>`, both surfaces calling the same function), and `RuleService.evaluate`
 gained `emit?: boolean` so a programmatic caller gets the result with nothing written to stdout.
-`tools/list` therefore advertises ten tools; at the gateway root each built-in also requires the
-`project` selector (task 1383).
+At the gateway root each built-in also requires the `project` selector (task 1383), which the
+gateway adds when it re-advertises `TOOL_DESCRIPTORS`.
 
 The server resolves planning folders against the served project root. Corpus operations use
 that root even when the server process was started from another working directory.
@@ -116,21 +153,40 @@ one resolver (`packages/app/src/services/mcp-workflow-tools.ts`), so a name is n
 while validate rejects it: no project namespace, a collision with a built-in name, or two
 definitions deriving the same name omit the tool and fail validate with the reason and remedy.
 
-**Tool annotations (task 1421 R2).** Every advertised descriptor — the ten built-ins and every
-exposed workflow tool — carries the three MCP hints. Reads (`sp_task_show`, `sp_task_list`,
-`sp_feature_check`, `sp_rule_run`, `sp_workflow_status`) are `{readOnlyHint: true, destructiveHint:
-false, idempotentHint: true}`; writes (`sp_task_create`, `sp_task_update`, `sp_task_transition`,
-`sp_workflow_run`, `sp_workflow_continue`) and workflow-derived tools are `{false, false, false}`.
-No tool deletes, so `destructiveHint` is always `false` but always present — a client renderer never
-has to guess a missing hint.
+**Tool annotations (task 1421 R2).** Every advertised descriptor — the 41 built-ins and every
+exposed workflow tool — carries the three MCP hints. Reads are `{readOnlyHint: true,
+destructiveHint: false, idempotentHint: true}` — the show/list/check/preflight/plan/status/trace/
+search/resolve tools (`sp_task_show`, `sp_task_list`, `sp_task_check`, `sp_task_preflight`,
+`sp_task_batch_plan`, `sp_feature_check`, `sp_feature_show`, `sp_feature_list`, `sp_rule_run`,
+`sp_rule_list`, `sp_rule_validate`, `sp_workflow_status`, `sp_workflow_list`, `sp_workflow_show`,
+`sp_workflow_validate`, `sp_decision_list`, `sp_decision_show`, `sp_decision_status`,
+`sp_agent_status`, `sp_message_inbox`, `sp_builder_check_deps`, `sp_builder_show_branches`,
+`sp_self_status`, `sp_self_search`, `sp_self_actions`); writes
+(`sp_task_create`/`update`/`transition`/`sections`/`deps`, `sp_feature_create`/`update`/`transition`/
+`sync`/`refresh`, `sp_workflow_run`/`cancel`/`continue`, `sp_decision_run`, `sp_message_send`/`reply`)
+and workflow-derived tools are `{false, false, false}` — cancel stops a run but deletes nothing, so
+the pair stays two-valued. No tool deletes, so `destructiveHint` is always `false` but always
+present — a client renderer never has to guess a missing hint.
 
 **Error codes (task 1421 R1).** The `mcp.tool.failed` event carries one of three codes. Every
 argument-validation failure is `invalid_arguments`, and the classification is a CLASS, not a message
 shape: the validators, `requiredString`, the map-of-strings and array checks, the declared-schema
 violation and the workflow-tool argument checks all throw `InvalidArgumentsError`
-(`apps/server/src/modules/mcp/index.ts`), and the emit site maps `instanceof` to the code. A new
+(`apps/server/src/modules/mcp/protocol.ts`, raised from `tools-shared.ts` and
+`index.ts`), and the emit site maps `instanceof` to the code. A new
 validator message therefore cannot silently degrade to `tool_error`. An unknown or renamed tool name
 stays `unknown_tool`, and a service's own failure stays `tool_error`.
+
+**Call telemetry (task 1446 R1/R2).** `mcp.tool.called` and `mcp.tool.failed` add `origin`
+(`built-in` | `workflow` | `unknown`), `access` (`read` | `write`, from the descriptor's
+`readOnlyHint`), `via` and `actor` — so `ProtocolUsage.byActor` attributes a caller instead of
+reading `unknown` for every row. Three diagnostic-tier, metadata-only events record protocol
+discovery, once per request and keyed on the request's method: `mcp.server.discovered`
+(`server/discover`), `mcp.tools.listed` (`tools/list`) and `mcp.resources.listed`
+(`resources/list`). A status or Board catalog read (`catalog()`) carries no `meta` and therefore
+emits nothing. `server/discover` calls `listTools` and `listResources` internally, so emitting per
+registry method would double-count — the method, not the call, is the unit. Emission reuses
+`emitEvent`, so a failing bus never fails the call it describes.
 
 ## 5. `spur mcp` stdio bridge
 
@@ -172,7 +228,10 @@ bypasses it.
 
 End-to-end integration tests through the gateway handler: `apps/server/tests/mcp-e2e.test.ts`
 (discover, tools/call, resources/read, bearer 401 + challenge, legacy-version rejection, stdio
-bridge round-trip). Module and adapter units: `apps/server/tests/modules/mcp-module.test.ts`,
-`apps/server/tests/modules/mcp/protocol.test.ts`; bridge units:
-`apps/cli/tests/commands/mcp.test.ts`; config and gateway units:
-`packages/config/tests/config.test.ts`, `packages/app/tests/services/project-gateway-edge.test.ts`.
+bridge round-trip, and the expanded task tools with their on-disk writes plus `mcp.tool.*`
+rows). Module and adapter units: `apps/server/tests/modules/mcp-module.test.ts`,
+`apps/server/tests/modules/mcp/protocol.test.ts`; per-domain composition checks:
+`apps/server/tests/modules/mcp/tools-*.test.ts` (descriptors and handlers name the same tools);
+bridge units:
+`apps/cli/tests/commands/mcp.test.ts`; gateway catalogue and edge units:
+`apps/server/tests/gateway-mcp.test.ts`, `packages/app/tests/services/project-gateway-edge.test.ts`.

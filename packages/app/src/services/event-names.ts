@@ -423,6 +423,11 @@ const BASE_CATALOG = [
     baseEvent('mcp.tool.called', 'mcp', 'mcp'),
     baseEvent('mcp.tool.failed', 'mcp', 'mcp', 'redacted'),
     baseEvent('mcp.resource.read', 'mcp', 'mcp'),
+    // 1446 R2: discovery/catalog lifecycle, metadata only — counts, namespace and transport
+    // identity, never a catalogue body or a header value other than the sanitized actor.
+    baseEvent('mcp.server.discovered', 'mcp', 'mcp', 'metadata-only', 'diagnostic'),
+    baseEvent('mcp.tools.listed', 'mcp', 'mcp', 'metadata-only', 'diagnostic'),
+    baseEvent('mcp.resources.listed', 'mcp', 'mcp', 'metadata-only', 'diagnostic'),
     // Transport refusal shared by the a2a/mcp mounts; 1377 adds a2a's own
     // message/cancel names under the same file.
     baseEvent('auth.denied', 'api', 'api'),
@@ -1978,9 +1983,12 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             field('tool', 'Tool'),
             field('argKeys', 'Argument keys'),
             field('durationMs', 'Duration (ms)'),
-            field('wbs', 'WBS'),
-            field('runId', 'Run'),
+            field('origin', 'Origin'),
+            field('access', 'Access'),
+            field('via', 'Delivered via'),
+            field('actor', 'Actor'),
         ],
+        retain: [field('wbs', 'WBS'), field('runId', 'Run')],
         summary: ({ data }) => {
             const tool = s(data, 'tool');
             const duration = n(data, 'durationMs');
@@ -1999,9 +2007,11 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             field('durationMs', 'Duration (ms)'),
             field('errorCode', 'Error code'),
             field('error', 'Error'),
-            field('wbs', 'WBS'),
-            field('runId', 'Run'),
+            field('origin', 'Origin'),
+            field('access', 'Access'),
+            field('via', 'Delivered via'),
         ],
+        retain: [field('actor', 'Actor'), field('wbs', 'WBS'), field('runId', 'Run')],
         summary: ({ data }) => {
             const tool = s(data, 'tool');
             const duration = n(data, 'durationMs');
@@ -2023,6 +2033,56 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
                 : '[mcp] resource read';
         },
         outcome: derivedFrom('outcome'),
+    },
+    // 1446 R2: one lifecycle row per discovery/catalog request. Metadata only — counts, the
+    // resolved namespace and transport identity; the catalog body never enters a payload.
+    'mcp.server.discovered': {
+        description:
+            'An MCP client completed discovery of this server, naming the namespace, the delivering hop and the caller.',
+        fields: [
+            field('namespace', 'Namespace'),
+            field('via', 'Delivered via'),
+            field('actor', 'Actor'),
+            field('durationMs', 'Duration (ms)'),
+        ],
+        summary: ({ data }) => {
+            const via = s(data, 'via');
+            const duration = n(data, 'durationMs');
+            return `[mcp] discovered${via !== undefined ? ` via ${via}` : ''}${duration !== undefined ? ` ${duration}ms` : ''}`;
+        },
+        outcome: unsupported,
+    },
+    'mcp.tools.listed': {
+        description: 'An MCP client listed the tool catalog, naming the built-in and workflow tool counts it received.',
+        fields: [
+            field('toolCount', 'Tools'),
+            field('builtinCount', 'Built-in tools'),
+            field('workflowCount', 'Workflow tools'),
+            field('namespace', 'Namespace'),
+            field('via', 'Delivered via'),
+            field('actor', 'Actor'),
+            field('durationMs', 'Duration (ms)'),
+        ],
+        summary: ({ data }) => {
+            const count = n(data, 'toolCount');
+            const duration = n(data, 'durationMs');
+            return `[mcp] listed ${count ?? 0} tools${duration !== undefined ? ` ${duration}ms` : ''}`;
+        },
+        outcome: unsupported,
+    },
+    'mcp.resources.listed': {
+        description: 'An MCP client listed the resource catalog, naming how many `spur://` resources it received.',
+        fields: [
+            field('resourceCount', 'Resources'),
+            field('via', 'Delivered via'),
+            field('actor', 'Actor'),
+            field('durationMs', 'Duration (ms)'),
+        ],
+        summary: ({ data }) => {
+            const count = n(data, 'resourceCount');
+            return `[mcp] listed ${count ?? 0} resources`;
+        },
+        outcome: unsupported,
     },
     'auth.denied': {
         description:

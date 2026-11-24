@@ -11,6 +11,7 @@ import {
     type PreflightRequest,
     parseCommaList,
     parseDepStatuses,
+    readCorpusFacts,
     recoveryHint,
     runPreflight,
 } from '../../src/services/planning-preflight';
@@ -464,5 +465,51 @@ describe('preflight list parsing (task 0814 R2)', () => {
         const bad = runPreflightCli(['--classify-feature', '{not json']);
         expect(bad.exitCode).toBe(1);
         expect(bad.stderr).toContain('Invalid JSON for --classify-feature');
+    });
+});
+
+/**
+ * 1445 R1 moved the corpus read out of `apps/cli` so `spur task preflight` and `sp_task_preflight`
+ * share it. The pins: dependencies and their statuses come from the corpus, a dependency that
+ * cannot be read stays unknown (the admission policy treats that as unmet), and `needDeps: false`
+ * performs no dependency read.
+ */
+describe('readCorpusFacts — the corpus read both surfaces share (1445 R1)', () => {
+    const tasksOf = (facts: Record<string, { status: string; dependencies?: string[] }>) => ({
+        show: async (wbs: string) => {
+            const fact = facts[wbs];
+            if (fact === undefined) throw new Error(`Task ${wbs} not found`);
+            return { status: fact.status, frontmatter: { dependencies: fact.dependencies } };
+        },
+    });
+
+    test('reads status, dependencies and the statuses it does not already know', async () => {
+        const facts = await readCorpusFacts(
+            tasksOf({ '1445': { status: 'todo', dependencies: ['1444', '1443'] }, '1444': { status: 'done' } }),
+            '1445',
+            true,
+            { '1443': 'wip' },
+        );
+        expect(facts).toEqual({ status: 'todo', deps: ['1444', '1443'], depStatuses: { '1444': 'done' } });
+    });
+
+    test('an unresolvable dependency stays unknown instead of failing the read', async () => {
+        const facts = await readCorpusFacts(
+            tasksOf({ '1445': { status: 'todo', dependencies: ['9999'] } }),
+            '1445',
+            true,
+            {},
+        );
+        expect(facts).toEqual({ status: 'todo', deps: ['9999'], depStatuses: {} });
+    });
+
+    test('needDeps=false reads the status only', async () => {
+        const facts = await readCorpusFacts(
+            tasksOf({ '1445': { status: 'todo', dependencies: ['1444'] }, '1444': { status: 'done' } }),
+            '1445',
+            false,
+            {},
+        );
+        expect(facts).toEqual({ status: 'todo', deps: [], depStatuses: {} });
     });
 });

@@ -233,7 +233,7 @@ export function buildProgram(
     registerDecisionCommand(program, context);
     registerFeatureCommand(program, context);
     registerHistoryCommand(program, context);
-    registerMcpCommand(program, context);
+    registerMcpCommand(program, context, serve?.loadProjectConfig);
     registerMessageCommand(program, context);
     registerProjectsCommand(program, context);
     registerRuleCommand(program, context);

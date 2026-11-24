@@ -160,6 +160,8 @@ export const integrationsToolUsageSchema = z.object({
     p50Ms: z.number().nullable(),
     p95Ms: z.number().nullable(),
     durationUnmeasured: z.number(),
+    /** Latest call or failure in the window (1446 R4); null when the window holds only other tools. */
+    lastCalledAt: z.string().nullable(),
 });
 
 /** One resource template's windowed reads. */
@@ -208,6 +210,13 @@ export const integrationsActivitySchema = z.object({
     failures: z.number(),
     lastCall: z.string().nullable(),
     authDenials: z.number(),
+    /**
+     * Per-tool `tools/call` counters the gateway keeps since it started (1446 R3) — independent of
+     * `since`. Absent on a standalone server and on a gateway that predates them.
+     */
+    byTool: z
+        .record(z.string(), z.object({ calls: z.number(), failures: z.number(), lastCall: z.string().nullable() }))
+        .optional(),
 });
 /** Inferred type for {@link integrationsActivitySchema}. */
 export type IntegrationsActivity = z.infer<typeof integrationsActivitySchema>;

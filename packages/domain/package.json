@@ -25,6 +25,7 @@
         "yaml": "catalog:"
     },
     "devDependencies": {
+        "@gobing-ai/spur-contracts": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:"
     }

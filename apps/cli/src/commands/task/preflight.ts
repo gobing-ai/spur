@@ -6,36 +6,6 @@ import { writeStepText } from './step-output';
 
 const OPERATIONS = ['run', 'refine', 'verify'] as const;
 
-/** Corpus facts the preflight reads when the caller did not pass them as flags. */
-interface CorpusFacts {
-    status: string | null;
-    deps: string[];
-    depStatuses: Record<string, string>;
-}
-
-async function readCorpusFacts(
-    context: CliContext,
-    folder: string | undefined,
-    wbs: string,
-    needDeps: boolean,
-    knownDepStatuses: Record<string, string>,
-): Promise<CorpusFacts> {
-    const svc = await makeService(context, folder);
-    const shown = await svc.show(wbs);
-    const rawDeps = (shown.frontmatter as { dependencies?: unknown } | undefined)?.dependencies;
-    const deps = needDeps && Array.isArray(rawDeps) ? rawDeps.map(String) : [];
-    const depStatuses: Record<string, string> = {};
-    for (const dep of deps) {
-        if (knownDepStatuses[dep] !== undefined) continue;
-        try {
-            depStatuses[dep] = (await svc.show(dep)).status;
-        } catch {
-            // An unresolvable dependency stays unknown, which the admission policy treats as unmet.
-        }
-    }
-    return { status: shown.status, deps, depStatuses };
-}
-
 /**
  * Register `spur task preflight [wbs]` — TABLE A STOP preflight, quick command-aware readiness,
  * one-shot recovery hints and feature-finding classification (script-absorption PR-5; replaces
@@ -72,7 +42,7 @@ export function registerTaskPreflightCommand(task: Command, context: CliContext)
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .action(async (wbs, options) => {
-            const { parseCommaList, parseDepStatuses, runPreflight } = await import(
+            const { parseCommaList, parseDepStatuses, readCorpusFacts, runPreflight } = await import(
                 '@gobing-ai/spur-app/pipeline-steps'
             );
             const operation = (OPERATIONS as readonly string[]).includes(options.operation ?? '')
@@ -85,8 +55,7 @@ export function registerTaskPreflightCommand(task: Command, context: CliContext)
             if (options.classifyFeature === undefined && status === null && wbs !== undefined) {
                 try {
                     const facts = await readCorpusFacts(
-                        context,
-                        options.folder,
+                        await makeService(context, options.folder),
                         wbs,
                         options.deps === undefined,
                         depStatuses,

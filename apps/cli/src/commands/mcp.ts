@@ -31,7 +31,7 @@ interface RpcMessage {
     jsonrpc?: unknown;
     id?: unknown;
     method?: unknown;
-    params?: { protocolVersion?: unknown };
+    params?: { protocolVersion?: unknown; clientInfo?: { name?: unknown } };
     result?: unknown;
 }
 
@@ -42,6 +42,15 @@ function parseRpc(text: string): RpcMessage | undefined {
     } catch {
         return undefined;
     }
+}
+
+/** The client's self-reported name, or `null` when absent or unusable as a header value (1446 P3). */
+function clientName(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const name = value.trim();
+    // The server would drop an out-of-charset actor anyway; forwarding it would instead make the
+    // bridge's own fetch throw and kill the session, so the shape is checked before it is a header.
+    return /^[A-Za-z0-9._:@-]{1,64}$/.test(name) ? name : null;
 }
 
 /** The context slice the bridge reads — the same shape `registerServeCommand` takes. */
@@ -68,6 +77,9 @@ export interface McpStdioBridgeOptions {
 export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise<number> {
     const reader = createInterface({ input: options.input });
     let legacy = false;
+    // 1446 R1/AC3: the standard client identity is `initialize.params.clientInfo.name`, which only
+    // this bridge sees — cache it and forward it as `X-Spur-Actor` (sanitized server-side).
+    let actor: string | null = null;
     try {
         for await (const line of reader) {
             const body = line.trim();
@@ -82,6 +94,7 @@ export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise
             }
             const requestedVersion = message?.params?.protocolVersion;
             const initialize = message?.method === 'initialize' && hasId && typeof requestedVersion === 'string';
+            if (initialize) actor = clientName(message?.params?.clientInfo?.name);
             let res: Response;
             try {
                 res = await fetch(options.url, {
@@ -89,6 +102,8 @@ export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise
                     headers: {
                         'Content-Type': 'application/json',
                         'Mcp-Protocol-Version': MCP_PROTOCOL_VERSION,
+                        'X-Spur-Mcp-Via': 'stdio',
+                        ...(actor !== null ? { 'X-Spur-Actor': actor } : {}),
                         ...(options.token !== null ? { Authorization: `Bearer ${options.token}` } : {}),
                     },
                     // A successful discovery proves the endpoint and bearer before we acknowledge stdio startup.
@@ -226,7 +241,11 @@ function bearerToken(
 export const MCP_COMMAND_NAME = 'mcp';
 
 /** Register `spur mcp [--cwd <path>] [--url <mcpUrl>]` (frozen names, task 1373 Design). */
-export function registerMcpCommand(program: Command, context: McpBridgeContext): void {
+export function registerMcpCommand(
+    program: Command,
+    context: McpBridgeContext,
+    loadProjectConfig?: (root: string) => Promise<SpurConfig | null>,
+): void {
     bootFree(program.command(MCP_COMMAND_NAME, { hidden: true }))
         .summary('bridge stdio MCP clients to the project MCP endpoint (stdio-to-HTTP transport shim)')
         .option(...SHARED_OPTIONS.cwdServe, context.cwd)
@@ -240,7 +259,9 @@ export function registerMcpCommand(program: Command, context: McpBridgeContext):
                     );
                 }
                 const projectRoot = resolveServeCwd(options.cwd);
-                const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
+                // The composition root injects the tolerant loader (ADR-082); the facade call is the
+                // fallback for an embedder that registers this command directly.
+                const spurConfig = await (loadProjectConfig ?? loadSpurConfig)(projectRoot).catch(() => null);
                 const config = buildConfigFromEnv(context.env, spurConfig);
                 // --gateway takes ITS OWN token variable: a gateway credential is not a project's.
                 const gatewayTarget =

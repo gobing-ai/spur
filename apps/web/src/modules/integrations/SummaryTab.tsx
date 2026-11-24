@@ -4,6 +4,7 @@ import { Badge, Card, CardBody } from '../../components/module-kit';
 import {
     clusterRange,
     formatLatency,
+    formatWhen,
     type ProtocolEventRow,
     stateTone,
     surfaceState,
@@ -129,13 +130,6 @@ function chipClass(state: SummaryRow['state']): string {
     return tone === 'success' ? 'badge-success' : 'badge-ghost';
 }
 
-/** A timestamp rendered compactly; an absent one reads `—` rather than an empty cell. */
-function when(value: string | null): string {
-    if (value === null || value === '') return '—';
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
-}
-
 /** One usage slice: a titled table, or its empty state when the window holds no rows. */
 function Slice({
     title,
@@ -228,7 +222,7 @@ export function SummaryTab({
                                     <td className="font-mono text-xs">{row.envName === '' ? '—' : row.envName}</td>
                                     <td>{row.calls ?? '—'}</td>
                                     <td>{row.errorRate === null ? '—' : `${Math.round(row.errorRate * 100)}%`}</td>
-                                    <td>{when(row.lastCall)}</td>
+                                    <td>{formatWhen(row.lastCall)}</td>
                                     <td>{row.authDenials ?? '—'}</td>
                                 </tr>
                             ))}
@@ -353,7 +347,7 @@ export function SummaryTab({
                             >
                                 <div>
                                     <dt className="text-base-content/60">Since</dt>
-                                    <dd>{when(status.gateway.counters.since)}</dd>
+                                    <dd>{formatWhen(status.gateway.counters.since)}</dd>
                                 </div>
                                 <div>
                                     <dt className="text-base-content/60">Requests</dt>

@@ -113,6 +113,13 @@ export function formatLatency(ms: number | null): string {
     return ms === null ? '—' : `${Math.round(ms)}ms`;
 }
 
+/** A timestamp rendered compactly; an absent one reads `—` rather than an empty cell. */
+export function formatWhen(value: string | null): string {
+    if (value === null || value === '') return '—';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString();
+}
+
 /** How many calls in a slice carried no measurable duration (1439 R1). */
 export function unmeasuredLabel(count: number): string {
     return count === 0 ? 'all measured' : `${count} unmeasured`;

@@ -27,6 +27,8 @@ export interface ProtocolToolUsage {
     p95Ms: number | null;
     /** Rows with no numeric `durationMs` — counted here, excluded from the percentiles, never 0. */
     durationUnmeasured: number;
+    /** Latest `occurred_at` over this tool's called and failed rows in the window; null when none. */
+    lastCalledAt: string | null;
 }
 
 /** Per-resource read statistics. */
@@ -163,7 +165,10 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
         return { tools: [], resources: [], byActor: [], a2a: [], authDenied: [], failureClusters: [] };
     }
 
-    const tools = new Map<string, { calls: number; failures: number; durations: number[]; unmeasured: number }>();
+    const tools = new Map<
+        string,
+        { calls: number; failures: number; durations: number[]; unmeasured: number; lastCalledAt: string | null }
+    >();
     const resources = new Map<string, ProtocolResourceUsage>();
     const actors = new Map<string, ProtocolActorUsage>();
     const a2a = new Map<string, ProtocolA2aUsage>();
@@ -173,7 +178,7 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
     const bucket = (key: string) => {
         let entry = tools.get(key);
         if (entry === undefined) {
-            entry = { calls: 0, failures: 0, durations: [], unmeasured: 0 };
+            entry = { calls: 0, failures: 0, durations: [], unmeasured: 0, lastCalledAt: null };
             tools.set(key, entry);
         }
         return entry;
@@ -207,6 +212,9 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
                 else entry.calls += 1;
                 if (duration === null) entry.unmeasured += 1;
                 else entry.durations.push(duration);
+                if (entry.lastCalledAt === null || row.occurred_at > entry.lastCalledAt) {
+                    entry.lastCalledAt = row.occurred_at;
+                }
                 const actor = actorBucket(row.actor ?? 'unknown');
                 if (failed) {
                     actor.failures += 1;
@@ -277,6 +285,7 @@ export async function protocolUsageSummary(db: DbAdapter, spec: ProtocolUsageOpt
                     p50Ms: nearestRank(entry.durations, 50),
                     p95Ms: nearestRank(entry.durations, 95),
                     durationUnmeasured: entry.unmeasured,
+                    lastCalledAt: entry.lastCalledAt,
                 };
             })
             .sort((a, b) => b.calls + b.failures - (a.calls + a.failures) || a.tool.localeCompare(b.tool)),

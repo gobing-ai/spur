@@ -45,6 +45,45 @@ export function recoveryHint(status: TaskStatus, wbs: string): { command: string
     }
 }
 
+/** Corpus facts the preflight reads when the caller did not pass them as flags. */
+export interface CorpusFacts {
+    status: string | null;
+    deps: string[];
+    depStatuses: Record<string, string>;
+}
+
+/** The corpus read `readCorpusFacts` needs — `TaskService.show`, structurally. */
+export interface CorpusFactsSource {
+    show(wbs: string): Promise<{ status: string; frontmatter: Record<string, unknown> }>;
+}
+
+/**
+ * Read status and dependency facts for one task from the corpus (task 1445 R1: shared by
+ * `spur task preflight` and `sp_task_preflight`, so it lives in the app layer).
+ *
+ * An unresolvable dependency stays unknown, which the admission policy treats as unmet.
+ */
+export async function readCorpusFacts(
+    tasks: CorpusFactsSource,
+    wbs: string,
+    needDeps: boolean,
+    knownDepStatuses: Record<string, string>,
+): Promise<CorpusFacts> {
+    const shown = await tasks.show(wbs);
+    const rawDeps = shown.frontmatter?.dependencies;
+    const deps = needDeps && Array.isArray(rawDeps) ? rawDeps.map(String) : [];
+    const depStatuses: Record<string, string> = {};
+    for (const dep of deps) {
+        if (knownDepStatuses[dep] !== undefined) continue;
+        try {
+            depStatuses[dep] = (await tasks.show(dep)).status;
+        } catch {
+            // An unresolvable dependency stays unknown, which the admission policy treats as unmet.
+        }
+    }
+    return { status: shown.status, deps, depStatuses };
+}
+
 /** Parsed `spur task preflight` request (the CLI adapter maps flags and the task corpus onto it). */
 export interface PreflightRequest {
     wbs: string;
