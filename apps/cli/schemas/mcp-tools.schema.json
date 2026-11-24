@@ -1,0 +1,111 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://spur.gobing.ai/schemas/mcp-tools.schema.json",
+    "title": "Spur Downstream MCP Tool Manifest",
+    "description": "Declarative project-owned MCP tools registered at plugins/<namespace>/mcp-tools.yaml (task 1447).",
+    "type": "object",
+    "required": ["schema_version", "tools"],
+    "additionalProperties": false,
+    "properties": {
+        "schema_version": {
+            "const": 1,
+            "description": "Manifest schema version."
+        },
+        "tools": {
+            "type": "array",
+            "description": "Project-owned CLI-backed MCP tools exposed as <namespace>_<name>.",
+            "items": {
+                "type": "object",
+                "required": ["name", "description", "annotations", "command"],
+                "additionalProperties": false,
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,47}$",
+                        "description": "Local tool identifier exposed as <namespace>_<name>."
+                    },
+                    "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Human-readable summary shown in tools/list."
+                    },
+                    "annotations": {
+                        "type": "object",
+                        "required": ["readOnlyHint", "destructiveHint", "idempotentHint"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "readOnlyHint": { "type": "boolean" },
+                            "destructiveHint": { "type": "boolean" },
+                            "idempotentHint": { "type": "boolean" }
+                        }
+                    },
+                    "params": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "required": ["type"],
+                            "additionalProperties": false,
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["string", "number", "boolean"]
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "enum": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {
+                                        "type": ["string", "number", "boolean"]
+                                    }
+                                },
+                                "default": {
+                                    "type": ["string", "number", "boolean"]
+                                },
+                                "required": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    },
+                    "command": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "description": "Fixed executable and base arguments (no placeholders, no shell)."
+                    },
+                    "args": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "string",
+                                "minLength": 1
+                            }
+                        },
+                        "description": "Per-parameter argv fragments. String/number params require one exact '{value}' element; boolean params forbid '{value}'."
+                    },
+                    "output": {
+                        "type": "string",
+                        "enum": ["json", "text"],
+                        "default": "text",
+                        "description": "How stdout is decoded on exit 0."
+                    },
+                    "timeoutMs": {
+                        "type": "integer",
+                        "minimum": 1000,
+                        "maximum": 120000,
+                        "default": 30000,
+                        "description": "Execution timeout in milliseconds."
+                    }
+                }
+            }
+        }
+    }
+}

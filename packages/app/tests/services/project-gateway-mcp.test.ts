@@ -512,4 +512,31 @@ describe('1446 — gateway per-tool telemetry', () => {
             rmSync(beta, { recursive: true, force: true });
         }
     });
+
+    it('AC6 (1447): lists and routes a project manifest tool to its owning project', async () => {
+        const alpha = project('alpha', { namespace: 'alphaspace' });
+        const beta = project('beta', { namespace: 'betaspace' });
+        mkdirSync(join(alpha, 'plugins', 'alphaspace'), { recursive: true });
+        writeFileSync(
+            join(alpha, 'plugins', 'alphaspace', 'mcp-tools.yaml'),
+            `schema_version: 1
+tools:
+  - name: ping
+    description: Ping alpha
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true }
+    command: [echo, pong]
+`,
+        );
+        const h = await captured([alpha, beta]);
+        try {
+            const tools = await h.registry.listTools();
+            expect(tools.map((t) => t.name)).toContain('alphaspace_ping');
+            await h.registry.callTool('alphaspace_ping', {});
+            expect(h.calls).toHaveLength(1);
+            const forwarded = h.calls[0]?.body as { params?: { name?: string } };
+            expect(forwarded?.params?.name).toBe('alphaspace_ping');
+        } finally {
+            h.dispose();
+        }
+    });
 });

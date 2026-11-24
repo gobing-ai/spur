@@ -881,3 +881,29 @@ describe('1440 — trace link helper', () => {
         expect(traceLink(null)).toBeNull();
     });
 });
+
+describe('1447 — manifest origin badge in McpTab', () => {
+    test('AC6: renders manifest origin badge in the Tools table', async () => {
+        overrides.status = () => ({
+            ...STATUS,
+            mcp: {
+                ...STATUS.mcp,
+                tools: [
+                    ...STATUS.mcp.tools,
+                    {
+                        name: 'ops_plugin_smoke',
+                        origin: 'manifest' as const,
+                        description: 'Run plugin smoke',
+                        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+                        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+                    },
+                ],
+            },
+        });
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getAllByRole('tab').length).toBe(3));
+        fireEvent.click(view.getByRole('tab', { name: 'MCP' }));
+        const row = await waitFor(() => view.getByTestId('integrations-tool-ops_plugin_smoke'));
+        expect(row.textContent).toContain('manifest');
+    });
+});

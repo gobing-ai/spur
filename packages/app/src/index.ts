@@ -626,8 +626,26 @@ export {
 } from './services/job-exclusion-guard';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
-// Workflow tools exposed over MCP (feature B91, task 1381)
+// Workflow and manifest tools exposed over MCP (feature B91, tasks 1381 & 1447)
 export { MCP_BUILTIN_TOOL_NAMES } from './services/mcp-builtin-tools';
+export {
+    buildManifestArgv,
+    MANIFEST_MAX_STDOUT_BYTES,
+    MANIFEST_MAX_STRING_ARG_LENGTH,
+    MANIFEST_STDERR_TAIL_CHARS,
+    MANIFEST_TOOL_NAME_PATTERN,
+    ManifestInvalidArgumentsError,
+    type ManifestTool,
+    type ManifestToolAnnotations,
+    type ManifestToolParam,
+    manifestAnnotationsSchema,
+    manifestParamSchema,
+    manifestSchema,
+    manifestToolDescriptor,
+    manifestToolEntrySchema,
+    type ResolveManifestToolsInput,
+    resolveManifestTools,
+} from './services/mcp-manifest-tools';
 // Project MCP namespace resolution (feature B91, task 1380)
 export {
     type McpNamespace,
@@ -638,8 +656,11 @@ export {
     type ExposedWorkflowTool,
     type McpExposureIssue,
     type McpExposureReason,
+    type ResolvedProjectMcpTools,
     resolveExposedWorkflowTools,
+    resolveProjectMcpTools,
     resolveProjectWorkflowTools,
+    type WorkflowMcpParamSpec,
     workflowToolDescriptor,
     workflowToolName,
 } from './services/mcp-workflow-tools';
@@ -1225,6 +1246,7 @@ export {
     withActionTrace,
 } from './workflow/action-trace';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
+export { childProcessEnv } from './workflow/actions/child-env';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
 // Non-pausing decide action (0941, ADR-125); catalog-reference form (task 1094)
 export {

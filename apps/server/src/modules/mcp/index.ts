@@ -1,14 +1,23 @@
 import { join } from 'node:path';
 import {
+    buildManifestArgv,
+    childProcessEnv,
     type ExposedWorkflowTool,
     type FeatureShowResult,
+    MANIFEST_MAX_STDOUT_BYTES,
+    MANIFEST_STDERR_TAIL_CHARS,
+    ManifestInvalidArgumentsError,
+    type ManifestTool,
     type McpExposureIssue,
     type McpNamespaceSource,
+    manifestToolDescriptor,
+    type ResolvedProjectMcpTools,
     resolveMcpNamespace,
-    resolveProjectWorkflowTools,
+    resolveProjectMcpTools,
     type WorkflowRunResult,
     workflowToolDescriptor,
 } from '@gobing-ai/spur-app';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { bearerEnv, bearerGuard } from '../../middleware/bearer-guard';
@@ -121,8 +130,12 @@ class McpDispatcher implements McpHandlerRegistry {
     async listTools(meta?: McpRequestMeta): Promise<McpToolDescriptor[]> {
         const startedAt = performance.now();
         await this.namespaceReady;
-        const { tools } = await this.exposedWorkflowTools();
-        const catalog = [...TOOL_DESCRIPTORS, ...tools.map(workflowToolDescriptor)];
+        const { workflowTools, manifestTools } = await this.exposedTools();
+        const catalog = [
+            ...TOOL_DESCRIPTORS,
+            ...workflowTools.map(workflowToolDescriptor),
+            ...manifestTools.map(manifestToolDescriptor),
+        ];
         // R2: keyed on the method the client sent. `server/discover` lists tools AND resources, so
         // emitting from the list methods alone would record two events for one request.
         if (meta?.method === 'server/discover') {
@@ -134,7 +147,8 @@ class McpDispatcher implements McpHandlerRegistry {
             await this.emitEvent('mcp.tools.listed', {
                 toolCount: catalog.length,
                 builtinCount: TOOL_DESCRIPTORS.length,
-                workflowCount: tools.length,
+                workflowCount: workflowTools.length,
+                manifestCount: manifestTools.length,
                 ...this.transport(meta),
                 durationMs: Math.round(performance.now() - startedAt),
             });
@@ -144,20 +158,26 @@ class McpDispatcher implements McpHandlerRegistry {
 
     /**
      * The catalog `tools/list` serves, plus the namespace provenance and the exposures the resolver
-     * refused (1438 R1). One resolver walk answers both, so the status read can never disagree with
-     * the protocol — and the issue list the dispatcher used to discard reaches a reader.
+     * refused (1438 R1; manifest tools 1447 R5). One resolver walk answers both, so the status read
+     * can never disagree with the protocol — and the issue list reaches a reader.
      */
     async catalog(): Promise<{
         tools: McpToolDescriptor[];
+        manifestToolNames: string[];
         resources: McpResourceDescriptor[];
         namespace: string | null;
         namespaceSource: McpNamespaceSource;
         exposureIssues: McpExposureIssue[];
     }> {
         await this.namespaceReady;
-        const { tools, issues } = await this.exposedWorkflowTools();
+        const { workflowTools, manifestTools, issues } = await this.exposedTools();
         return {
-            tools: [...TOOL_DESCRIPTORS, ...tools.map(workflowToolDescriptor)],
+            tools: [
+                ...TOOL_DESCRIPTORS,
+                ...workflowTools.map(workflowToolDescriptor),
+                ...manifestTools.map(manifestToolDescriptor),
+            ],
+            manifestToolNames: manifestTools.map((tool) => tool.tool),
             resources: await this.listResources(),
             namespace: this.resolvedNamespace,
             namespaceSource: this.resolvedNamespaceSource,
@@ -166,14 +186,14 @@ class McpDispatcher implements McpHandlerRegistry {
     }
 
     /**
-     * Workflows this project exposes as tools (task 1381 R2). Recomputed per call: the server is
-     * stateless and the resolver is one directory walk, so a cache would only add staleness.
+     * Workflows and manifest CLI tools this project exposes (task 1381 R2, task 1447 R5).
+     * Recomputed per call: the server is stateless and no cache can go stale.
      */
-    private async exposedWorkflowTools(): Promise<{ tools: ExposedWorkflowTool[]; issues: McpExposureIssue[] }> {
+    private async exposedTools(): Promise<ResolvedProjectMcpTools> {
         // The namespace resolves asynchronously; a `tools/call` can be the very first request,
         // so awaiting here is what stops it reading a not-yet-resolved `null` (task 1381 R3).
         await this.namespaceReady;
-        return resolveProjectWorkflowTools({
+        return resolveProjectMcpTools({
             namespace: this.resolvedNamespace,
             cwd: this.ctx.cwd,
             config: this.ctx.spurConfig ?? null,
@@ -181,13 +201,58 @@ class McpDispatcher implements McpHandlerRegistry {
         });
     }
 
-    /** R3: run an exposed workflow through the same service path as `sp_workflow_run`. */
+    /** R3 (1381) + R4 (1447): run an exposed workflow through the same service path as `sp_workflow_run`. */
     private async callWorkflowTool(
         tool: ExposedWorkflowTool,
         args: Record<string, unknown>,
     ): Promise<WorkflowRunResult> {
-        const accepted = Object.keys(tool.vars);
         const vars: Record<string, string> = {};
+        if (tool.params !== undefined) {
+            const accepted = Object.keys(tool.params);
+            for (const [key, value] of Object.entries(args)) {
+                if (value === undefined) continue;
+                if (!(key in tool.params)) {
+                    throw new InvalidArgumentsError(
+                        `invalid_arguments: tool "${tool.tool}" accepts only ${accepted.length === 0 ? 'no arguments' : accepted.join(', ')}; got "${key}"`,
+                    );
+                }
+            }
+            for (const [key, spec] of Object.entries(tool.params)) {
+                const value = args[key];
+                if (value === undefined) {
+                    if (spec.required === true) {
+                        throw new InvalidArgumentsError(
+                            `invalid_arguments: tool "${tool.tool}" requires argument "${key}"`,
+                        );
+                    }
+                    continue;
+                }
+                if (spec.type === 'string' && typeof value !== 'string') {
+                    throw new InvalidArgumentsError(
+                        `invalid_arguments: tool "${tool.tool}" argument "${key}" must be a string`,
+                    );
+                }
+                if (spec.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) {
+                    throw new InvalidArgumentsError(
+                        `invalid_arguments: tool "${tool.tool}" argument "${key}" must be a finite number`,
+                    );
+                }
+                if (spec.type === 'boolean' && typeof value !== 'boolean') {
+                    throw new InvalidArgumentsError(
+                        `invalid_arguments: tool "${tool.tool}" argument "${key}" must be a boolean`,
+                    );
+                }
+                if (spec.enum !== undefined && !spec.enum.includes(value as string | number | boolean)) {
+                    throw new InvalidArgumentsError(
+                        `invalid_arguments: tool "${tool.tool}" argument "${key}" must be one of ${spec.enum.join(', ')}`,
+                    );
+                }
+                vars[key] = String(value);
+            }
+            return this.ctx.workflowService().run(tool.file, { vars });
+        }
+
+        const accepted = Object.keys(tool.vars);
         for (const [key, value] of Object.entries(args)) {
             if (!(key in tool.vars)) {
                 throw new InvalidArgumentsError(
@@ -202,6 +267,57 @@ class McpDispatcher implements McpHandlerRegistry {
             vars[key] = value;
         }
         return this.ctx.workflowService().run(tool.file, { vars });
+    }
+
+    /** R3 (1447): validate arguments, blank authEnv, and execute one manifest CLI tool without a shell. */
+    private async callManifestTool(tool: ManifestTool, args: Record<string, unknown>): Promise<unknown> {
+        let argv: string[];
+        try {
+            argv = buildManifestArgv(tool, args);
+        } catch (error) {
+            if (error instanceof ManifestInvalidArgumentsError) {
+                throw new InvalidArgumentsError(error.message);
+            }
+            throw error;
+        }
+
+        const env = childProcessEnv();
+        const authEnv = mcpSettings(this.ctx).authEnv;
+        if (authEnv !== null && authEnv !== '') {
+            env[authEnv] = '';
+        }
+
+        const [command, ...commandArgs] = argv;
+        if (command === undefined) {
+            throw new InvalidArgumentsError(`invalid_arguments: tool "${tool.tool}" has an empty command`);
+        }
+        const executor = this.ctx.processExecutor?.() ?? new NodeProcessExecutor();
+        const result = await executor.run({
+            command,
+            args: commandArgs,
+            cwd: this.ctx.cwd,
+            env,
+            timeout: tool.timeoutMs,
+        });
+
+        const stderrTail = result.stderr.slice(-MANIFEST_STDERR_TAIL_CHARS);
+        if (result.outcome === 'timeout') {
+            throw new Error(`manifest tool ${tool.tool} timed out after ${tool.timeoutMs}ms: ${stderrTail}`);
+        }
+        if (result.exitCode !== 0) {
+            throw new Error(`manifest tool ${tool.tool} exited ${result.exitCode ?? 'unknown'}: ${stderrTail}`);
+        }
+        if (Buffer.byteLength(result.stdout, 'utf8') > MANIFEST_MAX_STDOUT_BYTES) {
+            throw new Error(`manifest tool ${tool.tool} stdout exceeded 1 MiB limit: ${stderrTail}`);
+        }
+        if (tool.output === 'json') {
+            try {
+                return JSON.parse(result.stdout);
+            } catch {
+                throw new Error(`manifest tool ${tool.tool} returned invalid JSON: ${stderrTail}`);
+            }
+        }
+        return { stdout: result.stdout };
     }
 
     async listResources(meta?: McpRequestMeta): Promise<McpResourceDescriptor[]> {
@@ -227,20 +343,28 @@ class McpDispatcher implements McpHandlerRegistry {
     }
 
     /**
-     * R1: what one tool name IS — `built-in` (a `TOOL_DESCRIPTORS` entry), `workflow` (an exposed
-     * project workflow), or `unknown` (the dispatcher refuses it). `access` comes from the matched
-     * descriptor's own annotation, so it can never disagree with `tools/list`.
+     * R1 (1446) + R5 (1447): what one tool name IS — `built-in` (a `TOOL_DESCRIPTORS` entry),
+     * `workflow` (an exposed project workflow), `manifest` (a `plugins/<ns>/mcp-tools.yaml` entry),
+     * or `unknown` (the dispatcher refuses it). `access` comes from the matched descriptor's own
+     * annotation, so it can never disagree with `tools/list`.
      */
     private async toolIdentity(
         name: string,
-    ): Promise<{ origin: 'built-in' | 'workflow' | 'unknown'; access?: 'read' | 'write' }> {
+    ): Promise<{ origin: 'built-in' | 'workflow' | 'manifest' | 'unknown'; access?: 'read' | 'write' }> {
         const descriptor = TOOL_DESCRIPTORS.find((tool) => tool.name === name);
         if (descriptor !== undefined) {
             if (descriptor.annotations === undefined) return { origin: 'built-in' };
             return { origin: 'built-in', access: descriptor.annotations.readOnlyHint ? 'read' : 'write' };
         }
-        const exposed = (await this.exposedWorkflowTools()).tools.some((tool) => tool.tool === name);
-        return exposed ? { origin: 'workflow', access: 'write' } : { origin: 'unknown' };
+        const { workflowTools, manifestTools } = await this.exposedTools();
+        if (workflowTools.some((tool) => tool.tool === name)) {
+            return { origin: 'workflow', access: 'write' };
+        }
+        const manifest = manifestTools.find((tool) => tool.tool === name);
+        if (manifest !== undefined) {
+            return { origin: 'manifest', access: manifest.annotations.readOnlyHint ? 'read' : 'write' };
+        }
+        return { origin: 'unknown' };
     }
 
     /** Route one harness tool to its `@gobing-ai/spur-app` service; unknown names are refused. */
@@ -314,8 +438,11 @@ class McpDispatcher implements McpHandlerRegistry {
         if (renamed !== undefined) {
             throw new Error(`tool "${name}" was renamed to "${renamed}"`);
         }
-        const exposed = (await this.exposedWorkflowTools()).tools.find((tool) => tool.tool === name);
+        const { workflowTools, manifestTools } = await this.exposedTools();
+        const exposed = workflowTools.find((tool) => tool.tool === name);
         if (exposed !== undefined) return this.callWorkflowTool(exposed, args);
+        const manifest = manifestTools.find((tool) => tool.tool === name);
+        if (manifest !== undefined) return this.callManifestTool(manifest, args);
         throw new Error(`unknown tool "${name}"; supported: ${TOOL_DESCRIPTORS.map((tool) => tool.name).join(', ')}`);
     }
 
@@ -379,6 +506,7 @@ class McpDispatcher implements McpHandlerRegistry {
  */
 export async function readMcpCatalog(ctx: ServerContext): Promise<{
     tools: McpToolDescriptor[];
+    manifestToolNames: string[];
     resources: McpResourceDescriptor[];
     namespace: string | null;
     namespaceSource: McpNamespaceSource;

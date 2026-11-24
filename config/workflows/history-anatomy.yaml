@@ -50,6 +50,29 @@ kind: state-machine
 name: history-anatomy
 version: "1"
 description: "Daily/ad-hoc history-anatomy report: cache branch, deterministic analyze/render, skill enrichment, deterministic structure gate, independent evidence validation, bounded correction, atomic publication"
+metadata:
+  mcp:
+    expose: true
+    params:
+      mode:
+        type: string
+        enum: [daily, ad-hoc]
+        description: "Report mode: daily or ad-hoc"
+      date:
+        type: string
+        description: "Target date (YYYY-MM-DD) for daily mode"
+      since:
+        type: string
+        description: "Inclusive ISO lower bound"
+      until:
+        type: string
+        description: "Inclusive ISO upper bound"
+      focus:
+        type: string
+        description: "Ad-hoc focus string (required in ad-hoc mode)"
+      recompute:
+        type: boolean
+        description: "Force full recomputation bypassing the cache"
 iterationBound: 20
 initialState: start
 terminalStates:

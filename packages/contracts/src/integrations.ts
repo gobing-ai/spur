@@ -18,7 +18,7 @@ export type IntegrationsAnnotations = z.infer<typeof integrationsAnnotationsSche
 /** One advertised MCP tool, with the origin the Board badges. */
 export const integrationsMcpToolSchema = z.object({
     name: z.string(),
-    origin: z.enum(['built-in', 'workflow']),
+    origin: z.enum(['built-in', 'workflow', 'manifest']),
     description: z.string(),
     annotations: integrationsAnnotationsSchema,
     inputSchema: z.unknown(),
@@ -83,7 +83,7 @@ export const integrationsMcpExposureIssueSchema = z.object({
     tool: z.string(),
     /** Project-relative display path, or the basename for a definition outside the checkout. */
     file: z.string(),
-    reason: z.enum(['no-namespace', 'builtin-collision', 'duplicate']),
+    reason: z.enum(['no-namespace', 'builtin-collision', 'duplicate', 'invalid-manifest', 'invalid-params']),
     remedy: z.string(),
 });
 /** Inferred type for {@link integrationsMcpExposureIssueSchema}. */

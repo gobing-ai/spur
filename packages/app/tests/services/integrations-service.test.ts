@@ -127,9 +127,24 @@ describe('1423 status — surfaces and credentials', () => {
         expect(status.mcp.tools).toHaveLength(2);
     });
 
-    test('the catalog carries origin and annotations from the descriptors (1421)', async () => {
-        const status = await service().status({ origin: 'http://localhost:1' });
-        const [builtin, workflow] = status.mcp.tools;
+    test('the catalog carries origin and annotations from the descriptors (1421, 1447)', async () => {
+        const status = await service({
+            sources: sources({
+                mcp: {
+                    tools: [
+                        ...mcpSource().tools,
+                        {
+                            name: 'ops_smoke',
+                            description: 'Smoke check',
+                            inputSchema: { type: 'object' },
+                            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+                        },
+                    ],
+                    manifestToolNames: ['ops_smoke'],
+                },
+            }),
+        }).status({ origin: 'http://localhost:1' });
+        const [builtin, workflow, manifest] = status.mcp.tools;
         expect(builtin).toMatchObject({
             name: 'sp_task_list',
             origin: 'built-in',
@@ -139,6 +154,11 @@ describe('1423 status — surfaces and credentials', () => {
             name: 'ops_daily_report',
             origin: 'workflow',
             description: 'Run the daily report',
+        });
+        expect(manifest).toMatchObject({
+            name: 'ops_smoke',
+            origin: 'manifest',
+            description: 'Smoke check',
         });
         expect(status.mcp.resources).toEqual([{ uriTemplate: 'spur://tasks/{wbs}', description: 'Task by WBS' }]);
     });

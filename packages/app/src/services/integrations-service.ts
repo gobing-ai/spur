@@ -38,8 +38,10 @@ export interface IntegrationsMcpSource {
         annotations?: { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean };
     }>;
     resources: Array<{ uri: string; description?: string }>;
-    /** Which advertised names are built-ins; everything else was derived from a workflow. */
+    /** Which advertised names are built-ins; everything else is manifest or workflow. */
     builtinToolNames: readonly string[];
+    /** Which advertised names come from `plugins/<namespace>/mcp-tools.yaml` (task 1447 R5). */
+    manifestToolNames?: readonly string[];
     /** The effective workflow tool namespace, where it came from, and the refused exposures (1438). */
     namespace?: string | null;
     namespaceSource?: 'config' | 'plugin-manifest' | 'none';
@@ -202,7 +204,11 @@ export class IntegrationsService {
     private mcpSurface(source: IntegrationsMcpSource, base: string): IntegrationsMcpSurface {
         const tools: IntegrationsMcpTool[] = source.tools.map((tool) => ({
             name: tool.name,
-            origin: source.builtinToolNames.includes(tool.name) ? 'built-in' : 'workflow',
+            origin: source.builtinToolNames.includes(tool.name)
+                ? 'built-in'
+                : source.manifestToolNames?.includes(tool.name)
+                  ? 'manifest'
+                  : 'workflow',
             description: tool.description ?? '',
             annotations: annotationsOf(tool),
             inputSchema: tool.inputSchema ?? null,

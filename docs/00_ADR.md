@@ -3000,6 +3000,13 @@ re-import pressure this entry already records).
   and negotiation/downgrade is rejected in §Alternatives. (The `2026-07-28` floor itself comes from
   the MCP 2.0+ stateless transport this module implements; the citation lives with the transport
   adapter, `apps/server/src/modules/mcp/protocol.ts`.)
+- **Amended 2026-11-24 (B91 1447):** project-owned downstream MCP tools declared in
+  `plugins/<namespace>/mcp-tools.yaml` may execute a fixed command argv per call via
+  `NodeProcessExecutor` (no shell, discrete argv elements, `server.mcp.authEnv` blanked from child
+  env, bounded timeout and stdout). This amendment applies strictly to operator-authored,
+  project-local manifests — the same trust boundary as workflow `shell` actions (ADR-012: local
+  plugins are operator-trusted and sandboxing is out of scope). Built-in `sp_*` tools continue to
+  delegate exclusively in-process to `@gobing-ai/spur-app` with no CLI spawn.
 - **Decision:** `spur serve` mounts `mcpModule` on `POST /mcp` (registered in the server module
   registry, off unless `server.mcp.enabled`) speaking stateless MCP 2.0+ Streamable HTTP only: a
   `2026-07-28` protocol-version floor is enforced on every request and legacy versions
