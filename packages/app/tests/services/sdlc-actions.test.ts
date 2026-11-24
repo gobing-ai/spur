@@ -81,7 +81,7 @@ describe('bun preset byte-identity (task 1222 R4)', () => {
             }),
         ).toBe(cmd('test:packages/app'));
         expect(resolveAction(undefined, 'rules-pre')).toMatchObject({ command: cmd('rules:pre') });
-        expect(resolveAction(undefined, 'rules-post')).toMatchObject({ command: cmd('rules:post') });
+        expect(resolveAction(undefined, 'rules-post')).toMatchObject({ command: 'bun run test-post-check' });
     });
 });
 

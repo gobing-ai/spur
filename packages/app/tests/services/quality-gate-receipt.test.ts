@@ -281,7 +281,6 @@ describe('planLightChecks', () => {
         expect(plans.map((p) => p.id)).toEqual([
             'format-lint:changed',
             'rules:pre',
-            'rules:post',
             'typecheck:packages/domain',
             'test:apps/cli',
             'test:packages/domain',
@@ -291,14 +290,13 @@ describe('planLightChecks', () => {
             cmd: 'bunx biome check apps/cli/src/a.ts packages/domain/src/b.ts',
         });
         expect(plans[1]).toEqual({ id: 'rules:pre', cmd: 'bun run test-pre-check' });
-        expect(plans[2]).toEqual({ id: 'rules:post', cmd: 'bun run test-post-check' });
-        expect(plans[3]).toEqual({ id: 'typecheck:packages/domain', cmd: 'cd packages/domain && bun run typecheck' });
+        expect(plans[2]).toEqual({ id: 'typecheck:packages/domain', cmd: 'cd packages/domain && bun run typecheck' });
         // Every test command cd's into its workspace; paths are workspace-relative.
-        expect(plans[4]).toEqual({
+        expect(plans[3]).toEqual({
             id: 'test:apps/cli',
             cmd: 'cd apps/cli && bun test --coverage --coverage-reporter=text tests/a.test.ts',
         });
-        expect(plans[5]).toEqual({
+        expect(plans[4]).toEqual({
             id: 'test:packages/domain',
             cmd: 'cd packages/domain && bun test --coverage --coverage-reporter=text tests/b.test.ts',
         });
@@ -506,7 +504,6 @@ describe('runLightGate (temp git repo)', () => {
             expect(result.checks.map((c) => c.id)).toEqual([
                 'format-lint:changed',
                 'rules:pre',
-                'rules:post',
                 'typecheck:pkg-a',
                 'test:pkg-a',
             ]);

@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type BuilderConfig, BuilderConfigSchema } from '@gobing-ai/spur-config';
 import {
-    changedCoverageShortfalls,
     dependentsOf,
     lightScope,
     readBaseSha,
@@ -393,69 +392,27 @@ describe('recheck visits triage through the light tier (1322 P2/AC3)', () => {
     });
 });
 
-describe('incremental coverage floor on changed files', () => {
+describe('light gate avoids workspace-wide coverage re-runs (coverage stays on full/feature gate)', () => {
     const FLOOR =
         '[test]\ncoverageThreshold = { lines = 0.9, functions = 0.9 }\ncoveragePathIgnorePatterns = ["**/gen/**"]\n';
     const low = "echo ' src/index.ts | 50.00 | 50.00 | 3-4'";
 
-    /** Change a source file and its suite so `test:apps/leaf-app` runs, under a 90/90 root floor. */
-    function gate(wbs: string, testCmd: string) {
+    test('a light run does not escalate to a second workspace-wide coverage:<ws> run', () => {
         const { dir, base, cleanup } = monorepoFixture();
         try {
-            recordBase(dir, wbs, base);
+            recordBase(dir, 'covskip', base);
             writeFileSync(join(dir, 'bunfig.toml'), FLOOR);
             writeFileSync(join(dir, 'apps/leaf-app/src/index.ts'), 'export const one = 2;\n');
             writeFileSync(join(dir, 'apps/leaf-app/tests/leaf-app.test.ts'), 'export const ok = 1;\n');
-            const result = silenceStdout(() => runLightGate({ wbs }, { cwd: dir, builder: leafBuilder(testCmd) }));
-            return { result, log: readFileSync(join(dir, result.logFile), 'utf8') };
+            const result = silenceStdout(() =>
+                runLightGate({ wbs: 'covskip' }, { cwd: dir, builder: leafBuilder(low) }),
+            );
+            expect(result.status).toBe('PASS');
+            expect(result.checks.some((check) => check.id.startsWith('coverage:'))).toBe(false);
+            expect(result.checks.some((check) => check.id === 'rules:post')).toBe(false);
         } finally {
             cleanup();
         }
-    }
-
-    test('only changed, non-ignored files are judged, re-rooted to repo paths', () => {
-        const table = [
-            ' src/a.ts | 50.00 | 100.00 | 7',
-            ' src/b.ts | 10.00 | 10.00 |',
-            ' src/gen/c.ts | 0.00 | 0.00 |',
-        ];
-        expect(
-            changedCoverageShortfalls(
-                table.join('\n'),
-                'apps/x',
-                ['apps/x/src/a.ts', 'apps/x/src/gen/c.ts'],
-                { functions: 0.9, lines: 0.9 },
-                ['**/gen/**'],
-            ),
-        ).toEqual(['quality gate: coverage shortfall apps/x/src/a.ts:7 funcs=50.00 lines=100.00']);
-    });
-
-    test('a changed file still below the floor after the workspace-wide run fails the tier', () => {
-        const { result, log } = gate('covfail', low);
-        expect(result.status).toBe('FAIL');
-        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'FAIL' });
-        expect(log).toContain('quality gate: coverage shortfall apps/leaf-app/src/index.ts:3 funcs=50.00 lines=50.00');
-    });
-
-    test('a shortfall the workspace-wide run covers passes', () => {
-        const { result } = gate(
-            'covpass',
-            `case "{paths}" in ./) echo 'All files | 100.00 | 100.00 |' ;; *) ${low} ;; esac`,
-        );
-        expect(result.status).toBe('PASS');
-        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'PASS' });
-    });
-
-    test('a workspace-wide run that prints no coverage table cannot clear the shortfall', () => {
-        const { result, log } = gate('coverr', `case "{paths}" in ./) exit 3 ;; *) ${low} ;; esac`);
-        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'FAIL' });
-        expect(log).toContain('no coverage table from the workspace-wide run');
-    });
-
-    test('a red workspace-wide run is still judged by its table', () => {
-        const table = "echo 'All files | 100.00 | 100.00 |'; echo ' src/index.ts | 100.00 | 100.00 |'; exit 1";
-        const { result } = gate('covred', `case "{paths}" in ./) ${table} ;; *) ${low} ;; esac`);
-        expect(result.checks.at(-1)).toMatchObject({ id: 'coverage:apps/leaf-app', status: 'PASS' });
     });
 
     test('sibling suites of a changed source file join the related tests', () => {
@@ -469,20 +426,6 @@ describe('incremental coverage floor on changed files', () => {
                 runLightGate({ wbs: 'covsib' }, { cwd: dir, builder: leafBuilder('echo ran {paths}') }),
             );
             expect(readFileSync(join(dir, result.logFile), 'utf8')).toContain('ran tests/index-extra.test.ts');
-        } finally {
-            cleanup();
-        }
-    });
-
-    test('no floor configured means nothing to judge', () => {
-        const { dir, base, cleanup } = monorepoFixture();
-        try {
-            recordBase(dir, 'covnone', base);
-            writeFileSync(join(dir, 'apps/leaf-app/tests/leaf-app.test.ts'), 'export const ok = 1;\n');
-            const result = silenceStdout(() =>
-                runLightGate({ wbs: 'covnone' }, { cwd: dir, builder: leafBuilder(low) }),
-            );
-            expect(result.checks.some((check) => check.id.startsWith('coverage:'))).toBe(false);
         } finally {
             cleanup();
         }

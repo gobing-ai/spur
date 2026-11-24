@@ -781,10 +781,12 @@ export function planLightChecks(
     const lintable = scope.files.filter((file) => !DOC_FILE_PATTERN.test(file));
     if (scope.files.length > 0) {
         if (lintable.length > 0) plans.push(plan('format-lint:changed', 'lint-changed', { files: lintable }));
-        // Task 1142 R1: The light tier covers the cheap failure classes.
-        // Appends rules:pre and rules:post after the lint step whenever scope is non-empty.
+        // The light tier covers cheap static failure classes only (`rules:pre`). `rules:post`
+        // reads repo-wide `.coverage/lcov.info`, which scoped `test-changed` runs deliberately do
+        // not write — running `rules:post` in the light tier fails fresh worktrees and forces
+        // full-suite reruns. Full and feature gates keep enforcing `rules:post` (including 90%
+        // per-file coverage).
         plans.push(plan('rules:pre', 'rules-pre', { files: scope.files }));
-        plans.push(plan('rules:post', 'rules-post', { files: scope.files }));
     }
     const typecheck = resolveAction(builder, 'typecheck-changed');
     for (const workspace of scope.workspaces) {
@@ -903,95 +905,6 @@ export function runDeferredGate(env: QualityGateEnv, options: QualityGateOptions
     return { status, light, statusFile };
 }
 
-/** Root `bunfig.toml` coverage floor + ignore globs; null when no floor is configured. */
-function readCoverageConfig(cwd: string | undefined): { threshold: CoverageThreshold; ignore: string[] } | null {
-    try {
-        const text = readFileSync(cwd ? join(cwd, 'bunfig.toml') : 'bunfig.toml', 'utf8');
-        const threshold = parseCoverageThreshold(text);
-        if (threshold === null) return null;
-        const test = (Bun.TOML.parse(text) as { test?: { coveragePathIgnorePatterns?: unknown } }).test;
-        const raw = test?.coveragePathIgnorePatterns;
-        const ignore = Array.isArray(raw) ? raw.filter((g): g is string => typeof g === 'string') : [];
-        return { threshold, ignore };
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Shortfall lines for the CHANGED files of one workspace only: coverage-table rows are
- * workspace-relative, so each is re-rooted before matching the change set. Files the root
- * `coveragePathIgnorePatterns` exempt stay exempt; files no test loaded have no row and are not
- * judged (the full gate does not judge them either).
- */
-export function changedCoverageShortfalls(
-    testLog: string,
-    workspace: string,
-    changedFiles: string[],
-    threshold: CoverageThreshold,
-    ignore: string[] = [],
-): string[] {
-    const changed = new Set(changedFiles);
-    const globs = ignore.map((pattern) => new Bun.Glob(pattern));
-    const shortfalls: string[] = [];
-    for (const line of scanCoverageShortfalls(testLog, threshold)) {
-        const rel = line.slice('quality gate: coverage shortfall '.length).split(':')[0] ?? '';
-        const path = `${workspace}/${rel}`;
-        if (!changed.has(path) || globs.some((glob) => glob.match(path))) continue;
-        shortfalls.push(line.replace(rel, path));
-    }
-    return shortfalls;
-}
-
-/**
- * Incremental coverage floor: after a green `test:<ws>` run, every changed file of that workspace
- * must meet the root per-file floor. The related tests alone often under-cover a file the rest of
- * the workspace suite exercises, so a shortfall escalates ONCE to the whole workspace suite before
- * it counts. Returns null when there is nothing to judge (no floor, no changed file below it).
- */
-function changedCoverageCheck(
-    plan: LightCheckPlan,
-    testLog: string,
-    scope: LightScope,
-    cwd: string | undefined,
-    timeoutMs: number,
-    builder: BuilderConfig | undefined,
-): { id: string; cmd: string; status: CheckStatus; durationMs: number; log: string } | null {
-    const config = readCoverageConfig(cwd);
-    if (config === null) return null;
-    const workspace = plan.id.slice('test:'.length);
-    const id = `coverage:${workspace}`;
-    const related = changedCoverageShortfalls(testLog, workspace, scope.files, config.threshold, config.ignore);
-    if (related.length === 0) return null;
-    const resolved = resolveAction(builder, 'test-changed');
-    if (resolved.kind === 'unbound') return null;
-    const command =
-        resolved.kind === 'command'
-            ? resolved.command
-            : resolved.kind === 'parallel'
-              ? resolved.commands.join(' & ')
-              : resolved.steps.join(' && ');
-    const cmd = renderScoped(command, { workspace, paths: ['./'] });
-    const startedAtMs = Date.now();
-    const full = runShellCommand(cmd, cwd, undefined, timeoutMs);
-    const durationMs = Date.now() - startedAtMs;
-    // A red suite still prints a valid table: failures elsewhere in the workspace are the full
-    // gate's verdict, not this row's. Only a run that produced no table cannot be judged.
-    const remaining =
-        !full.timedOut && /^\s*All files\s*\|/m.test(full.output)
-            ? changedCoverageShortfalls(full.output, workspace, scope.files, config.threshold, config.ignore)
-            : [`quality gate: no coverage table from the workspace-wide run (${cmd})`, ...related];
-    const status: CheckStatus = remaining.length === 0 ? 'PASS' : 'FAIL';
-    const body = remaining.length === 0 ? '' : `${remaining.join('\n')}\n`;
-    return {
-        id,
-        cmd,
-        status,
-        durationMs,
-        log: `--- light ${id}: ${status} (${durationMs}ms, workspace-wide)\n${body}`,
-    };
-}
-
 /**
  * Light tier (0939 R1): run the planned sub-checks, merge their rows into the receipt under
  * `tier: light`, exit soft. A sub-check already PASS in a light receipt at the same
@@ -1098,19 +1011,6 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
             : `--- light ${plan.id}: ${status} (${durationMs}ms)\n`;
         appendFileSync(abs(logFile), `${header}${result.output}`);
         checks.push({ id: plan.id, cmd: plan.cmd, status, durationMs, logPath: logFile });
-        if (status === 'PASS' && plan.id.startsWith('test:')) {
-            const row = changedCoverageCheck(plan, result.output, scope, cwd, timeoutMs, options.builder);
-            if (row !== null) {
-                appendFileSync(abs(logFile), row.log);
-                checks.push({
-                    id: row.id,
-                    cmd: row.cmd,
-                    status: row.status,
-                    durationMs: row.durationMs,
-                    logPath: logFile,
-                });
-            }
-        }
     }
 
     const receipt = buildReceipt({

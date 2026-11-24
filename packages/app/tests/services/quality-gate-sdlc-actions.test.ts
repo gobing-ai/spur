@@ -45,10 +45,6 @@ const PRE_CHANGE_PLAN_JSON = `[
     "cmd": "bun run test-pre-check"
   },
   {
-    "id": "rules:post",
-    "cmd": "bun run test-post-check"
-  },
-  {
     "id": "typecheck:packages/app",
     "cmd": "cd packages/app && bun run typecheck"
   },
@@ -70,7 +66,6 @@ describe('light-tier action resolution (1224 R1/R2/R8)', () => {
         expect(withTypecheck).toEqual([
             'format-lint:changed',
             'rules:pre',
-            'rules:post',
             'typecheck:packages/app',
             'test:packages/app',
         ]);
@@ -79,7 +74,7 @@ describe('light-tier action resolution (1224 R1/R2/R8)', () => {
 
     test('a documentation-only scope plans no format-lint:changed; a mixed scope lints only code', () => {
         const docs = planLightChecks({ files: ['docs/a.md', 'docs/b.md'], workspaces: [], tests: [] }, () => false);
-        expect(docs.map((plan) => plan.id)).toEqual(['rules:pre', 'rules:post']);
+        expect(docs.map((plan) => plan.id)).toEqual(['rules:pre']);
         const mixed = planLightChecks(
             { files: ['docs/a.md', 'packages/app/src/a.ts'], workspaces: [], tests: [] },
             () => false,
@@ -106,12 +101,11 @@ describe('light-tier action resolution (1224 R1/R2/R8)', () => {
         for (const id of ['typecheck:packages/app', 'test:packages/app']) {
             expect(plans.find((plan) => plan.id === id)).toEqual({ id, cmd: '', skipped: 'unbound' });
         }
-        // `rules-pre`/`rules-post` are the reserved stack-neutral pair: they resolve a Spur-owned
-        // default under `preset: none`, so only the genuinely unbound actions are skipped.
+        // `rules-pre` is a reserved stack-neutral action: it resolves a Spur-owned default under
+        // `preset: none`, so only the genuinely unbound actions are skipped. `rules:post` stays
+        // on the full/feature gate (reads repo-wide `.coverage/lcov.info`).
         expect(plans.find((plan) => plan.id === 'rules:pre')?.cmd).toContain('rule run --preset recommended-pre-check');
-        expect(plans.find((plan) => plan.id === 'rules:post')?.cmd).toContain(
-            'rule run --preset recommended-post-check',
-        );
+        expect(plans.find((plan) => plan.id === 'rules:post')).toBeUndefined();
     });
 });
 
@@ -180,14 +174,12 @@ describe('light gate on a python-shaped fixture (1224 R1/R2, AC1)', () => {
             expect(result.checks.map((check) => check.id)).toEqual([
                 'format-lint:changed',
                 'rules:pre',
-                'rules:post',
                 'typecheck:pkg-a',
                 'test:pkg-a',
             ]);
             expect(calls(dir)).toEqual([
                 'ruff check pkg-a/src/m.py',
                 'ruff rules-pre',
-                'ruff rules-post',
                 'mypy pkg-a',
                 'pytest tests/m.py',
             ]);

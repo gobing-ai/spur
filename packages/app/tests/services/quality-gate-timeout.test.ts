@@ -143,7 +143,8 @@ test('a light-tier sub-check timeout names the timeout on its log row and return
         expect(result.status).toBe('FAIL');
         const log = readFileSync(join(dir, result.logFile), 'utf8');
         expect(log).toMatch(/--- light format-lint:changed: FAIL \(timeout after 300ms, \d+ms elapsed\)/);
-        expect(result.checks.map((check) => check.id)).toContain('rules:post');
+        expect(result.checks.map((check) => check.id)).toContain('rules:pre');
+        expect(result.checks.map((check) => check.id)).not.toContain('rules:post');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
