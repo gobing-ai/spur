@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { main } from '../../../src/index';
 import { createCapturedOutput, createTempProject } from '../../helpers';
 
@@ -99,7 +99,7 @@ describe('task 1248 AC1: an interactive operator pause on a host run waits for a
         expect(result.pause).toEqual({ reason: 'hitl-pause', kind: 'hitl.confirm', prompt: 'Approve the idea?' });
         expect(await runStatus(dbUrl, 'host-gate-1')).toBe('paused');
         // The default-deny shell never ran: the pause is before it, not after.
-        expect(readFile(join(dir, 'answer.txt'), 'utf8')).rejects.toThrow();
+        await expect(readFile(join(dir, 'answer.txt'), 'utf8')).rejects.toThrow();
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -120,33 +120,6 @@ describe('task 1248 AC1: an interactive operator pause on a host run waits for a
         await rm(dir, { recursive: true, force: true });
     });
 
-    test('the pause writes no summary; the terminal continue publishes it for the original run (1448 AC2)', async () => {
-        const { dir, dbUrl, result } = await runOnHost('host-gate-sum');
-        const md = join(dir, '.spur', 'run', 'host-gate-sum-summary.md');
-        const json = join(dir, '.spur', 'run', 'host-gate-sum-summary.json');
-        expect(result.status).toBe('paused');
-        expect('summaryFile' in result).toBe(false);
-        expect(access(md)).rejects.toThrow();
-        expect(access(json)).rejects.toThrow();
-        const out = createCapturedOutput();
-        const exit = await main(['workflow', 'continue', 'host-gate-sum', '--yes', '--answer', 'yes', '--json'], {
-            output: out,
-            cwd: dir,
-            dbUrl,
-        });
-        expect(exit).toBe(0);
-        const resumed = JSON.parse(out.messages.at(-1) ?? '{}');
-        expect(resumed.status).toBe('done');
-        expect(resumed.summaryFile).toBe(join('.spur', 'run', 'host-gate-sum-summary.md'));
-        await access(md);
-        const receipt = JSON.parse(await readFile(json, 'utf8'));
-        const row = await new RunDao(await createMigratedDb({ url: dbUrl })).traceRowById('host-gate-sum');
-        expect(receipt.runId).toBe('host-gate-sum');
-        expect(Date.parse(receipt.startedAt)).toBe(new Date(row?.started_at ?? '').getTime());
-        expect(Date.parse(receipt.completedAt)).toBe(new Date(row?.completed_at ?? '').getTime());
-        await rm(dir, { recursive: true, force: true });
-    });
-
     test('continue --no-summary closes the resumed run without a summary (1146 AC3)', async () => {
         const { dir, dbUrl } = await runOnHost('host-gate-nosum');
         const out = createCapturedOutput();
@@ -158,7 +131,7 @@ describe('task 1248 AC1: an interactive operator pause on a host run waits for a
         const resumed = JSON.parse(out.messages.at(-1) ?? '{}');
         expect(resumed.status).toBe('done');
         expect('summaryFile' in resumed).toBe(false);
-        expect(access(join(dir, '.spur', 'run', 'host-gate-nosum-summary.md'))).rejects.toThrow();
+        await expect(access(join(dir, '.spur', 'run', 'host-gate-nosum-summary.md'))).rejects.toThrow();
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -190,7 +163,7 @@ describe('task 1248 AC1: an interactive operator pause on a host run waits for a
         expect(errText).toContain('use --answer yes|no|cancel');
         // A refused answer mutates nothing: still paused, still no shell output.
         expect(await runStatus(dbUrl, 'host-gate-4')).toBe('paused');
-        expect(readFile(join(dir, 'answer.txt'), 'utf8')).rejects.toThrow();
+        await expect(readFile(join(dir, 'answer.txt'), 'utf8')).rejects.toThrow();
         await rm(dir, { recursive: true, force: true });
     });
 

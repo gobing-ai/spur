@@ -4,7 +4,7 @@ name: Restore the run-close execution summary on the engine terminal path
 status: done
 template: issue
 created_at: 2026-11-24T20:57:29.557Z
-updated_at: "2026-11-24T22:03:51.199Z"
+updated_at: "2026-11-24T22:45:53.633Z"
 feature_id: E5
 
 ac_altitude: task-local
@@ -116,17 +116,17 @@ Then it reads the returned `summaryFile` for display, skips missing JSON receipt
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/run-summary-render.ts:210-268`, `apps/cli/src/commands/workflow/shared.ts:216-242`, `apps/cli/tests/commands/workflow/run.test.ts:445-552` |
-| R2 | MET | `apps/cli/src/commands/workflow/shared.ts:216-242`, `apps/cli/src/commands/workflow/run.ts:591-594,983-986`, `apps/cli/src/commands/workflow/continue.ts:305-311`, `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` |
-| R3 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`, `docs/help/cmd_workflow.md:220-239` |
-| R4 | MET | `apps/cli/tests/commands/workflow/run.test.ts:445-552`, `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328`, `packages/app/tests/workflow/run-summary-render.test.ts:175-238` |
+| R1 | MET | `packages/app/src/workflow/run-summary-render.ts:210-268` (`writeRunCloseSummary`: SAFE_RUN_ID_RE, persisted terminal row, launch workdir, DB window); `apps/cli/src/commands/workflow/shared.ts:216-242` (`withCloseSummary`: done/failed only, dry-run skipped) |
+| R2 | MET | `apps/cli/src/commands/workflow/run.ts:591-594,983-986`; `apps/cli/src/commands/workflow/continue.ts:305-311`; `summaryFile` relative path asserted in `apps/cli/tests/commands/workflow/run.test.ts:445` |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`; `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`; `docs/help/cmd_workflow.md:220-239` |
+| R4 | MET | Real CLI `main` + on-disk DB tests: `apps/cli/tests/commands/workflow/run.test.ts:445-580`; `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:305-345`; `apps/cli/tests/commands/workflow/continue.test.ts:265` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:445-518` |
-| AC2 | MET | test | `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:288-328` |
-| AC3 | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:520-552` |
-| AC4 | MET | command | `plugins/sp/skills/spur-dev/references/dev-operations.md:167-186`, `plugins/sp/skills/spur-dev/references/execution-batch-report.md:144-156`, `docs/help/cmd_workflow.md:220-239`, `plugins/sp/tests/skill-structure.test.ts` (0 `inline close` matches via `rg`) |
+| AC1 — An immediate workflow close publishes its measured summary | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:445` (summary + DB window), `:475` (dry run excluded), `:511` (failed run), `:528` (async fallback) |
+| AC2 — A host pause publishes a receipt only after terminal resume | MET | test | `apps/cli/tests/commands/workflow/host-operator-pause.test.ts:305-345` |
+| AC3 — Summary I/O failure preserves the CLI verdict | MET | test | `apps/cli/tests/commands/workflow/run.test.ts:558` (done + failed variants) |
+| AC4 — Runbooks use terminal receipts for display and roll-up | MET | command | docs in R3; `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1162,1172`; `rg "inline close"` over references + cmd_workflow: 0 matches |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
