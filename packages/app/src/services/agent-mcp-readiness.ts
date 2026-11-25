@@ -143,7 +143,7 @@ export const READINESS_AGENTS: readonly AgentSpec[] = [
         label: 'OpenClaw',
         binary: 'openclaw',
         format: 'json',
-        paths: ['~/.openclaw/config.json'],
+        paths: ['~/.openclaw/openclaw.json', '~/.openclaw/config.json'],
         entry: openclawEntry,
         actors: ['openclaw'],
         legacyRevision: false,

@@ -76,7 +76,7 @@ const CLIENT_AGENT_LABELS: Record<McpClientAgent, { label: string; path: string 
     omp: { label: 'omp', path: '~/.omp/agent/config.yml' },
     opencode: { label: 'OpenCode', path: 'opencode.json' },
     grok: { label: 'Grok CLI', path: '.grok/config.toml' },
-    openclaw: { label: 'OpenClaw', path: '~/.openclaw/config.json' },
+    openclaw: { label: 'OpenClaw', path: '~/.openclaw/openclaw.json' },
     generic: { label: 'Generic HTTP', path: 'any MCP 2026-07-28 client' },
 };
 

@@ -145,6 +145,20 @@ describe('1449 — the five readiness states', () => {
         expect(claude?.detail).toContain('spur mcp');
     });
 
+    test('the OpenClaw entry is read from openclaw.json, the file its own CLI writes', async () => {
+        const { cwd, home } = workspace();
+        // `openclaw mcp add` saves to ~/.openclaw/openclaw.json; a probe reading config.json there
+        // reports "no native config" for an agent that is in fact configured.
+        write(
+            join(home, '.openclaw', 'openclaw.json'),
+            JSON.stringify({ mcp: { servers: { spur: { command: 'spur', args: ['mcp', '--gateway'] } } } }),
+        );
+        const result = await probeAgentMcpReadiness(deps(cwd, home));
+        const openclaw = result.agents.find((entry) => entry.agent === 'openclaw');
+        expect(openclaw?.state).toBe('configured');
+        expect(openclaw?.configPath).toBe(join(home, '.openclaw', 'openclaw.json'));
+    });
+
     test('an off project surface makes an entry pointing at /mcp a misconfiguration', async () => {
         const { cwd, home } = workspace();
         write(
