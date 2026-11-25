@@ -6,6 +6,7 @@ import {
     parseAllowedHosts,
     parseEnvBoolean,
     resolveBuilderBumpVerConfig,
+    spurConfigSchema,
 } from '../src';
 
 describe('config', () => {
@@ -187,5 +188,59 @@ describe('server.gateway.allowedHosts (tunnel hostnames)', () => {
         // degrade to the loopback-only default, not crash the gateway at boot.
         expect(parseAllowedHosts(' , ')).toEqual([]);
         expect(parseAllowedHosts(undefined)).toEqual([]);
+    });
+});
+
+// ─── 1449 R2: server.gateway.mcp inherits from server.mcp, but never its credential ───
+// The failure modes: a gateway entry enabled with no usable credential (fails the load), a
+// project token silently copied into the gateway's credential slot (ADR-151 K41), and an
+// explicit `false` overridden by an inherited `true`.
+describe('1449 — server.gateway.mcp conditional inheritance', () => {
+    const fileConfig = (server: Record<string, unknown>) => spurConfigSchema.parse({ server });
+
+    test('inherits allowUnauthenticated and an auth-satisfied enabled when gateway.mcp is omitted', () => {
+        const cfg = buildConfigFromEnv({}, fileConfig({ mcp: { enabled: true, allowUnauthenticated: true } }));
+        expect(cfg.server.gateway.mcp.enabled).toBe(true);
+        expect(cfg.server.gateway.mcp.allowUnauthenticated).toBe(true);
+    });
+
+    test('an explicit false wins over the inherited enabled', () => {
+        const cfg = buildConfigFromEnv(
+            {},
+            fileConfig({
+                mcp: { enabled: true, allowUnauthenticated: true },
+                gateway: { mcp: { enabled: false } },
+            }),
+        );
+        expect(cfg.server.gateway.mcp.enabled).toBe(false);
+        // The policy still inherits: only `enabled` is an explicit opt-out.
+        expect(cfg.server.gateway.mcp.allowUnauthenticated).toBe(true);
+    });
+
+    test('a project token alone leaves the gateway entry off instead of failing the load', () => {
+        const cfg = buildConfigFromEnv({}, fileConfig({ mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' } }));
+        expect(cfg.server.mcp.enabled).toBe(true);
+        expect(cfg.server.gateway.mcp.enabled).toBe(false);
+        expect(cfg.server.gateway.mcp.authEnv).toBeUndefined();
+    });
+
+    test('the gateway credential is never copied from the project one', () => {
+        const cfg = buildConfigFromEnv(
+            {},
+            fileConfig({
+                mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+                gateway: { mcp: { enabled: true, authEnv: 'SPUR_GATEWAY_MCP_TOKEN' } },
+            }),
+        );
+        expect(cfg.server.gateway.mcp.authEnv).toBe('SPUR_GATEWAY_MCP_TOKEN');
+        expect(cfg.server.mcp.authEnv).toBe('SPUR_MCP_TOKEN');
+    });
+
+    test('SPUR_GATEWAY_MCP_ENABLED=false beats the file and the inheritance', () => {
+        const cfg = buildConfigFromEnv(
+            { SPUR_GATEWAY_MCP_ENABLED: 'false' },
+            fileConfig({ mcp: { enabled: true, allowUnauthenticated: true } }),
+        );
+        expect(cfg.server.gateway.mcp.enabled).toBe(false);
     });
 });

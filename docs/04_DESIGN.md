@@ -108,7 +108,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Universal config loading | [universal-config-loading.md](design/universal-config-loading.md) |
 | Agent doctor as the routing inspection surface | [agent-doctor-inspection-surface.md](design/agent-doctor-inspection-surface.md) |
 | Tasks Module — History-Shell Parity (F72) | [tasks-module-shell-parity.md](design/tasks-module-shell-parity.md) |
-| Integrations Board module: status contract, MCP/A2A tabs, and the MCP/A2A protocol fixes (A82; ADR-148 amendment 2026-11-21) | [integrations-module.md](design/integrations-module.md) |
+| Integrations Board module: status contract, MCP/A2A tabs, the MCP/A2A protocol fixes, per-agent MCP client config and read-only agent readiness (A82; ADR-148 amendment 2026-11-21; 1449) | [integrations-module.md](design/integrations-module.md) |
 | History anatomy: daily cache, ad-hoc diagnosis, and bounded migration | [history-anatomy.md](design/history-anatomy.md) |
 | Environment-improvement lens | [environment-improvement-lens.md](design/environment-improvement-lens.md) |
 | Active session review | [session-review.md](design/session-review.md) |

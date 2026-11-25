@@ -193,6 +193,12 @@ export interface StartServerOptions {
     jobWorkerStartDelayMs?: number;
     /** Optional callback invoked once the HTTP server is listening and ready to accept requests. */
     onListening?: (info: { port: number; host: string; url: string; boardUrl: string | null }) => void;
+    /**
+     * Embedded `$schema` documents for the config loader (1449 R1). The bundled CLI passes
+     * `EMBEDDED_SPUR_SCHEMAS` so a compiled `spur self serve` never fails to resolve
+     * `$schema: "@gobing-ai/spur/schemas/…"` and degrade to an env-only boot.
+     */
+    embeddedSchemas?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -224,6 +230,16 @@ export const defaultDeps: StartServerDeps = {
     openUrl,
     resolveConfigFile,
 };
+
+/**
+ * True when a failed config load is about the FLEET declaration itself (0858 R4 keeps that fatal: a
+ * retired `agent.team`, a bad `agent.fleet.strategy`, a leftover `fleet.json` must never serve as an
+ * empty fleet). Every other config error is diagnosed and degraded instead (1449 R1).
+ */
+function isFleetConfigFailure(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /\bagent\.(fleet|team)\b|fleet\.json/.test(message);
+}
 
 /** Options for {@link registerSchedulerEntries} (task 0803 R4). */
 export interface SchedulerTickOptions {
@@ -806,13 +822,23 @@ export async function startServer(options: StartServerOptions, deps: StartServer
         // Task 0989 R6 narrows that tolerance for one case: a project that EXPLICITLY declared
         // `bootstrap.modules` must not be silently degraded to "no modules" — that turns a config
         // typo into a board that quietly renders nothing. Every other load failure keeps the
-        // env-only fallback.
-        const spurConfig = await loadSpurConfig(configCwd).catch((error: unknown) => {
+        // env-only fallback, but 1449 R1 stops it being SILENT: the message rides into
+        // `ServerBootConfig.configDiagnostic`, is logged at startup and shown on the Board.
+        let configDiagnostic: string | undefined;
+        let configError: unknown;
+        const spurConfig = await loadSpurConfig(
+            configCwd,
+            options.embeddedSchemas === undefined ? undefined : { embeddedSchemas: options.embeddedSchemas },
+        ).catch((error: unknown) => {
             if (isBoardModuleConfigError(error)) throw error;
+            configError = error;
+            configDiagnostic = error instanceof Error ? error.message : String(error);
             return null;
         });
         checkCancellation();
-        const bootConfig = deps.serverBootstrapConfig(env, spurConfig);
+        const resolvedBootConfig = deps.serverBootstrapConfig(env, spurConfig);
+        const bootConfig =
+            configDiagnostic === undefined ? resolvedBootConfig : { ...resolvedBootConfig, configDiagnostic };
         const configFile = deps.resolveConfigFile(projectRoot);
 
         await deps.runNodeApplication({
@@ -820,6 +846,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             configLoader: configFile ? { configFile, bootstrapSection: 'bootstrap' } : undefined,
             async start(appRt: ApplicationRuntime) {
                 checkCancellation();
+                if (bootConfig.configDiagnostic !== undefined) {
+                    appRt.logger.warn(
+                        `project config could not be loaded — every protocol surface is reporting its env-only ` +
+                            `default. Fix the file named below and restart: ${bootConfig.configDiagnostic}`,
+                    );
+                }
                 const fs = deps.createNodeFileSystem(projectRoot);
                 if (options.dbUrl && options.dbUrl !== IN_MEMORY_DATABASE_URL) {
                     await fs.ensureDir(dirname(options.dbUrl));
@@ -990,15 +1022,22 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                     // ground-truth guard.
                     //
                     // 0858 R4: `agent.fleet.enabled` is the single fleet switch — absent or
-                    // disabled means neither materialization nor autostart. This load is
-                    // deliberately NOT the tolerant one above: a retired source (`agent.team`,
-                    // a global-layer `agent.fleet`, a leftover `.spur/fleet.json`) or an invalid
-                    // `agent.fleet` must fail the START (design §3 step 1), not silently serve an
-                    // empty fleet.
+                    // disabled means neither materialization nor autostart. The fleet's own ground
+                    // truth (a retired `agent.team`, a global-layer `agent.fleet`, a leftover
+                    // `.spur/fleet.json`, an invalid declaration) still fails the START inside
+                    // `FleetService`, not silently serving an empty fleet.
+                    //
+                    // 1449 R1: the strict RE-LOAD that used to run here threw for EVERY config
+                    // error, so the tolerant load above could never report one and the operator got
+                    // a stack trace instead of a Board naming the broken key. The already-loaded
+                    // value is reused; only a failure about the fleet declaration itself stays fatal
+                    // (0858 R4), every other config error degrades to the recorded diagnostic.
                     await checkBootCancellation();
-                    const fleetConfig = await loadSpurConfig(configCwd);
+                    if (spurConfig === null && configError !== undefined && isFleetConfigFailure(configError))
+                        throw configError;
+                    const fleetConfig = spurConfig;
                     await checkBootCancellation();
-                    const fleetSection = fleetConfig.agent?.fleet;
+                    const fleetSection = fleetConfig?.agent?.fleet;
                     const fleetService = new FleetService({
                         fs,
                         spurConfig: fleetConfig,

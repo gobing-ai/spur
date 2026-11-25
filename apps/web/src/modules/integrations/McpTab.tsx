@@ -1,18 +1,41 @@
-import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import type { IntegrationsAgentReadiness, IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { useState } from 'react';
-import { Badge, Button, Card, CardBody } from '../../components/module-kit';
+import { Badge, Button, Card, CardBody, ModuleTabs } from '../../components/module-kit';
 import {
-    clientSnippet,
     clusterRange,
     discoverProbe,
     filterTools,
     formatLatency,
     formatWhen,
     gatewayMcpCommand,
+    gatewayWithoutProjectMcp,
+    MCP_CLIENT_AGENTS,
+    type McpClientAgent,
+    type McpClientTransport,
     type ProtocolEventRow,
     projectMcpCommand,
+    renderClientConfig,
     unmeasuredLabel,
 } from './helpers';
+
+/** The transport choices the Client config card offers, in recommendation order. */
+const MCP_TRANSPORTS: ReadonlyArray<{ id: McpClientTransport; label: string }> = [
+    { id: 'gateway-stdio', label: 'Gateway stdio bridge' },
+    { id: 'project-stdio', label: 'Project stdio bridge' },
+    { id: 'http', label: 'Direct HTTP (MCP 2026-07-28+)' },
+];
+
+/** How a readiness state reads as a badge tone. */
+const READINESS_TONE: Record<
+    IntegrationsAgentReadiness['agents'][number]['state'],
+    'success' | 'primary' | 'warning' | 'ghost' | 'error'
+> = {
+    active: 'success',
+    configured: 'primary',
+    misconfigured: 'warning',
+    'not-configured': 'ghost',
+    'not-installed': 'error',
+};
 
 /**
  * Integrations › MCP (task 1424 R4; namespace and exposure diagnostics 1438 R2).
@@ -24,18 +47,28 @@ import {
  *
  * The call columns join `usage.tools` by name (1446 R5); an uncalled tool reads `0`/`0`/`—`/`—`, and
  * the separate latency table keeps only the usage rows the catalog does not advertise.
+ *
+ * 1449 R3/R4: the Client config card is a per-agent TabView in each agent's OWN native format, and
+ * the readiness pins report what the read-only probe found — a config the Board never writes.
  */
 export function McpTab({
     status,
     events,
     usage,
+    readiness = null,
+    fallbackOrigin,
 }: {
     status: IntegrationsStatus;
     events: ProtocolEventRow[];
     usage: IntegrationsUsage | null;
+    readiness?: IntegrationsAgentReadiness | null;
+    fallbackOrigin?: string;
 }) {
     const [query, setQuery] = useState('');
-    const snippet = clientSnippet(status);
+    const [clientAgent, setClientAgent] = useState<McpClientAgent>('claude');
+    const [transport, setTransport] = useState<McpClientTransport>('gateway-stdio');
+    const view = renderClientConfig(status, clientAgent, transport, fallbackOrigin);
+    const needsProjectMcp = gatewayWithoutProjectMcp(status);
     const tools = filterTools(status.mcp.tools, query);
     const issues = status.mcp.exposureIssues ?? [];
     const toolUsage = usage?.tools ?? [];
@@ -56,6 +89,19 @@ export function McpTab({
     };
     return (
         <div className="flex flex-col gap-4">
+            {needsProjectMcp ? (
+                <div
+                    role="status"
+                    className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80"
+                    data-testid="integrations-mcp-gateway-warning"
+                >
+                    The gateway's <span className="font-mono">/mcp</span> entry is on while this project's
+                    <span className="font-mono"> server.mcp.enabled</span> is off: gateway{' '}
+                    <span className="font-mono">tools/call</span> forwards to the project's loopback{' '}
+                    <span className="font-mono">/mcp</span>, so set{' '}
+                    <span className="font-mono">server.mcp.enabled: true</span> on every target project.
+                </div>
+            ) : null}
             <Card>
                 <CardBody>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -319,18 +365,115 @@ export function McpTab({
 
             <Card>
                 <CardBody>
-                    <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <h2 className="text-sm font-semibold">Client config</h2>
-                        <Button size="sm" variant="ghost" onClick={() => copy(snippet)}>
-                            Copy
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-1" data-testid="integrations-mcp-transport">
+                            {MCP_TRANSPORTS.map((option) => (
+                                <Button
+                                    key={option.id}
+                                    size="sm"
+                                    variant={option.id === transport ? 'primary' : 'ghost'}
+                                    data-testid={`integrations-mcp-transport-${option.id}`}
+                                    onClick={() => setTransport(option.id)}
+                                >
+                                    {option.label}
+                                </Button>
+                            ))}
+                        </div>
                     </div>
-                    <pre
-                        className="overflow-auto rounded bg-base-200 p-2 text-xs"
-                        data-testid="integrations-mcp-snippet"
+                    <ModuleTabs
+                        tabs={MCP_CLIENT_AGENTS.map((agent) => ({
+                            id: agent,
+                            label: renderClientConfig(status, agent, transport, fallbackOrigin).label,
+                        }))}
+                        value={clientAgent}
+                        onChange={(id) => setClientAgent(id as McpClientAgent)}
+                        label="MCP client agents"
+                        idPrefix="integrations-mcp-client"
+                        className="mb-2 flex-wrap"
+                    />
+                    <div
+                        id={`integrations-mcp-client-panel-${clientAgent}`}
+                        role="tabpanel"
+                        aria-labelledby={`integrations-mcp-client-${clientAgent}`}
                     >
-                        {snippet}
-                    </pre>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                            <p
+                                className="font-mono text-xs text-base-content/70"
+                                data-testid="integrations-mcp-client-path"
+                            >
+                                {view.configPath} · {view.format}
+                            </p>
+                            <Button size="sm" variant="ghost" onClick={() => copy(view.snippet)}>
+                                Copy
+                            </Button>
+                        </div>
+                        <pre
+                            className="overflow-auto rounded bg-base-200 p-2 text-xs"
+                            data-testid="integrations-mcp-snippet"
+                        >
+                            {view.snippet}
+                        </pre>
+                        <p
+                            className="mt-2 text-xs text-base-content/70"
+                            data-testid="integrations-mcp-client-transport"
+                        >
+                            {view.transportNote}
+                        </p>
+                        <p className="mt-1 text-xs text-base-content/70" data-testid="integrations-mcp-client-auth">
+                            {view.authNote}
+                        </p>
+                        {view.exportCommand === null ? null : (
+                            <div className="mt-2">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                    <h3 className="text-xs font-semibold">Set the token first</h3>
+                                    <Button size="sm" variant="ghost" onClick={() => copy(view.exportCommand ?? '')}>
+                                        Copy
+                                    </Button>
+                                </div>
+                                <pre
+                                    className="overflow-auto rounded bg-base-200 p-2 text-xs"
+                                    data-testid="integrations-mcp-client-export"
+                                >
+                                    {view.exportCommand}
+                                </pre>
+                            </div>
+                        )}
+                    </div>
+                </CardBody>
+            </Card>
+
+            <Card>
+                <CardBody>
+                    <h2 className="text-sm font-semibold mb-2">Agent readiness</h2>
+                    {readiness === null || !readiness.available ? (
+                        <p
+                            className="text-sm text-base-content/70"
+                            data-testid="integrations-mcp-readiness-unavailable"
+                        >
+                            {readiness?.reason ?? 'This server does not report per-agent readiness.'}
+                        </p>
+                    ) : (
+                        <ul className="flex flex-col gap-2 text-xs" data-testid="integrations-mcp-readiness">
+                            {readiness.agents.map((entry) => (
+                                <li key={entry.agent} data-testid={`integrations-readiness-${entry.agent}`}>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-semibold">{entry.label}</span>
+                                        <Badge variant={READINESS_TONE[entry.state]} size="sm">
+                                            {entry.state}
+                                        </Badge>
+                                        <span className="font-mono text-[11px] text-base-content/60">
+                                            {entry.transport ?? 'no entry'} · {entry.observedCalls} calls
+                                        </span>
+                                    </div>
+                                    <div className="text-base-content/70">{entry.detail}</div>
+                                    {entry.remedy === null ? null : (
+                                        <div className="text-base-content/60">→ {entry.remedy}</div>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </CardBody>
             </Card>
 

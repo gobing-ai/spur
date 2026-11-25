@@ -47,7 +47,13 @@ describe('serverBootstrapConfig', () => {
             authEnv: 'SPUR_A2A_TOKEN',
             allowUnauthenticated: true,
         });
-        expect(fromYaml.gateway).toEqual({ port: 3070 });
+        // 1449 R2: server.gateway.mcp inherits the unauthenticated policy and, because that policy
+        // satisfies the gateway's own auth check, `enabled` too — the credentials stay independent.
+        expect(fromYaml.gateway).toEqual({
+            port: 3070,
+            explicit: true,
+            mcp: { enabled: true, authEnv: null, allowUnauthenticated: true },
+        });
 
         const overridden = serverBootstrapConfig(
             {
@@ -60,7 +66,13 @@ describe('serverBootstrapConfig', () => {
         );
         expect(overridden.mcp?.enabled).toBe(false);
         expect(overridden.a2a?.authEnv).toBe('OVERRIDE_A2A_TOKEN');
-        expect(overridden.gateway).toEqual({ port: 4123 });
+        // SPUR_MCP_ENABLED=false removes the source of the inheritance, so the gateway entry stays
+        // off while the unauthenticated policy still flows through.
+        expect(overridden.gateway).toEqual({
+            port: 4123,
+            explicit: true,
+            mcp: { enabled: false, authEnv: null, allowUnauthenticated: true },
+        });
     });
 
     test('spurConfigSchema refuses server.mcp.enabled or server.a2a.enabled without authEnv unless allowUnauthenticated is true', () => {

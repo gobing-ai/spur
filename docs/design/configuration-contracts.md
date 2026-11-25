@@ -129,6 +129,9 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 | `server.mcp.authEnv`   | `SPUR_MCP_AUTH_ENV`       | — (NAME of the variable holding the MCP bearer token; required when `enabled` is true, never stored)                 |
 | `server.mcp.namespace` | `SPUR_MCP_NAMESPACE`      | — (optional project MCP namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load)               |
 | `server.gateway.port`  | `SPUR_GATEWAY_PORT`       | `3000` (shared by the gateway and its stdio bridge)                                                                      |
+| `server.gateway.mcp.enabled` | `SPUR_GATEWAY_MCP_ENABLED` | `false`, but **inherits `true` from `server.mcp.enabled`** when omitted and the gateway's own credential is satisfied (`server.gateway.mcp.authEnv` set, or an effective `allowUnauthenticated`) — 1449 R2 |
+| `server.gateway.mcp.authEnv` | `SPUR_GATEWAY_MCP_AUTH_ENV` | — (NAME of the gateway MCP token variable; **never** inherited from `server.mcp.authEnv`, ADR-151 K41)          |
+| `server.gateway.mcp.allowUnauthenticated` | — | inherits `server.mcp.allowUnauthenticated` when omitted (1449 R2)                                                |
 | `telemetry.enabled`  | `SPUR_TELEMETRY_ENABLED`  | `false`                                                                                                              |
 | `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | —                                                                                                                    |
 | `logging.level`      | `SPUR_LOG_LEVEL`          | `info` (debug\|info\|warn\|error)                                                                                    |

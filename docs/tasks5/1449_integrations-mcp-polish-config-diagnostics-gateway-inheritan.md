@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Integrations MCP polish: config diagnostics, gateway inheritance, multi-agent Client config TabView, and per-agent readiness pins"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-25T18:12:12.528Z
-updated_at: "2026-11-25T18:23:31.411Z"
+updated_at: "2026-11-25T18:47:06.350Z"
 feature_id: A82
 
 tags: ["integrations", "A82", "mcp"]
@@ -12,6 +12,8 @@ ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 10
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1449. Integrations MCP polish: config diagnostics, gateway inheritance, multi-agent Client config TabView, and per-agent readiness pins
@@ -43,10 +45,10 @@ Remaining work scoped to this task:
 
 ### Requirements
 
-- [ ] R1. Thread `EMBEDDED_SPUR_SCHEMAS` into `startServer` (`apps/server/src/serve.ts`) via `StartServerOptions` and capture non-fatal `loadSpurConfig` errors into `ServerBootConfig.configDiagnostic` (logged at startup and exposed as optional `configDiagnostic` on `integrations.status`) across both project serve and `--gateway`; track `ServerBootConfig.gateway.explicit` and thread `forwardedHost` into `IntegrationsSources.gateway(since, forwardedHost)` so `gatewayPort()` falls back to the loopback `x-forwarded-host` port when no env/YAML port is explicitly configured; and render an inline warning in `SummaryTab` and `McpTab` when `gateway.mcp.enabled` is true while project `mcp.enabled` is false.
-- [ ] R2. Update `packages/config/src/index.ts` (`serverProtocolConfigSchema`, `configSchema`, `buildConfigFromEnv`) and `apps/cli/schemas/spur-config.schema.json` so `server.gateway.mcp` inherits `allowUnauthenticated` from `server.mcp` when omitted and inherits `enabled: true` from `server.mcp` when `server.gateway.mcp.enabled` (and `SPUR_GATEWAY_MCP_ENABLED`) is omitted and gateway auth is satisfied (`gateway.mcp.authEnv` is set or effective `allowUnauthenticated` is true), while preserving explicit `true`/`false` overrides and keeping `server.gateway.mcp.authEnv` independent per ADR-151 K41.
-- [ ] R3. Extend `integrationsAuthSchema` (`packages/contracts/src/integrations.ts`) and server/gateway auth projections with optional `allowUnauthenticated`, and replace the single JSON `Client config` card in `apps/web/src/modules/integrations/McpTab.tsx` and `helpers.ts` with a `ModuleTabs`-based multi-agent TabView covering `claude`, `codex` (TOML with `env_vars` allowlist), `gemini`, `pi`, `omp` (YAML), `opencode`, `grok` (TOML), `openclaw`, and `generic` (HTTP JSON), a transport selector (`gateway-stdio`, `project-stdio`, `direct-http` with MCP >= 2026-07-28 compatibility note), always-resolved server URLs (never literal `<server>`), and inline auth/env-var guidance (never literal `<ENV_NAME>`, omitting `Authorization` when `allowUnauthenticated` is active with `tokenPresent` false, and showing copyable `export` instructions when a required token is unset).
-- [ ] R4. Add a read-only oRPC procedure `GET /api/integrations/agent-readiness` (`integrations.agentReadiness` in `packages/contracts/src/integrations.ts`) backed by a new `packages/app` service `probeAgentMcpReadiness()` (never mutating files or spawning LLM/bridge processes) that combines binary availability (`.spur/run/agent-doctor.json` cache or PATH lookup), read-only inspection of each supported agent's native MCP config files, and passive `usage.byActor` (`X-Spur-Actor`) telemetry, and render per-agent readiness pins (`active`, `configured`, `misconfigured`, `not-configured`, `not-installed`) with tooltips and remedies in `McpTab.tsx`.
+- [x] R1. Thread `EMBEDDED_SPUR_SCHEMAS` into `startServer` (`apps/server/src/serve.ts`) via `StartServerOptions` and capture non-fatal `loadSpurConfig` errors into `ServerBootConfig.configDiagnostic` (logged at startup and exposed as optional `configDiagnostic` on `integrations.status`) across both project serve and `--gateway`; track `ServerBootConfig.gateway.explicit` and thread `forwardedHost` into `IntegrationsSources.gateway(since, forwardedHost)` so `gatewayPort()` falls back to the loopback `x-forwarded-host` port when no env/YAML port is explicitly configured; and render an inline warning in `SummaryTab` and `McpTab` when `gateway.mcp.enabled` is true while project `mcp.enabled` is false.
+- [x] R2. Update `packages/config/src/index.ts` (`serverProtocolConfigSchema`, `configSchema`, `buildConfigFromEnv`) and `apps/cli/schemas/spur-config.schema.json` so `server.gateway.mcp` inherits `allowUnauthenticated` from `server.mcp` when omitted and inherits `enabled: true` from `server.mcp` when `server.gateway.mcp.enabled` (and `SPUR_GATEWAY_MCP_ENABLED`) is omitted and gateway auth is satisfied (`gateway.mcp.authEnv` is set or effective `allowUnauthenticated` is true), while preserving explicit `true`/`false` overrides and keeping `server.gateway.mcp.authEnv` independent per ADR-151 K41.
+- [x] R3. Extend `integrationsAuthSchema` (`packages/contracts/src/integrations.ts`) and server/gateway auth projections with optional `allowUnauthenticated`, and replace the single JSON `Client config` card in `apps/web/src/modules/integrations/McpTab.tsx` and `helpers.ts` with a `ModuleTabs`-based multi-agent TabView covering `claude`, `codex` (TOML with `env_vars` allowlist), `gemini`, `pi`, `omp` (YAML), `opencode`, `grok` (TOML), `openclaw`, and `generic` (HTTP JSON), a transport selector (`gateway-stdio`, `project-stdio`, `direct-http` with MCP >= 2026-07-28 compatibility note), always-resolved server URLs (never literal `<server>`), and inline auth/env-var guidance (never literal `<ENV_NAME>`, omitting `Authorization` when `allowUnauthenticated` is active with `tokenPresent` false, and showing copyable `export` instructions when a required token is unset).
+- [x] R4. Add a read-only oRPC procedure `GET /api/integrations/agent-readiness` (`integrations.agentReadiness` in `packages/contracts/src/integrations.ts`) backed by a new `packages/app` service `probeAgentMcpReadiness()` (never mutating files or spawning LLM/bridge processes) that combines binary availability (`.spur/run/agent-doctor.json` cache or PATH lookup), read-only inspection of each supported agent's native MCP config files, and passive `usage.byActor` (`X-Spur-Actor`) telemetry, and render per-agent readiness pins (`active`, `configured`, `misconfigured`, `not-configured`, `not-installed`) with tooltips and remedies in `McpTab.tsx`.
 
 **Out of scope / Non-goals**
 - Writing, repairing, or generating agent config files from the Board (owned by Superskill per `AGENTS.md`).
@@ -163,15 +165,122 @@ Feature: Integrations MCP polish — diagnostics, gateway inheritance, multi-age
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+R1 — startup config diagnostics, forwarded-host port fallback, Board warnings.
+
+- `apps/server/src/serve.ts`: `StartServerOptions.embeddedSchemas` reaches `loadSpurConfig`, so a
+  bundled `spur self serve` resolves `$schema` instead of failing; any non-`BoardModuleConfigError`
+  load failure is captured (message kept on `ServerBootConfig.configDiagnostic`, logged via
+  `appRt.logger.warn`). The strict fleet RE-LOAD is replaced by the already-loaded value plus
+  `isFleetConfigFailure`, which keeps 0858 R4 fatal (a bad `agent.fleet`/`agent.team`/`fleet.json`
+  still aborts boot) while every other config error degrades to a named, visible diagnostic.
+- `apps/cli/src/commands/self/serve.ts`: passes `EMBEDDED_SPUR_SCHEMAS` into `startServer` and loads
+  the gateway's config through the embedded schemas, reporting a failure on stderr instead of
+  `.catch(() => null)`.
+- `apps/server/src/server-config.ts`: `ServerBootConfig.gateway` gains `explicit` (env or YAML port
+  actually configured — the schema default of 3000 is indistinguishable otherwise), the gateway MCP
+  switch, and `configDiagnostic`.
+- `apps/server/src/modules/integrations/handlers.ts`: `gatewayPort(env, bootGateway, forwardedHost)`
+  resolves `SPUR_GATEWAY_PORT` → explicitly configured port → loopback `x-forwarded-host` port →
+  3000 (`loopbackPort` refuses a non-loopback host, so a tunnel's `:443` is never read as local).
+- `packages/app/src/services/integrations-service.ts`: `IntegrationsSources.gateway(since,
+  forwardedHost)`, an optional `diagnostic()` source projected onto `status.configDiagnostic`.
+- `apps/web/src/modules/integrations/helpers.ts` + `SummaryTab.tsx` + `McpTab.tsx` + `IntegrationsModule.tsx`:
+  `gatewayWithoutProjectMcp()` drives an inline warning on both tabs, and the Summary renders the
+  config diagnostic through `Diagnostic`.
+
+R2 — `server.gateway.mcp` conditional inheritance (`packages/config/src/index.ts`).
+
+`buildConfigFromEnv` inherits `allowUnauthenticated` whenever the gateway does not state its own, and
+`enabled: true` only when the gateway's own switch is omitted (env and file) AND its own credential is
+satisfied (`gateway.mcp.authEnv` set or effective `allowUnauthenticated`). `authEnv` is never copied
+(ADR-151 K41), so a single-project config with only `server.mcp.authEnv` keeps the gateway entry off
+instead of failing `configSchema.superRefine`. `apps/cli/schemas/spur-config.schema.json` documents
+the rule on each property.
+
+R3 — `allowUnauthenticated` on the wire and the per-agent Client config TabView.
+
+- `packages/contracts/src/integrations.ts`: `integrationsAuthSchema.allowUnauthenticated?`.
+- `apps/server/src/modules/integrations/handlers.ts` + `apps/server/src/gateway.ts`: the projections
+  report the token's REAL presence and the policy separately (they used to fold one into the other).
+- `packages/app/src/services/integrations-service.ts`: `authOf` carries the policy through.
+- `apps/web/src/modules/integrations/helpers.ts`: `MCP_CLIENT_AGENTS`, `McpClientTransport`
+  (`gateway-stdio`/`project-stdio`/`http`), `McpClientConfigView` and `renderClientConfig()` emit each
+  agent's verified native format (Codex/Grok TOML, omp YAML, Claude/pi/Gemini/OpenCode/OpenClaw/generic
+  JSON), an always-resolved endpoint (status URL → gateway root → Board origin), and auth guidance
+  that names the variable, omits `Authorization` under `allowUnauthenticated`, and offers
+  `export <VAR>="$(openssl rand -hex 32)"` when the token is unset. `clientSnippet()` now delegates to
+  it; `surfaceState()` treats the policy as "on".
+- `apps/web/src/modules/integrations/McpTab.tsx`: `ModuleTabs` (`idPrefix="integrations-mcp-client"`)
+  plus a transport toggle; `integrations-mcp-snippet` and `integrations-mcp-project-command` are kept
+  verbatim for `integrations-browser.heavy.test.ts`.
+
+R4 — read-only per-agent readiness.
+
+- `packages/app/src/services/agent-mcp-readiness.ts`: `probeAgentMcpReadiness(deps)` reads an installed
+  binary (`resolveBinary`), the agent's own native config (`JSON.parse` / `Bun.TOML.parse` / `yaml`),
+  and `usageActors` traffic, and returns one entry per agent with `state`, `transport`, `configPath`,
+  `detail`, `remedy` and `observedCalls`. No writes, no spawned processes, no token values; a
+  malformed config degrades to `not-configured` rather than throwing.
+- `packages/contracts/src/integrations.ts` + handler: `integrations.agentReadiness`
+  (`GET /api/integrations/agent-readiness`), wired with `protocolUsageSummary(db, {}).byActor`,
+  `ctx.cwd`, `homedir()`, `Bun.which` and the boot surface switches.
+- `apps/web/src/modules/integrations/useIntegrations.ts`: fetched tolerantly in the module's own
+  `Promise.all`, so a 404/503 (older or Worker server) degrades to `readiness: null`;
+  `McpTab` renders the pins and an unavailable note.
+- Docs: `docs/design/integrations-module.md` (§2 bullets, §2.2, the MCP tab row, states),
+  `docs/design/project-gateway.md` (port precedence, inheritance), and
+  `docs/design/configuration-contracts.md` (the three gateway MCP rows).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 embeddedSchemas + configDiagnostic + explicit gateway port + forwarded-host fallback + Board warnings | MET | `apps/server/src/serve.ts:201`, `apps/server/src/serve.ts:827-851`, `apps/server/src/server-config.ts:42-43`, `apps/server/src/server-config.ts:99`, `apps/server/src/modules/integrations/handlers.ts:92`, `apps/server/src/modules/integrations/handlers.ts:108`, `apps/server/src/modules/integrations/handlers.ts:218`, `apps/web/src/modules/integrations/helpers.ts:493`, `apps/web/src/modules/integrations/SummaryTab.tsx:201`, `apps/web/src/modules/integrations/McpTab.tsx:96`, `apps/cli/src/commands/self/serve.ts:90-107` |
+| R2 server.gateway.mcp conditional inheritance (allowUnauthenticated always, enabled only when gateway auth satisfied, authEnv never copied) | MET | `packages/config/src/index.ts:1630-1645`, `packages/config/src/index.ts:1664-1670`, `apps/cli/schemas/spur-config.schema.json:563-577`, `packages/config/tests/config.test.ts:193-245` |
+| R3 allowUnauthenticated on the wire + ModuleTabs per-agent Client config with resolved URLs, transport selector, auth guidance, preserved testids | MET | `packages/contracts/src/integrations.ts:45`, `packages/app/src/services/integrations-service.ts:139-146`, `apps/server/src/gateway.ts:97-102`, `apps/web/src/modules/integrations/helpers.ts:30-320`, `apps/web/src/modules/integrations/McpTab.tsx:384-440` |
+| R4 probeAgentMcpReadiness + integrations.agentReadiness + tolerant fetch + readiness pins | MET | `packages/app/src/services/agent-mcp-readiness.ts:326`, `packages/contracts/src/integrations.ts:318`, `apps/server/src/modules/integrations/handlers.ts:267`, `apps/web/src/modules/integrations/useIntegrations.ts:105`, `apps/web/src/modules/integrations/McpTab.tsx:457` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 configDiagnostic, loopback forwarded-host fallback, gateway/project warning | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts` (1449 gateway port precedence: loopback fallback, non-loopback ignored, env and explicit YAML wins; diagnostics + allowUnauthenticated wire), `apps/server/tests/serve.test.ts:2974` (diagnostic logged + carried), `apps/server/tests/server-config.test.ts` (explicit flag), `apps/web/tests/modules/integrations/integrations-module.test.tsx` (both warnings + config diagnostic) |
+| AC2 inheritance without breaking single-project configs, explicit false wins, authEnv independent | MET | test | `packages/config/tests/config.test.ts:193-245` (5 cases), `apps/server/tests/server-config.test.ts` (inherited mcp block + env override) |
+| AC3 native formats per agent, resolved URL, auth guidance, testids intact | MET | test | `apps/web/tests/modules/integrations/helpers.test.ts` (1449 per-agent client config: Codex TOML + env_vars, omp YAML, OpenCode/OpenClaw/Gemini JSON, no `<server>`, export line, unauthenticated header omission), `apps/web/tests/modules/integrations/integrations-module.test.tsx` (tab switch + transport toggle + preserved `integrations-mcp-project-command`) |
+| AC4 five readiness states, no writes, no token leak, 404-tolerant fetch | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts` (5 cases incl. before/after file fingerprints and a token value absent from the result), `apps/server/tests/modules/integrations/handlers.test.ts` (endpoint shape, no token), `apps/web/tests/modules/integrations/integrations-module.test.tsx` (pins + unavailable degradation) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Reviewed the 28-file change against R1–R4 / AC1–AC4 at `--focus all` (diffstat lane: 1945 insertions, 105 deletions; the task pins a sensitive surface, so the full depth applied). Full tables and per-row evidence are in the review certificate the run captured
+(`.spur/run/<run-id>-review-cert.md`); `spur task verdict 1449` derives **PASS** from those rows.
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R1 | MET | `apps/server/src/serve.ts:201`, `:827-851` (`embeddedSchemas`, `configDiagnostic`, `isFleetConfigFailure` keeps 0858 R4 fatal), `apps/server/src/server-config.ts:42-99` (`explicit` + gateway MCP switch), `apps/server/src/modules/integrations/handlers.ts:92-118` (port precedence, loopback-only forwarded fallback), `apps/web/src/modules/integrations/helpers.ts:493`, `SummaryTab.tsx:201`, `McpTab.tsx:96` |
+| R2 | MET | `packages/config/src/index.ts:1630-1670`, schema docs `apps/cli/schemas/spur-config.schema.json`, tests `packages/config/tests/config.test.ts` |
+| R3 | MET | `packages/contracts/src/integrations.ts:45`, `packages/app/src/services/integrations-service.ts:139`, `apps/server/src/gateway.ts:97`, `apps/web/src/modules/integrations/helpers.ts:53-320`, `McpTab.tsx:384-440` |
+| R4 | MET | `packages/app/src/services/agent-mcp-readiness.ts:326`, `packages/contracts/src/integrations.ts:318`, `handlers.ts:267`, `useIntegrations.ts:105`, `McpTab.tsx:457` |
+
+Findings (no open P1–P3):
+
+- **P4 advisory** — `McpTab` rebuilds nine short label strings per render to feed `ModuleTabs`
+  (`McpTab.tsx:384`). Noise at this size; worth hoisting only if the card gains a cheaper input.
+- **P4 advisory** — the gateway stdio bridge stays selectable while the project surface is off; the
+  transport note already names that condition, so it is guidance rather than a defect
+  (`helpers.ts:250`).
+
+Security: no token value crosses a boundary — the readiness probe reads no environment at all, the
+wire carries only `tokenPresent` / `allowUnauthenticated` booleans, and `apps/server/src/worker-app.ts`
+never imports `router.ts`, so the new `node:os` + `Bun.which` use stays off the Cloudflare path.
+Correctness: the strict fleet-config failure is preserved (an `agent.fleet` / `agent.team` /
+`fleet.json` error still aborts boot), and every other config error now degrades to a named
+diagnostic instead of a silent env-only boot. Architecture: the module's read-only contract holds —
+the probe and the Board write nothing and spawn nothing.
+
+Verdict: PASS
 
 ### References
 
@@ -188,4 +297,7 @@ Feature: Integrations MCP polish — diagnostics, gateway inheritance, multi-age
 ### History
 
 - 2026-11-25T18:23:31.411Z backlog → todo (system)
+- 2026-11-25T18:43:33.769Z todo → wip (system)
+- 2026-11-25T18:47:04.656Z wip → testing (system)
+- 2026-11-25T18:47:06.345Z testing → done (system)
 

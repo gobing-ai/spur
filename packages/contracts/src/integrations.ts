@@ -38,6 +38,11 @@ export type IntegrationsMcpResource = z.infer<typeof integrationsMcpResourceSche
 export const integrationsAuthSchema = z.object({
     envName: z.string(),
     tokenPresent: z.boolean(),
+    /**
+     * True when the surface accepts local callers without a bearer token (1449 R3). Optional so a
+     * Board reading an older server's status still parses; absent means "not reported", not "false".
+     */
+    allowUnauthenticated: z.boolean().optional(),
 });
 /** Inferred type for {@link integrationsAuthSchema}. */
 export type IntegrationsAuth = z.infer<typeof integrationsAuthSchema>;
@@ -147,6 +152,11 @@ export const integrationsStatusSchema = z.object({
     mcp: integrationsMcpSurfaceSchema,
     a2a: integrationsA2aSurfaceSchema,
     gateway: integrationsGatewaySchema,
+    /**
+     * Why the project config could not be loaded at startup (1449 R1). Absent means the load
+     * succeeded; present means every surface below is reporting its env-only default.
+     */
+    configDiagnostic: z.string().optional(),
 });
 /** Inferred type for {@link integrationsStatusSchema}. */
 export type IntegrationsStatus = z.infer<typeof integrationsStatusSchema>;
@@ -247,7 +257,46 @@ export const integrationsUsageInputSchema = z.object({ since: z.string().optiona
 /** Inferred type for {@link integrationsUsageInputSchema}. */
 export type IntegrationsUsageInput = z.infer<typeof integrationsUsageInputSchema>;
 
-/** The Integrations procedures: one status read and one windowed usage read. */
+/** The five readiness states one agent's MCP entry can be in (1449 R4). */
+export const integrationsAgentReadinessStateSchema = z.enum([
+    'active',
+    'configured',
+    'misconfigured',
+    'not-configured',
+    'not-installed',
+]);
+/** Inferred type for {@link integrationsAgentReadinessStateSchema}. */
+export type IntegrationsAgentReadinessState = z.infer<typeof integrationsAgentReadinessStateSchema>;
+
+/** One supported coding agent's MCP readiness, as read-only inspection found it. */
+export const integrationsAgentReadinessEntrySchema = z.object({
+    agent: z.string(),
+    label: z.string(),
+    state: integrationsAgentReadinessStateSchema,
+    /** The transport its native entry declares; null when there is no entry to read. */
+    transport: z.enum(['stdio', 'http']).nullable(),
+    /** The native config file inspected, or null when none of the known paths exists. */
+    configPath: z.string().nullable(),
+    /** What the probe observed, in the operator's words. */
+    detail: z.string(),
+    /** The next safe action, or null when nothing needs fixing. */
+    remedy: z.string().nullable(),
+    /** `tools/call` traffic attributed to this actor in the window (`X-Spur-Actor`). */
+    observedCalls: z.number(),
+});
+/** Inferred type for {@link integrationsAgentReadinessEntrySchema}. */
+export type IntegrationsAgentReadinessEntry = z.infer<typeof integrationsAgentReadinessEntrySchema>;
+
+/** The readiness read: `available: false` with a reason when this environment cannot be probed. */
+export const integrationsAgentReadinessSchema = z.object({
+    available: z.boolean(),
+    reason: z.string().optional(),
+    agents: z.array(integrationsAgentReadinessEntrySchema),
+});
+/** Inferred type for {@link integrationsAgentReadinessSchema}. */
+export type IntegrationsAgentReadiness = z.infer<typeof integrationsAgentReadinessSchema>;
+
+/** The Integrations procedures: status, windowed usage and agent readiness. */
 export const integrationsContract = {
     status: oc
         .route({
@@ -266,4 +315,12 @@ export const integrationsContract = {
         })
         .input(integrationsUsageInputSchema)
         .output(integrationsUsageSchema),
+    agentReadiness: oc
+        .route({
+            method: 'GET',
+            path: '/integrations/agent-readiness',
+            summary: 'Read each supported coding agent’s MCP readiness without touching its config',
+            tags: ['integrations'],
+        })
+        .output(integrationsAgentReadinessSchema),
 };

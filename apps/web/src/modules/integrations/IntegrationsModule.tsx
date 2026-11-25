@@ -17,6 +17,11 @@ import { SummaryTab } from './SummaryTab';
 import { INTEGRATIONS_TABS } from './tabs';
 import { type IntegrationsSeams, useIntegrations } from './useIntegrations';
 
+/** The origin this Board is served from, or undefined when there is no browser location. */
+function boardOrigin(): string | undefined {
+    return typeof window === 'undefined' ? undefined : window.location.origin;
+}
+
 /**
  * Integrations module shell (feature A82, task 1424).
  *
@@ -113,7 +118,15 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
                         {enablementKeys().join(' or ')}.
                     </EmptyState>
                 ) : active?.id === 'mcp' ? (
-                    <McpTab status={data.status} events={data.mcpEvents} usage={data.usage} />
+                    <McpTab
+                        status={data.status}
+                        events={data.mcpEvents}
+                        usage={data.usage}
+                        readiness={data.readiness}
+                        // 1449 R3: with the surface off there is no endpoint to print, so the snippet
+                        // falls back to the origin this Board is served from — never a `<server>` token.
+                        {...(boardOrigin() === undefined ? {} : { fallbackOrigin: boardOrigin() })}
+                    />
                 ) : active?.id === 'a2a' ? (
                     <A2aTab
                         status={data.status}

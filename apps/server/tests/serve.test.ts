@@ -2970,6 +2970,40 @@ describe('startServer', () => {
         // keep a second construction path that could start a rival scheduler.
         expect(defaultDeps).not.toHaveProperty('createScheduler');
     });
+
+    test('1449 R1: a broken project config is logged and carried as configDiagnostic, never silently swallowed', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const root = mkdtempSync(join(tmpdir(), 'spur-serve-config-diagnostic-'));
+        mkdirSync(join(root, '.spur'), { recursive: true });
+        // A schema violation: tolerated (env-only boot) but it must be NAMED, not degraded to "all off".
+        writeFileSync(join(root, '.spur', 'config.yaml'), 'server:\n  mcp:\n    enabled: yes-please\n');
+        const logs: { msg: string; data?: Record<string, unknown> }[] = [];
+        let captured: { configDiagnostic?: string } = {};
+        const deps = makeDeps({
+            serverBootstrapConfig,
+            runNodeApplication: (async (opts: {
+                config: { configDiagnostic?: string };
+                start: (rt: ApplicationRuntime) => Promise<void>;
+            }) => {
+                captured = opts.config;
+                const rt = capturingRuntime(logs);
+                await opts.start(rt);
+                return rt;
+            }) as unknown as StartServerDeps['runNodeApplication'],
+        });
+        try {
+            await startServerRaw(
+                { port: 5099, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: root },
+                deps,
+            );
+            expect(captured.configDiagnostic ?? '').toContain('mcp');
+            expect(logs.some((entry) => entry.msg.includes('project config could not be loaded'))).toBe(true);
+            sigHandlers.SIGINT?.();
+            await exitCalled;
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
 });
 
 describe('serverBootstrapConfig bootstrap.options parsing (task 0902)', () => {

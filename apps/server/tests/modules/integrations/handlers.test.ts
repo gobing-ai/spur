@@ -26,11 +26,13 @@ async function makeCtx(
     boot: {
         mcp?: { enabled: boolean; authEnv: string | null; namespace?: string };
         a2a?: { enabled: boolean; authEnv: string | null };
-        gateway?: { port: number };
+        gateway?: { port: number; explicit?: boolean; mcp?: { enabled: boolean; authEnv: string | null } };
         env?: Record<string, string | undefined>;
         cwd?: string;
         /** The project config `reloadAgentConfig` resolves — the fleet declaration the A2A block reads. */
         config?: unknown;
+        /** A startup config-load failure the Board must see (1449 R1). */
+        configDiagnostic?: string;
     } = {},
 ): Promise<{ ctx: ServerContext; close: () => Promise<void> }> {
     const db = await createMigratedDb({ url: ':memory:' });
@@ -53,6 +55,8 @@ async function makeCtx(
             mcp: boot.mcp ?? { enabled: false, authEnv: null },
             a2a: boot.a2a ?? { enabled: false, authEnv: null },
             ...(boot.gateway === undefined ? {} : { gateway: boot.gateway }),
+            // 1449 R1/R4: a config load that failed is carried on the boot config, not swallowed.
+            ...(boot.configDiagnostic === undefined ? {} : { configDiagnostic: boot.configDiagnostic }),
         }),
         reloadAgentConfig: async () => boot.config ?? null,
         eventBus: () => ({ emit: () => {} }),
@@ -235,7 +239,7 @@ describe('1423 — the gateway block (R5)', () => {
         const { ctx, close } = await makeCtx({
             cwd,
             mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
-            gateway: { port: 3070 },
+            gateway: { port: 3070, explicit: true },
             env: { SPUR_MCP_TOKEN: MCP_TOKEN },
         });
         const probedUrls: string[] = [];
@@ -523,6 +527,151 @@ describe('1440 — outbound credential state (R2)', () => {
             expect(byEnv.get('PEER_A2A_TOKEN')?.auth).toEqual({ envName: 'PEER_A2A_TOKEN', tokenPresent: true });
             expect(byEnv.get('UNSET_PEER_TOKEN')?.auth).toEqual({ envName: 'UNSET_PEER_TOKEN', tokenPresent: false });
             expect(byEnv.get('PEER_A2A_TOKEN')?.target).toBe('https://peer.example/.well-known/agent-card.json');
+        } finally {
+            await close();
+        }
+    });
+});
+
+// ─── 1449 R1: gateway port precedence and startup config diagnostics ──────────────────────
+// The failure modes: probing a gateway nobody configured (default 3000 while the caller reached a
+// different loopback port), trusting a tunnel's :443 as a local port, an explicit port losing to a
+// forwarded header, and a broken config reading as "every surface off" with no explanation.
+describe('1449 — gateway port precedence (R1)', () => {
+    /** One status read through a gateway, returning the loopback URL the probe fetched. */
+    async function probedUrl(
+        boot: { gateway?: { port: number; explicit?: boolean } },
+        env: Record<string, string | undefined>,
+        forwardedHost: string,
+    ): Promise<string | undefined> {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-integrations-prec-'));
+        const projectsFile = join(cwd, 'projects.json');
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
+        await new ProjectRegistry(projectsFile).upsert({ name: 'integrations-test', path: cwd, port: 3007 });
+        const { ctx, close } = await makeCtx({
+            cwd,
+            mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+            ...boot,
+            env: { SPUR_MCP_TOKEN: MCP_TOKEN, ...env },
+        });
+        const probed: string[] = [];
+        setGatewayProbeFetchForTesting(async (input) => {
+            probed.push(input);
+            return Response.json({
+                counters: {
+                    since: '2026-11-22T00:00:00.000Z',
+                    requests: 1,
+                    status4xx: 0,
+                    status5xx: 0,
+                    upstreamRestarts: {},
+                },
+                mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+            });
+        });
+        try {
+            await statusOf(ctx, { 'x-forwarded-host': forwardedHost, 'x-forwarded-prefix': '/integrations-test' });
+            return probed[0];
+        } finally {
+            setGatewayProbeFetchForTesting(undefined);
+            await close();
+            removeEnvVar('SPUR_PROJECTS_FILE');
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    }
+
+    test('an unconfigured port falls back to the loopback x-forwarded-host port', async () => {
+        expect(await probedUrl({}, {}, 'localhost:3070')).toBe('http://localhost:3070/api/health');
+        expect(await probedUrl({}, {}, '127.0.0.1:4123')).toBe('http://localhost:4123/api/health');
+    });
+
+    test('a non-loopback forwarded host never contributes a port', async () => {
+        expect(await probedUrl({}, {}, 'spur.example.com:443')).toBe('http://localhost:3000/api/health');
+    });
+
+    test('an explicit env port wins over the forwarded host', async () => {
+        expect(await probedUrl({}, { SPUR_GATEWAY_PORT: '4123' }, 'localhost:3070')).toBe(
+            'http://localhost:4123/api/health',
+        );
+    });
+
+    test('an explicitly configured YAML port wins over the forwarded host', async () => {
+        expect(await probedUrl({ gateway: { port: 3070, explicit: true } }, {}, 'localhost:9999')).toBe(
+            'http://localhost:3070/api/health',
+        );
+    });
+});
+
+describe('1449 — config diagnostics and the unauthenticated wire signal (R1/R3)', () => {
+    test('a failed config load is named on the status read instead of reading as all-off', async () => {
+        const { ctx, close } = await makeCtx({ configDiagnostic: 'server.mcp.enabled: expected boolean' });
+        try {
+            const body = (await (await statusOf(ctx)).json()) as {
+                configDiagnostic?: string;
+                mcp: { enabled: boolean };
+            };
+            expect(body.mcp.enabled).toBe(false);
+            expect(body.configDiagnostic).toContain('server.mcp.enabled');
+        } finally {
+            await close();
+        }
+    });
+
+    test('a clean boot carries no configDiagnostic at all', async () => {
+        const { ctx, close } = await makeCtx();
+        try {
+            const body = (await (await statusOf(ctx)).json()) as { configDiagnostic?: string };
+            expect(body.configDiagnostic).toBeUndefined();
+        } finally {
+            await close();
+        }
+    });
+
+    test('allowUnauthenticated is reported beside a real tokenPresent, not folded into it', async () => {
+        const { ctx, close } = await makeCtx({
+            mcp: { enabled: true, authEnv: null, allowUnauthenticated: true } as never,
+            env: {},
+        });
+        try {
+            const body = (await (await statusOf(ctx)).json()) as {
+                mcp: { auth: { envName: string; tokenPresent: boolean; allowUnauthenticated?: boolean } };
+            };
+            expect(body.mcp.auth).toEqual({ envName: '', tokenPresent: false, allowUnauthenticated: true });
+        } finally {
+            await close();
+        }
+    });
+});
+
+describe('1449 — per-agent MCP readiness (R4)', () => {
+    test('the read-only procedure answers one entry per supported agent and never a token value', async () => {
+        const { ctx, close } = await makeCtx({ mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' } });
+        try {
+            const res = (await appFor(ctx).fetch(
+                new Request('http://127.0.0.1:3007/api/integrations/agent-readiness'),
+            )) as Response;
+            expect(res.status).toBe(200);
+            const raw = await res.text();
+            expect(raw).not.toContain(MCP_TOKEN);
+            const body = JSON.parse(raw) as {
+                available: boolean;
+                agents: Array<{ agent: string; state: string; detail: string; observedCalls: number }>;
+            };
+            expect(body.available).toBe(true);
+            expect(body.agents.map((entry) => entry.agent)).toEqual([
+                'claude',
+                'codex',
+                'gemini',
+                'pi',
+                'omp',
+                'opencode',
+                'grok',
+                'openclaw',
+            ]);
+            const states = ['active', 'configured', 'misconfigured', 'not-configured', 'not-installed'];
+            for (const entry of body.agents) {
+                expect(states).toContain(entry.state);
+                expect(entry.detail.length).toBeGreaterThan(0);
+            }
         } finally {
             await close();
         }

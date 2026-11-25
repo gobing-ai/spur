@@ -7,7 +7,7 @@
  * no way back, and outbound/A2A rows from the wrong family.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import type { IntegrationsAgentReadiness, IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { resetBasePathForTesting } from '../../../src/components/base-path';
 import { module as integrationsModule } from '../../../src/modules/integrations';
@@ -196,6 +196,10 @@ let overrides: {
     card?: () => Promise<Response>;
     /** The outbound receipt page the A2A tab reads (1440 R2). */
     receipts?: Array<{ id: string; kind: string; requestKey: string | null; status: string; taskId: string | null }>;
+    /** Per-agent readiness the probe endpoint answers (1449 R4); default: not reported. */
+    readiness?: IntegrationsAgentReadiness;
+    /** The readiness read failing outright — the tolerant-fetch case. */
+    readinessError?: Error;
 } = {};
 let statusRequests = 0;
 
@@ -228,6 +232,12 @@ function makeSeams(): IntegrationsSeams {
             },
             usage: async (input: { since?: string }) =>
                 overrides.usage === undefined ? USAGE : overrides.usage(input ?? {}),
+            // 1449 R4: the readiness read is its own procedure, so it can be absent (404) on an
+            // older server without touching the status read.
+            agentReadiness: async () => {
+                if (overrides.readinessError !== undefined) throw overrides.readinessError;
+                return overrides.readiness ?? { available: false, agents: [] };
+            },
         },
         inbox: {
             requests: async () => REQUESTS,
@@ -905,5 +915,133 @@ describe('1447 — manifest origin badge in McpTab', () => {
         fireEvent.click(view.getByRole('tab', { name: 'MCP' }));
         const row = await waitFor(() => view.getByTestId('integrations-tool-ops_plugin_smoke'));
         expect(row.textContent).toContain('manifest');
+    });
+});
+
+// ─── 1449 R1/R3/R4: diagnostics, the per-agent Client config, and readiness pins ───────────
+// The failure modes: a gateway-root MCP entry that looks configured while the project it forwards
+// to has none, a startup config failure rendered as "all surfaces off", a client snippet the agent
+// cannot read, and a readiness badge that claims active without evidence.
+describe('1449 — diagnostics, client config tabs and readiness pins', () => {
+    const GATEWAY_ON: IntegrationsStatus['gateway'] = {
+        served: true as const,
+        namespace: '/spur-new',
+        rootMcpUrl: 'http://localhost:3070/mcp',
+        counters: null,
+        mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+    };
+
+    async function openClientConfig(view: ReturnType<typeof render>) {
+        await waitFor(() => expect(view.getAllByRole('tab').length).toBe(3));
+        fireEvent.click(view.getByRole('tab', { name: 'MCP' }));
+        await waitFor(() => expect(view.getByTestId('integrations-mcp-snippet')).toBeTruthy());
+    }
+
+    test('a config-load failure is named on the Summary instead of reading as all-off', async () => {
+        overrides.status = () => ({ ...STATUS, configDiagnostic: 'server.mcp.enabled: expected boolean' });
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getByTestId('integrations-config-diagnostic')).toBeTruthy());
+        expect(view.getByTestId('integrations-config-diagnostic').textContent).toContain('server.mcp.enabled');
+    });
+
+    test('gateway MCP on while the project MCP is off warns on both tabs', async () => {
+        overrides.status = () => ({
+            ...STATUS,
+            mcp: { ...STATUS.mcp, enabled: false, url: null },
+            gateway: GATEWAY_ON,
+        });
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getByTestId('integrations-gateway-mcp-warning')).toBeTruthy());
+        expect(view.getByTestId('integrations-gateway-mcp-warning').textContent).toContain('server.mcp.enabled');
+        await openClientConfig(view);
+        expect(view.getByTestId('integrations-mcp-gateway-warning').textContent).toContain('tools/call');
+    });
+
+    test('each agent tab renders its own native format, and the transport toggle drives the shape', async () => {
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await openClientConfig(view);
+        // The default agent is Claude Code over the gateway bridge.
+        expect(view.getByTestId('integrations-mcp-snippet').textContent).toContain('"mcpServers"');
+        // ModuleTabs owns the ids (`integrations-mcp-client-<agent>`), not a data-testid.
+        fireEvent.click(view.getByRole('tab', { name: 'Codex' }));
+        await waitFor(() =>
+            expect(view.getByTestId('integrations-mcp-snippet').textContent).toContain('[mcp_servers.spur]'),
+        );
+        fireEvent.click(view.getByTestId('integrations-mcp-transport-http'));
+        await waitFor(() =>
+            expect(view.getByTestId('integrations-mcp-snippet').textContent).toContain(
+                'url = "http://localhost:3007/mcp"',
+            ),
+        );
+        expect(view.getByTestId('integrations-mcp-client-auth').textContent).toContain('SPUR_MCP_TOKEN');
+        // The heavy browser suite pins these ids; the TabView must not rename them.
+        expect(view.getByTestId('integrations-mcp-project-command')).toBeTruthy();
+    });
+
+    test('readiness pins report each state with its detail and remedy', async () => {
+        overrides.readiness = {
+            available: true,
+            agents: [
+                {
+                    agent: 'claude',
+                    label: 'Claude Code',
+                    state: 'active',
+                    transport: 'stdio',
+                    configPath: '/home/.claude.json',
+                    detail: 'stdio entry spur in /home/.claude.json · 4 calls in the last 24h',
+                    remedy: null,
+                    observedCalls: 4,
+                },
+                {
+                    agent: 'codex',
+                    label: 'Codex',
+                    state: 'misconfigured',
+                    transport: 'stdio',
+                    configPath: '/home/.codex/config.toml',
+                    detail: 'Codex passes no environment without env_vars',
+                    remedy: null,
+                    observedCalls: 0,
+                },
+                {
+                    agent: 'pi',
+                    label: 'pi',
+                    state: 'not-configured',
+                    transport: null,
+                    configPath: null,
+                    detail: 'no native config at ~/.pi/agent/mcp.json',
+                    remedy: 'add a spur entry running spur mcp --url http://localhost:3007/mcp',
+                    observedCalls: 0,
+                },
+                {
+                    agent: 'opencode',
+                    label: 'OpenCode',
+                    state: 'not-installed',
+                    transport: null,
+                    configPath: null,
+                    detail: 'opencode is not on PATH',
+                    remedy: 'install opencode and re-run this check',
+                    observedCalls: 0,
+                },
+            ],
+        };
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await openClientConfig(view);
+        const pins = view.getByTestId('integrations-mcp-readiness').textContent ?? '';
+        for (const state of ['active', 'misconfigured', 'not-configured', 'not-installed']) {
+            expect(pins).toContain(state);
+        }
+        expect(view.getByTestId('integrations-readiness-pi').textContent).toContain('spur mcp --url');
+        expect(view.getByTestId('integrations-readiness-claude').textContent).toContain('4 calls');
+    });
+
+    test('an older server without the readiness procedure degrades to "not reported"', async () => {
+        overrides.readinessError = new Error('404 not found');
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await openClientConfig(view);
+        expect(view.getByTestId('integrations-mcp-readiness-unavailable').textContent).toContain(
+            'does not report per-agent readiness',
+        );
+        // The rest of the module still renders: readiness is additive, never load-bearing.
+        expect(view.getByTestId('integrations-mcp-tools')).toBeTruthy();
     });
 });

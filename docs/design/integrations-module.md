@@ -64,7 +64,7 @@ interface IntegrationsStatus {
     generatedAt: string;
     mcp: {
         enabled: boolean; path: '/mcp'; url: string | null;
-        auth: { envName: string; tokenPresent: boolean };
+        auth: { envName: string; tokenPresent: boolean; allowUnauthenticated?: boolean };
         protocolVersion: string;
         tools: Array<{ name: string; origin: 'built-in' | 'workflow'; description: string;
             annotations: { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean };
@@ -78,7 +78,8 @@ interface IntegrationsStatus {
             reason: 'no-namespace' | 'builtin-collision' | 'duplicate'; remedy: string }>;
     };
     a2a: {
-        enabled: boolean; basePath: '/a2a'; auth: { envName: string; tokenPresent: boolean };
+        enabled: boolean; basePath: '/a2a';
+        auth: { envName: string; tokenPresent: boolean; allowUnauthenticated?: boolean };
         inbound: Array<{ member: string; role: string | null; cardUrl: string; writeFenced: boolean }>;
         outbound: Array<{ member: string; kind: 'a2a' | 'project'; target: string }>;
     };
@@ -89,6 +90,8 @@ interface IntegrationsStatus {
         mcp?: { enabled: boolean; auth: { envName: string; tokenPresent: boolean } };  // when the gateway serves /mcp
         diagnostic?: string;
     };
+    /** Why the merged project config could not be loaded at startup (1449 R1); absent on a clean boot. */
+    configDiagnostic?: string;
 }
 ```
 
@@ -116,6 +119,21 @@ interface IntegrationsStatus {
   counters come from the gateway's `/api/health` over loopback on `SPUR_GATEWAY_PORT` (default
   `3000`). If that read fails, the response carries `counters: null` plus a `diagnostic` string;
   the procedure itself still succeeds.
+- **Port precedence (1449 R1).** The loopback port the counters are read from resolves in strict
+  order: an explicit `SPUR_GATEWAY_PORT` → a port the operator actually configured
+  (`ServerBootConfig.gateway.explicit`, because the schema defaults `server.gateway.port` to `3000`
+  and a default cannot be told from a choice) → the port in a **loopback** `x-forwarded-host`
+  (`localhost:3070`, `127.0.0.1:3070`, `[::1]:3070`) → `3000`. A non-loopback forwarded host never
+  contributes: a tunnel's `:443` says nothing about the local listener.
+- **Config diagnostics (1449 R1).** A project config that fails to load is not silent: the error
+  message is logged at startup and carried on `ServerBootConfig.configDiagnostic`, which the handler
+  projects onto `integrations.status.configDiagnostic` (the Summary renders it as a `Diagnostic`).
+  A failure about the fleet declaration itself stays fatal (0858 R4); every other config error
+  degrades to an env-only boot that names itself.
+- **`allowUnauthenticated` is a separate wire signal (1449 R3).** `tokenPresent` now reports whether
+  the named variable actually holds a value, and `allowUnauthenticated` reports the policy, so the
+  Board can tell "token set" from "no token needed". `surfaceState()` reads both: either one makes
+  the surface `on` rather than `on · token unset`.
 
 ### 2.1 Activity
 
@@ -124,6 +142,24 @@ rate, auth denials, per-member A2A counts) come from I61 `protocolUsageSummary(d
 (`packages/domain/src/analytics/protocol-usage.ts`), exposed as the `integrations.usage { since }`
 procedure. Recent rows come from the existing `/api/events/history` with `prefix=mcp`, `a2a`
 and `auth` (no trailing dot; `SYSTEM_EVENT_PREFIXES` in `packages/app/src/services/event-names.ts`).
+
+### 2.2 Agent readiness (1449 R4)
+
+`integrations.agentReadiness` (`GET /api/integrations/agent-readiness`) is a separate read-only
+procedure, deliberately not folded into `status`: a Worker or an older server answers it `404`/`503`,
+and `useIntegrations` degrades that to `readiness: null` instead of failing the module.
+
+`probeAgentMcpReadiness(deps)` in `packages/app` combines three passive signals — an installed
+binary (`resolveBinary`, i.e. `Bun.which`), the agent's OWN native config file, and `tools/call`
+traffic already attributed to it by `X-Spur-Actor`. It writes nothing, spawns nothing and returns no
+token: the states are `active` (valid entry + traffic), `configured` (valid entry, no traffic),
+`misconfigured` (an HTTP entry on a pre-2026-07-28 client, Codex without `env_vars`, a target surface
+switched off, or a wrong port/URL), `not-configured` (installed, no `spur` entry) and `not-installed`.
+Each entry carries `detail` (what was observed) and `remedy` (the next action, or `null` when nothing
+needs fixing); `McpTab` renders them as pins.
+
+The native formats and paths are the ones `scripts/commands/mcp-agent-interop.ts` verified against
+the installed binaries, so a `configured` state is a shape the agent accepts.
 
 ## 3. Board module
 
@@ -142,11 +178,14 @@ failed identity read leaves the rest of the status visible (1437 R6).
 | Tab | Content | Data |
 | --- | --- | --- |
 | Summary | One row per surface: state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus the window's six usage slices — tool latency (p50/p95 with unmeasured calls counted and a null percentile as `—`), resource reads, actor attribution, A2A intake, auth refusals by surface and reason, and repeated `(tool, errorCode)` failures with their first→last range — each with its own empty state. Plus a gateway counters strip when served | status + usage |
-| MCP | Namespace line (`namespace <ns> · from <config\|plugin-manifest\|none>`), tool table (origin badge, read/write badge, the window's calls / failures / p50-p95 / last call joined from `usage.tools` by name — an uncalled but advertised tool reads `0 / 0 / — / —` — and a schema drawer) with a case-insensitive name filter that never hides the exposure findings or the `spur://` list and a header badge totalling the window's call attempts, exposure findings with their remedies, the window's usage rows whose tool the catalog no longer advertises (latency, counted unmeasured calls), resource reads and repeated failures, `spur://` resource list, recent calls (tool, duration, outcome, errorCode), copyable client config snippet (URL + `${ENV}` placeholder), the project command `spur mcp --url <endpoint>`, the gateway command `spur mcp --gateway` only when the gateway's own MCP entry is on, and a JSON-RPC `server/discover` probe expanding the auth variable name only | status + usage + events |
+| MCP | Namespace line (`namespace <ns> · from <config\|plugin-manifest\|none>`), tool table (origin badge, read/write badge, the window's calls / failures / p50-p95 / last call joined from `usage.tools` by name — an uncalled but advertised tool reads `0 / 0 / — / —` — and a schema drawer) with a case-insensitive name filter that never hides the exposure findings or the `spur://` list and a header badge totalling the window's call attempts, exposure findings with their remedies, the window's usage rows whose tool the catalog no longer advertises (latency, counted unmeasured calls), resource reads and repeated failures, `spur://` resource list, recent calls (tool, duration, outcome, errorCode), a **per-agent Client config TabView** (1449 R3 — nine `ModuleTabs` agents in their own native format: Codex/Grok TOML, omp YAML, the JSON trees for Claude Code, pi, Gemini, OpenCode, OpenClaw and a generic HTTP client; a transport selector for the gateway stdio bridge, the project stdio bridge and direct HTTP with the 2026-07-28 floor; the endpoint always resolved from the status or the Board's own origin; and inline auth guidance that names the variable, never a stored value), the project command `spur mcp --url <endpoint>`, the gateway command `spur mcp --gateway` only when the gateway's own MCP entry is on, a JSON-RPC `server/discover` probe expanding the auth variable name only, and the **readiness pins** from §2.2 | status + usage + events + readiness |
 | A2A | Inbound member cards (card URL, write-fenced badge) with an on-demand **card inspector** (public JSON fetched under the current Board mount, with inline retry, while the listener is on) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project members with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
 
 States: a loading skeleton; an `EmptyState` when every surface is off, with the config keys that
-enable each one; a `Diagnostic` with retry when `integrations.status` fails.
+enable each one; a `Diagnostic` with retry when `integrations.status` fails. Two inline warnings are
+additive to those states: the config diagnostic from §2 when the startup load failed, and — on both
+Summary and MCP — the gateway-on/project-off warning, because the gateway forwards `tools/call` to
+each project's loopback `/mcp` and looks configured while every call fails.
 
 **Remote refs are per receipt, credentials are per member (1440 R2).** `coordination_runs` holds one
 row per dispatched run, so several receipts for one member can name different remote tasks. The inbox

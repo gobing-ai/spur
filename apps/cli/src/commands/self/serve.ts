@@ -4,10 +4,10 @@ import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import { createJsonlEventSink, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
-import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { type StartGatewayOptions, startGateway, startServer } from '@gobing-ai/spur-server';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { bootFree } from '../../boot-free-route';
+import { EMBEDDED_SPUR_SCHEMAS } from '../../config/embedded-schemas';
 import type { CliContext } from '../../context';
 import { CommandError, errorMessage } from '../../errors';
 import { toEnvelopeJson, writeJsonError } from '../../output';
@@ -88,9 +88,23 @@ export function registerServeCommand(
                 const config = buildConfigFromEnv(env);
 
                 if (options.gateway) {
-                    const spurConfig = options.json
-                        ? null
-                        : await (registration.loadProjectConfig ?? loadSpurConfig)(context.cwd).catch(() => null);
+                    // 1449 R1: a config load failure degrades to env-only, but never silently. The
+                    // loader itself is injected (index.ts is the composition root that owns
+                    // EMBEDDED_SPUR_SCHEMAS — ADR-082), so this command only reports its outcome.
+                    let configDiagnostic: string | undefined;
+                    const loadConfig = registration.loadProjectConfig;
+                    const spurConfig =
+                        options.json || loadConfig === undefined
+                            ? null
+                            : await loadConfig(context.cwd).catch((error: unknown) => {
+                                  configDiagnostic = error instanceof Error ? error.message : String(error);
+                                  return null;
+                              });
+                    if (configDiagnostic !== undefined) {
+                        context.output.error(
+                            `config: project config could not be loaded — the gateway is using env-only defaults: ${configDiagnostic}`,
+                        );
+                    }
                     const gatewayConfig = buildConfigFromEnv(env, spurConfig);
                     const gatewayPort = options.port ?? gatewayConfig.server.gateway.port;
                     const gatewayHost = options.host ?? gatewayConfig.server.host;
@@ -183,6 +197,7 @@ export function registerServeCommand(
                     webDistPath: config.server.webDistPath,
                     // PATH-independent child invocation for queued history refreshes (task 0717).
                     spurInvocation: resolveSpurArgv(),
+                    embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
                     ...(projectRoot !== undefined ? { cwd: projectRoot } : {}),
                     onListening: ({ url, boardUrl }) => {
                         context.output.write(`Spur server listening on ${url}`);

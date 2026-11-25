@@ -1,10 +1,11 @@
 import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import type { ReactNode } from 'react';
-import { Badge, Card, CardBody } from '../../components/module-kit';
+import { Badge, Card, CardBody, Diagnostic } from '../../components/module-kit';
 import {
     clusterRange,
     formatLatency,
     formatWhen,
+    gatewayWithoutProjectMcp,
     type ProtocolEventRow,
     stateTone,
     surfaceState,
@@ -194,6 +195,27 @@ export function SummaryTab({
     const clusters = usage?.failureClusters ?? [];
     return (
         <div className="flex flex-col gap-4">
+            {status.configDiagnostic === undefined ? null : (
+                <Diagnostic
+                    tone="warning"
+                    testId="integrations-config-diagnostic"
+                    title="The project config could not be loaded at startup"
+                    detail="Every surface below is reporting its env-only default, so a surface you configured in .spur/config.yaml may show as off."
+                    code={status.configDiagnostic}
+                    hint="Fix the file it names, then restart `spur self serve`."
+                />
+            )}
+            {gatewayWithoutProjectMcp(status) ? (
+                <div
+                    role="status"
+                    className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80"
+                    data-testid="integrations-gateway-mcp-warning"
+                >
+                    Gateway MCP is on but this project's <span className="font-mono">server.mcp.enabled</span> is off:
+                    the gateway's <span className="font-mono">tools/call</span> forwards to the project's loopback{' '}
+                    <span className="font-mono">/mcp</span>, so enable it on every target project.
+                </div>
+            ) : null}
             <Card>
                 <CardBody>
                     <table className="table table-sm w-full" data-testid="integrations-summary-table">

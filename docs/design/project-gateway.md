@@ -79,8 +79,19 @@ comma-separated `SPUR_GATEWAY_ALLOWED_HOSTS`) and, since task 1382,
 `server.gateway.mcp: { enabled: boolean (default false), authEnv?: string, allowUnauthenticated?: boolean }` mapped from
 `SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`. `enabled` without `authEnv` fails the
 config load with the same message shape as `server.mcp` unless `allowUnauthenticated: true` is set
-for local-only access. `allocatePort()` skips the gateway port;
+for local-only access. Since 1449 the entry inherits from `server.mcp`: `allowUnauthenticated` when
+it is omitted, and `enabled: true` when its own switch is omitted **and** the gateway's own credential
+is satisfied — the credential itself never inherits (ADR-151 K41), so a single-project config that
+declares only `server.mcp.authEnv` keeps the gateway entry off instead of failing the load.
+`allocatePort()` skips the gateway port;
 spawned serves already bind `127.0.0.1` (`project-start.ts:450-460`).
+
+**Port precedence for loopback reads (1449 R1).** Anything that must call the gateway from inside
+the process (the Integrations probe, the direct-root MCP URL) resolves the port in this order:
+explicit `SPUR_GATEWAY_PORT` → a port the operator actually configured (`ServerBootConfig.gateway.explicit`;
+the schema default of `3000` cannot be told from a choice) → the port in a **loopback**
+`x-forwarded-host` → `3000`. A non-loopback forwarded host is ignored, so a tunnel's `:443` can never
+be mistaken for the local listener.
 
 ### 4.1a Gateway-hosted MCP entry (task 1382, feature K41)
 

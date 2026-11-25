@@ -1,4 +1,4 @@
-import { buildConfigFromEnv, getAppOptions, type SpurConfig } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, getAppOptions, SPUR_ENV_VARS, type SpurConfig } from '@gobing-ai/spur-config';
 import type { LoggingOptions } from '@gobing-ai/ts-infra/application';
 
 /**
@@ -30,8 +30,23 @@ export interface ServerBootConfig {
         allowUnauthenticated?: boolean;
         namespace?: string | null;
     };
-    /** Configured gateway listener port (`server.gateway.port` / `SPUR_GATEWAY_PORT`). */
-    gateway?: { port: number };
+    /**
+     * Configured gateway listener port (`server.gateway.port` / `SPUR_GATEWAY_PORT`), whether an
+     * operator actually configured it (1449 R1), and the gateway-hosted MCP entry's own switch
+     * (1449 R4 — the readiness probe must know whether a gateway root exists to point at).
+     * `port` alone cannot tell "configured 3000" from "unset", because the schema defaults it, so
+     * `explicit` is what lets a caller prefer a loopback `x-forwarded-host` port over the default.
+     */
+    gateway?: {
+        port: number;
+        explicit?: boolean;
+        mcp?: { enabled: boolean; authEnv: string | null; allowUnauthenticated?: boolean };
+    };
+    /**
+     * Why the merged project config could not be loaded at startup, in the loader's own words
+     * (1449 R1). Absent on a clean load; present means every surface reports its env-only default.
+     */
+    configDiagnostic?: string;
 }
 
 /**
@@ -81,6 +96,12 @@ export function serverBootstrapConfig(
         },
         gateway: {
             port: appConfig.server.gateway.port,
+            explicit: env[SPUR_ENV_VARS.gatewayPort] !== undefined || spurConfig?.server?.gateway?.port !== undefined,
+            mcp: {
+                enabled: appConfig.server.gateway.mcp.enabled,
+                authEnv: appConfig.server.gateway.mcp.authEnv ?? null,
+                allowUnauthenticated: appConfig.server.gateway.mcp.allowUnauthenticated,
+            },
         },
     };
 }

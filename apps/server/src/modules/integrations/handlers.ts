@@ -1,12 +1,15 @@
+import { homedir } from 'node:os';
 import {
     FleetService,
     type IntegrationsGatewayProbe,
     IntegrationsService,
     normalizeProjectPath,
     ProjectRegistry,
+    probeAgentMcpReadiness,
 } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl, SPUR_ENV_VARS } from '@gobing-ai/spur-config';
 import { contract, type IntegrationsAuth, integrationsGatewayHealthSchema } from '@gobing-ai/spur-contracts';
+import { protocolUsageSummary } from '@gobing-ai/spur-domain';
 import { implement } from '@orpc/server';
 import type { ServerContext } from '../../context';
 import { bearerEnv } from '../../middleware/bearer-guard';
@@ -80,13 +83,35 @@ export function setGatewayProbeFetchForTesting(
     probeFetch = fn;
 }
 
-/** The gateway's fixed public port: `SPUR_GATEWAY_PORT`, then configured `server.gateway.port`, defaulting to 3000. */
-function gatewayPort(env: Record<string, string | undefined>, configuredPort?: number): number {
+/**
+ * The gateway's public port. Precedence (1449 R1): an explicit `SPUR_GATEWAY_PORT`, then a port the
+ * operator actually configured, then the loopback port the caller reached the gateway on, then 3000.
+ * The forwarded step matters because the schema defaults `server.gateway.port` to 3000, so a gateway
+ * started on another port leaves no other trace: without it the probe would read the wrong process.
+ */
+function gatewayPort(
+    env: Record<string, string | undefined>,
+    bootGateway?: { port: number; explicit?: boolean },
+    forwardedHost?: string | null,
+): number {
     const envPort = Number(env[SPUR_ENV_VARS.gatewayPort] ?? '');
     if (Number.isFinite(envPort) && envPort > 0) return envPort;
-    return configuredPort !== undefined && Number.isFinite(configuredPort) && configuredPort > 0
-        ? configuredPort
-        : 3000;
+    if (bootGateway?.explicit === true && Number.isFinite(bootGateway.port) && bootGateway.port > 0)
+        return bootGateway.port;
+    return loopbackPort(forwardedHost) ?? 3000;
+}
+
+/**
+ * The port in a loopback `x-forwarded-host` (`localhost:3070`, `127.0.0.1:3070`, `[::1]:3070`).
+ * A non-loopback host is ignored on purpose: a tunnel's `:443` says nothing about the local listener.
+ */
+function loopbackPort(forwardedHost?: string | null): number | undefined {
+    const first = (forwardedHost ?? '').split(',')[0]?.trim() ?? '';
+    if (first === '') return undefined;
+    const match = /^\[([^\]]+)\]:([0-9]+)$/.exec(first) ?? /^([^:]+):([0-9]+)$/.exec(first);
+    if (match === null || !isLocalHost(match[1])) return undefined;
+    const port = Number(match[2]);
+    return Number.isFinite(port) && port > 0 && port <= 65_535 ? port : undefined;
 }
 
 /** Gateway counters from the gateway's own `/api/health` over loopback; a failure is reported, not thrown. */
@@ -109,8 +134,7 @@ async function probeGateway(port: number, since?: string): Promise<IntegrationsG
 /**
  * Outbound credential state, keyed by member instance id (1440 R2). Only the variable NAME and
  * whether it resolved leaves this function — the value stays in the environment.
- */
-async function outboundAuthOf(ctx: ServerContext, fleet: FleetService): Promise<Record<string, IntegrationsAuth>> {
+ */ async function outboundAuthOf(ctx: ServerContext, fleet: FleetService): Promise<Record<string, IntegrationsAuth>> {
     const env = bearerEnv(ctx);
     const [declaration, addresses] = await Promise.all([fleet.load(ctx.cwd), fleet.memberAddresses(ctx.cwd)]);
     const result: Record<string, IntegrationsAuth> = {};
@@ -124,7 +148,26 @@ async function outboundAuthOf(ctx: ServerContext, fleet: FleetService): Promise<
     return result;
 }
 
-/** Build the status/usage handlers bound to this server's context. */
+/**
+ * The base URL the caller used, prefix included, from headers already on the request context. The
+ * readiness remedies paste it, so it must agree with the URL `integrations.status` reports.
+ */
+function visibleBase(context: {
+    origin: string;
+    forwardedProto?: string | null;
+    forwardedHost?: string | null;
+    forwardedPrefix?: string | null;
+    localGatewayBase?: string;
+}): string {
+    const host = context.forwardedHost?.trim() ?? '';
+    const prefix = (context.forwardedPrefix ?? '').replace(/\/+$/, '');
+    if (host !== '' && prefix !== '')
+        return `${context.forwardedProto === 'https' ? 'https' : 'http'}://${host}${prefix}`;
+    const local = (context.localGatewayBase ?? '').replace(/\/+$/, '');
+    return local !== '' ? local : context.origin.replace(/\/+$/, '');
+}
+
+/** Build the status, usage and readiness handlers bound to this server's context. */
 export function createIntegrationsHandlers(ctx: ServerContext) {
     const service = () => {
         const fleet = new FleetService({
@@ -143,7 +186,10 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                     return {
                         enabled: settings.enabled,
                         authEnv: settings.authEnv,
-                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv, settings.allowUnauthenticated),
+                        // 1449 R3: the WIRE reports the token's real presence and the unauthenticated
+                        // policy separately, so the Board can tell "token set" from "no token needed".
+                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv),
+                        allowUnauthenticated: settings.allowUnauthenticated,
                         protocolVersion: MIN_MCP_PROTOCOL_VERSION,
                         tools: catalog.tools,
                         resources: catalog.resources,
@@ -161,12 +207,15 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                     return {
                         enabled: settings.enabled,
                         authEnv: settings.authEnv,
-                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv, settings.allowUnauthenticated),
+                        tokenPresent: tokenPresent(bearerEnv(ctx), settings.authEnv),
+                        allowUnauthenticated: settings.allowUnauthenticated,
                         outboundAuth: await outboundAuthOf(ctx, fleet),
                     };
                 },
-                gateway: async (since) =>
-                    probeGateway(gatewayPort(bearerEnv(ctx), ctx.bootConfig?.()?.gateway?.port), since),
+                gateway: async (since, forwardedHost) =>
+                    probeGateway(gatewayPort(bearerEnv(ctx), ctx.bootConfig?.()?.gateway, forwardedHost), since),
+                // 1449 R1: a config load that failed at startup is visible on the Board, not just in a log.
+                diagnostic: () => ctx.bootConfig?.()?.configDiagnostic,
             },
         });
     };
@@ -194,7 +243,7 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
         const localGatewayBase = entry
             ? resolveProjectGatewayUrl(
                   entry,
-                  { host: server.host, port: gatewayPort(env, ctx.bootConfig?.()?.gateway?.port) },
+                  { host: server.host, port: gatewayPort(env, ctx.bootConfig?.()?.gateway) },
                   '',
               )
             : undefined;
@@ -213,5 +262,27 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
         usage: os.integrations.usage.handler(async ({ input, context }) =>
             service().usage(input, requestContextOf(context)),
         ),
+
+        /** Read-only readiness: the agent binaries, their own config entries, and attributed traffic. */
+        agentReadiness: os.integrations.agentReadiness.handler(async ({ context }) => {
+            const env = bearerEnv(ctx);
+            const settings = mcpSettings(ctx);
+            const boot = ctx.bootConfig?.();
+            const usage = await protocolUsageSummary(await ctx.getDb(), {});
+            const base = visibleBase(requestContextOf(context));
+            return probeAgentMcpReadiness({
+                cwd: ctx.cwd,
+                home: homedir(),
+                fs: ctx.fs,
+                resolveBinary: (binary) => Bun.which(binary),
+                usageActors: usage.byActor,
+                surface: {
+                    mcpEnabled: settings.enabled,
+                    gatewayMcpEnabled: boot?.gateway?.mcp?.enabled === true,
+                    gatewayPort: gatewayPort(env, boot?.gateway),
+                    projectUrl: settings.enabled && base !== '' ? `${base}/mcp` : null,
+                },
+            });
+        }),
     };
 }

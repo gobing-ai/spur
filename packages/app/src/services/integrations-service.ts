@@ -29,6 +29,8 @@ export interface IntegrationsMcpSource {
     enabled: boolean;
     /** The token variable NAME (`server.mcp.authEnv`), never its value. */
     authEnv: string | null;
+    /** True when local callers are admitted without a bearer token (1449 R3). */
+    allowUnauthenticated?: boolean;
     tokenPresent: boolean;
     protocolVersion: string;
     tools: Array<{
@@ -52,6 +54,8 @@ export interface IntegrationsMcpSource {
 export interface IntegrationsA2aSource {
     enabled: boolean;
     authEnv: string | null;
+    /** True when local callers are admitted without a bearer token (1449 R3). */
+    allowUnauthenticated?: boolean;
     tokenPresent: boolean;
     /**
      * Outbound credential state keyed by member instance id (1440 R2). Only the variable NAME and its
@@ -72,8 +76,14 @@ export interface IntegrationsGatewayProbe {
 export interface IntegrationsSources {
     mcp(): Promise<IntegrationsMcpSource>;
     a2a(): Promise<IntegrationsA2aSource>;
-    /** Called only when the request came through a gateway. */
-    gateway(since?: string): Promise<IntegrationsGatewayProbe>;
+    /**
+     * Called only when the request came through a gateway. `forwardedHost` is the caller's
+     * `x-forwarded-host`, which the probe needs to resolve a gateway that was started on a port
+     * nobody configured (1449 R1).
+     */
+    gateway(since?: string, forwardedHost?: string | null): Promise<IntegrationsGatewayProbe>;
+    /** Why the project config failed to load at startup, if it did (1449 R1). */
+    diagnostic?(): string | undefined;
 }
 
 /** Where the caller reached the server: what absolute URLs in the response must be built from. */
@@ -138,9 +148,13 @@ function annotationsOf(tool: {
     return tool.annotations ?? { readOnlyHint: false, destructiveHint: false, idempotentHint: false };
 }
 
-/** The credentials block: the variable NAME always, its presence as a boolean. */
-function authOf(authEnv: string | null, tokenPresent: boolean): IntegrationsAuth {
-    return { envName: authEnv ?? '', tokenPresent };
+/** The credentials block: the variable NAME always, its presence as a boolean, and the unauthenticated policy. */
+function authOf(authEnv: string | null, tokenPresent: boolean, allowUnauthenticated?: boolean): IntegrationsAuth {
+    return {
+        envName: authEnv ?? '',
+        tokenPresent,
+        ...(allowUnauthenticated === true ? { allowUnauthenticated: true } : {}),
+    };
 }
 
 /** Read-only projection over the project's agent-protocol surfaces (task 1423). */
@@ -156,11 +170,13 @@ export class IntegrationsService {
         const prefix = request.forwardedPrefix ?? '';
         const underGateway = mountPrefix(prefix) !== '';
         const base = callerBase(request);
+        const diagnostic = this.deps.sources.diagnostic?.();
         return {
             generatedAt: new Date().toISOString(),
             mcp: this.mcpSurface(mcpSource, base),
             a2a: await this.a2aSurface(a2aSource, base),
-            gateway: underGateway ? await this.gateway(base, prefix) : { served: false },
+            gateway: underGateway ? await this.gateway(base, prefix, request.forwardedHost) : { served: false },
+            ...(diagnostic === undefined ? {} : { configDiagnostic: diagnostic }),
         };
     }
 
@@ -171,7 +187,7 @@ export class IntegrationsService {
         const [usage, outboundActivity, gateway] = await Promise.all([
             protocolUsageSummary(db, input.since === undefined ? {} : { since: input.since }),
             this.outboundActivity(db, input.since),
-            underGateway ? this.deps.sources.gateway(input.since) : null,
+            underGateway ? this.deps.sources.gateway(input.since, request?.forwardedHost) : null,
         ]);
         return { ...usage, outboundActivity, gatewayMcpActivity: gateway?.mcpActivity ?? null };
     }
@@ -219,7 +235,7 @@ export class IntegrationsService {
             // The catalog is still listed when the surface is off — "off" is an answer, and the Board
             // shows what would be exposed — but there is no endpoint to copy.
             url: source.enabled ? `${base}/mcp` : null,
-            auth: authOf(source.authEnv, source.tokenPresent),
+            auth: authOf(source.authEnv, source.tokenPresent, source.allowUnauthenticated),
             protocolVersion: source.protocolVersion,
             tools,
             resources: source.resources.map((resource) => ({
@@ -287,7 +303,7 @@ export class IntegrationsService {
             enabled: source.enabled,
             basePath: '/a2a',
             url: source.enabled ? `${base}/a2a` : null,
-            auth: authOf(source.authEnv, source.tokenPresent),
+            auth: authOf(source.authEnv, source.tokenPresent, source.allowUnauthenticated),
             inbound,
             outbound,
         };
@@ -307,8 +323,8 @@ export class IntegrationsService {
         }
     }
 
-    private async gateway(base: string, prefix: string): Promise<IntegrationsGateway> {
-        const probe = await this.deps.sources.gateway();
+    private async gateway(base: string, prefix: string, forwardedHost?: string | null): Promise<IntegrationsGateway> {
+        const probe = await this.deps.sources.gateway(undefined, forwardedHost);
         return {
             served: true,
             namespace: mountPrefix(prefix),

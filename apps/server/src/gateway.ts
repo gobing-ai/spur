@@ -96,7 +96,9 @@ function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): Gat
         ...deps,
         mcpAuth: {
             envName: mcp.authEnv ?? '',
-            tokenPresent: Boolean((mcp.authEnv && env[mcp.authEnv]) || mcp.allowUnauthenticated === true),
+            // 1449 R3: presence and policy are separate signals — an unauthenticated gateway has no token.
+            tokenPresent: Boolean(mcp.authEnv && env[mcp.authEnv]),
+            ...(mcp.allowUnauthenticated === true ? { allowUnauthenticated: true } : {}),
         },
         // Task 1383 R1/R3: the five `sp_*` descriptors and the upstream protocol version.
         builtinTools: () => TOOL_DESCRIPTORS,

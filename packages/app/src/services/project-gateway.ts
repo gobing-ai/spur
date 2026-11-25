@@ -50,7 +50,7 @@ export interface GatewayDeps {
      * registry is built here (it needs `ensureUpstream`'s de-duplication) and handed in (task 1383).
      */
     mcp?: (req: Request, registry: McpGatewayRegistry) => Promise<Response>;
-    mcpAuth?: { envName: string; tokenPresent: boolean };
+    mcpAuth?: { envName: string; tokenPresent: boolean; allowUnauthenticated?: boolean };
     /** The five `sp_*` built-in descriptors, supplied by `apps/server` (task 1383 R1). */
     builtinTools?: () => McpGatewayTool[];
     /** Project bearer token for upstream calls; the gateway env holds one shared value (closed Q&A). */

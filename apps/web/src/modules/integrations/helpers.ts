@@ -24,12 +24,15 @@ export function sinceForWindow(window: UsageWindow, now = Date.now()): string | 
 export type SurfaceState = 'off' | 'on' | 'on · token unset';
 
 /**
- * `off` when the surface is disabled; `on · token unset` when it is enabled but its bearer
- * variable is empty (an error the operator must see); otherwise `on`.
+ * `off` when the surface is disabled; `on · token unset` when it is enabled but neither a bearer
+ * token nor the unauthenticated policy is in force (an error the operator must see); otherwise `on`.
  */
-export function surfaceState(surface: { enabled: boolean; auth: { tokenPresent: boolean } }): SurfaceState {
+export function surfaceState(surface: {
+    enabled: boolean;
+    auth: { tokenPresent: boolean; allowUnauthenticated?: boolean };
+}): SurfaceState {
     if (!surface.enabled) return 'off';
-    return surface.auth.tokenPresent ? 'on' : 'on · token unset';
+    return surface.auth.tokenPresent || surface.auth.allowUnauthenticated === true ? 'on' : 'on · token unset';
 }
 
 /** How a state chip is toned: an enabled surface with no token is the module's only error. */
@@ -42,27 +45,270 @@ export function stateTone(state: SurfaceState): 'error' | 'success' | 'neutral' 
  * The copyable client config for the MCP surface. It names the endpoint and the variable holding
  * the token — never a value, because the Board cannot read one.
  */
-export function clientSnippet(status: IntegrationsStatus): string {
-    const url = status.mcp.url ?? '<server>/mcp';
-    const envName = status.mcp.auth.envName === '' ? '<ENV_NAME>' : status.mcp.auth.envName;
-    return [
-        '{',
-        '  "mcpServers": {',
-        '    "spur": {',
-        '      "type": "http",',
-        `      "url": "${url}",`,
-        '      "headers": {',
-        `        "Authorization": "Bearer \${${envName.replace(/[{}]/g, '')}}"`,
-        '      }',
-        '    }',
-        '  }',
-        '}',
-    ].join('\n');
+export function clientSnippet(status: IntegrationsStatus, fallbackOrigin?: string): string {
+    return renderClientConfig(status, 'generic', 'http', fallbackOrigin).snippet;
 }
 
-/** A shell-safe credential reference: the variable name when it is a valid identifier, else a placeholder. */
+/** The coding agents the Client config tabs cover, in the Board's display order. */
+export const MCP_CLIENT_AGENTS = [
+    'claude',
+    'codex',
+    'gemini',
+    'pi',
+    'omp',
+    'opencode',
+    'grok',
+    'openclaw',
+    'generic',
+] as const;
+/** One agent with a verified native MCP config format (1449 R3). */
+export type McpClientAgent = (typeof MCP_CLIENT_AGENTS)[number];
+
+/** How a client reaches the endpoint: a stdio bridge, or MCP over HTTP directly. */
+export type McpClientTransport = 'gateway-stdio' | 'project-stdio' | 'http';
+
+/** The display names and the native config file each agent reads. */
+const CLIENT_AGENT_LABELS: Record<McpClientAgent, { label: string; path: string }> = {
+    claude: { label: 'Claude Code', path: '~/.claude.json (or .mcp.json)' },
+    codex: { label: 'Codex', path: '~/.codex/config.toml' },
+    gemini: { label: 'Gemini CLI', path: '~/.gemini/settings.json' },
+    pi: { label: 'pi', path: '.pi/mcp.json' },
+    omp: { label: 'omp', path: '~/.omp/agent/config.yml' },
+    opencode: { label: 'OpenCode', path: 'opencode.json' },
+    grok: { label: 'Grok CLI', path: '.grok/config.toml' },
+    openclaw: { label: 'OpenClaw', path: '~/.openclaw/config.json' },
+    generic: { label: 'Generic HTTP', path: 'any MCP 2026-07-28 client' },
+};
+
+/**
+ * The clients whose MCP revision predates 2026-07-28: they reach a server through `spur mcp` over
+ * stdio, and a direct HTTP entry is refused (`docs/design/mcp-agent-adoption.md`).
+ */
+const LEGACY_REVISION_AGENTS: readonly McpClientAgent[] = ['claude', 'codex', 'pi'];
+
+/** One rendered client config: the snippet plus the guidance that makes it actionable. */
+export interface McpClientConfigView {
+    agent: McpClientAgent;
+    label: string;
+    format: 'json' | 'toml' | 'yaml';
+    configPath: string;
+    snippet: string;
+    transportNote: string;
+    authNote: string;
+    /** The `export` line to run first when a required token is unset; null when nothing is missing. */
+    exportCommand: string | null;
+}
+
+/** The endpoint a snippet should name: the project's, the gateway's, or this Board's own origin. */
+function clientUrl(status: IntegrationsStatus, fallbackOrigin?: string): string {
+    if (status.mcp.url !== null) return status.mcp.url;
+    if (status.gateway?.served === true && status.gateway.mcp?.enabled === true) return status.gateway.rootMcpUrl;
+    const origin = (fallbackOrigin ?? '').replace(/\/+$/, '');
+    return origin === '' ? '<server>/mcp' : `${origin}/mcp`;
+}
+
+/** True when this surface admits local callers with no bearer token at all. */
+function unauthenticated(status: IntegrationsStatus): boolean {
+    return status.mcp.auth.allowUnauthenticated === true && !status.mcp.auth.tokenPresent;
+}
+
+/** The `Authorization` header value, or null when this surface needs no header. */
+function authorization(status: IntegrationsStatus): string | null {
+    if (unauthenticated(status)) return null;
+    return `Bearer ${envRef(status.mcp.auth.envName)}`;
+}
+
+/** The inline auth guidance: what the variable is, and the one command that sets it. */
+function authGuidance(status: IntegrationsStatus): { note: string; exportCommand: string | null } {
+    const envName = status.mcp.auth.envName;
+    if (unauthenticated(status))
+        return {
+            note: 'No Authorization header: server.mcp.allowUnauthenticated admits local callers without a token.',
+            exportCommand: null,
+        };
+    if (envName === '')
+        return {
+            note: 'No credential is configured: set server.mcp.authEnv to the NAME of an environment variable holding the token.',
+            exportCommand: null,
+        };
+    const note = `${envName} names an environment variable — the token value is never stored in the config or shown here.`;
+    return {
+        note: status.mcp.auth.tokenPresent ? note : `${note} It is not set in this server's environment yet.`,
+        exportCommand: status.mcp.auth.tokenPresent ? null : `export ${envName}="$(openssl rand -hex 32)"`,
+    };
+}
+
+/** The `command`/`args` a stdio client runs for one transport. */
+function stdioCommand(transport: McpClientTransport, url: string): string[] {
+    return transport === 'gateway-stdio' ? ['spur', 'mcp', '--gateway'] : ['spur', 'mcp', '--url', url];
+}
+
+/** `key = "value"` with the JSON escaping TOML accepts for a basic string. */
+const tomlString = (value: string): string => JSON.stringify(value);
+
+/** A JSON `headers` block at one indentation pad, or nothing when there is no header. */
+function jsonHeaders(header: Record<string, string> | null, pad: string): string[] {
+    return header === null
+        ? []
+        : [`${pad}"headers": {`, `${pad}  "Authorization": ${JSON.stringify(header.Authorization)}`, `${pad}},`];
+}
+
+/** Render one agent's config, in its own native format, for one transport (1449 R3). */
+export function renderClientConfig(
+    status: IntegrationsStatus,
+    agent: McpClientAgent,
+    transport: McpClientTransport,
+    fallbackOrigin?: string,
+): McpClientConfigView {
+    const url = clientUrl(status, fallbackOrigin);
+    const auth = authorization(status);
+    const header = auth === null ? null : { Authorization: auth };
+    const guidance = authGuidance(status);
+    const command = stdioCommand(transport, url);
+    const isHttp = transport === 'http';
+    const legacy = LEGACY_REVISION_AGENTS.includes(agent);
+    const format: McpClientConfigView['format'] =
+        agent === 'codex' || agent === 'grok' ? 'toml' : agent === 'omp' ? 'yaml' : 'json';
+    const args = command.slice(1);
+    const jsonArgs = `[${args.map((part) => JSON.stringify(part)).join(', ')}]`;
+    const snippet = ((): string => {
+        if (format === 'toml') {
+            const lines = ['[mcp_servers.spur]', 'enabled = true'];
+            if (isHttp) {
+                lines.push(`url = ${tomlString(url)}`);
+                if (header !== null)
+                    lines.push('[mcp_servers.spur.headers]', `Authorization = ${tomlString(header.Authorization)}`);
+            } else {
+                lines.push(`command = ${tomlString(command[0] ?? 'spur')}`);
+                lines.push(`args = [${args.map((part) => tomlString(part)).join(', ')}]`);
+                if (agent === 'codex') lines.push('env_vars = ["SPUR_MCP_AUTH_ENV", "SPUR_MCP_TOKEN"]');
+            }
+            return lines.join('\n');
+        }
+        if (format === 'yaml') {
+            const lines = ['mcp_servers:', '  spur:'];
+            if (isHttp) {
+                lines.push(`    url: ${url}`);
+                if (header !== null)
+                    lines.push('    headers:', `      Authorization: ${tomlString(header.Authorization)}`);
+            } else {
+                lines.push(
+                    `    command: ${command[0] ?? 'spur'}`,
+                    '    args:',
+                    ...args.map((part) => `      - ${part}`),
+                );
+            }
+            return lines.join('\n');
+        }
+        if (agent === 'generic') {
+            const entry = isHttp
+                ? [
+                      '    "spur": {',
+                      '      "type": "http",',
+                      `      "url": ${JSON.stringify(url)},`,
+                      ...jsonHeaders(header, '      '),
+                      '    }',
+                  ]
+                : [
+                      '    "spur": {',
+                      `      "command": ${JSON.stringify(command[0] ?? 'spur')},`,
+                      `      "args": ${jsonArgs}`,
+                      '    }',
+                  ];
+            return ['{', '  "mcpServers": {', ...entry, '  }', '}'].join('\n');
+        }
+        if (agent === 'opencode') {
+            const entry = isHttp
+                ? [
+                      '    "spur": {',
+                      '      "type": "remote",',
+                      `      "url": ${JSON.stringify(url)},`,
+                      ...jsonHeaders(header, '      '),
+                      '    }',
+                  ]
+                : [
+                      '    "spur": {',
+                      '      "type": "local",',
+                      `      "command": [${command.map((part) => JSON.stringify(part)).join(', ')}]`,
+                      '    }',
+                  ];
+            return ['{', '  "$schema": "https://opencode.ai/config.json",', '  "mcp": {', ...entry, '  }', '}'].join(
+                '\n',
+            );
+        }
+        if (agent === 'openclaw') {
+            const entry = isHttp
+                ? [
+                      '        "spur": {',
+                      `          "url": ${JSON.stringify(url)},`,
+                      ...jsonHeaders(header, '          '),
+                      '        }',
+                  ]
+                : [
+                      '        "spur": {',
+                      `          "command": ${JSON.stringify(command[0] ?? 'spur')},`,
+                      `          "args": ${jsonArgs}`,
+                      '        }',
+                  ];
+            return ['{', '  "mcp": {', '    "servers": {', ...entry, '    }', '  }', '}'].join('\n');
+        }
+        if (agent === 'gemini' && isHttp) {
+            return [
+                '{',
+                '  "mcpServers": {',
+                '    "spur": {',
+                `      "httpUrl": ${JSON.stringify(url)},`,
+                ...jsonHeaders(header, '      '),
+                '    }',
+                '  }',
+                '}',
+            ].join('\n');
+        }
+        const entry = isHttp
+            ? [
+                  '    "spur": {',
+                  '      "type": "http",',
+                  `      "url": ${JSON.stringify(url)},`,
+                  ...jsonHeaders(header, '      '),
+                  '    }',
+              ]
+            : [
+                  '    "spur": {',
+                  `      "command": ${JSON.stringify(command[0] ?? 'spur')},`,
+                  `      "args": ${jsonArgs}`,
+                  '    }',
+              ];
+        return ['{', '  "mcpServers": {', ...entry, '  }', '}'].join('\n');
+    })();
+    const transportNote = ((): string => {
+        if (transport === 'gateway-stdio')
+            return status.gateway?.served === true && status.gateway.mcp?.enabled === true
+                ? 'Runs `spur mcp --gateway`, the shared stdio bridge in front of the gateway root.'
+                : 'The gateway MCP entry is off — enable server.gateway.mcp for this bridge to resolve.';
+        if (transport === 'project-stdio')
+            return `Runs \`spur mcp --url ${url}\`, a stdio bridge in front of this project's own /mcp endpoint.`;
+        return legacy
+            ? `${CLIENT_AGENT_LABELS[agent].label} speaks MCP before 2026-07-28, so it cannot use a direct HTTP entry (docs/design/mcp-agent-adoption.md) — pick a stdio bridge.`
+            : 'Speaks MCP over HTTP directly; the client must support protocol 2026-07-28 or newer.';
+    })();
+    return {
+        agent,
+        label: CLIENT_AGENT_LABELS[agent].label,
+        format,
+        configPath: CLIENT_AGENT_LABELS[agent].path,
+        snippet,
+        transportNote,
+        authNote: guidance.note,
+        exportCommand: guidance.exportCommand,
+    };
+}
+
+/**
+ * A credential reference as both a shell and an MCP client read it: `${VAR}` for a valid identifier,
+ * `${<ENV_NAME>}` when no variable is named — a visible placeholder, never an empty header.
+ */
 function envRef(envName: string): string {
-    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(envName) ? `\${${envName}}` : '<ENV_NAME>';
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(envName) ? `\${${envName}}` : `\${<ENV_NAME>}`;
 }
 
 /** A URL quoted only when it carries shell-significant characters. */
@@ -237,6 +483,15 @@ export function projectProtocolEvent(row: unknown): ProtocolEventRow | null {
         errorCode: typeof data.errorCode === 'string' ? data.errorCode : field('error code'),
         tool: typeof data.tool === 'string' ? data.tool : field('tool'),
     };
+}
+
+/**
+ * True when the gateway's own MCP entry is on while this project's is off (1449 R1). The gateway
+ * forwards `tools/call` to each project's loopback `/mcp`, so this state looks configured and fails
+ * on the first call — the Board says so instead of leaving the operator to find out.
+ */
+export function gatewayWithoutProjectMcp(status: IntegrationsStatus): boolean {
+    return status.gateway?.served === true && status.gateway.mcp?.enabled === true && !status.mcp.enabled;
 }
 
 /** True when every surface (project MCP, A2A inbound, gateway MCP, and A2A outbound) is off — renders the empty state. */

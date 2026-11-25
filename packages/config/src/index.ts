@@ -1624,6 +1624,24 @@ export function buildConfigFromEnv(
 ): Config {
     const fileServer = spurConfig?.server;
     const envAllowedHosts = parseAllowedHosts(env[SPUR_ENV_VARS.gatewayAllowedHosts]);
+    // R2 (1449): `server.gateway.mcp` inherits from `server.mcp` where that is unambiguous.
+    // `allowUnauthenticated` is a policy of the operator's machine, so it inherits whenever the
+    // gateway does not state its own. `enabled` inherits only when the gateway's own credential is
+    // satisfied — otherwise the inherited `true` would fail the schema's auth check on a config
+    // that declares a project token alone (ADR-151 K41 keeps the two credentials independent, so
+    // `authEnv` is NEVER copied).
+    const mcpEnabled = parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]) ?? fileServer?.mcp?.enabled;
+    const mcpAllowUnauthenticated = fileServer?.mcp?.allowUnauthenticated;
+    const gatewayMcpAuthEnv = env[SPUR_ENV_VARS.gatewayMcpAuthEnv] ?? fileServer?.gateway?.mcp?.authEnv;
+    const gatewayMcpAllowUnauthenticated = fileServer?.gateway?.mcp?.allowUnauthenticated ?? mcpAllowUnauthenticated;
+    const explicitGatewayMcpEnabled =
+        parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]) ?? fileServer?.gateway?.mcp?.enabled;
+    const gatewayMcpEnabled =
+        explicitGatewayMcpEnabled !== undefined
+            ? explicitGatewayMcpEnabled
+            : mcpEnabled === true && (gatewayMcpAuthEnv !== undefined || gatewayMcpAllowUnauthenticated === true)
+              ? true
+              : undefined;
     return configSchema.parse({
         database: {
             url: env[SPUR_ENV_VARS.databaseUrl],
@@ -1637,18 +1655,18 @@ export function buildConfigFromEnv(
                 allowUnauthenticated: fileServer?.a2a?.allowUnauthenticated,
             },
             mcp: {
-                enabled: parseEnvBoolean(env[SPUR_ENV_VARS.mcpEnabled]) ?? fileServer?.mcp?.enabled,
+                enabled: mcpEnabled,
                 authEnv: env[SPUR_ENV_VARS.mcpAuthEnv] ?? fileServer?.mcp?.authEnv,
-                allowUnauthenticated: fileServer?.mcp?.allowUnauthenticated,
+                allowUnauthenticated: mcpAllowUnauthenticated,
                 namespace: env[SPUR_ENV_VARS.mcpNamespace] ?? fileServer?.mcp?.namespace,
             },
             gateway: {
                 port: env[SPUR_ENV_VARS.gatewayPort] ?? fileServer?.gateway?.port,
                 allowedHosts: envAllowedHosts.length > 0 ? envAllowedHosts : (fileServer?.gateway?.allowedHosts ?? []),
                 mcp: {
-                    enabled: parseEnvBoolean(env[SPUR_ENV_VARS.gatewayMcpEnabled]) ?? fileServer?.gateway?.mcp?.enabled,
-                    authEnv: env[SPUR_ENV_VARS.gatewayMcpAuthEnv] ?? fileServer?.gateway?.mcp?.authEnv,
-                    allowUnauthenticated: fileServer?.gateway?.mcp?.allowUnauthenticated,
+                    enabled: gatewayMcpEnabled,
+                    authEnv: gatewayMcpAuthEnv,
+                    allowUnauthenticated: gatewayMcpAllowUnauthenticated,
                 },
             },
         },

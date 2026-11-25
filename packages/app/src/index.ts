@@ -236,6 +236,12 @@ export {
     loopSleep,
     runAgentLoopCore,
 } from './services/agent-loop-service';
+export {
+    type AgentMcpReadinessDeps,
+    type AgentReadinessSurface,
+    probeAgentMcpReadiness,
+    READINESS_AGENTS,
+} from './services/agent-mcp-readiness';
 export { type AgentProcessStatus, fetchAgentProcesses, mapAgentProcessStatus } from './services/agent-process-status';
 export type { ObservationRefreshStatus } from './services/agent-quota-refresh';
 export {

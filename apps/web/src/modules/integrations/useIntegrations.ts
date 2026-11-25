@@ -1,4 +1,4 @@
-import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import type { IntegrationsAgentReadiness, IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiClient } from '../../lib/rpc-client';
 import { api, apiFetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
@@ -36,6 +36,11 @@ export interface IntegrationsData {
     receipts: Array<{ member: string; rows: InboxRequestRow[] }>;
     /** The served build's version + uptime; `null` when `/api/health` cannot be read. */
     server: ServerRuntime | null;
+    /**
+     * Per-agent MCP readiness (1449 R4); `null` when this server does not expose the procedure, so a
+     * remote or older server degrades to "not reported" instead of failing the module.
+     */
+    readiness: IntegrationsAgentReadiness | null;
     loading: boolean;
     error: Error | null;
     window: UsageWindow;
@@ -93,20 +98,39 @@ async function readServerRuntime(seams: IntegrationsSeams): Promise<ServerRuntim
     }
 }
 
+/**
+ * Read per-agent readiness tolerantly (1449 R4). A server that predates the procedure answers 404,
+ * and a Worker/shared deployment answers 503: both mean "not reported here", never a module error.
+ */
+async function readReadiness(seams: IntegrationsSeams): Promise<IntegrationsAgentReadiness | null> {
+    const client = seams.api ?? api;
+    try {
+        const readiness = await client.integrations.agentReadiness();
+        return readiness.available ? readiness : null;
+    } catch {
+        return null;
+    }
+}
+
 /** Load everything the module needs for one window. */
 async function load(
     window: UsageWindow,
     seams: IntegrationsSeams,
-): Promise<Omit<IntegrationsData, 'server' | 'loading' | 'error' | 'window' | 'setWindow' | 'retry'>> {
+): Promise<
+    Omit<IntegrationsData, 'server' | 'readiness' | 'loading' | 'error' | 'window' | 'setWindow' | 'retry'> & {
+        readiness: IntegrationsAgentReadiness | null;
+    }
+> {
     const since = sinceForWindow(window);
     const client = seams.api ?? api;
-    const [status, usage, mcpEvents, a2aEvents, authEvents, requestRows] = await Promise.all([
+    const [status, usage, mcpEvents, a2aEvents, authEvents, requestRows, readiness] = await Promise.all([
         client.integrations.status(),
         client.integrations.usage(since === undefined ? {} : { since }),
         readEvents('mcp', since, seams),
         readEvents('a2a', since, seams),
         readEvents('auth', since, seams),
         client.inbox.requests({ limit: 100, scope: 'all' }),
+        readReadiness(seams),
     ]);
     // One receipt page serves both the A2A task list and the per-member outbound receipts: the
     // receipt row IS the request row, so no second read and no N+1 per message.
@@ -135,6 +159,7 @@ async function load(
         a2aEvents: [...a2aEvents, ...authEvents].sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1)),
         requests: a2aRequests(requestRows),
         receipts,
+        readiness,
     };
 }
 
@@ -166,6 +191,7 @@ export function useIntegrations(seams: IntegrationsSeams = {}): IntegrationsData
         requests: InboxRequestRow[];
         receipts: Array<{ member: string; rows: InboxRequestRow[] }>;
         server: ServerRuntime | null;
+        readiness: IntegrationsAgentReadiness | null;
         loading: boolean;
         error: Error | null;
     }>({
@@ -176,6 +202,7 @@ export function useIntegrations(seams: IntegrationsSeams = {}): IntegrationsData
         requests: [],
         receipts: [],
         server: null,
+        readiness: null,
         loading: true,
         error: null,
     });

@@ -15,7 +15,9 @@ import {
     enablementKeys,
     formatUptime,
     inboxLink,
+    MCP_CLIENT_AGENTS,
     projectProtocolEvent,
+    renderClientConfig,
     requestState,
     sinceForWindow,
     surfaceState,
@@ -198,5 +200,115 @@ describe('1437 — server uptime formatting', () => {
     test('a negative or fractional reading never renders garbage', () => {
         expect(formatUptime(-1)).toBe('0s');
         expect(formatUptime(59.9)).toBe('59s');
+    });
+});
+
+// ─── 1449 R3: one Client config per agent, in that agent's own native format ──────────────
+// The failure modes: a snippet in a format the agent does not read, a literal `<server>` /
+// `<ENV_NAME>` the operator must hand-edit, and auth guidance that cannot distinguish "token set"
+// from "no token needed".
+describe('1449 — per-agent client config', () => {
+    const live = {
+        mcp: {
+            enabled: true,
+            url: 'http://localhost:3070/spur-new/mcp',
+            path: '/mcp',
+            auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true },
+        },
+        gateway: {
+            served: true as const,
+            namespace: '/spur-new',
+            rootMcpUrl: 'http://localhost:3070/mcp',
+            counters: null,
+            mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+        },
+    } as unknown as IntegrationsStatus;
+
+    test('Codex renders valid TOML with the stdio command and its env_vars allowlist', () => {
+        const view = renderClientConfig(live, 'codex', 'project-stdio');
+        expect(view.format).toBe('toml');
+        expect(view.snippet).toContain('[mcp_servers.spur]');
+        expect(view.snippet).toContain('command = "spur"');
+        expect(view.snippet).toContain('"--url"');
+        expect(view.snippet).toContain('env_vars = ["SPUR_MCP_AUTH_ENV", "SPUR_MCP_TOKEN"]');
+        expect(view.configPath).toBe('~/.codex/config.toml');
+    });
+
+    test('omp renders YAML and OpenCode/OpenClaw render their own JSON trees', () => {
+        expect(renderClientConfig(live, 'omp', 'gateway-stdio').snippet).toContain('mcp_servers:');
+        const opencode = renderClientConfig(live, 'opencode', 'http').snippet;
+        expect(opencode).toContain('"$schema": "https://opencode.ai/config.json"');
+        expect(opencode).toContain('"type": "remote"');
+        expect(renderClientConfig(live, 'openclaw', 'http').snippet).toContain('"servers": {');
+    });
+
+    test('Gemini uses httpUrl for a direct HTTP entry and command/args for a bridge', () => {
+        expect(renderClientConfig(live, 'gemini', 'http').snippet).toContain(
+            '"httpUrl": "http://localhost:3070/spur-new/mcp"',
+        );
+        const stdio = renderClientConfig(live, 'gemini', 'gateway-stdio').snippet;
+        expect(stdio).toContain('"command": "spur"');
+        expect(stdio).toContain('"--gateway"');
+    });
+
+    test('every agent resolves a real URL — never a literal <server>', () => {
+        for (const agent of MCP_CLIENT_AGENTS) {
+            expect(renderClientConfig(live, agent, 'http').snippet).not.toContain('<server>');
+        }
+        // With the surface off, the Board's own origin is the fallback.
+        const off = {
+            mcp: { enabled: false, url: null, auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true } },
+            gateway: { served: false as const },
+        } as unknown as IntegrationsStatus;
+        expect(renderClientConfig(off, 'generic', 'http', 'http://localhost:4000').snippet).toContain(
+            'http://localhost:4000/mcp',
+        );
+    });
+
+    test('the guidance names the configured variable and explains it is not a stored secret', () => {
+        const view = renderClientConfig(live, 'claude', 'gateway-stdio');
+        expect(view.authNote).toContain('SPUR_MCP_TOKEN');
+        expect(view.authNote).toContain('environment variable');
+        expect(view.exportCommand).toBeNull();
+        expect(view.snippet).not.toContain('<ENV_NAME>');
+    });
+
+    test('an unset token adds the export command, and its value is never in the snippet', () => {
+        const unset = {
+            mcp: {
+                enabled: true,
+                url: 'http://localhost:3070/mcp',
+                auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: false },
+            },
+            gateway: { served: false as const },
+        } as unknown as IntegrationsStatus;
+        const view = renderClientConfig(unset, 'gemini', 'http');
+        expect(view.exportCommand).toBe('export SPUR_MCP_TOKEN="$(openssl rand -hex 32)"');
+        expect(view.authNote).toContain('not set');
+    });
+
+    test('an unauthenticated surface omits the Authorization header entirely', () => {
+        const open = {
+            mcp: {
+                enabled: true,
+                url: 'http://localhost:3070/mcp',
+                auth: { envName: '', tokenPresent: false, allowUnauthenticated: true },
+            },
+            gateway: { served: false as const },
+        } as unknown as IntegrationsStatus;
+        const view = renderClientConfig(open, 'generic', 'http');
+        expect(view.snippet).not.toContain('Authorization');
+        expect(view.exportCommand).toBeNull();
+        expect(view.authNote).toContain('allowUnauthenticated');
+        // The state chip also reads the policy: an unauthenticated surface is on, not token-less.
+        expect(surfaceState(open.mcp)).toBe('on');
+    });
+
+    test('a legacy-revision client is warned off direct HTTP, and the gateway bridge says when it is off', () => {
+        expect(renderClientConfig(live, 'codex', 'http').transportNote).toContain('2026-07-28');
+        const standalone = { mcp: live.mcp, gateway: { served: false as const } } as unknown as IntegrationsStatus;
+        expect(renderClientConfig(standalone, 'claude', 'gateway-stdio').transportNote).toContain(
+            'gateway MCP entry is off',
+        );
     });
 });
