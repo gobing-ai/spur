@@ -326,6 +326,18 @@ describe('1424 — Summary (R3)', () => {
         expect(view.getByTestId('integrations-row-a2a-outbound').textContent).toContain('on');
     });
 
+    // One config per protocol (K44): labels name the endpoint or direction, never a separate config.
+    test('row labels name the protocol, then the endpoint or traffic direction', async () => {
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getByTestId('integrations-summary-table')).toBeTruthy());
+        const label = (surface: string) =>
+            view.getByTestId(`integrations-row-${surface}`).querySelector('td')?.textContent;
+        expect(label('project-mcp')).toBe('MCP · project endpoint');
+        expect(label('gateway-mcp')).toBe('MCP · gateway root');
+        expect(label('a2a-inbound')).toBe('A2A · received');
+        expect(label('a2a-outbound')).toBe('A2A · sent');
+    });
+
     test('the activity columns come from the usage window', async () => {
         const view = render(<IntegrationsModule seams={makeSeams()} />);
         await waitFor(() => expect(view.getByTestId('integrations-row-project-mcp')).toBeTruthy());
@@ -476,6 +488,19 @@ describe('1424 — states (R7)', () => {
         fireEvent.click(view.getByRole('button', { name: 'Retry' }));
         await waitFor(() => expect(view.getByTestId('integrations-summary-table')).toBeTruthy());
         expect(statusRequests).toBeGreaterThan(before);
+    });
+
+    // A project server started before a rebuild survives the gateway restart (ADR-151 §7) and
+    // answers the old shape to the new Board: say so, instead of a TypeError from deep in a helper.
+    test('a status from an older server build names the stale server instead of crashing', async () => {
+        const { members: _members, ...a2a } = STATUS.a2a;
+        overrides.status = () => ({ ...STATUS, a2a: { ...a2a, inbound: [], outbound: [] } }) as never;
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getByTestId('integrations-diagnostic')).toBeTruthy());
+        const text = view.getByTestId('integrations-diagnostic').textContent ?? '';
+        expect(text).toContain('older Spur build');
+        expect(text).toContain('spur projects stop');
+        expect(text).not.toContain("reading 'filter'");
     });
 });
 

@@ -1,4 +1,5 @@
 import type { IntegrationsAgentReadiness, IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import { integrationsStatusSchema } from '@gobing-ai/spur-contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiClient } from '../../lib/rpc-client';
 import { api, apiFetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
@@ -124,7 +125,7 @@ async function load(
 > {
     const since = sinceForWindow(window);
     const client = seams.api ?? api;
-    const [status, usage, mcpEvents, a2aEvents, authEvents, requestRows, readiness] = await Promise.all([
+    const [rawStatus, usage, mcpEvents, a2aEvents, authEvents, requestRows, readiness] = await Promise.all([
         client.integrations.status(),
         client.integrations.usage(since === undefined ? {} : { since }),
         readEvents('mcp', since, seams),
@@ -133,6 +134,15 @@ async function load(
         client.inbox.requests({ limit: 100, scope: 'all' }),
         readReadiness(seams),
     ]);
+    // The OpenAPI client does not validate responses. A project server started before a rebuild
+    // survives the gateway restart (ADR-151 §7) and answers the old shape to the new Board.
+    const parsed = integrationsStatusSchema.safeParse(rawStatus);
+    if (!parsed.success) {
+        throw new Error(
+            'The project server answered an integrations status this Board cannot read — it is likely an older Spur build still running from before an upgrade or rebuild. Restart it with `spur projects stop <project>`; the gateway starts the current build on the next request.',
+        );
+    }
+    const status = parsed.data;
     // One receipt page serves both the A2A task list and the per-member outbound receipts: the
     // receipt row IS the request row, so no second read and no N+1 per message.
     const receiptById = new Map(requestRows.map((row) => [row.messageId, row]));

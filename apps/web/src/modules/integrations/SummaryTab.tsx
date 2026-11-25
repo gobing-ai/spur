@@ -16,8 +16,9 @@ import {
 /**
  * Integrations › Summary (task 1424 R3).
  *
- * One row per surface — project MCP, gateway MCP, A2A inbound, A2A outbound — with the state chip,
- * the endpoint, the auth variable NAME and the window's activity. The gateway strip renders only
+ * One row per surface — MCP at the project endpoint and at the gateway root, A2A received and sent
+ * (one config per protocol, K44) — with the state chip, the endpoint, the auth variable NAME and the
+ * window's activity. The gateway strip renders only
  * when the project is served under a gateway, and says so when its counters are unreadable.
  */
 
@@ -81,7 +82,7 @@ export function summaryRows(
     return [
         {
             surface: 'project-mcp',
-            label: 'Project MCP',
+            label: 'MCP · project endpoint',
             state: surfaceState(status.mcp),
             endpoint: status.mcp.url ?? status.mcp.path,
             envName: status.mcp.auth.envName,
@@ -92,7 +93,7 @@ export function summaryRows(
         },
         {
             surface: 'gateway-mcp',
-            label: 'Gateway MCP',
+            label: 'MCP · gateway root',
             state: gateway?.mcp === undefined ? 'off' : surfaceState(gateway.mcp),
             endpoint: gateway === null ? 'not served under a gateway' : gateway.rootMcpUrl,
             envName: gateway?.mcp?.auth.envName ?? '',
@@ -103,7 +104,7 @@ export function summaryRows(
         },
         {
             surface: 'a2a-inbound',
-            label: 'A2A inbound',
+            label: 'A2A · received',
             state: surfaceState(status.a2a),
             endpoint: status.a2a.url ?? status.a2a.basePath,
             envName: status.a2a.auth.envName,
@@ -114,7 +115,7 @@ export function summaryRows(
         },
         {
             surface: 'a2a-outbound',
-            label: 'A2A outbound',
+            label: 'A2A · sent',
             state: outbound.length === 0 ? 'off' : 'on',
             endpoint: outbound.map((member) => member.target).join(', '),
             envName: '',
@@ -213,9 +214,9 @@ export function SummaryTab({
                     className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-base-content/80"
                     data-testid="integrations-gateway-mcp-warning"
                 >
-                    Gateway MCP is on but this project's <span className="font-mono">server.mcp.enabled</span> is off:
-                    the gateway's <span className="font-mono">tools/call</span> forwards to the project's loopback{' '}
-                    <span className="font-mono">/mcp</span>, so enable it on every target project.
+                    The gateway root MCP is on but this project's <span className="font-mono">server.mcp.enabled</span>{' '}
+                    is off: the gateway's <span className="font-mono">tools/call</span> forwards to the project's
+                    loopback <span className="font-mono">/mcp</span>, so enable it on every target project.
                 </div>
             ) : null}
             <Card>
