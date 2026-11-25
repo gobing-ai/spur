@@ -145,8 +145,5 @@
         "typescript": "catalog:",
         "yaml": "2.9.0",
         "zod": "4.4.3"
-    },
-    "patchedDependencies": {
-        "@gobing-ai/ts-db@0.8.0": "patches/@gobing-ai%2Fts-db@0.8.0.patch"
     }
 }
