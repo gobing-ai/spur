@@ -11,10 +11,137 @@ import { EmptyState } from '../../components/module-kit/EmptyState';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import JobDetailDrawer from './JobDetailDrawer';
 import { RetentionBadge, timeRangeSince } from './ObservabilityFilters';
-import { formatDuration } from './SystemEventsTab';
 import type { ObservabilityTabProps } from './tabs';
 
 export type JobStatusFilter = 'all' | 'failed' | 'running' | 'completed';
+
+/**
+ * Format a duration in milliseconds with 3 decimal places and thousands grouping,
+ * or an em dash when absent/non-finite.
+ */
+export function formatDurationMs(durationMs: number | null | undefined): string {
+    if (typeof durationMs !== 'number' || !Number.isFinite(durationMs)) {
+        return '—';
+    }
+    return durationMs.toLocaleString('en-US', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+    });
+}
+
+function readNonEmptyString(payload: Record<string, unknown> | null, key: string): string | null {
+    if (!payload) return null;
+    const raw = payload[key];
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Derive a human-readable job label from payload metadata when available,
+ * falling back to `job.type`.
+ */
+export function resolveJobName(job: QueueJobRow): string {
+    if (job.type === 'scheduler.custom') {
+        return readNonEmptyString(job.payload, 'name') ?? job.type;
+    }
+    if (job.type === 'task-action') {
+        const wbs = readNonEmptyString(job.payload, 'wbs');
+        const action = readNonEmptyString(job.payload, 'action');
+        if (wbs && action) return `task:${wbs} · ${action}`;
+        if (wbs) return `task:${wbs}`;
+        if (action) return `${job.type} · ${action}`;
+        return job.type;
+    }
+    if (job.type === 'feature-action') {
+        const featureId = readNonEmptyString(job.payload, 'featureId');
+        const action = readNonEmptyString(job.payload, 'action');
+        if (featureId && action) return `feature:${featureId} · ${action}`;
+        if (featureId) return `feature:${featureId}`;
+        if (action) return `${job.type} · ${action}`;
+        return job.type;
+    }
+    return readNonEmptyString(job.payload, 'name') ?? job.type;
+}
+
+/**
+ * Extract the command or source summary for a queue job row.
+ */
+export function resolveJobCommand(job: QueueJobRow): string | null {
+    const command = readNonEmptyString(job.payload, 'command');
+    if (command) return command;
+    const source = readNonEmptyString(job.payload, 'source');
+    if (source) return `source: ${source}`;
+    return null;
+}
+
+function formatJobTimestamp(iso: string | null): string {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    const now = new Date();
+    const isSameDay =
+        date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate();
+    if (isSameDay) {
+        return date.toLocaleTimeString();
+    }
+    return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+}
+
+/**
+ * Return whether a queue job remains visible under the current schedule exclusions.
+ */
+export function jobMatchesScheduleFilter(
+    job: QueueJobRow,
+    excluded: { excludeTypes: readonly string[]; excludeCustomNames: readonly string[] },
+): boolean {
+    if (excluded.excludeTypes.includes(job.type)) {
+        return false;
+    }
+    if (
+        job.type === 'scheduler.custom' &&
+        job.payload !== null &&
+        typeof job.payload.name === 'string' &&
+        excluded.excludeCustomNames.includes(job.payload.name)
+    ) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Filter queue jobs against unchecked schedules (defense-in-depth alongside server SQL filtering).
+ */
+export function filterJobsBySchedules(
+    jobs: readonly QueueJobRow[],
+    excluded: { excludeTypes: readonly string[]; excludeCustomNames: readonly string[] },
+): QueueJobRow[] {
+    if (excluded.excludeTypes.length === 0 && excluded.excludeCustomNames.length === 0) {
+        return [...jobs];
+    }
+    const excludeTypeSet = new Set(excluded.excludeTypes);
+    const excludeCustomSet = new Set(excluded.excludeCustomNames);
+    return jobs.filter((job) => {
+        if (excludeTypeSet.has(job.type)) return false;
+        if (
+            job.type === 'scheduler.custom' &&
+            job.payload !== null &&
+            typeof job.payload.name === 'string' &&
+            excludeCustomSet.has(job.payload.name)
+        ) {
+            return false;
+        }
+        return true;
+    });
+}
 
 /**
  * Default schedule filter selection: built-in schedules start unchecked (ignored in
@@ -369,11 +496,38 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
         });
     };
 
+    const visibleJobs = useMemo(() => filterJobsBySchedules(jobs, excluded), [jobs, excluded]);
+    const displayCounts = useMemo<QueueJobStatusCounts>(() => {
+        if (visibleJobs.length === jobs.length) {
+            return counts;
+        }
+        let hiddenAll = 0;
+        let hiddenPending = 0;
+        let hiddenProcessing = 0;
+        let hiddenCompleted = 0;
+        let hiddenFailed = 0;
+        for (const job of jobs) {
+            if (jobMatchesScheduleFilter(job, excluded)) continue;
+            hiddenAll += 1;
+            if (job.status === 'pending') hiddenPending += 1;
+            else if (job.status === 'processing') hiddenProcessing += 1;
+            else if (job.status === 'completed') hiddenCompleted += 1;
+            else if (job.status === 'failed') hiddenFailed += 1;
+        }
+        return {
+            all: Math.max(0, counts.all - hiddenAll),
+            pending: Math.max(0, counts.pending - hiddenPending),
+            processing: Math.max(0, counts.processing - hiddenProcessing),
+            completed: Math.max(0, counts.completed - hiddenCompleted),
+            failed: Math.max(0, counts.failed - hiddenFailed),
+        };
+    }, [jobs, visibleJobs.length, counts, excluded]);
+
     const chips: { id: JobStatusFilter; label: string; count: number }[] = [
-        { id: 'all', label: 'All', count: counts.all },
-        { id: 'failed', label: 'Failed', count: counts.failed },
-        { id: 'running', label: 'Running', count: counts.processing },
-        { id: 'completed', label: 'Completed', count: counts.completed },
+        { id: 'all', label: 'All', count: displayCounts.all },
+        { id: 'failed', label: 'Failed', count: displayCounts.failed },
+        { id: 'running', label: 'Running', count: displayCounts.processing },
+        { id: 'completed', label: 'Completed', count: displayCounts.completed },
     ];
 
     return (
@@ -413,13 +567,13 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
             </div>
 
             {/* Failure Warning Banner */}
-            {counts.failed > 0 && (
+            {displayCounts.failed > 0 && (
                 <div
                     className="p-3 rounded-xl bg-error/10 border border-error/20 flex items-center justify-between text-xs text-error font-medium"
                     data-testid="jobs-failure-banner"
                 >
                     <span>
-                        ⚠️ {counts.failed} {counts.failed === 1 ? 'job' : 'jobs'} failed in this window
+                        ⚠️ {displayCounts.failed} {displayCounts.failed === 1 ? 'job' : 'jobs'} failed in this window
                     </span>
                     <button
                         type="button"
@@ -450,7 +604,7 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
                         Queue Jobs
                     </span>
                     <span className="text-xs text-base-content/50 font-mono">
-                        Showing {jobs.length} of {counts.all} job(s)
+                        Showing {visibleJobs.length} of {displayCounts.all} job(s)
                         {excludedCount > 0 ? ` · ${excludedCount} schedule(s) hidden` : ''}
                     </span>
                 </div>
@@ -463,7 +617,7 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
                     <div className="flex items-center justify-center h-32 text-base-content/50 text-sm">
                         <Loading size="sm" /> Loading jobs…
                     </div>
-                ) : jobs.length === 0 ? (
+                ) : visibleJobs.length === 0 ? (
                     <EmptyState testId="jobs-empty-state">
                         {excludedCount > 0
                             ? 'No jobs found in this time range with the current schedule filters.'
@@ -475,17 +629,23 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
                             <thead>
                                 <tr className="border-b border-base-content/10 text-base-content/60">
                                     <th>Status</th>
-                                    <th>Job Type</th>
-                                    <th>Enqueued At</th>
-                                    <th>Started At</th>
-                                    <th>Duration</th>
-                                    <th>Attempts</th>
+                                    <th>Job</th>
+                                    <th>Command</th>
+                                    <th className="text-right">Started At</th>
+                                    <th className="text-right">Ended At</th>
+                                    <th className="text-right">Duration (ms)</th>
+                                    <th className="text-right">Attempts</th>
                                     <th>Error</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {jobs.map((job) => {
+                                {visibleJobs.map((job) => {
                                     const isExpanded = expandedErrors.has(job.id);
+                                    const jobName = resolveJobName(job);
+                                    const jobCommand = resolveJobCommand(job);
+                                    const startedTooltip = job.startedAt
+                                        ? `Started: ${new Date(job.startedAt).toLocaleString()} · Enqueued: ${new Date(job.queuedAt).toLocaleString()}`
+                                        : `Not started · Enqueued: ${new Date(job.queuedAt).toLocaleString()}`;
                                     return (
                                         <tr
                                             key={job.id}
@@ -498,17 +658,34 @@ export default function JobsTab({ timeRange, onNavigate }: ObservabilityTabProps
                                                     {job.status}
                                                 </Badge>
                                             </td>
-                                            <td className="font-semibold text-base-content">{job.type}</td>
-                                            <td className="text-base-content/60">
-                                                {new Date(job.queuedAt).toLocaleTimeString()}
+                                            <td
+                                                className="font-semibold text-base-content whitespace-nowrap"
+                                                title={jobName !== job.type ? `${jobName} (${job.type})` : job.type}
+                                            >
+                                                {jobName}
                                             </td>
-                                            <td className="text-base-content/60">
-                                                {job.startedAt ? new Date(job.startedAt).toLocaleTimeString() : '—'}
+                                            <td
+                                                className="max-w-xs truncate text-base-content/70"
+                                                title={jobCommand ?? undefined}
+                                            >
+                                                {jobCommand ?? <span className="text-base-content/30">—</span>}
                                             </td>
-                                            <td className="text-base-content/80">
-                                                {job.durationMs !== null ? formatDuration(job.durationMs) : '—'}
+                                            <td
+                                                className="text-right tabular-nums whitespace-nowrap text-base-content/60"
+                                                title={startedTooltip}
+                                            >
+                                                {formatJobTimestamp(job.startedAt)}
                                             </td>
-                                            <td className="text-base-content/60">
+                                            <td
+                                                className="text-right tabular-nums whitespace-nowrap text-base-content/60"
+                                                title={job.endedAt ? new Date(job.endedAt).toLocaleString() : undefined}
+                                            >
+                                                {formatJobTimestamp(job.endedAt)}
+                                            </td>
+                                            <td className="text-right tabular-nums whitespace-nowrap text-base-content/80">
+                                                {formatDurationMs(job.durationMs)}
+                                            </td>
+                                            <td className="text-right tabular-nums whitespace-nowrap text-base-content/60">
                                                 {job.attempts} / {job.maxRetries}
                                             </td>
                                             <td className="max-w-xs">

@@ -87,8 +87,8 @@ export default function JobDetailDrawer({ job, onClose, onNavigate }: JobDetailD
                     };
                 });
 
-                // Synthesize started step from job.startedAt if present (Q&A D2)
-                if (job.startedAt) {
+                // Synthesize started step from job.startedAt only if no recorded queue.job.started exists (Q&A D2)
+                if (job.startedAt && !items.some((item) => item.eventName === 'queue.job.started')) {
                     items.push({
                         id: `synth-started-${job.id}`,
                         eventName: 'queue.job.started',

@@ -2,9 +2,14 @@ import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import type { QueueJobListResponse, QueueJobRow, SchedulerScheduleRow } from '@gobing-ai/spur-contracts';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
+import JobDetailDrawer from '../../../src/modules/observability/JobDetailDrawer';
 import JobsTab, {
     computeExcludedSchedules,
     defaultSelectedSchedules,
+    filterJobsBySchedules,
+    formatDurationMs,
+    resolveJobCommand,
+    resolveJobName,
 } from '../../../src/modules/observability/JobsTab';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
@@ -155,6 +160,7 @@ function createMockFetch(options: {
     schedulesStatus?: number;
     jobs?: QueueJobRow[];
     hasMoreForFirstPage?: boolean;
+    ignoreServerExclusions?: boolean;
 }) {
     const requests: string[] = [];
     const schedules = options.schedules ?? SCHEDULES;
@@ -188,7 +194,8 @@ function createMockFetch(options: {
                               },
                           ]
                         : jobs;
-                const body = buildJobsResponse(pageJobs, url, options.hasMoreForFirstPage && offset === 0);
+                const effectiveUrl = options.ignoreServerExclusions ? new URL('http://localhost/api/jobs') : url;
+                const body = buildJobsResponse(pageJobs, effectiveUrl, options.hasMoreForFirstPage && offset === 0);
                 return new Response(JSON.stringify(body), {
                     status: 200,
                     headers: { 'content-type': 'application/json' },
@@ -222,6 +229,71 @@ describe('JobsTab schedule filter helpers', () => {
             excludeTypes: [],
             excludeCustomNames: [],
         });
+    });
+
+    test('formatDurationMs formats numeric values in milliseconds with 3 decimals and grouping, and non-finite values as em dash', () => {
+        expect(formatDurationMs(720.3193330168724)).toBe('720.319');
+        expect(formatDurationMs(0.019791990518569946)).toBe('0.020');
+        expect(formatDurationMs(1300)).toBe('1,300.000');
+        expect(formatDurationMs(182098.798)).toBe('182,098.798');
+        expect(formatDurationMs(0)).toBe('0.000');
+        expect(formatDurationMs(null)).toBe('—');
+        expect(formatDurationMs(undefined)).toBe('—');
+        expect(formatDurationMs(Number.NaN)).toBe('—');
+        expect(formatDurationMs(Number.POSITIVE_INFINITY)).toBe('—');
+    });
+
+    test('resolveJobName and resolveJobCommand derive clear labels and commands from job payloads', () => {
+        const customJob = ALL_JOBS[2];
+        const pruneJob = ALL_JOBS[0];
+        if (!customJob || !pruneJob) throw new Error('missing fixture');
+
+        expect(resolveJobName(customJob)).toBe('history-refresh');
+        expect(resolveJobName({ ...customJob, payload: null })).toBe('scheduler.custom');
+        expect(resolveJobName({ ...customJob, payload: { name: '   ' } })).toBe('scheduler.custom');
+
+        expect(resolveJobName({ ...customJob, type: 'task-action', payload: { wbs: '1234', action: 'run' } })).toBe(
+            'task:1234 · run',
+        );
+        expect(resolveJobName({ ...customJob, type: 'task-action', payload: { wbs: '1234' } })).toBe('task:1234');
+        expect(resolveJobName({ ...customJob, type: 'task-action', payload: { action: 'run' } })).toBe(
+            'task-action · run',
+        );
+        expect(resolveJobName({ ...customJob, type: 'task-action', payload: {} })).toBe('task-action');
+
+        expect(
+            resolveJobName({ ...customJob, type: 'feature-action', payload: { featureId: 'A1', action: 'check' } }),
+        ).toBe('feature:A1 · check');
+        expect(resolveJobName({ ...customJob, type: 'feature-action', payload: { featureId: 'A1' } })).toBe(
+            'feature:A1',
+        );
+        expect(resolveJobName({ ...customJob, type: 'feature-action', payload: { action: 'check' } })).toBe(
+            'feature-action · check',
+        );
+        expect(resolveJobName({ ...customJob, type: 'feature-action', payload: {} })).toBe('feature-action');
+
+        expect(resolveJobName(pruneJob)).toBe('system-events-prune');
+
+        expect(resolveJobCommand(customJob)).toBe('spur history import');
+        expect(resolveJobCommand({ ...customJob, payload: { command: '  echo ok  ' } })).toBe('echo ok');
+        expect(resolveJobCommand(pruneJob)).toBe('source: scheduler');
+        expect(resolveJobCommand({ ...customJob, payload: { command: '  ', source: '' } })).toBeNull();
+        expect(resolveJobCommand({ ...customJob, payload: null })).toBeNull();
+    });
+
+    test('filterJobsBySchedules filters matching builtin and scheduler.custom rows while keeping ad-hoc and payloadless rows', () => {
+        const customTemplate = ALL_JOBS[2];
+        if (!customTemplate) throw new Error('missing fixture');
+        const customWithoutName: QueueJobRow = {
+            ...customTemplate,
+            id: 'job-custom-noname',
+            payload: null,
+        };
+        const filtered = filterJobsBySchedules([...ALL_JOBS, customWithoutName], {
+            excludeTypes: ['system-events-prune', 'smoke'],
+            excludeCustomNames: ['history-refresh'],
+        });
+        expect(filtered.map((j) => j.id)).toEqual(['job-adhoc-1', 'job-custom-noname']);
     });
 });
 
@@ -369,5 +441,194 @@ describe('JobsTab Active Schedules filter integration', () => {
             expect(view.queryByTestId('schedules-error')).not.toBeNull();
             expect(view.queryByTestId('job-row-job-prune-1')).not.toBeNull();
         });
+    });
+
+    test('filters Queue Jobs client-side even when /api/jobs returns unfiltered rows', async () => {
+        const { mockFetch } = createMockFetch({ ignoreServerExclusions: true });
+        setFetchForTesting(mockFetch);
+
+        const view = render(<JobsTab timeRange="4h" />);
+        await waitFor(() => {
+            expect(view.queryByTestId('job-row-job-history-1')).not.toBeNull();
+        });
+
+        expect(view.queryByTestId('job-row-job-prune-1') === null).toBe(true);
+        expect(view.queryByTestId('job-row-job-smoke-1') === null).toBe(true);
+        expect(view.queryByTestId('job-row-job-adhoc-1')).not.toBeNull();
+        expect(view.getByTestId('status-chip-all').textContent).toContain('2');
+        expect(view.container.textContent).toContain('Showing 2 of 2 job(s)');
+
+        fireEvent.click(view.getByTestId('schedule-filter-smoke'));
+        await waitFor(() => {
+            expect(view.queryByTestId('job-row-job-smoke-1')).not.toBeNull();
+        });
+        expect(view.getByTestId('status-chip-all').textContent).toContain('3');
+
+        fireEvent.click(view.getByTestId('schedule-filter-history-refresh'));
+        await waitFor(() => {
+            expect(view.queryByTestId('job-row-job-history-1') === null).toBe(true);
+        });
+        expect(view.getByTestId('status-chip-all').textContent).toContain('2');
+    });
+
+    test('renders refined Queue Jobs columns, resolved job names/commands, right-aligned numbers/times, and 3-decimal Duration (ms)', async () => {
+        const customTemplate = ALL_JOBS[2];
+        const adhocTemplate = ALL_JOBS[3];
+        if (!customTemplate || !adhocTemplate) throw new Error('missing fixture');
+        const durationJobs: QueueJobRow[] = [
+            {
+                ...customTemplate,
+                id: 'job-dur-frac',
+                durationMs: 720.3193330168724,
+            },
+            {
+                ...adhocTemplate,
+                id: 'job-dur-sec',
+                durationMs: 1300,
+            },
+            {
+                ...adhocTemplate,
+                id: 'job-dur-null',
+                startedAt: null,
+                endedAt: null,
+                durationMs: null,
+                payload: null,
+            },
+        ];
+        const { mockFetch } = createMockFetch({ jobs: durationJobs });
+        setFetchForTesting(mockFetch);
+
+        const view = render(<JobsTab timeRange="4h" />);
+        await waitFor(() => {
+            expect(view.queryByTestId('job-row-job-dur-frac')).not.toBeNull();
+        });
+
+        const headerCells = Array.from(view.container.querySelectorAll('thead th'));
+        expect(headerCells.map((th) => th.textContent)).toEqual([
+            'Status',
+            'Job',
+            'Command',
+            'Started At',
+            'Ended At',
+            'Duration (ms)',
+            'Attempts',
+            'Error',
+        ]);
+        for (const idx of [3, 4, 5, 6]) {
+            expect(headerCells[idx]?.className).toContain('text-right');
+        }
+
+        const fracRow = view.getByTestId('job-row-job-dur-frac');
+        const fracCells = Array.from(fracRow.querySelectorAll('td'));
+        expect(fracCells[1]?.textContent).toBe('history-refresh');
+        expect(fracCells[1]?.getAttribute('title')).toContain('scheduler.custom');
+        expect(fracCells[2]?.textContent).toBe('spur history import');
+        expect(fracCells[5]?.textContent).toBe('720.319');
+        for (const idx of [3, 4, 5, 6]) {
+            expect(fracCells[idx]?.className).toContain('text-right');
+            expect(fracCells[idx]?.className).toContain('tabular-nums');
+        }
+
+        const secRow = view.getByTestId('job-row-job-dur-sec');
+        const secCells = Array.from(secRow.querySelectorAll('td'));
+        expect(secCells[1]?.textContent).toBe('task:1234');
+        expect(secCells[5]?.textContent).toBe('1,300.000');
+
+        const nullRow = view.getByTestId('job-row-job-dur-null');
+        const nullCells = Array.from(nullRow.querySelectorAll('td'));
+        expect(nullCells[2]?.textContent).toBe('—');
+        expect(nullCells[3]?.textContent).toBe('—');
+        expect(nullCells[4]?.textContent).toBe('—');
+        expect(nullCells[5]?.textContent).toBe('—');
+    });
+});
+
+describe('JobDetailDrawer lifecycle timeline deduplication', () => {
+    test('does not duplicate queue.job.started when a real started event is already recorded', async () => {
+        const job = ALL_JOBS[2];
+        if (!job) throw new Error('missing fixture');
+
+        setFetchForTesting(
+            Object.assign(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            events: [
+                                {
+                                    id: 'ev-enq',
+                                    eventName: 'queue.job.enqueued',
+                                    occurredAt: '2026-11-25T10:30:00.000Z',
+                                    actor: null,
+                                    payload: { jobId: job.id },
+                                },
+                                {
+                                    id: 'ev-start',
+                                    eventName: 'queue.job.started',
+                                    occurredAt: '2026-11-25T10:30:00.100Z',
+                                    actor: null,
+                                    payload: { jobId: job.id },
+                                },
+                                {
+                                    id: 'ev-comp',
+                                    eventName: 'queue.job.completed',
+                                    occurredAt: '2026-11-25T10:30:01.000Z',
+                                    actor: null,
+                                    payload: { jobId: job.id },
+                                },
+                            ],
+                            count: 3,
+                        }),
+                        { status: 200, headers: { 'content-type': 'application/json' } },
+                    ),
+                { preconnect: () => {} },
+            ),
+        );
+
+        const view = render(<JobDetailDrawer job={job} onClose={() => {}} />);
+        await waitFor(() => {
+            expect(view.queryByTestId('lifecycle-timeline-list')).not.toBeNull();
+        });
+
+        const text = view.getByTestId('lifecycle-timeline-list').textContent ?? '';
+        const startedMatches = text.match(/queue\.job\.started/g) ?? [];
+        expect(startedMatches).toHaveLength(1);
+        expect(text).not.toContain('derived');
+    });
+
+    test('synthesizes derived queue.job.started when no recorded started event exists', async () => {
+        const job = ALL_JOBS[2];
+        if (!job) throw new Error('missing fixture');
+
+        setFetchForTesting(
+            Object.assign(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            events: [
+                                {
+                                    id: 'ev-enq',
+                                    eventName: 'queue.job.enqueued',
+                                    occurredAt: '2026-11-25T10:30:00.000Z',
+                                    actor: null,
+                                    payload: { jobId: job.id },
+                                },
+                            ],
+                            count: 1,
+                        }),
+                        { status: 200, headers: { 'content-type': 'application/json' } },
+                    ),
+                { preconnect: () => {} },
+            ),
+        );
+
+        const view = render(<JobDetailDrawer job={job} onClose={() => {}} />);
+        await waitFor(() => {
+            expect(view.queryByTestId('lifecycle-timeline-list')).not.toBeNull();
+        });
+
+        const text = view.getByTestId('lifecycle-timeline-list').textContent ?? '';
+        const startedMatches = text.match(/queue\.job\.started/g) ?? [];
+        expect(startedMatches).toHaveLength(1);
+        expect(text).toContain('derived');
     });
 });
