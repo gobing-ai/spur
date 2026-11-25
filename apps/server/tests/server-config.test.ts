@@ -32,6 +32,7 @@ describe('serverBootstrapConfig', () => {
             server: {
                 mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN', allowUnauthenticated: true, namespace: 'sp' },
                 a2a: { enabled: true, authEnv: 'SPUR_A2A_TOKEN', allowUnauthenticated: true },
+                gateway: { port: 3070 },
             },
         });
         const fromYaml = serverBootstrapConfig({ NODE_ENV: 'test' }, spurConfig);
@@ -46,13 +47,20 @@ describe('serverBootstrapConfig', () => {
             authEnv: 'SPUR_A2A_TOKEN',
             allowUnauthenticated: true,
         });
+        expect(fromYaml.gateway).toEqual({ port: 3070 });
 
         const overridden = serverBootstrapConfig(
-            { NODE_ENV: 'test', SPUR_MCP_ENABLED: 'false', SPUR_A2A_AUTH_ENV: 'OVERRIDE_A2A_TOKEN' },
+            {
+                NODE_ENV: 'test',
+                SPUR_MCP_ENABLED: 'false',
+                SPUR_A2A_AUTH_ENV: 'OVERRIDE_A2A_TOKEN',
+                SPUR_GATEWAY_PORT: '4123',
+            },
             spurConfig,
         );
         expect(overridden.mcp?.enabled).toBe(false);
         expect(overridden.a2a?.authEnv).toBe('OVERRIDE_A2A_TOKEN');
+        expect(overridden.gateway).toEqual({ port: 4123 });
     });
 
     test('spurConfigSchema refuses server.mcp.enabled or server.a2a.enabled without authEnv unless allowUnauthenticated is true', () => {

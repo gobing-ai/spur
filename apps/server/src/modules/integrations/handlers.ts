@@ -80,10 +80,13 @@ export function setGatewayProbeFetchForTesting(
     probeFetch = fn;
 }
 
-/** The gateway's fixed public port: `SPUR_GATEWAY_PORT`, defaulting to 3000. */
-function gatewayPort(env: Record<string, string | undefined>): number {
-    const configured = Number(env[SPUR_ENV_VARS.gatewayPort] ?? '');
-    return Number.isFinite(configured) && configured > 0 ? configured : 3000;
+/** The gateway's fixed public port: `SPUR_GATEWAY_PORT`, then configured `server.gateway.port`, defaulting to 3000. */
+function gatewayPort(env: Record<string, string | undefined>, configuredPort?: number): number {
+    const envPort = Number(env[SPUR_ENV_VARS.gatewayPort] ?? '');
+    if (Number.isFinite(envPort) && envPort > 0) return envPort;
+    return configuredPort !== undefined && Number.isFinite(configuredPort) && configuredPort > 0
+        ? configuredPort
+        : 3000;
 }
 
 /** Gateway counters from the gateway's own `/api/health` over loopback; a failure is reported, not thrown. */
@@ -162,7 +165,8 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                         outboundAuth: await outboundAuthOf(ctx, fleet),
                     };
                 },
-                gateway: async (since) => probeGateway(gatewayPort(bearerEnv(ctx)), since),
+                gateway: async (since) =>
+                    probeGateway(gatewayPort(bearerEnv(ctx), ctx.bootConfig?.()?.gateway?.port), since),
             },
         });
     };
@@ -178,7 +182,8 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
     const requestContextOf = (context: unknown) => {
         const request = requestOf(context);
         if (request === undefined) return { origin: '' };
-        const server = buildConfigFromEnv(bearerEnv(ctx)).server;
+        const env = bearerEnv(ctx);
+        const server = buildConfigFromEnv(env).server;
         const entry = new ProjectRegistry()
             .peek()
             .projects.find(
@@ -187,7 +192,11 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                     normalizeProjectPath(candidate.path) === normalizeProjectPath(ctx.cwd),
             );
         const localGatewayBase = entry
-            ? resolveProjectGatewayUrl(entry, { host: server.host, port: server.gateway.port }, '')
+            ? resolveProjectGatewayUrl(
+                  entry,
+                  { host: server.host, port: gatewayPort(env, ctx.bootConfig?.()?.gateway?.port) },
+                  '',
+              )
             : undefined;
         return {
             origin: new URL(request.url).origin,

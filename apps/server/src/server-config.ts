@@ -30,6 +30,8 @@ export interface ServerBootConfig {
         allowUnauthenticated?: boolean;
         namespace?: string | null;
     };
+    /** Configured gateway listener port (`server.gateway.port` / `SPUR_GATEWAY_PORT`). */
+    gateway?: { port: number };
 }
 
 /**
@@ -76,6 +78,9 @@ export function serverBootstrapConfig(
             authEnv: appConfig.server.mcp.authEnv ?? null,
             allowUnauthenticated: appConfig.server.mcp.allowUnauthenticated,
             namespace: appConfig.server.mcp.namespace ?? null,
+        },
+        gateway: {
+            port: appConfig.server.gateway.port,
         },
     };
 }

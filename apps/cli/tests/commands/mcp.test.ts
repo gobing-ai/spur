@@ -225,6 +225,15 @@ describe('resolveMcpUrl (task 1373 R1: gateway or direct port)', () => {
     test('falls back to server.port for an unregistered project', async () => {
         expect(await resolveMcpUrl(projectRoot, {})).toBe(`http://127.0.0.1:${config.server.port}/mcp`);
     });
+
+    test('uses spurConfig.server.gateway.port when SPUR_GATEWAY_PORT is unset and lets env override', async () => {
+        seed([{ name: 'b9', path: projectRoot, host: 'localhost', port: 3101, prefix: '/b9' }]);
+        const spurConfig = { server: { gateway: { port: 3070 } } };
+        expect(await resolveMcpUrl(projectRoot, {}, spurConfig)).toBe('http://localhost:3070/b9/mcp');
+        expect(await resolveMcpUrl(projectRoot, { SPUR_GATEWAY_PORT: '4123' }, spurConfig)).toBe(
+            'http://localhost:4123/b9/mcp',
+        );
+    });
 });
 
 describe('registerMcpCommand wiring (task 1373 R2)', () => {

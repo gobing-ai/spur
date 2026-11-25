@@ -115,6 +115,7 @@ describe('renderGatewayPlist (K4 R9)', () => {
         expect(plist).toContain('<key>ThrottleInterval</key>\n    <integer>10</integer>');
         expect(plist).toContain('/Users/tester/Library/Logs/spur/gateway.out.log');
         expect(plist).toContain('/Users/tester/Library/Logs/spur/gateway.err.log');
+        expect(plist).toContain('<key>SPUR_GATEWAY_PORT</key>\n        <string>3111</string>');
         for (const arg of [
             '/opt/homebrew/bin/bun',
             '/opt/spur/apps/cli/src/index.ts',
@@ -150,6 +151,8 @@ describe('renderGatewayPlist (K4 R9)', () => {
             port: 3070,
             allowedHosts: ['spur.example.net', 'gw.example.net'],
         });
+        expect(plist).toContain('<key>SPUR_GATEWAY_PORT</key>');
+        expect(plist).toContain('<string>3070</string>');
         expect(plist).toContain('<key>SPUR_GATEWAY_ALLOWED_HOSTS</key>');
         expect(plist).toContain('<string>spur.example.net,gw.example.net</string>');
 

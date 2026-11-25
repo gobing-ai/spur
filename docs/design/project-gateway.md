@@ -76,15 +76,21 @@ Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` 
 set with `SPUR_GATEWAY_PORT` for both the gateway and MCP bridge),
 `server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`, mapped from the
 comma-separated `SPUR_GATEWAY_ALLOWED_HOSTS`) and, since task 1382,
-`server.gateway.mcp: { enabled: boolean (default false), authEnv?: string }` mapped from
+`server.gateway.mcp: { enabled: boolean (default false), authEnv?: string, allowUnauthenticated?: boolean }` mapped from
 `SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`. `enabled` without `authEnv` fails the
-config load with the same message shape as `server.mcp`. `allocatePort()` skips the gateway port;
+config load with the same message shape as `server.mcp` unless `allowUnauthenticated: true` is set
+for local-only access. `allocatePort()` skips the gateway port;
 spawned serves already bind `127.0.0.1` (`project-start.ts:450-460`).
 
 ### 4.1a Gateway-hosted MCP entry (task 1382, feature K41)
 
 The gateway answers **its own** MCP endpoint at the root, so an MCP client needs one URL no matter
-how many projects are registered.
+how many projects are registered. `server.gateway.mcp` and `server.mcp` are intentionally separate
+surfaces: `server.gateway.mcp` exposes the multi-project hub at `/mcp` (requiring a `project`
+selector on built-ins and using its own `SPUR_GATEWAY_MCP_TOKEN` boundary), while `server.mcp`
+exposes each project's `/<prefix>/mcp` endpoint (single-project scope plus `spur://` resources).
+Because gateway `tools/call` forwards to each target project's loopback `/mcp`, projects targeted
+through the gateway must also have `server.mcp.enabled: true`.
 
 | Aspect | Contract |
 | --- | --- |

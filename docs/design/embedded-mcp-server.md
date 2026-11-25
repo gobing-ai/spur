@@ -32,11 +32,16 @@ services. Stdio-only clients connect through the `spur mcp` CLI bridge
 | Key | Env var | Default |
 | --- | --- | --- |
 | `server.mcp.enabled` | `SPUR_MCP_ENABLED` | `false` |
-| `server.mcp.authEnv` | `SPUR_MCP_AUTH_ENV` | — (NAME of the variable holding the bearer token; required when `enabled` is true — enabling without it fails the config load; the value is read at request time, never stored) |
+| `server.mcp.authEnv` | `SPUR_MCP_AUTH_ENV` | — (NAME of the variable holding the bearer token; required when `enabled` is true unless `allowUnauthenticated` is true — enabling without either fails the config load; the value is read at request time, never stored) |
+| `server.mcp.allowUnauthenticated` | — | `false` (when `true`, permits local requests without a bearer token when `authEnv` is unset in the environment) |
 | `server.mcp.namespace` | `SPUR_MCP_NAMESPACE` | — (optional project namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load naming the variable and grammar) |
 
 Mirrors `server.a2a` end to end (`packages/config/src/index.ts` schema + `superRefine`;
-`ServerBootConfig.mcp` in `apps/server/src/server-config.ts`).
+`ServerBootConfig.mcp` in `apps/server/src/server-config.ts`). `server.mcp` governs the per-project
+`/<prefix>/mcp` endpoint, whereas `server.gateway.mcp` governs the separate gateway-root `/mcp`
+multi-project hub ([project-gateway.md](project-gateway.md#41a-gateway-hosted-mcp-entry-task-1382-feature-k41));
+because the gateway forwards `tools/call` to each project's loopback `/mcp`, target projects also
+need `server.mcp.enabled: true`.
 
 **Namespace resolution (task 1380):** `resolveMcpNamespace` in `packages/app/src/services/mcp-namespace.ts`
 resolves the project namespace once when `McpDispatcher` constructs:

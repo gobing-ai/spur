@@ -105,6 +105,8 @@ export function renderGatewayPlist(
         '    <dict>',
         '        <key>PATH</key>',
         `        <string>${xmlEscape(deps.path)}</string>`,
+        '        <key>SPUR_GATEWAY_PORT</key>',
+        `        <string>${String(deps.port)}</string>`,
         ...(allowedHosts.length === 0
             ? []
             : [

@@ -160,9 +160,13 @@ export async function runMcpStdioBridge(options: McpStdioBridgeOptions): Promise
  * uses its canonical gateway prefix regardless of liveness. Only an unregistered project uses the
  * direct `server.port` fallback. The gateway-hosted root `/mcp` resolver is separate.
  */
-export async function resolveMcpUrl(projectRoot: string, env: Record<string, string | undefined>): Promise<string> {
+export async function resolveMcpUrl(
+    projectRoot: string,
+    env: Record<string, string | undefined>,
+    spurConfig?: Pick<SpurConfig, 'server'> | null,
+): Promise<string> {
     const entry = findRegisteredEntry(projectRoot);
-    const config = buildConfigFromEnv(env);
+    const config = buildConfigFromEnv(env, spurConfig);
     if (entry !== undefined && isLocalHost(entry.host)) {
         const url = resolveProjectGatewayUrl(
             entry,
@@ -269,7 +273,8 @@ export function registerMcpCommand(program: Command, context: McpBridgeContext):
                               context.env,
                               config.server.mcp.allowUnauthenticated === true,
                           );
-                const url = gatewayTarget?.url ?? options.url ?? (await resolveMcpUrl(projectRoot, context.env));
+                const url =
+                    gatewayTarget?.url ?? options.url ?? (await resolveMcpUrl(projectRoot, context.env, spurConfig));
                 const exit = await runMcpStdioBridge({
                     url,
                     token,

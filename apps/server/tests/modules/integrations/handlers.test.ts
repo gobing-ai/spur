@@ -26,6 +26,7 @@ async function makeCtx(
     boot: {
         mcp?: { enabled: boolean; authEnv: string | null; namespace?: string };
         a2a?: { enabled: boolean; authEnv: string | null };
+        gateway?: { port: number };
         env?: Record<string, string | undefined>;
         cwd?: string;
         /** The project config `reloadAgentConfig` resolves — the fleet declaration the A2A block reads. */
@@ -51,6 +52,7 @@ async function makeCtx(
             scheduler: { enabled: false },
             mcp: boot.mcp ?? { enabled: false, authEnv: null },
             a2a: boot.a2a ?? { enabled: false, authEnv: null },
+            ...(boot.gateway === undefined ? {} : { gateway: boot.gateway }),
         }),
         reloadAgentConfig: async () => boot.config ?? null,
         eventBus: () => ({ emit: () => {} }),
@@ -222,6 +224,56 @@ describe('1423 — the gateway block (R5)', () => {
         } finally {
             setGatewayProbeFetchForTesting(undefined);
             await close();
+        }
+    });
+
+    test('gateway probe and direct-root canonical URL honor bootConfig.gateway.port when SPUR_GATEWAY_PORT is unset', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-integrations-cfg-port-'));
+        const projectsFile = join(cwd, 'projects.json');
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
+        await new ProjectRegistry(projectsFile).upsert({ name: 'integrations-test', path: cwd, port: 3007 });
+        const { ctx, close } = await makeCtx({
+            cwd,
+            mcp: { enabled: true, authEnv: 'SPUR_MCP_TOKEN' },
+            gateway: { port: 3070 },
+            env: { SPUR_MCP_TOKEN: MCP_TOKEN },
+        });
+        const probedUrls: string[] = [];
+        setGatewayProbeFetchForTesting(async (input) => {
+            probedUrls.push(input);
+            return Response.json({
+                ok: true,
+                gateway: true,
+                counters: {
+                    since: '2026-11-22T00:00:00.000Z',
+                    requests: 2,
+                    status4xx: 0,
+                    status5xx: 0,
+                    upstreamRestarts: {},
+                },
+                mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+            });
+        });
+        try {
+            const directBody = (await (await statusOf(ctx)).json()) as { mcp: { url: string } };
+            expect(directBody.mcp.url).toBe('http://localhost:3070/integrations-test/mcp');
+
+            const proxiedRes = await statusOf(ctx, {
+                'x-forwarded-host': 'localhost:3070',
+                'x-forwarded-prefix': '/integrations-test',
+            });
+            expect(proxiedRes.status).toBe(200);
+            expect(probedUrls[0]).toStartWith('http://localhost:3070/api/health');
+            const proxiedBody = (await proxiedRes.json()) as {
+                gateway: { served: boolean; mcp?: { enabled: boolean } };
+            };
+            expect(proxiedBody.gateway.served).toBe(true);
+            expect(proxiedBody.gateway.mcp?.enabled).toBe(true);
+        } finally {
+            setGatewayProbeFetchForTesting(undefined);
+            await close();
+            removeEnvVar('SPUR_PROJECTS_FILE');
+            rmSync(cwd, { recursive: true, force: true });
         }
     });
 
