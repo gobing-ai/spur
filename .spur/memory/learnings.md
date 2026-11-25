@@ -7889,3 +7889,25 @@ Not checked: no `bun run lint`/typecheck/test run (markdown-only diff, no source
 - **Historical amendment bodies are not repair targets.** ADR-152's 2026-11-17 amendment naming the five renamed tools is a record of that rename; only the current-state decision body needed the count changed.
 
 Not checked: no `bun run lint` / typecheck / full test run (markdown-only diff, no source or corpus change); the `writeInlineSection` P3 and the four lax legacy schemas remain open follow-ups.
+## 2026-11-25 — 1449 (Integrations MCP polish)
+
+- A tolerant config load is only half a fix: `startServer` caught the error into `null` and then a
+  SECOND strict `loadSpurConfig` for the fleet aborted the boot anyway, so the diagnostic was
+  unreachable. Reusing the loaded value plus a message-class check (`isFleetConfigFailure`) keeps the
+  0858 R4 fatal case and makes every other failure visible.
+- `configSchema` defaults `server.gateway.port` to 3000, so a served port cannot be inferred from the
+  config alone. Any "was it configured?" question needs an explicit provenance flag
+  (`ServerBootConfig.gateway.explicit`), not a comparison against the default.
+- When a host-executor work item pauses, `spur workflow continue --answer-text` takes the RECEIPT
+  PATH (`.spur/run/<run>/receipts/<state>.json`), not prose; the receipt must name the run/state and
+  carry `executor: "host"`, `outcome: "done"`, and every path the work item declares in
+  `expectFiles` must exist first.
+- The boundary rule `spur-config-loader-only-at-composition-roots` matches the literal
+  `loadSpurConfig(`. A command may consume the injected `loadProjectConfig` only; a
+  `?? loadSpurConfig` fallback is an accidental (and fragile) dodge, not a pattern to copy.
+- `ModuleTabs` owns `id=<idPrefix>-<tabId>` and sets no `data-testid`; tests must click those tabs by
+  role/name, while the wrapping components keep `data-testid` for the heavy browser suite.
+- An auth policy and a credential are two facts: folding `allowUnauthenticated` into `tokenPresent`
+  made "no token needed" indistinguishable from "token set" on the wire, and the Board could not
+  decide whether to print an `Authorization` header.
+
