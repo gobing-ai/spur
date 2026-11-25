@@ -8,6 +8,48 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.48] - 2026-11-25
+
+### Added
+- the Integrations module surfaces a config-load diagnostic, per-agent client config in each agent's own native format, and MCP readiness for every supported agent (8863e5fe3)
+  <!-- src: apps/server/src/modules/integrations/handlers.ts:267 · confidence: HIGH -->
+- queue jobs are named from their payload and durations render to three decimals (f41cbf83c)
+  <!-- src: apps/web/src/modules/observability/JobsTab.tsx:22 · confidence: HIGH -->
+- queue jobs can be filtered by the declared schedule selection (bfdd4623c)
+  <!-- src: apps/web/src/modules/observability/JobsTab.tsx:123 · confidence: HIGH -->
+- the tasks shell hides the tab strip while only one view exists (0bbc99fc4)
+  <!-- src: apps/web/src/modules/task-kanban/TasksShell.tsx:178 · confidence: HIGH -->
+
+### Fixed
+- a `project` + `member` + `authEnv` row in `agent.fleet.members` passes the config's JSON Schema as well as Zod, so the peer no longer fails every command (6078dc8ab)
+  <!-- src: apps/cli/schemas/spur-config.schema.json:240 · confidence: HIGH -->
+- the Board schema-checks the integrations status and names a stale project server instead of failing inside a helper (dc0e8eb20)
+  <!-- src: apps/web/src/modules/integrations/useIntegrations.ts:139 · confidence: HIGH -->
+- default discovery scans OpenClaw transcripts under `.openclaw/agents`, so `logs/config-audit.jsonl` no longer degrades the fan-out (098b5624a)
+  <!-- src: packages/app/src/services/history-service.ts:475 · confidence: HIGH -->
+- `history import` prints up to three parse and validation error samples per degraded source (81083bb6f)
+  <!-- src: apps/cli/src/commands/history/import.ts:232 · confidence: HIGH -->
+- MCP readiness reads the OpenClaw entry from `~/.openclaw/openclaw.json`, the file its own CLI writes (de3b70ebf)
+  <!-- src: packages/app/src/services/agent-mcp-readiness.ts:146 · confidence: HIGH -->
+- gateway port resolution falls back to the configured port before the forwarded loopback host (7287e3df0)
+  <!-- src: apps/server/src/modules/integrations/handlers.ts:92 · confidence: HIGH -->
+
+### Changed
+- **BREAKING:** one `server.mcp` switch, token and unauthenticated policy drive the gateway root `/mcp` as well as each project endpoint; the `server.gateway.mcp` block and its two env vars are removed and a legacy block is dropped by the schema (841a7005d)
+  <!-- src: docs/00_ADR.md:2982 · confidence: HIGH -->
+- the stdio bridge resolves one bearer token, and `resolveGatewayMcpUrl` returns the URL alone (fd9260cc1)
+  <!-- src: apps/cli/src/commands/mcp.ts:214 · confidence: HIGH -->
+
+### Other
+- a project can declare the ts-libs coder as an outbound A2A peer (33fc59677)
+  <!-- src: .spur/config.yaml:193 · confidence: HIGH -->
+- `restart-daemon` stops the project server so the gateway starts the current build (6ef6ee693)
+  <!-- src: package.json:112 · confidence: HIGH -->
+- the jobs-tab test compares row lookups to null explicitly (eaa6a50f5)
+- task 1449's evidence tables were refreshed after a re-run (b0b1374b6)
+- the 1449 wrap-up learnings were recorded in project memory (d64cd4bb1)
+- task 1449 was added for the A82 MCP polish (b1d502eca)
+
 ## [0.4.47] - 2026-11-24
 
 ### Added
