@@ -288,7 +288,7 @@ describe('JobsTab Active Schedules filter integration', () => {
         // Uncheck `history-refresh`
         fireEvent.click(view.getByTestId('schedule-filter-history-refresh'));
         await waitFor(() => {
-            expect(view.queryByTestId('job-row-job-history-1')).toBeNull();
+            expect(view.queryByTestId('job-row-job-history-1') === null).toBe(true);
         });
         expect((view.getByTestId('schedule-filter-history-refresh') as HTMLInputElement).checked).toBe(false);
 
@@ -343,8 +343,8 @@ describe('JobsTab Active Schedules filter integration', () => {
 
         fireEvent.click(view.getByTestId('schedules-reset-defaults'));
         await waitFor(() => {
-            expect(view.queryByTestId('job-row-job-prune-1')).toBeNull();
-            expect(view.queryByTestId('job-row-job-smoke-1')).toBeNull();
+            expect(view.queryByTestId('job-row-job-prune-1') === null).toBe(true);
+            expect(view.queryByTestId('job-row-job-smoke-1') === null).toBe(true);
         });
     });
 
