@@ -213,7 +213,7 @@
                         "members": {
                             "type": "array",
                             "default": [],
-                            "description": "The roster. Each member declares a role or an executor. `enabled: false` keeps the member's derived <role>-<n> id index but does not materialize it.",
+                            "description": "The roster. Each member declares a role, an executor, an a2a card, or a project + member peer. `enabled: false` keeps the member's derived <role>-<n> id index but does not materialize it.",
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -237,6 +237,16 @@
                                         "minLength": 1,
                                         "description": "Agent Card host, URL or local path. Presence selects the hidden A2A member turn driver (ADR-148); no local executor is declared."
                                     },
+                                    "project": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Registered local project (registry name or gateway prefix) owning the target member (1395 R1). Resolved to the gateway's card URL at dispatch. Requires member and authEnv (the target project A2A token variable); mutually exclusive with a2a and executor."
+                                    },
+                                    "member": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Target member's local id inside project (e.g. coder-1)."
+                                    },
                                     "authEnv": {
                                         "type": "string",
                                         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
@@ -254,9 +264,14 @@
                                 "anyOf": [
                                     { "required": ["role"] },
                                     { "required": ["executor"] },
-                                    { "required": ["a2a"] }
+                                    { "required": ["a2a"] },
+                                    { "required": ["project", "member", "authEnv"] }
                                 ],
-                                "not": { "required": ["a2a", "executor"] }
+                                "allOf": [
+                                    { "not": { "required": ["a2a", "executor"] } },
+                                    { "not": { "required": ["project", "a2a"] } },
+                                    { "not": { "required": ["project", "executor"] } }
+                                ]
                             }
                         }
                     }
