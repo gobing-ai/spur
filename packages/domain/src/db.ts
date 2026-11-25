@@ -376,6 +376,8 @@ export interface QueueJobQuerySpec {
     since?: string | number;
     limit?: number;
     offset?: number;
+    excludeTypes?: readonly string[];
+    excludeCustomNames?: readonly string[];
 }
 
 /** Normalized queue job representation for queries. */
@@ -407,8 +409,48 @@ export interface QueueJobQueryResult {
     };
 }
 
+function normalizeQueueFilterValues(values: readonly string[] | undefined): string[] {
+    if (!values || values.length === 0) return [];
+    const seen = new Set<string>();
+    for (const value of values) {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) seen.add(trimmed);
+    }
+    return Array.from(seen);
+}
+
+function appendQueueJobBaseFilters(
+    conditions: string[],
+    params: unknown[],
+    sinceMs: number | undefined,
+    excludeTypes: readonly string[],
+    excludeCustomNames: readonly string[],
+): void {
+    if (sinceMs !== undefined) {
+        conditions.push('created_at >= ?');
+        params.push(sinceMs);
+    }
+    if (excludeTypes.length > 0) {
+        conditions.push(`type NOT IN (${excludeTypes.map(() => '?').join(', ')})`);
+        params.push(...excludeTypes);
+    }
+    if (excludeCustomNames.length > 0) {
+        conditions.push(
+            `CASE
+                WHEN type = 'scheduler.custom'
+                 AND payload IS NOT NULL
+                 AND json_valid(payload) = 1
+                 AND json_extract(payload, '$.name') IN (${excludeCustomNames.map(() => '?').join(', ')})
+                THEN 1
+                ELSE 0
+            END = 0`,
+        );
+        params.push(...excludeCustomNames);
+    }
+}
+
 /**
- * Query queue_jobs rows with status/since filtering and newest-first ordering.
+ * Query queue_jobs rows with status/since/schedule-exclusion filtering and newest-first ordering.
  */
 export async function queryQueueJobs(db: DbAdapter, spec: QueueJobQuerySpec = {}): Promise<QueueJobQueryResult> {
     const limit = Math.min(500, Math.max(1, spec.limit ?? 100));
@@ -418,15 +460,14 @@ export async function queryQueueJobs(db: DbAdapter, spec: QueueJobQuerySpec = {}
         sinceMs = typeof spec.since === 'number' ? spec.since : Date.parse(spec.since);
         if (Number.isNaN(sinceMs)) sinceMs = undefined;
     }
+    const excludeTypes = normalizeQueueFilterValues(spec.excludeTypes);
+    const excludeCustomNames = normalizeQueueFilterValues(spec.excludeCustomNames);
 
     try {
-        // 1. countsByStatus over since window (ignoring status filter)
+        // 1. countsByStatus over since + schedule-exclusion window (ignoring status filter)
         const countConditions: string[] = ['1=1'];
         const countParams: unknown[] = [];
-        if (sinceMs !== undefined) {
-            countConditions.push('created_at >= ?');
-            countParams.push(sinceMs);
-        }
+        appendQueueJobBaseFilters(countConditions, countParams, sinceMs, excludeTypes, excludeCustomNames);
 
         const countRows = await db.queryAll<{ status: string; cnt: number }>(
             `SELECT status, COUNT(*) AS cnt
@@ -453,7 +494,7 @@ export async function queryQueueJobs(db: DbAdapter, spec: QueueJobQuerySpec = {}
             else if (row.status === 'failed') countsByStatus.failed = count;
         }
 
-        // 2. Query jobs with status and since filter, limit + 1 probe
+        // 2. Query jobs with status, since, and schedule-exclusion filters, limit + 1 probe
         const queryConditions: string[] = ['1=1'];
         const queryParams: unknown[] = [];
 
@@ -461,10 +502,7 @@ export async function queryQueueJobs(db: DbAdapter, spec: QueueJobQuerySpec = {}
             queryConditions.push('status = ?');
             queryParams.push(spec.status);
         }
-        if (sinceMs !== undefined) {
-            queryConditions.push('created_at >= ?');
-            queryParams.push(sinceMs);
-        }
+        appendQueueJobBaseFilters(queryConditions, queryParams, sinceMs, excludeTypes, excludeCustomNames);
 
         queryParams.push(limit + 1);
         queryParams.push(offset);

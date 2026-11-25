@@ -174,6 +174,92 @@ describe('jobs stats count scheduler.custom rows without an API change (task 073
         }
     });
 
+    test('GET /api/jobs supports excludeType and excludeCustomName query parameters', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-jobs-exclude-api-'));
+        const ctx = createServerContext((await import('../../middleware/helpers')).mockRuntime(), {
+            cwd,
+            fs: createNodeFileSystem(cwd),
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+            eventsBus: new EventBus<Record<string, (event: unknown) => void>>(),
+        });
+        const db = await ctx.getDb();
+
+        try {
+            const now = Date.now();
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('j-prune', 'system-events-prune', '{}', 'completed', 1, 1, ?, ?)`,
+                now - 5000,
+                now - 4900,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('j-smoke', 'smoke', '{}', 'failed', 1, 1, ?, ?)`,
+                now - 4000,
+                now - 3900,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('j-custom-hist', 'scheduler.custom', '{"name":"history-refresh"}', 'completed', 1, 1, ?, ?)`,
+                now - 3000,
+                now - 2900,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('j-custom-maint', 'scheduler.custom', '{"name":"database-daily-maintenance"}', 'completed', 1, 1, ?, ?)`,
+                now - 2000,
+                now - 1900,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES ('j-task', 'task-action', '{"wbs":"0001"}', 'completed', 1, 1, ?, ?)`,
+                now - 1000,
+                now - 900,
+            );
+
+            const app = new Hono();
+            jobsModule.mount(app, ctx);
+
+            // Repeatable excludeType params
+            const resRepeatable = await app.fetch(
+                new Request('http://localhost/api/jobs?excludeType=system-events-prune&excludeType=smoke'),
+            );
+            expect(resRepeatable.status).toBe(200);
+            const dataRepeatable = (await resRepeatable.json()) as {
+                jobs: Array<{ id: string }>;
+                total: number;
+                countsByStatus: { all: number; completed: number; failed: number };
+            };
+            expect(dataRepeatable.jobs.map((j) => j.id)).toEqual(['j-task', 'j-custom-maint', 'j-custom-hist']);
+            expect(dataRepeatable.total).toBe(3);
+            expect(dataRepeatable.countsByStatus).toMatchObject({ all: 3, completed: 3, failed: 0 });
+
+            // Comma-separated excludeType + excludeCustomName
+            const resCombined = await app.fetch(
+                new Request(
+                    'http://localhost/api/jobs?excludeType=system-events-prune,smoke&excludeCustomName=history-refresh',
+                ),
+            );
+            expect(resCombined.status).toBe(200);
+            const dataCombined = (await resCombined.json()) as {
+                jobs: Array<{ id: string }>;
+                total: number;
+            };
+            expect(dataCombined.jobs.map((j) => j.id)).toEqual(['j-task', 'j-custom-maint']);
+            expect(dataCombined.total).toBe(2);
+
+            // Unfiltered preserves all 5
+            const resAll = await app.fetch(new Request('http://localhost/api/jobs'));
+            expect(resAll.status).toBe(200);
+            const dataAll = (await resAll.json()) as { total: number };
+            expect(dataAll.total).toBe(5);
+        } finally {
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
     test('GET /api/jobs/schedules returns registered jobs with timing and latest status', async () => {
         const cwd = mkdtempSync(join(tmpdir(), 'spur-0789-schedules-api-'));
         const ctx = createServerContext((await import('../../middleware/helpers')).mockRuntime(), {

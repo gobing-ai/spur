@@ -115,6 +115,160 @@ describe('queryQueueJobs and queueJobKpis', () => {
         adapter.close();
     });
 
+    test('queryQueueJobs excludes built-in types and scheduler.custom names safely across jobs and countsByStatus', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+
+        const now = Date.now();
+        const rows = [
+            {
+                id: 'prune-1',
+                type: 'system-events-prune',
+                payload: JSON.stringify({ source: 'scheduler' }),
+                status: 'completed',
+                createdAt: now - 8_000,
+            },
+            {
+                id: 'smoke-1',
+                type: 'smoke',
+                payload: JSON.stringify({ source: 'scheduler' }),
+                status: 'failed',
+                createdAt: now - 7_000,
+            },
+            {
+                id: 'custom-history-1',
+                type: 'scheduler.custom',
+                payload: JSON.stringify({ name: 'history-refresh', command: 'echo 1' }),
+                status: 'completed',
+                createdAt: now - 6_000,
+            },
+            {
+                id: 'custom-daily-1',
+                type: 'scheduler.custom',
+                payload: JSON.stringify({ name: 'database-daily-maintenance', command: 'echo 2' }),
+                status: 'pending',
+                createdAt: now - 5_000,
+            },
+            {
+                id: 'custom-empty-string-payload',
+                type: 'scheduler.custom',
+                payload: '',
+                status: 'completed',
+                createdAt: now - 4_000,
+            },
+            {
+                id: 'custom-empty-json',
+                type: 'scheduler.custom',
+                payload: '{}',
+                status: 'completed',
+                createdAt: now - 3_000,
+            },
+            {
+                id: 'custom-malformed-json',
+                type: 'scheduler.custom',
+                payload: 'not-valid-json',
+                status: 'failed',
+                createdAt: now - 2_000,
+            },
+            {
+                id: 'adhoc-named-like-custom',
+                type: 'history-refresh',
+                payload: JSON.stringify({ taskId: 't-1' }),
+                status: 'processing',
+                createdAt: now - 1_000,
+            },
+        ] as const;
+
+        for (const r of rows) {
+            await adapter.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, 1, 3, ?, ?)`,
+                r.id,
+                r.type,
+                r.payload,
+                r.status,
+                r.createdAt,
+                r.createdAt,
+            );
+        }
+
+        // 1. excludeTypes removes matching built-in jobs from both jobs and countsByStatus
+        const withoutBuiltins = await queryQueueJobs(adapter, {
+            excludeTypes: ['system-events-prune', 'smoke', 'observation-refresh'],
+        });
+        expect(withoutBuiltins.jobs.map((j) => j.id)).toEqual([
+            'adhoc-named-like-custom',
+            'custom-malformed-json',
+            'custom-empty-json',
+            'custom-empty-string-payload',
+            'custom-daily-1',
+            'custom-history-1',
+        ]);
+        expect(withoutBuiltins.total).toBe(6);
+        expect(withoutBuiltins.countsByStatus).toEqual({
+            all: 6,
+            pending: 1,
+            processing: 1,
+            completed: 3,
+            failed: 1,
+        });
+
+        // 2. excludeCustomNames removes matching scheduler.custom rows while keeping empty/malformed JSON
+        //    and non-scheduler.custom rows whose type matches the excluded name.
+        const withoutHistory = await queryQueueJobs(adapter, {
+            excludeTypes: ['system-events-prune', 'smoke'],
+            excludeCustomNames: ['history-refresh'],
+        });
+        expect(withoutHistory.jobs.map((j) => j.id)).toEqual([
+            'adhoc-named-like-custom',
+            'custom-malformed-json',
+            'custom-empty-json',
+            'custom-empty-string-payload',
+            'custom-daily-1',
+        ]);
+        expect(withoutHistory.total).toBe(5);
+        expect(withoutHistory.countsByStatus).toEqual({
+            all: 5,
+            pending: 1,
+            processing: 1,
+            completed: 2,
+            failed: 1,
+        });
+
+        // 3. Combined status, since, pagination, and exclusion filters
+        const filteredFailed = await queryQueueJobs(adapter, {
+            status: 'failed',
+            since: now - 8_500,
+            excludeTypes: ['smoke'],
+        });
+        expect(filteredFailed.jobs.map((j) => j.id)).toEqual(['custom-malformed-json']);
+        expect(filteredFailed.total).toBe(1);
+        expect(filteredFailed.countsByStatus).toEqual({
+            all: 7,
+            pending: 1,
+            processing: 1,
+            completed: 4,
+            failed: 1,
+        });
+
+        const paged = await queryQueueJobs(adapter, {
+            excludeTypes: ['system-events-prune', 'smoke'],
+            limit: 2,
+            offset: 2,
+        });
+        expect(paged.jobs.map((j) => j.id)).toEqual(['custom-empty-json', 'custom-empty-string-payload']);
+        expect(paged.hasMore).toBe(true);
+
+        // 4. Empty / whitespace-only exclusion arrays are no-ops
+        const noop = await queryQueueJobs(adapter, {
+            excludeTypes: ['', '   '],
+            excludeCustomNames: [''],
+        });
+        expect(noop.total).toBe(8);
+
+        adapter.close();
+    });
+
     test('queueJobKpis computes rates, counts, and returns recent errors', async () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);

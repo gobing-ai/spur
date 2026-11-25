@@ -15,6 +15,18 @@ export * from './schedule-registry';
 /** Terminal queue events whose persisted envelope carries the true attempt duration. */
 const TERMINAL_JOB_EVENT_NAMES = ['queue.job.completed', 'queue.job.failed'] as const;
 
+function parseMultiQuery(values: string[] | undefined): string[] {
+    if (!values || values.length === 0) return [];
+    return Array.from(
+        new Set(
+            values
+                .flatMap((chunk) => chunk.split(','))
+                .map((v) => v.trim())
+                .filter((v) => v.length > 0),
+        ),
+    );
+}
+
 /**
  * Task 0806 R4: `markCompleted`/`markFailed` clear `processing_at`, so a
  * terminal row alone cannot answer "when did it actually run and for how long".
@@ -148,12 +160,17 @@ export const jobsModule: ServerModule = {
                     }
                 }
 
+                const excludeTypes = parseMultiQuery(c.req.queries('excludeType'));
+                const excludeCustomNames = parseMultiQuery(c.req.queries('excludeCustomName'));
+
                 const db = await ctx.getDb();
                 const result = await queryQueueJobs(db, {
                     status,
                     since: sinceParam,
                     limit,
                     offset,
+                    ...(excludeTypes.length > 0 ? { excludeTypes } : {}),
+                    ...(excludeCustomNames.length > 0 ? { excludeCustomNames } : {}),
                 });
                 // Task 0806 R4: recover the true attempt duration/start for terminal
                 // rows whose `processing_at` was cleared on completion.

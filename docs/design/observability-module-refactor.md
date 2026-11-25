@@ -86,12 +86,13 @@ In `apps/web/src/modules/observability/tabs.ts`:
   - `startedAt`: `row.processing_at ? new Date(row.processing_at).toISOString() : null`
   - `endedAt`: `['completed', 'failed'].includes(row.status) ? new Date(row.updated_at).toISOString() : null`
   - `durationMs`: computed duration in ms.
-- Filtering is handled in SQL: `WHERE status = ?` and `WHERE created_at >= ?`, supporting keyset/offset pagination.
+- Filtering is handled in SQL: `WHERE status = ?`, `WHERE created_at >= ?`, optional `excludeType` (`type NOT IN (...)`), and optional `excludeCustomName` (for `type = 'scheduler.custom'` with valid JSON `$.name`), supporting keyset/offset pagination and applying schedule exclusions consistently to both `jobs` and `countsByStatus`.
 
-### 2.5 Active Schedules Card
+### 2.5 Active Schedules Card & Queue Jobs Filter
 - Exposes registered built-in and bootstrap cron jobs via `GET /api/jobs/schedules`.
 - Computes `nextFireAt` for interval built-in entries; cron entries render `cron (unknown)` if `nextFireAt` is null.
 - Displays name, cron string, cadence description, next-fire time, and latest execution status in a card above the Jobs table.
+- Each schedule card acts as an interactive checkbox filter for `Queue Jobs`: `builtin` schedules start unchecked by default (sending `excludeType`) and `config` schedules start checked by default; toggling any card immediately updates `excludeType` / `excludeCustomName` queries and `countsByStatus` while leaving ad-hoc jobs visible.
 
 ### 2.6 Job Detail Slide-Over Drawer
 - Clicking a job row opens `JobDetailDrawer` keyed by `jobId`.
@@ -185,6 +186,9 @@ export interface ObservabilitySummaryResponse {
 **Top event types KPIs.** `avgDurationMs` is the mean of v2 `$.data.durationMs` else legacy `$.durationMs` (numeric values only; untimed rows are excluded, never treated as 0). `failureCount` is the count of that type with `presentation.severity = 'error'`. The Summary tab **Top Event Types** card renders `avgDurationMs / 1000` as `Avg(Duration - s)` (em dash when null) and `failureCount` as `Failures`.
 
 ### 3.2 `GET /api/jobs`
+
+Query parameters: `status` (`pending | processing | completed | failed`), `since` (ISO timestamp or epoch ms), `limit` (1..500, default 100), `offset` (default 0), repeatable or comma-separated `excludeType` (excluded `queue_jobs.type` values), and repeatable or comma-separated `excludeCustomName` (excluded `scheduler.custom` payload `name` values).
+
 ```ts
 export interface QueueJobRow {
     id: string;
