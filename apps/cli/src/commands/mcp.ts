@@ -182,15 +182,15 @@ export async function resolveMcpUrl(
 }
 
 /**
- * Resolve the GATEWAY's own `/mcp` endpoint (task 1401 R1): the root route on the gateway port, with
- * the token from `server.mcp.authEnv` — one MCP config drives both endpoints (K44 1450). Every
+ * Resolve the gateway root `/mcp` endpoint (task 1401 R1) after checking the one `server.mcp` config
+ * that drives it and every project endpoint (K44 1450); the caller reads the same token. Every
  * refusal names the fix; no token value is ever printed. Checked before any traffic, so a
  * misconfiguration fails at launch, not mid-session.
  */
 export async function resolveGatewayMcpUrl(
     env: Record<string, string | undefined>,
     spurConfig?: Pick<SpurConfig, 'server'> | null,
-): Promise<{ url: string; authEnv: string | undefined; allowUnauthenticated: boolean }> {
+): Promise<{ url: string }> {
     const config = buildConfigFromEnv(env, spurConfig);
     const { gateway, mcp } = config.server;
     if (!mcp.enabled) {
@@ -211,7 +211,7 @@ export async function resolveGatewayMcpUrl(
             `no gateway is answering on port ${gateway.port}; start it with \`spur self serve --gateway\` (or pass --url for a direct project endpoint)`,
         );
     }
-    return { url: `http://localhost:${gateway.port}/mcp`, authEnv, allowUnauthenticated };
+    return { url: `http://localhost:${gateway.port}/mcp` };
 }
 
 /** Find this project's registry entry over `peek()` — the read-only snapshot never heals, purges
@@ -263,17 +263,14 @@ export function registerMcpCommand(program: Command, context: McpBridgeContext):
                 // the split-brain ADR-082 removed (rule: spur-config-loader-only-at-composition-roots).
                 const spurConfig = await context.loadAgentConfig(projectRoot);
                 const config = buildConfigFromEnv(context.env, spurConfig);
-                // --gateway takes ITS OWN token variable: a gateway credential is not a project's.
+                // One server.mcp token serves the gateway root and every project endpoint (K44 1450).
                 const gatewayTarget =
                     options.gateway === true ? await resolveGatewayMcpUrl(context.env, spurConfig) : undefined;
-                const token =
-                    gatewayTarget !== undefined
-                        ? bearerToken(gatewayTarget.authEnv, context.env, gatewayTarget.allowUnauthenticated)
-                        : bearerToken(
-                              config.server.mcp.authEnv,
-                              context.env,
-                              config.server.mcp.allowUnauthenticated === true,
-                          );
+                const token = bearerToken(
+                    config.server.mcp.authEnv,
+                    context.env,
+                    config.server.mcp.allowUnauthenticated === true,
+                );
                 const url =
                     gatewayTarget?.url ?? options.url ?? (await resolveMcpUrl(projectRoot, context.env, spurConfig));
                 const exit = await runMcpStdioBridge({

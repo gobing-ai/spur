@@ -27,8 +27,8 @@ describe('spur mcp --gateway resolution (task 1401 R1)', () => {
     test('targets the gateway root on the configured port with the server.mcp token variable', async () => {
         probe(true);
         const resolved = await resolveGatewayMcpUrl(env());
-        expect(resolved.url).toBe('http://localhost:3000/mcp');
-        expect(resolved.authEnv).toBe('MCP_TOKEN');
+        // Only the URL: the bearer comes from the same server.mcp token every endpoint uses (K44 1450).
+        expect(resolved).toEqual({ url: 'http://localhost:3000/mcp' });
     }, 20_000);
 
     test('refuses when server.mcp is disabled or has no token variable', async () => {

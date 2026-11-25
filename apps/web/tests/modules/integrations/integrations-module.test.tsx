@@ -347,6 +347,8 @@ describe('1424 — Summary (R3)', () => {
                 namespace: '/tslibs',
                 rootMcpUrl: 'http://localhost:3000/mcp',
                 counters: null,
+                // A name distinct from the project's proves the row shows the gateway's PROBED state
+                // (its own machine config at boot), not a copy of this project's server.mcp.
                 mcp: { enabled: true, auth: { envName: 'GATEWAY_TOKEN', tokenPresent: true } },
                 diagnostic: 'connect ECONNREFUSED',
             },
