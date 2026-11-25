@@ -534,8 +534,9 @@ controlled props when the module is also embedded elsewhere (ADR-081 embed rule)
 A multi-view module declares its views as a `tabs.ts` contract — `{ id, label, component }` — never
 an inline array in the shell. Entries are **append-only**: never reorder and never rename, because
 strip order and persisted UI state key on `id`. Removing or renaming a tab is a change to saved
-state and needs a migration, not an edit. A single-view module still renders the strip with one tab
-so the shell reads the same everywhere.
+state and needs a migration, not an edit. A single-view module omits the tab strip until a second
+view is added (keeping `tabs.ts` append-only when future views are planned, matching Features,
+Plans, Designs, and Search).
 
 ### Density and width
 

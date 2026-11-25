@@ -7,7 +7,7 @@ import { ModuleHeader, ModuleShell, ModuleTabs } from '../../components/module-k
 import { api } from '../../lib/rpc-client';
 import { BOOTSTRAP_FOLDER } from './KanbanBoard';
 import NewTaskPanel from './NewTaskPanel';
-import { TASKS_TABS } from './tabs';
+import { TASKS_TABS, type TasksTab } from './tabs';
 import { useTaskParams } from './useTaskParams';
 
 /**
@@ -27,9 +27,11 @@ export function parseCombinedInput(
  * One-row module shell for the Tasks board (History-parity, F72).
  *
  * Header (left→right): identity block + live chip → inline filters (phase
- * Select, status checkboxes, combined WBS/feature input) → tab strip. The board
- * body is full-bleed: no centered max-width wrapper (the ADR-081 divergence from
- * the History/Observability shells) so lanes use every available pixel.
+ * Select, status checkboxes, combined WBS/feature input) → optional tab strip
+ * (rendered only when `TASKS_TABS` has more than one view) and no bottom
+ * hairline so the board reclaims vertical space. The board body is full-bleed:
+ * no centered max-width wrapper (the ADR-081 divergence from the
+ * History/Observability shells) so lanes use every available pixel.
  */
 export default function TasksShell() {
     const { selectTask, setFilter, filters } = useTaskParams();
@@ -93,12 +95,13 @@ export default function TasksShell() {
         setFilter(parsed.key, parsed.value || null);
     };
 
+    const showTabs = (TASKS_TABS as readonly TasksTab[]).length > 1;
     const ActiveTab = (TASKS_TABS.find((t) => t.id === activeTab) ?? TASKS_TABS[0]).component;
 
     return (
-        <ModuleShell className="task-kanban h-full max-w-none" data-tasks-shell>
+        <ModuleShell className="task-kanban h-full max-w-none gap-0!" data-tasks-shell>
             <ModuleHeader
-                className="max-w-[1600px] mx-auto w-full"
+                className="max-w-[1600px] mx-auto w-full border-b-0! pb-0!"
                 icon={<ModuleIcon id="tasks" size="lg" className="h-7 w-7 text-spur-accent" aria-hidden="true" />}
                 title="Tasks"
                 subtitle="Task corpus, kanban lanes, and phase filters"
@@ -173,22 +176,28 @@ export default function TasksShell() {
                     </div>
                 }
                 tabs={
-                    <ModuleTabs
-                        tabs={TASKS_TABS}
-                        value={activeTab}
-                        onChange={(id) => setActiveTab(id as typeof activeTab)}
-                        label="Tasks tabs"
-                        idPrefix="tasks-tab"
-                    />
+                    showTabs ? (
+                        <ModuleTabs
+                            tabs={TASKS_TABS}
+                            value={activeTab}
+                            onChange={(id) => setActiveTab(id as typeof activeTab)}
+                            label="Tasks tabs"
+                            idPrefix="tasks-tab"
+                        />
+                    ) : undefined
                 }
             />
 
             <div
                 data-kanban-board
                 className="flex-1 overflow-hidden"
-                role="tabpanel"
-                id={`tasks-tab-panel-${activeTab}`}
-                aria-labelledby={`tasks-tab-${activeTab}`}
+                {...(showTabs
+                    ? {
+                          role: 'tabpanel',
+                          id: `tasks-tab-panel-${activeTab}`,
+                          'aria-labelledby': `tasks-tab-${activeTab}`,
+                      }
+                    : {})}
             >
                 <ActiveTab
                     onSelectTask={selectTask}

@@ -2,7 +2,7 @@
 kind: design
 title: "Tasks Module — History-Shell Parity (F72)"
 created_at: 2026-08-24
-updated_at: 2026-08-25
+updated_at: 2026-11-25
 related: [F72]
 tags: [system, F72, web, planning]
 doc: design/tasks-module-shell-parity
@@ -62,7 +62,8 @@ embed (`workspace/tabs.ts`) keeps importing the headerless `TaskKanbanView`.
 
 ## 3. Header Anatomy (TasksShell)
 
-One row, `flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3`,
+One row, `flex flex-wrap items-center justify-between gap-4 border-b-0! pb-0!` (omitting the
+bottom divider hairline and shell vertical gap so the Kanban lanes reclaim vertical space),
 full-width with the same horizontal padding as the body (`px-4`) so lanes align under the header.
 Left → right:
 
@@ -79,7 +80,8 @@ Left → right:
    shell. `folder` comes from shell state; `onCreated` lets the SSE/poll store propagate the new
    card (documented fallback today: "poll will catch up on next interval").
 4. **Tab strip** — History styling (`bg-base-300 p-1 rounded-xl`, active tab
-   `bg-primary text-primary-content`); one tab: `Kanban`.
+   `bg-primary text-primary-content`), hidden while `TASKS_TABS` has a single entry (`kanban`)
+   so the controls stay on one row without wrapping an extra pill bar.
 
 No `TaskFilters` bar, no in-board toolbar row: the board's first pixel below the header is lane
 content.
@@ -120,7 +122,7 @@ export const TASKS_TABS: readonly TasksTab[] = [
 ];
 ```
 
-`TasksShell` passes the shared tab props (folder, lane visibility, filters, connection reporter) to the active component.
+`TasksShell` passes the shared tab props (folder, lane visibility, filters, connection reporter) to the active component, and renders the `ModuleTabs` strip only when `TASKS_TABS.length > 1`.
 Future tabs (List / Swimlanes / Analytics) are **additive entries only** — designing them is out of
 F72's scope.
 
