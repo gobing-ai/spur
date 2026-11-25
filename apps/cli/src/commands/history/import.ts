@@ -229,6 +229,10 @@ function formatFanOutResult(r: FanOutResult): string {
         lines.push(
             `  ${e.source}: ${e.status} (files=${e.files} scanned, new-messages=${e.messages}, tool-calls=${e.toolCalls})`,
         );
+        const samples = [...e.parseErrorSamples, ...e.validationErrorSamples].slice(0, 3);
+        for (const sample of samples) {
+            lines.push(`    error: ${sample}`);
+        }
     }
     const a = r.attribution;
     lines.push(

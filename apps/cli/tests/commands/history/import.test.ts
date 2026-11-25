@@ -348,11 +348,26 @@ describe('history command', () => {
         expect(joined).toContain('exit_code: 0');
     });
 
-    test('import subcommand formats warnings in text output', async () => {
+    test('import subcommand formats warnings and bounded error samples in text output', async () => {
         const spy = spyOn(HistoryService.prototype, 'importAll').mockResolvedValueOnce({
-            entries: [makeCoverageEntry({ source: 'claude' })],
-            warnings: [{ code: 'WARN_TEST', source: 'claude', detail: 'test warning detail' }],
-            exitCode: 0,
+            entries: [
+                makeCoverageEntry({
+                    source: 'openclaw',
+                    status: 'degraded',
+                    validationErrors: 2,
+                    validationErrorSamples: [
+                        '/home/.openclaw/a.jsonl:1: expected string, received undefined',
+                        '/home/.openclaw/a.jsonl:2: invalid timestamp',
+                    ],
+                    parseErrors: 2,
+                    parseErrorSamples: [
+                        '/home/.openclaw/a.jsonl:3: unexpected EOF',
+                        '/home/.openclaw/a.jsonl:4: bad json',
+                    ],
+                }),
+            ],
+            warnings: [{ code: 'source-degraded', source: 'openclaw', detail: 'degraded detail' }],
+            exitCode: 2,
             attribution: {
                 sessionsEvaluated: 0,
                 linksCreated: 0,
@@ -364,14 +379,19 @@ describe('history command', () => {
 
         try {
             const { output, lines } = capturingOutput();
-            const exitCode = await main(['history', 'import', '--source', 'claude'], {
+            const exitCode = await main(['history', 'import', '--source', 'openclaw'], {
                 output,
                 dbUrl: ':memory:',
             });
-            expect(exitCode).toBe(0);
+            expect(exitCode).toBe(2);
             const joined = lines.join('');
             expect(joined).toContain('warnings:');
-            expect(joined).toContain('[WARN_TEST] claude: test warning detail');
+            expect(joined).toContain('[source-degraded] openclaw: degraded detail');
+            expect(joined).toContain('error: /home/.openclaw/a.jsonl:3: unexpected EOF');
+            expect(joined).toContain('error: /home/.openclaw/a.jsonl:4: bad json');
+            expect(joined).toContain('error: /home/.openclaw/a.jsonl:1: expected string, received undefined');
+            // Bounded to 3 samples total per source
+            expect(joined).not.toContain('/home/.openclaw/a.jsonl:2: invalid timestamp');
         } finally {
             spy.mockRestore();
         }
