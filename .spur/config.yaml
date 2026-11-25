@@ -190,6 +190,7 @@ agent:
       - { role: planner, purpose: orchestrator }  # planner-1
       - { role: coder, executor: pi-k3, id: coder-1 } # coder-1 (volc + zai standard quotas exhausted 2026-10-03; id pinned per ADR-126 A4 rename guard)
       - { role: reviewer, executor: agy-opus-5.5 } # reviewer-1 (agy-gemini flash-high burned its turn budget on 1276's large diff and exited 0 with an empty answer file — 2026-10-22; pin per the role-only escape hatch above)
+      - { id: tslibs-coder, project: ts-libs, member: coder-1, authEnv: SPUR_A2A_TOKEN } # outbound A2A peer → ts-libs coder-1 (address spur-new-tslibs-coder)
 
   # Routing-ladder kill-switch (111 R1) — merges into the global agent.executors entry by
   # name: the agy-gemini flash-high reviewer burned its turn budget on 1276's large diff
