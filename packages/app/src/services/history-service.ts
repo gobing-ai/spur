@@ -472,6 +472,13 @@ const FULL_FIDELITY_SOURCES: readonly string[] = ['claude', 'codex', 'pi', 'omp'
  */
 const DEFERRED_SOURCES: readonly string[] = ['gemini', 'opencode', 'antigravity', 'openclaw', 'hermes'];
 
+const SOURCE_DEFAULT_ROOT_OVERRIDES: Partial<Record<LlmJsonlSource, readonly string[]>> = {
+    // Upstream ts-llm-jsonl-importer@0.8.4 scans all of ~/.openclaw, picking up
+    // non-session audit logs like ~/.openclaw/logs/config-audit.jsonl and degrading
+    // the fan-out to exit code 2. OpenClaw stores agent transcripts under ~/.openclaw/agents/.
+    openclaw: ['.openclaw/agents'],
+};
+
 /**
  * Build the honest coverage report (task 0550 R3/R4) from the import fan-out and the
  * analyze selector. `refreshed` = full-fidelity sources whose fan-out entry did not
@@ -563,7 +570,8 @@ async function runSessionAugmentedRoots(
     cwd: string,
     dao: RunSessionDao,
 ): Promise<{ roots: string[]; runRoots: Array<{ runId: string; root: string }> }> {
-    const roots = getSourceDefinition(source).defaultRoots.map((root) => resolve(home, root));
+    const defaultRoots = SOURCE_DEFAULT_ROOT_OVERRIDES[source] ?? getSourceDefinition(source).defaultRoots;
+    const roots = defaultRoots.map((root) => resolve(home, root));
     const runRoots: Array<{ runId: string; root: string }> = [];
     // 1026 R2: durable session dirs first (`.spur/memory/runs/<id>/agent-sessions/`),
     // legacy scratch (`.spur/run/<id>/agent-sessions/`) second; run/agent identity and

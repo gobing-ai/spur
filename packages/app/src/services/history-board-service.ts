@@ -139,7 +139,7 @@ const AGENT_CATALOG: Array<{
         pattern: 'transcript.jsonl',
     },
     { id: 'omp', name: 'OMP', color: '#10b981', path: '~/.omp/sessions/', pattern: 'session-*.jsonl' },
-    { id: 'openclaw', name: 'OpenClaw', color: '#ec4899', path: '~/.openclaw/history/', pattern: 'claw-*.jsonl' },
+    { id: 'openclaw', name: 'OpenClaw', color: '#ec4899', path: '~/.openclaw/agents/', pattern: '*.jsonl' },
     { id: 'hermes', name: 'Hermes', color: '#8b5cf6', path: '~/.hermes/sessions/', pattern: 'hermes-*.jsonl' },
     { id: 'grok', name: 'Grok Build', color: '#f59e0b', path: '~/.grok/sessions/', pattern: 'build-*.jsonl' },
     { id: 'opencode', name: 'OpenCode', color: '#6366f1', path: '~/.opencode/history/', pattern: 'opencode-*.jsonl' },

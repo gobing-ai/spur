@@ -79,7 +79,7 @@ Two distinct catalogs exist and must not be conflated:
 | `gemini` | Gemini CLI | `.gemini/tmp`, `.config/gemini` | `*.jsonl` |
 | `opencode` | OpenCode | `.opencode`, `.local/share/opencode` | `*.jsonl` |
 | `antigravity` | Antigravity | `.antigravity` | `*.jsonl` |
-| `openclaw` | OpenClaw | `.openclaw` | `*.jsonl` |
+| `openclaw` | OpenClaw | `.openclaw/agents` (Spur narrows upstream `.openclaw` to exclude `.openclaw/logs/config-audit.jsonl`) | `*.jsonl` |
 
 **Board card catalog (9)** — `AGENT_CATALOG` in `packages/app/src/services/history-board-service.ts`: `claude`, `codex`, `agy`, `omp`, `openclaw`, `hermes`, `grok`, `opencode`, `pi`. The Board renders nine agent cards; the importer ingests ten source ids. The sets differ (importer has `gemini`/`antigravity`, Board has `hermes`), so neither count substitutes for the other.
 

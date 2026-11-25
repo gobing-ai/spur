@@ -1364,6 +1364,55 @@ describe('HistoryService', () => {
             }
         });
 
+        test('openclaw default discovery scans .openclaw/agents and ignores .openclaw/logs/config-audit.jsonl', async () => {
+            const home = mkdtempSync(join(tmpdir(), 'spur-openclaw-home-'));
+            const logsDir = join(home, '.openclaw', 'logs');
+            const sessionsDir = join(home, '.openclaw', 'agents', 'main', 'sessions');
+            mkdirSync(logsDir, { recursive: true });
+            mkdirSync(sessionsDir, { recursive: true });
+            writeFileSync(
+                join(logsDir, 'config-audit.jsonl'),
+                `${JSON.stringify({
+                    ts: '2026-11-25T19:37:53.801Z',
+                    source: 'config-io',
+                    event: 'config.write',
+                    configPath: join(home, '.openclaw', 'openclaw.json'),
+                    result: 'rename',
+                })}\n`,
+            );
+
+            const svc = new HistoryService({ ...makeCtx(), historyHome: home, cwd: home });
+            try {
+                // Only logs/config-audit.jsonl exists -> must not scan or degrade openclaw
+                const emptyAgents = await svc.importAll({ sources: ['openclaw'], mode: 'incremental' });
+                const emptyEntry = emptyAgents.entries.find((e) => e.source === 'openclaw');
+                expect(emptyEntry?.files).toBe(0);
+                expect(emptyEntry?.status).toBe('deferred');
+                expect(emptyEntry?.validationErrors).toBe(0);
+                expect(emptyAgents.exitCode).toBe(0);
+
+                // Valid transcript under .openclaw/agents/main/sessions/ is discovered and imported cleanly
+                writeFileSync(
+                    join(sessionsDir, 'session-1.jsonl'),
+                    `${JSON.stringify({
+                        id: 'oc-1',
+                        timestamp: '2026-11-25T19:40:00.000Z',
+                        content: 'hello from openclaw',
+                        role: 'user',
+                    })}\n`,
+                );
+                const withSession = await svc.importAll({ sources: ['openclaw'], mode: 'incremental' });
+                const okEntry = withSession.entries.find((e) => e.source === 'openclaw');
+                expect(okEntry?.files).toBe(1);
+                expect(okEntry?.messages).toBe(1);
+                expect(okEntry?.status).toBe('ok');
+                expect(okEntry?.validationErrors).toBe(0);
+                expect(withSession.exitCode).toBe(0);
+            } finally {
+                rmSync(home, { recursive: true, force: true });
+            }
+        });
+
         test('a non-deferred source scanning 0 files stays empty; analyze warns source-empty while deferred does not', async () => {
             const dir = mkdtempSync(join(tmpdir(), 'spur-hist-empty-'));
             const svc = new HistoryService(makeCtx());
