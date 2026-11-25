@@ -32,15 +32,14 @@ export interface ServerBootConfig {
     };
     /**
      * Configured gateway listener port (`server.gateway.port` / `SPUR_GATEWAY_PORT`), whether an
-     * operator actually configured it (1449 R1), and the gateway-hosted MCP entry's own switch
-     * (1449 R4 — the readiness probe must know whether a gateway root exists to point at).
+     * operator actually configured it (1449 R1). The gateway root `/mcp` has no switch of its own:
+     * `mcp` above drives it (K44 1450).
      * `port` alone cannot tell "configured 3000" from "unset", because the schema defaults it, so
      * `explicit` is what lets a caller prefer a loopback `x-forwarded-host` port over the default.
      */
     gateway?: {
         port: number;
         explicit?: boolean;
-        mcp?: { enabled: boolean; authEnv: string | null; allowUnauthenticated?: boolean };
     };
     /**
      * Why the merged project config could not be loaded at startup, in the loader's own words
@@ -97,11 +96,6 @@ export function serverBootstrapConfig(
         gateway: {
             port: appConfig.server.gateway.port,
             explicit: env[SPUR_ENV_VARS.gatewayPort] !== undefined || spurConfig?.server?.gateway?.port !== undefined,
-            mcp: {
-                enabled: appConfig.server.gateway.mcp.enabled,
-                authEnv: appConfig.server.gateway.mcp.authEnv ?? null,
-                allowUnauthenticated: appConfig.server.gateway.mcp.allowUnauthenticated,
-            },
         },
     };
 }

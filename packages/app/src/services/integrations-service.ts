@@ -269,6 +269,7 @@ export class IntegrationsService {
             return [
                 {
                     member: address.instanceId,
+                    direction: 'inbound' as const,
                     role: address.role ?? null,
                     cardUrl: `${base}/a2a/members/${encodeURIComponent(address.instanceId)}/.well-known/agent-card.json`,
                     writeFenced: writeCapable.get(address.instanceId) ?? false,
@@ -282,6 +283,7 @@ export class IntegrationsService {
                 return [
                     {
                         member: instanceId,
+                        direction: 'outbound' as const,
                         kind: 'a2a' as const,
                         target: member.a2a,
                         ...(auth === undefined ? {} : { auth }),
@@ -291,6 +293,7 @@ export class IntegrationsService {
                 return [
                     {
                         member: instanceId,
+                        direction: 'outbound' as const,
                         kind: 'project' as const,
                         target: member.member === undefined ? member.project : `${member.project}/${member.member}`,
                         ...(auth === undefined ? {} : { auth }),
@@ -304,8 +307,7 @@ export class IntegrationsService {
             basePath: '/a2a',
             url: source.enabled ? `${base}/a2a` : null,
             auth: authOf(source.authEnv, source.tokenPresent, source.allowUnauthenticated),
-            inbound,
-            outbound,
+            members: [...inbound, ...outbound],
         };
     }
 

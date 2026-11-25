@@ -62,7 +62,6 @@ function deps(cwd: string, home: string, overrides: Partial<AgentMcpReadinessDep
         usageActors: [],
         surface: {
             mcpEnabled: true,
-            gatewayMcpEnabled: true,
             gatewayPort: GATEWAY_PORT,
             projectUrl: `http://localhost:${GATEWAY_PORT}/mcp`,
         },
@@ -167,7 +166,7 @@ describe('1449 — the five readiness states', () => {
         );
         const result = await probeAgentMcpReadiness(
             deps(cwd, home, {
-                surface: { mcpEnabled: false, gatewayMcpEnabled: false, gatewayPort: GATEWAY_PORT, projectUrl: null },
+                surface: { mcpEnabled: false, gatewayPort: GATEWAY_PORT, projectUrl: null },
             }),
         );
         expect(result.agents.find((entry) => entry.agent === 'gemini')?.state).toBe('misconfigured');

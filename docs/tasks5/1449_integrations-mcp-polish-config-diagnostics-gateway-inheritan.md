@@ -4,7 +4,7 @@ name: "Integrations MCP polish: config diagnostics, gateway inheritance, multi-a
 status: done
 template: feature-impl
 created_at: 2026-11-25T18:12:12.528Z
-updated_at: "2026-11-25T18:57:14.740Z"
+updated_at: "2026-11-25T21:56:41.937Z"
 feature_id: A82
 
 tags: ["integrations", "A82", "mcp"]
@@ -241,14 +241,14 @@ R4 — read-only per-agent readiness.
 |-------------|--------|----------|
 | R1 | MET | `apps/server/src/modules/integrations/handlers.ts:92-115` (env → explicit → loopback forwarded → 3000; non-loopback ignored), `apps/server/src/serve.ts:827-851`, `apps/server/src/server-config.ts:42-99`, `apps/web/src/modules/integrations/McpTab.tsx:96`; re-run `(cd apps/server && bun test tests/serve.test.ts tests/server-config.test.ts tests/modules/integrations/handlers.test.ts)` → 105 pass / 0 fail |
 | R2 | MET | `packages/config/src/index.ts:1627-1645` (allowUnauthenticated inherits; enabled only when gateway auth satisfied; authEnv never copied), `packages/config/tests/config.test.ts:193-245`; `(cd packages/config && bun test tests/config.test.ts)` → 27 pass / 0 fail |
-| R3 | MET | `packages/contracts/src/integrations.ts:45`, `apps/web/src/modules/integrations/helpers.ts:30-320`, `apps/web/src/modules/integrations/McpTab.tsx:392` (ModuleTabs idPrefix), `apps/web/src/modules/integrations/McpTab.tsx:413` + `:491` (testids kept); `(cd apps/web && bun test tests/modules/integrations/)` → 77 pass / 0 fail |
+| R3 | MET | `packages/contracts/src/integrations.ts:45`, `apps/web/src/modules/integrations/helpers.ts:30-320`, `apps/web/src/modules/integrations/McpTab.tsx:392` (ModuleTabs idPrefix), `apps/web/src/modules/integrations/McpTab.tsx:413` + `:491` (testids kept), `apps/web/src/modules/integrations/helpers.ts:152` (Codex `env_vars` follows the transport's token variable — verify fix); `(cd apps/web && bun test tests/modules/integrations/)` → 78 pass / 0 fail |
 | R4 | MET | `packages/app/src/services/agent-mcp-readiness.ts:326` (no write/spawn calls in file), `packages/contracts/src/integrations.ts:318`, `apps/server/src/modules/integrations/handlers.ts:267`, `apps/web/src/modules/integrations/useIntegrations.ts:105-110` (tolerant catch); `(cd packages/app && bun test tests/services/agent-mcp-readiness.test.ts)` → 5 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts`, `apps/server/tests/serve.test.ts:2974`, `apps/web/tests/modules/integrations/integrations-module.test.tsx` — 105 + 77 pass this run |
 | AC2 | MET | test | `packages/config/tests/config.test.ts:193-245`, `apps/server/tests/server-config.test.ts` — pass this run |
-| AC3 | MET | test | `apps/web/tests/modules/integrations/helpers.test.ts`, `apps/web/tests/modules/integrations/integrations-module.test.tsx` — 77 pass this run |
+| AC3 | MET | test | `apps/web/tests/modules/integrations/helpers.test.ts:237` (Codex gateway bridge allowlists the gateway token variable; failed before the fix), `apps/web/tests/modules/integrations/integrations-module.test.tsx` — 78 pass this run |
 | AC4 | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts` (file fingerprints unchanged, no token in output), `apps/server/tests/modules/integrations/handlers.test.ts` — pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

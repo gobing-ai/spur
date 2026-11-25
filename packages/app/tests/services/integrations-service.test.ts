@@ -7,6 +7,7 @@
  * must come from the real ledger fold rather than a second query.
  */
 import { describe, expect, test } from 'bun:test';
+import type { IntegrationsInboundMember, IntegrationsStatus } from '@gobing-ai/spur-contracts';
 import { createMigratedDb, type DbAdapter, SystemEventDao } from '@gobing-ai/spur-domain';
 import { InboxService } from '../../src/services/inbox-service';
 import type {
@@ -17,6 +18,11 @@ import type {
 import { IntegrationsService, type IntegrationsSources } from '../../src/services/integrations-service';
 
 const TOKEN = 'integrations-secret-token-9876';
+
+/** The inbound rows of the merged A2A member list (K44 1451). */
+function inbound(status: IntegrationsStatus): IntegrationsInboundMember[] {
+    return status.a2a.members.filter((member): member is IntegrationsInboundMember => member.direction === 'inbound');
+}
 
 /** A fleet double: one inbound coder and one outbound A2A peer. */
 function fleetDouble(options: { writeCapable?: boolean } = {}) {
@@ -163,22 +169,26 @@ describe('1423 status — surfaces and credentials', () => {
         expect(status.mcp.resources).toEqual([{ uriTemplate: 'spur://tasks/{wbs}', description: 'Task by WBS' }]);
     });
 
-    test('inbound and outbound members come from the fleet declaration', async () => {
+    test('K44 1451 — inbound and outbound members come from the fleet declaration as one list with a direction', async () => {
         const status = await service().status({ origin: 'http://localhost:3007' });
-        expect(status.a2a.inbound).toEqual([
+        expect(status.a2a.members).toEqual([
             {
                 member: 'proj-coder',
+                direction: 'inbound',
                 role: 'coder',
                 cardUrl: 'http://localhost:3007/a2a/members/proj-coder/.well-known/agent-card.json',
                 writeFenced: true,
             },
+            { member: 'proj-peer', direction: 'outbound', kind: 'a2a', target: 'https://peer.example' },
         ]);
-        expect(status.a2a.outbound).toEqual([{ member: 'proj-peer', kind: 'a2a', target: 'https://peer.example' }]);
+        // The two old lists are gone, not kept alongside.
+        expect(Object.keys(status.a2a)).not.toContain('inbound');
+        expect(Object.keys(status.a2a)).not.toContain('outbound');
     });
 
     test('a member whose executor cannot attest write capability is not advertised as fenced', async () => {
         const status = await service({ writeCapable: false }).status({ origin: 'http://localhost:1' });
-        expect(status.a2a.inbound[0]?.writeFenced).toBe(false);
+        expect(inbound(status)[0]?.writeFenced).toBe(false);
     });
 
     test('disabled inbound members are omitted from the published A2A inbound list', async () => {
@@ -207,7 +217,7 @@ describe('1423 status — surfaces and credentials', () => {
             getDb: async () => createMigratedDb({ url: ':memory:' }),
             projectPath: '/proj',
         }).status({ origin: 'http://localhost:3007' });
-        expect(status.a2a.inbound.map((entry) => entry.member)).toEqual(['proj-coder']);
+        expect(inbound(status).map((entry) => entry.member)).toEqual(['proj-coder']);
     });
 
     test('no serialized field contains the token value', async () => {
@@ -241,7 +251,7 @@ describe('1423 status — gateway block', () => {
         });
         // URLs through the gateway keep the mount prefix the caller used.
         expect(status.mcp.url).toBe('http://localhost:3000/tslibs/mcp');
-        expect(status.a2a.inbound[0]?.cardUrl).toBe(
+        expect(inbound(status)[0]?.cardUrl).toBe(
             'http://localhost:3000/tslibs/a2a/members/proj-coder/.well-known/agent-card.json',
         );
     });
@@ -253,7 +263,7 @@ describe('1423 status — gateway block', () => {
         });
         expect(status.gateway).toEqual({ served: false });
         expect(status.mcp.url).toBe('http://localhost:3000/tslibs/mcp');
-        expect(status.a2a.inbound[0]?.cardUrl).toBe(
+        expect(inbound(status)[0]?.cardUrl).toBe(
             'http://localhost:3000/tslibs/a2a/members/proj-coder/.well-known/agent-card.json',
         );
     });
@@ -267,7 +277,7 @@ describe('1423 status — gateway block', () => {
         });
         expect(status.mcp.url).toBe('https://spur.example.com/tslibs/mcp');
         expect(status.a2a.url).toBe('https://spur.example.com/tslibs/a2a');
-        expect(status.a2a.inbound[0]?.cardUrl).toBe(
+        expect(inbound(status)[0]?.cardUrl).toBe(
             'https://spur.example.com/tslibs/a2a/members/proj-coder/.well-known/agent-card.json',
         );
         if (status.gateway.served) {

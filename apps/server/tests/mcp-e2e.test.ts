@@ -27,8 +27,6 @@ import { mockRuntime } from './middleware/helpers';
 
 const TOKEN = 'e2e-mcp-token-9001';
 const TOKEN_VAR = 'SPUR_E2E_MCP_TOKEN';
-const GATEWAY_TOKEN_VAR = 'SPUR_E2E_GATEWAY_TOKEN';
-const GATEWAY_TOKEN = 'e2e-root-gateway-token';
 const PREFIX = '/e2e';
 /** Newest legacy pre-2.0 version: `2026-07-28`+ is the only accepted line (AC2). */
 const LEGACY_VERSIONS = ['2024-11-05', '2025-03-26', '2025-11-25'];
@@ -102,9 +100,9 @@ beforeAll(async () => {
         host: '127.0.0.1',
         mcp: {
             enabled: true,
-            authEnv: GATEWAY_TOKEN_VAR,
-            projectTokenEnv: TOKEN_VAR,
-            env: { [GATEWAY_TOKEN_VAR]: GATEWAY_TOKEN, [TOKEN_VAR]: TOKEN },
+            // K44 1450: the one `server.mcp` token guards the root AND is forwarded upstream.
+            authEnv: TOKEN_VAR,
+            env: { [TOKEN_VAR]: TOKEN },
         },
         deps: {
             port: 0,
@@ -456,9 +454,8 @@ terminalStates:
                 host: '127.0.0.1',
                 mcp: {
                     enabled: true,
-                    authEnv: GATEWAY_TOKEN_VAR,
-                    projectTokenEnv: TOKEN_VAR,
-                    env: { ...env, [TOKEN_VAR]: TOKEN, [GATEWAY_TOKEN_VAR]: GATEWAY_TOKEN },
+                    authEnv: TOKEN_VAR,
+                    env: { ...env, [TOKEN_VAR]: TOKEN },
                 },
                 deps: {
                     port: 0,
@@ -474,7 +471,7 @@ terminalStates:
             const gatewayPost = (body: unknown) =>
                 fetch(`${workflowGateway?.url}/mcp`, {
                     method: 'POST',
-                    headers: authHeaders({ Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+                    headers: authHeaders({ Authorization: `Bearer ${TOKEN}` }),
                     body: JSON.stringify(body),
                 });
             const discovery = await jsonBody<
@@ -627,7 +624,7 @@ describe('1392: guarded corpus write tools', () => {
     test('root gateway creates a task in the selected project when the server cwd is elsewhere', async () => {
         const res = await fetch(`http://127.0.0.1:${gateway?.port}/mcp`, {
             method: 'POST',
-            headers: authHeaders({ Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+            headers: authHeaders({ Authorization: `Bearer ${TOKEN}` }),
             body: JSON.stringify(
                 rpc('tools/call', {
                     name: 'sp_task_create',
@@ -709,7 +706,7 @@ describe('1392: guarded corpus write tools', () => {
 
         const refused = await fetch(`http://127.0.0.1:${gateway?.port}/mcp`, {
             method: 'POST',
-            headers: authHeaders({ Authorization: `Bearer ${GATEWAY_TOKEN}` }),
+            headers: authHeaders({ Authorization: `Bearer ${TOKEN}` }),
             body: JSON.stringify(
                 rpc('tools/call', {
                     name: 'sp_task_transition',

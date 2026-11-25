@@ -128,9 +128,9 @@ export function registerServeCommand(
                         port: gatewayPort,
                         host: gatewayHost,
                         mcp: {
-                            ...gatewayConfig.server.gateway.mcp,
-                            projectTokenEnv: gatewayConfig.server.mcp.authEnv,
-                            projectAllowUnauthenticated: gatewayConfig.server.mcp.allowUnauthenticated,
+                            enabled: gatewayConfig.server.mcp.enabled,
+                            authEnv: gatewayConfig.server.mcp.authEnv,
+                            allowUnauthenticated: gatewayConfig.server.mcp.allowUnauthenticated,
                             env,
                         },
                         deps: {

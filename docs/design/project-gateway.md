@@ -75,14 +75,10 @@ forwarded scheme/host. Remote entries and internal start/diagnostic URLs are unc
 Config (`packages/config/src/index.ts` `server` section): `server.gateway.port` (default **3000**,
 set with `SPUR_GATEWAY_PORT` for both the gateway and MCP bridge),
 `server.gateway.allowedHosts: string[]` (tunnel hostnames, default `[]`, mapped from the
-comma-separated `SPUR_GATEWAY_ALLOWED_HOSTS`) and, since task 1382,
-`server.gateway.mcp: { enabled: boolean (default false), authEnv?: string, allowUnauthenticated?: boolean }` mapped from
-`SPUR_GATEWAY_MCP_ENABLED` / `SPUR_GATEWAY_MCP_AUTH_ENV`. `enabled` without `authEnv` fails the
-config load with the same message shape as `server.mcp` unless `allowUnauthenticated: true` is set
-for local-only access. Since 1449 the entry inherits from `server.mcp`: `allowUnauthenticated` when
-it is omitted, and `enabled: true` when its own switch is omitted **and** the gateway's own credential
-is satisfied — the credential itself never inherits (ADR-151 K41), so a single-project config that
-declares only `server.mcp.authEnv` keeps the gateway entry off instead of failing the load.
+comma-separated `SPUR_GATEWAY_ALLOWED_HOSTS`). The gateway has no MCP config of its own: since K44
+(task 1450) `server.mcp` drives the gateway root `/mcp` as well as every `/<prefix>/mcp`. The K41
+`server.gateway.mcp` block and the `SPUR_GATEWAY_MCP_*` variables are gone; a leftover block is
+dropped by the schema and has no effect.
 `allocatePort()` skips the gateway port;
 spawned serves already bind `127.0.0.1` (`project-start.ts:450-460`).
 
@@ -96,17 +92,15 @@ be mistaken for the local listener.
 ### 4.1a Gateway-hosted MCP entry (task 1382, feature K41)
 
 The gateway answers **its own** MCP endpoint at the root, so an MCP client needs one URL no matter
-how many projects are registered. `server.gateway.mcp` and `server.mcp` are intentionally separate
-surfaces: `server.gateway.mcp` exposes the multi-project hub at `/mcp` (requiring a `project`
-selector on built-ins and using its own `SPUR_GATEWAY_MCP_TOKEN` boundary), while `server.mcp`
-exposes each project's `/<prefix>/mcp` endpoint (single-project scope plus `spur://` resources).
-Because gateway `tools/call` forwards to each target project's loopback `/mcp`, projects targeted
-through the gateway must also have `server.mcp.enabled: true`.
+how many projects are registered. The root hub (built-ins take a `project` selector) and each
+project's `/<prefix>/mcp` (single-project scope plus `spur://` resources) are two endpoints of one
+surface, configured by the one `server.mcp` block (K44 1450). A separate gateway credential was no
+real boundary: the same origin already proxies `/<prefix>/mcp`, guarded by the same global token.
 
 | Aspect | Contract |
 | --- | --- |
 | Route | `POST /mcp` at the gateway root, matched **before** prefix routing. Disabled ⇒ `404`; never a proxy attempt at a project prefix |
-| Auth | the shared `bearerGuard` (1375) with realm `spur-gateway-mcp` and the gateway's **own** token variable — a gateway credential never implies a project credential. Missing/wrong token ⇒ 401; unset variable ⇒ 500 fail-closed |
+| Auth | the shared `bearerGuard` (1375) with realm `spur-gateway-mcp` and the `server.mcp.authEnv` token variable — the same token the gateway forwards upstream. Missing/wrong token ⇒ 401; unset variable ⇒ 500 fail-closed |
 | CSRF | root `/mcp` is exempt from the same-origin check (bearer-authenticated, like `/<prefix>/mcp`); the host allowlist still applies |
 | Reserved | `mcp` joined `RESERVED_PREFIX_SEGMENTS`, so a project can never be prefixed `/mcp` and silently shadow the endpoint |
 | Composition | `apps/server/src/gateway.ts` builds the handler from `{ enabled, authEnv, env }` and injects it as `GatewayDeps.mcp`; `packages/app` stays transport-free |
@@ -135,9 +129,8 @@ a restart resets them, and durable history stays in each project's ledger. A ref
 `upstream-no-result`), never the error text: the text quotes the `project` selector, and an event
 must not carry an argument value.
 
-The gateway forwards one shared project token. The CLI passes `server.mcp.authEnv`
-(`SPUR_MCP_AUTH_ENV`) as `projectTokenEnv`, and project servers started by the gateway inherit those
-settings. Gateway clients use the separate gateway credential. See the
+The gateway forwards the one `server.mcp` token it also checks at its root, and project servers
+started by the gateway inherit those settings. See the
 [install guide](../install.md#2-connect-the-coding-agent) for the environment and live probes.
 Offline discovery uses the gateway's `SPUR_MCP_NAMESPACE` when set, otherwise each project's plugin
 manifest. Use distinct manifests for multi-project discovery. A separately launched project must

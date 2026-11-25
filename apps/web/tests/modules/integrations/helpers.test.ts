@@ -38,11 +38,11 @@ describe('1424 — surface state vocabulary', () => {
     test('every surface off is the only empty-state condition', () => {
         const off = {
             mcp: { enabled: false },
-            a2a: { enabled: false, outbound: [] },
+            a2a: { enabled: false, members: [] },
             gateway: { served: false },
         } as unknown as IntegrationsStatus;
         expect(allSurfacesOff(off)).toBe(true);
-        expect(allSurfacesOff({ ...off, a2a: { enabled: true, outbound: [] } } as unknown as IntegrationsStatus)).toBe(
+        expect(allSurfacesOff({ ...off, a2a: { enabled: true, members: [] } } as unknown as IntegrationsStatus)).toBe(
             false,
         );
         expect(
@@ -60,7 +60,10 @@ describe('1424 — surface state vocabulary', () => {
         expect(
             allSurfacesOff({
                 ...off,
-                a2a: { enabled: false, outbound: [{ member: 'peer', kind: 'a2a', target: 'http://peer' }] },
+                a2a: {
+                    enabled: false,
+                    members: [{ member: 'peer', direction: 'outbound', kind: 'a2a', target: 'http://peer' }],
+                },
             } as unknown as IntegrationsStatus),
         ).toBe(false);
     });
@@ -220,7 +223,7 @@ describe('1449 — per-agent client config', () => {
             namespace: '/spur-new',
             rootMcpUrl: 'http://localhost:3070/mcp',
             counters: null,
-            mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+            mcp: { enabled: true, auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true } },
         },
     } as unknown as IntegrationsStatus;
 
@@ -232,6 +235,20 @@ describe('1449 — per-agent client config', () => {
         expect(view.snippet).toContain('"--url"');
         expect(view.snippet).toContain('env_vars = ["SPUR_MCP_AUTH_ENV", "SPUR_MCP_TOKEN"]');
         expect(view.configPath).toBe('~/.codex/config.toml');
+    });
+
+    test('Codex gateway bridge allowlists the one server.mcp token variable (K44 1450)', () => {
+        const view = renderClientConfig(live, 'codex', 'gateway-stdio');
+        expect(view.snippet).toContain('args = ["mcp", "--gateway"]');
+        expect(view.snippet).toContain(
+            `env_vars = ["SPUR_GATEWAY_PORT", "SPUR_MCP_ENABLED", "SPUR_MCP_AUTH_ENV", "${live.mcp.auth.envName}"]`,
+        );
+        expect(view.snippet).not.toContain('SPUR_GATEWAY_MCP');
+        const custom = {
+            ...live,
+            mcp: { ...live.mcp, auth: { envName: 'MY_TOKEN', tokenPresent: true } },
+        } as unknown as IntegrationsStatus;
+        expect(renderClientConfig(custom, 'codex', 'gateway-stdio').snippet).toContain('"MY_TOKEN"]');
     });
 
     test('omp renders YAML and OpenCode/OpenClaw render their own JSON trees', () => {
@@ -308,7 +325,7 @@ describe('1449 — per-agent client config', () => {
         expect(renderClientConfig(live, 'codex', 'http').transportNote).toContain('2026-07-28');
         const standalone = { mcp: live.mcp, gateway: { served: false as const } } as unknown as IntegrationsStatus;
         expect(renderClientConfig(standalone, 'claude', 'gateway-stdio').transportNote).toContain(
-            'gateway MCP entry is off',
+            'gateway MCP endpoint is off — enable server.mcp',
         );
     });
 });

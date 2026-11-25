@@ -80,8 +80,11 @@ interface IntegrationsStatus {
     a2a: {
         enabled: boolean; basePath: '/a2a';
         auth: { envName: string; tokenPresent: boolean; allowUnauthenticated?: boolean };
-        inbound: Array<{ member: string; role: string | null; cardUrl: string; writeFenced: boolean }>;
-        outbound: Array<{ member: string; kind: 'a2a' | 'project'; target: string }>;
+        // One list, discriminated by direction (K44 1451): each member is a receiver or a peer, never both.
+        members: Array<
+            | { member: string; direction: 'inbound'; role: string | null; cardUrl: string; writeFenced: boolean }
+            | { member: string; direction: 'outbound'; kind: 'a2a' | 'project'; target: string; auth?: Auth }
+        >;
     };
     gateway: { served: false } | {
         served: true; namespace: string; rootMcpUrl: string;
@@ -112,9 +115,10 @@ interface IntegrationsStatus {
   registered local project's canonical `localGatewayBase` from `resolveProjectGatewayUrl` for a
   direct-root legacy request → the request's own origin only for an unregistered/remote context.
   It is the rule `cardOrigin()` already applies to the A2A card.
-- `a2a.inbound` lists only receive-capable, enabled members: a member declared by `a2a`/`project`
-  is an outbound peer, and `enabled: false` is omitted because the listener already answers it
-  `404`. The A2A tab renders `cardUrl` as a link only while `a2a.enabled`.
+- `a2a.members` carries both directions in one list (K44 1451); the service derives `direction`
+  from the declaration. `inbound` rows are only receive-capable, enabled members: a member declared
+  by `a2a`/`project` is an `outbound` peer, and `enabled: false` is omitted because the listener
+  already answers it `404`. The A2A tab renders `cardUrl` as a link only while `a2a.enabled`.
 - Gateway detection uses the forwarded prefix headers that `cardOrigin()` already reads. The
   counters come from the gateway's `/api/health` over loopback on `SPUR_GATEWAY_PORT` (default
   `3000`). If that read fails, the response carries `counters: null` plus a `diagnostic` string;
@@ -179,7 +183,7 @@ failed identity read leaves the rest of the status visible (1437 R6).
 | --- | --- | --- |
 | Summary | One row per surface: state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus the window's six usage slices — tool latency (p50/p95 with unmeasured calls counted and a null percentile as `—`), resource reads, actor attribution, A2A intake, auth refusals by surface and reason, and repeated `(tool, errorCode)` failures with their first→last range — each with its own empty state. Plus a gateway counters strip when served | status + usage |
 | MCP | Namespace line (`namespace <ns> · from <config\|plugin-manifest\|none>`), tool table (origin badge, read/write badge, the window's calls / failures / p50-p95 / last call joined from `usage.tools` by name — an uncalled but advertised tool reads `0 / 0 / — / —` — and a schema drawer) with a case-insensitive name filter that never hides the exposure findings or the `spur://` list and a header badge totalling the window's call attempts, exposure findings with their remedies, the window's usage rows whose tool the catalog no longer advertises (latency, counted unmeasured calls), resource reads and repeated failures, `spur://` resource list, recent calls (tool, duration, outcome, errorCode), a **per-agent Client config TabView** (1449 R3 — nine `ModuleTabs` agents in their own native format: Codex/Grok TOML, omp YAML, the JSON trees for Claude Code, pi, Gemini, OpenCode, OpenClaw and a generic HTTP client; a transport selector for the gateway stdio bridge, the project stdio bridge and direct HTTP with the 2026-07-28 floor; the endpoint always resolved from the status or the Board's own origin; and inline auth guidance that names the variable, never a stored value), the project command `spur mcp --url <endpoint>`, the gateway command `spur mcp --gateway` only when the gateway's own MCP entry is on, a JSON-RPC `server/discover` probe expanding the auth variable name only, and the **readiness pins** from §2.2 | status + usage + events + readiness |
-| A2A | Inbound member cards (card URL, write-fenced badge) with an on-demand **card inspector** (public JSON fetched under the current Board mount, with inline retry, while the listener is on) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project members with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
+| A2A | One **Members** list, each row labelled `inbound` or `outbound`. Inbound rows: card URL, write-fenced badge with an on-demand **card inspector** (public JSON fetched under the current Board mount, with inline retry, while the listener is on) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project rows with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
 
 States: a loading skeleton; an `EmptyState` when every surface is off, with the config keys that
 enable each one; a `Diagnostic` with retry when `integrations.status` fails. Two inline warnings are
@@ -193,7 +197,7 @@ request projection therefore carries `remoteTaskId`, `remoteContextId` and `remo
 (`inboxRequestSchema`, optional; a malformed or absent artifact reads as absent) rather than on the
 member. Credential state is the opposite: it belongs to the member declaration, so the server reads
 `authEnv` presence and the service projects only `envName` + `tokenPresent` into
-`outbound[].auth` — a member that declares no credential omits the field, and the value never crosses
+the outbound row's `auth` — a member that declares no credential omits the field, and the value never crosses
 the port.
 
 **The exact-run deep link (1440 R3).** A receipt's Run link is

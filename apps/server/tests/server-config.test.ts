@@ -47,13 +47,8 @@ describe('serverBootstrapConfig', () => {
             authEnv: 'SPUR_A2A_TOKEN',
             allowUnauthenticated: true,
         });
-        // 1449 R2: server.gateway.mcp inherits the unauthenticated policy and, because that policy
-        // satisfies the gateway's own auth check, `enabled` too — the credentials stay independent.
-        expect(fromYaml.gateway).toEqual({
-            port: 3070,
-            explicit: true,
-            mcp: { enabled: true, authEnv: null, allowUnauthenticated: true },
-        });
+        // K44 1450: the gateway carries no MCP config of its own; server.mcp drives its root /mcp.
+        expect(fromYaml.gateway).toEqual({ port: 3070, explicit: true });
 
         const overridden = serverBootstrapConfig(
             {
@@ -66,29 +61,17 @@ describe('serverBootstrapConfig', () => {
         );
         expect(overridden.mcp?.enabled).toBe(false);
         expect(overridden.a2a?.authEnv).toBe('OVERRIDE_A2A_TOKEN');
-        // SPUR_MCP_ENABLED=false removes the source of the inheritance, so the gateway entry stays
-        // off while the unauthenticated policy still flows through.
-        expect(overridden.gateway).toEqual({
-            port: 4123,
-            explicit: true,
-            mcp: { enabled: false, authEnv: null, allowUnauthenticated: true },
-        });
+        expect(overridden.gateway).toEqual({ port: 4123, explicit: true });
     });
 
     test('spurConfigSchema refuses server.mcp.enabled or server.a2a.enabled without authEnv unless allowUnauthenticated is true', () => {
         expect(spurConfigSchema.safeParse({ server: { mcp: { enabled: true } } }).success).toBe(false);
         expect(spurConfigSchema.safeParse({ server: { a2a: { enabled: true } } }).success).toBe(false);
-        expect(spurConfigSchema.safeParse({ server: { gateway: { mcp: { enabled: true } } } }).success).toBe(false);
         expect(
             spurConfigSchema.safeParse({ server: { mcp: { enabled: true, allowUnauthenticated: true } } }).success,
         ).toBe(true);
         expect(
             spurConfigSchema.safeParse({ server: { a2a: { enabled: true, allowUnauthenticated: true } } }).success,
-        ).toBe(true);
-        expect(
-            spurConfigSchema.safeParse({
-                server: { gateway: { mcp: { enabled: true, allowUnauthenticated: true } } },
-            }).success,
         ).toBe(true);
     });
 });

@@ -255,7 +255,7 @@ describe('1423 — the gateway block (R5)', () => {
                     status5xx: 0,
                     upstreamRestarts: {},
                 },
-                mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+                mcp: { enabled: true, auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true } },
             });
         });
         try {
@@ -515,15 +515,17 @@ describe('1440 — outbound credential state (R2)', () => {
             expect(raw).not.toContain(PEER_TOKEN);
             const body = JSON.parse(raw) as {
                 a2a: {
-                    outbound: Array<{
+                    members: Array<{
                         member: string;
+                        direction: string;
                         kind: string;
                         target: string;
                         auth?: { envName: string; tokenPresent: boolean };
                     }>;
                 };
             };
-            const byEnv = new Map(body.a2a.outbound.map((member) => [member.auth?.envName, member]));
+            const outbound = body.a2a.members.filter((member) => member.direction === 'outbound');
+            const byEnv = new Map(outbound.map((member) => [member.auth?.envName, member]));
             expect(byEnv.get('PEER_A2A_TOKEN')?.auth).toEqual({ envName: 'PEER_A2A_TOKEN', tokenPresent: true });
             expect(byEnv.get('UNSET_PEER_TOKEN')?.auth).toEqual({ envName: 'UNSET_PEER_TOKEN', tokenPresent: false });
             expect(byEnv.get('PEER_A2A_TOKEN')?.target).toBe('https://peer.example/.well-known/agent-card.json');
@@ -565,7 +567,7 @@ describe('1449 — gateway port precedence (R1)', () => {
                     status5xx: 0,
                     upstreamRestarts: {},
                 },
-                mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+                mcp: { enabled: true, auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true } },
             });
         });
         try {

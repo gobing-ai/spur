@@ -42,41 +42,161 @@ spur projects add . --json
 
 ## 2. Connect the coding agent
 
-Superskill reads the [plugin MCP manifest](../plugins/sp/mcp.json) and installs the `spur` entry
-where the target supports MCP config. The entry runs `spur mcp --gateway`. Inspect the target's
-installed MCP entry or plugin registration. If the target has a stdio client and Superskill did
-not generate an entry, use the target's native MCP registration for the same command and
-arguments. Keep the bearer token in the process environment.
+Every agent reaches Spur the same way: a `spur` MCP entry that runs `spur mcp --gateway`, a stdio
+bridge in front of the local gateway's `/mcp`. The bridge resolves `http://localhost:<port>/mcp`
+from `server.gateway` and reads the bearer from the variable `server.mcp.authEnv` names, so no
+token ever lands in an agent config file. Set up the machine once (2.1–2.2), then add the entry
+to each agent you use (2.3).
 
-Use a shell that can launch both the gateway and the coding agent. The agent uses one token to
-access the gateway. The gateway uses a separate token to call its project servers. Use your
-secret store or generate separate local tokens for this session.
+### 2.1 Machine config
 
-```sh
-export SPUR_GATEWAY_MCP_ENABLED=true
-export SPUR_GATEWAY_MCP_AUTH_ENV=SPUR_GATEWAY_MCP_TOKEN
-export SPUR_GATEWAY_MCP_TOKEN="$(openssl rand -hex 32)"
-(
-  export SPUR_MCP_ENABLED=true
-  export SPUR_MCP_AUTH_ENV=SPUR_PROJECT_MCP_TOKEN
-  export SPUR_PROJECT_MCP_TOKEN="$(openssl rand -hex 32)"
-  exec spur self serve --gateway --no-open
-) &
+`spur self install` seeds `~/.config/spur/config.yaml` from the shipped default when the file is
+absent. That default already enables MCP and admits loopback callers without a token, so a fresh
+machine needs no exports. If the file predates this, add (or compare against) the `server` block
+from [`config/config.global.yaml`](../config/config.global.yaml):
+
+```yaml
+server:
+    mcp:                         # drives the gateway root /mcp AND each project's /<prefix>/mcp
+        enabled: true
+        authEnv: SPUR_MCP_TOKEN   # the NAME of a variable, never the token
+        allowUnauthenticated: true
+    # gateway:
+    #     port: 3000             # set only when 3000 is taken; the bridge reads the same value
 ```
 
-Wait for the gateway startup message. Launch a fresh agent session with the gateway exports
-and `spur` on PATH. The default loopback port is 3000. Set `SPUR_GATEWAY_PORT` in the shared shell
-before either process starts if you need another port. A separately launched project server needs
-the same project auth settings as the gateway. Relaunch existing processes to pick up changed
-environment variables.
+One block and one token cover both endpoints: the gateway checks the bearer at its root `/mcp` and
+forwards the same token to each project's loopback `/mcp`
+([project gateway](design/project-gateway.md)). A leftover `server.gateway.mcp` block from an older
+release is ignored; delete it.
 
-Codex filters the bridge environment. Superskill generates an `env_vars` allowlist from the plugin
-manifest for the gateway variable names above. If you choose a custom gateway token variable,
-include that name in Codex's allowlist as well.
+To require a token instead, set `allowUnauthenticated: false` and export the token in the shell
+profile that launches the gateway and your agents:
+
+```sh
+export SPUR_MCP_TOKEN="$(openssl rand -hex 32)"   # or read it from your secret store
+```
+
+Process variables (`SPUR_GATEWAY_PORT`, `SPUR_MCP_ENABLED`, `SPUR_MCP_AUTH_ENV`) override the file
+for one session. Config is read at
+startup, so restart the gateway after editing it.
+
+### 2.2 Keep the gateway running
+
+On macOS, install the LaunchAgent once; it survives logout and reboot:
+
+```sh
+spur self install --daemon --json
+```
+
+For a port other than 3000, pass `--port <n>` and set the same `server.gateway.port` in the YAML:
+the bridges read the port from config, not from the LaunchAgent.
+
+Elsewhere, or for a one-off session, run it in the background of the shell that launches your
+agents and wait for its startup message:
+
+```sh
+spur self serve --gateway --no-open &
+```
+
+A startup line beginning `config: project config could not be loaded` means the YAML did not
+parse; fix it before going on, or the gateway runs with every surface off.
+
+### 2.3 Add the agent entry
+
+Run `spur self install --with sp-plugin --json` (or `superskill install sp --marketplace
+gobing-ai/spur --targets <target>`) first: Superskill translates the
+[plugin MCP manifest](../plugins/sp/mcp.json) into each target's native config and is idempotent.
+Inspect the target file it wrote. Add the entry by hand only where Superskill generated none, and
+keep any other servers already in that file.
+
+All entries run the same command. Transport verdicts come from the
+[MCP agent adoption matrix](design/mcp-agent-adoption.md); only omp passed direct HTTP, because
+Spur accepts HTTP revisions `2026-07-28` and newer, so use the stdio bridge everywhere else.
+
+| Agent | Native file (user / project) | Entry key | Observed verdict |
+| --- | --- | --- | --- |
+| Claude Code | native `sp` plugin; else `~/.claude.json` / `.mcp.json` | `mcpServers.spur` | plugin connected (1417); matrix: cli-only |
+| Codex CLI | `~/.codex/config.toml` | `[mcp_servers.spur]` + `env_vars` | mcp-stdio-bridge |
+| Gemini CLI | `~/.gemini/settings.json` / `.gemini/settings.json` | `mcpServers.spur` | unobserved (account error) |
+| pi | `~/.pi/agent/mcp.json` / `.pi/mcp.json` (trusted projects) | `mcpServers.spur` | mcp-stdio-bridge |
+| omp | `~/.omp/agent/config.yml` | `mcp_servers.spur` | mcp-http (stdio also passes) |
+| OpenCode | `~/.config/opencode/opencode.json` / `opencode.json` | `mcp.spur` | unobserved (provider balance) |
+| Grok CLI | `~/.grok/config.toml` / `.grok/config.toml` | `[mcp_servers.spur]` | unobserved (no request) |
+| OpenClaw | `~/.openclaw/openclaw.json` | `mcp.servers.spur` | unobserved (provider auth) |
+| Antigravity, Hermes | not verified | — | use the CLI fallback |
+
+"Unobserved" means the harness never reached MCP on that client, not that its MCP support is
+missing; the entry below is the format the harness injected. These are the same snippets the
+Board shows under **Integrations › MCP › Client config**.
+
+Claude Code, Gemini CLI, pi (and any `mcpServers` JSON client):
+
+```json
+{
+  "mcpServers": {
+    "spur": { "command": "spur", "args": ["mcp", "--gateway"] }
+  }
+}
+```
+
+Codex filters the child environment, so allowlist the variables the bridge reads. Use your own
+token variable name in place of `SPUR_MCP_TOKEN` if you changed `authEnv`:
+
+```toml
+[mcp_servers.spur]
+enabled = true
+command = "spur"
+args = ["mcp", "--gateway"]
+env_vars = ["SPUR_GATEWAY_PORT", "SPUR_MCP_ENABLED", "SPUR_MCP_AUTH_ENV", "SPUR_MCP_TOKEN"]
+```
+
+Grok CLI uses the same TOML without `env_vars`. omp (YAML):
+
+```yaml
+mcp_servers:
+  spur:
+    command: spur
+    args:
+      - mcp
+      - --gateway
+```
+
+omp may instead use `url: http://localhost:3000/mcp` directly, plus
+`headers: { Authorization: "Bearer ${SPUR_MCP_TOKEN}" }` when tokens are required.
+
+OpenCode:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "spur": { "type": "local", "command": ["spur", "mcp", "--gateway"] }
+  }
+}
+```
+
+OpenClaw:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "spur": { "command": "spur", "args": ["mcp", "--gateway"] }
+    }
+  }
+}
+```
+
+`spur` must be on the PATH the agent launches children with; if it is not, put the absolute path
+from `command -v spur` in `command`. Start a fresh agent session after adding the entry. The Board's
+**Integrations › MCP** readiness pins show, per agent, whether the binary is installed, the entry is
+valid (`configured` / `misconfigured`) and the gateway has seen its calls (`active`); they read the
+same files and change nothing.
 
 ## 3. Verify the live catalog
 
-Run these probes from a shell with the same exports. They use the same bridge as the installed
+Run these probes from a shell with the same environment as the agent. They use the same bridge as the installed
 agent entry. Inspect the JSON-RPC response for a `result` or `error`.
 
 ```sh

@@ -183,9 +183,9 @@ decisions:
             stop: [not-fixed]
 
 # Machine-wide agent protocol surfaces (B9 MCP, G9 A2A, K4/K41 Gateway).
-# - `server.mcp` configures each project's `/<prefix>/mcp` endpoint (single-project scope + `spur://` resources).
-# - `server.gateway.mcp` configures the gateway-root `/mcp` endpoint (multi-project hub with a `project` selector);
-#   gateway `tools/call` forwards to each project's loopback `/mcp`, so target projects must also keep `server.mcp.enabled: true`.
+# - `server.mcp` configures BOTH MCP endpoints with one switch and one token (K44): each project's `/<prefix>/mcp`
+#   and the gateway-root `/mcp` (multi-project hub with a `project` selector), which forwards `tools/call` to the
+#   project's loopback `/mcp` with the same token.
 # - `authEnv` names the environment variable holding the bearer token — never the token value.
 # - Both settings are read at server/gateway startup (restart running processes after editing); process env vars (`SPUR_MCP_ENABLED`, etc.) override.
 server:
@@ -197,8 +197,3 @@ server:
         enabled: true
         authEnv: SPUR_A2A_TOKEN
         allowUnauthenticated: true
-    gateway:
-        mcp:
-            enabled: true
-            authEnv: SPUR_GATEWAY_MCP_TOKEN
-            allowUnauthenticated: true

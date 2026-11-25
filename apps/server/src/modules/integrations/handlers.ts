@@ -278,7 +278,6 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                 usageActors: usage.byActor,
                 surface: {
                     mcpEnabled: settings.enabled,
-                    gatewayMcpEnabled: boot?.gateway?.mcp?.enabled === true,
                     gatewayPort: gatewayPort(env, boot?.gateway),
                     projectUrl: settings.enabled && base !== '' ? `${base}/mcp` : null,
                 },

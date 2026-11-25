@@ -50,6 +50,7 @@ export type IntegrationsAuth = z.infer<typeof integrationsAuthSchema>;
 /** One inbound A2A member as the fleet declaration publishes it. */
 export const integrationsInboundMemberSchema = z.object({
     member: z.string(),
+    direction: z.literal('inbound'),
     role: z.string().nullable(),
     cardUrl: z.string(),
     /** True when the member's resolved executor attests write capability (the card's fencing extension). */
@@ -61,6 +62,7 @@ export type IntegrationsInboundMember = z.infer<typeof integrationsInboundMember
 /** One outbound member: an A2A peer card or a registered project's member. */
 export const integrationsOutboundMemberSchema = z.object({
     member: z.string(),
+    direction: z.literal('outbound'),
     kind: z.enum(['a2a', 'project']),
     target: z.string(),
     /**
@@ -71,6 +73,17 @@ export const integrationsOutboundMemberSchema = z.object({
 });
 /** Inferred type for {@link integrationsOutboundMemberSchema}. */
 export type IntegrationsOutboundMember = z.infer<typeof integrationsOutboundMemberSchema>;
+
+/**
+ * One fleet member on the A2A surface (K44 1451): a receiver this listener serves (`inbound`) or a
+ * peer this project calls (`outbound`). Each member has exactly one direction, so one list carries both.
+ */
+export const integrationsA2aMemberSchema = z.discriminatedUnion('direction', [
+    integrationsInboundMemberSchema,
+    integrationsOutboundMemberSchema,
+]);
+/** Inferred type for {@link integrationsA2aMemberSchema}. */
+export type IntegrationsA2aMember = z.infer<typeof integrationsA2aMemberSchema>;
 
 /** The gateway's since-creation counters, exactly as `/api/health` reports them (task 1385). */
 export const integrationsGatewayCountersSchema = z.object({
@@ -121,8 +134,7 @@ export const integrationsA2aSurfaceSchema = z.object({
     basePath: z.literal('/a2a'),
     url: z.string().nullable().optional(),
     auth: integrationsAuthSchema,
-    inbound: z.array(integrationsInboundMemberSchema),
-    outbound: z.array(integrationsOutboundMemberSchema),
+    members: z.array(integrationsA2aMemberSchema),
 });
 /** Inferred type for {@link integrationsA2aSurfaceSchema}. */
 export type IntegrationsA2aSurface = z.infer<typeof integrationsA2aSurfaceSchema>;

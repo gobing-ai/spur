@@ -558,24 +558,6 @@
                             "type": "array",
                             "items": { "type": "string", "minLength": 1 },
                             "description": "Tunnel hostnames admitted by the gateway host guard (env: SPUR_GATEWAY_ALLOWED_HOSTS)."
-                        },
-                        "mcp": {
-                            "type": "object",
-                            "properties": {
-                                "enabled": {
-                                    "type": "boolean",
-                                    "description": "Enable the gateway-root /mcp endpoint (env: SPUR_GATEWAY_MCP_ENABLED). Inherits true from server.mcp.enabled when omitted, but only when the gateway's own credential is satisfied (server.gateway.mcp.authEnv or an effective allowUnauthenticated)."
-                                },
-                                "authEnv": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "description": "Environment variable NAME holding the gateway MCP bearer token (env: SPUR_GATEWAY_MCP_AUTH_ENV). Never inherited from server.mcp.authEnv — the two credentials stay independent."
-                                },
-                                "allowUnauthenticated": {
-                                    "type": "boolean",
-                                    "description": "Permit requests without a bearer token when authEnv is unset in the environment. Inherits server.mcp.allowUnauthenticated when omitted."
-                                }
-                            }
                         }
                     }
                 }

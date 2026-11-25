@@ -1,4 +1,4 @@
-import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import type { IntegrationsOutboundMember, IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { useState } from 'react';
 import { withBase } from '../../components/base-path';
 import { Badge, Button, Card, CardBody } from '../../components/module-kit';
@@ -16,8 +16,8 @@ import {
 /**
  * Integrations › A2A (task 1424 R5; inspection, credential state and trace links 1440).
  *
- * Inbound member cards (public card URL, write-fenced badge) with an on-demand card inspector and the
- * copyable `a2a` CLI examples, the A2A tasks the listener created (the `a2a:` request-key family)
+ * One member list (K44 1451), each row labelled with its direction: inbound receivers (public card URL,
+ * write-fenced badge, on-demand card inspector, copyable `a2a` CLI examples) and outbound peers, the A2A tasks the listener created (the `a2a:` request-key family)
  * linking to Projects › Inbox and to the exact run in Observability › Trace, the outbound receipts
  * per declared member with their credential state and own remote refs, and recent A2A/auth events.
  */
@@ -99,6 +99,55 @@ function RemoteRefs({ row }: { row: InboxRequestRow }) {
     );
 }
 
+/** The direction label every member row carries, so one list reads both ways (K44 1451). */
+function DirectionBadge({ member, direction }: { member: string; direction: 'inbound' | 'outbound' }) {
+    return (
+        <Badge variant={direction === 'inbound' ? 'info' : 'neutral'} size="sm">
+            <span data-testid={`integrations-a2a-direction-${member}`}>{direction}</span>
+        </Badge>
+    );
+}
+
+/** An outbound peer's row body: its target, credential state and its own receipts. */
+function OutboundMember({ member, rows }: { member: IntegrationsOutboundMember; rows: InboxRequestRow[] }) {
+    return (
+        <>
+            <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">{member.member}</span>
+                <DirectionBadge member={member.member} direction="outbound" />
+                <Badge variant="ghost" size="sm">
+                    {member.kind}
+                </Badge>
+                <span className="font-mono text-xs break-all">{member.target}</span>
+            </div>
+            <div className="mt-1 text-xs" data-testid={`integrations-a2a-auth-${member.member}`}>
+                {member.auth === undefined || member.auth.envName === '' ? (
+                    <span className="text-base-content/60">no credential declared</span>
+                ) : (
+                    <>
+                        <span className="font-mono">{member.auth.envName}</span>{' '}
+                        <Badge variant={member.auth.tokenPresent ? 'success' : 'warning'} size="sm">
+                            {member.auth.tokenPresent ? 'set' : 'unset'}
+                        </Badge>
+                    </>
+                )}
+            </div>
+            {rows.length === 0 ? (
+                <p className="text-xs text-base-content/60">No receipts.</p>
+            ) : (
+                <ul className="mt-1 flex flex-col gap-1 text-xs">
+                    {rows.map((row) => (
+                        <li key={row.messageId} className="font-mono">
+                            {row.messageId} · {requestState(row)}
+                            <RemoteRefs row={row} />
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </>
+    );
+}
+
 export function A2aTab({
     status,
     requests,
@@ -119,7 +168,7 @@ export function A2aTab({
     const denials = (usage?.authDenied ?? []).filter((entry) => entry.surface === 'a2a');
     return (
         <div className="flex flex-col gap-4">
-            {status.a2a.enabled && status.a2a.inbound.length === 0 ? (
+            {status.a2a.enabled && !status.a2a.members.some((member) => member.direction === 'inbound') ? (
                 <p className="text-sm text-warning" data-testid="integrations-a2a-no-inbound">
                     The A2A listener is enabled but no member declares an inbound surface, so nothing can reach this
                     project. Declare a fleet member with an executor, or turn the listener off.
@@ -127,54 +176,66 @@ export function A2aTab({
             ) : null}
             <Card>
                 <CardBody>
-                    <h2 className="text-sm font-semibold mb-2">Inbound members</h2>
-                    {status.a2a.inbound.length === 0 ? (
-                        <p className="text-sm text-base-content/70">No members declare an inbound A2A surface.</p>
+                    <h2 className="text-sm font-semibold mb-2">Members</h2>
+                    {status.a2a.members.length === 0 ? (
+                        <p className="text-sm text-base-content/70">No members declare an A2A surface.</p>
                     ) : (
                         <ul className="grid gap-2 sm:grid-cols-2" data-testid="integrations-a2a-members">
-                            {status.a2a.inbound.map((member) => (
+                            {status.a2a.members.map((member) => (
                                 <li
                                     key={member.member}
                                     className="rounded-md border border-base-content/10 p-3"
                                     data-testid={`integrations-a2a-member-${member.member}`}
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold text-sm">{member.member}</span>
-                                        <Badge variant="ghost" size="sm">
-                                            {member.role ?? 'general'}
-                                        </Badge>
-                                        <Badge variant={member.writeFenced ? 'success' : 'ghost'} size="sm">
-                                            {member.writeFenced ? 'write-fenced' : 'read-only'}
-                                        </Badge>
-                                    </div>
-                                    {status.a2a.enabled ? (
+                                    {member.direction === 'inbound' ? (
                                         <>
-                                            <a
-                                                className="mt-1 block break-all font-mono text-xs link"
-                                                href={member.cardUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                {member.cardUrl}
-                                            </a>
-                                            <CardInspector member={member.member} fetchCard={fetchCard} />
-                                            <pre
-                                                className="mt-2 overflow-auto rounded bg-base-200 p-2 text-xs"
-                                                data-testid={`integrations-a2a-examples-${member.member}`}
-                                            >
-                                                {[
-                                                    a2aExamples(member.cardUrl, status.a2a.auth.envName).card,
-                                                    a2aExamples(member.cardUrl, status.a2a.auth.envName).send,
-                                                ].join('\n')}
-                                            </pre>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-semibold text-sm">{member.member}</span>
+                                                <DirectionBadge member={member.member} direction="inbound" />
+                                                <Badge variant="ghost" size="sm">
+                                                    {member.role ?? 'general'}
+                                                </Badge>
+                                                <Badge variant={member.writeFenced ? 'success' : 'ghost'} size="sm">
+                                                    {member.writeFenced ? 'write-fenced' : 'read-only'}
+                                                </Badge>
+                                            </div>
+                                            {status.a2a.enabled ? (
+                                                <>
+                                                    <a
+                                                        className="mt-1 block break-all font-mono text-xs link"
+                                                        href={member.cardUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        {member.cardUrl}
+                                                    </a>
+                                                    <CardInspector member={member.member} fetchCard={fetchCard} />
+                                                    <pre
+                                                        className="mt-2 overflow-auto rounded bg-base-200 p-2 text-xs"
+                                                        data-testid={`integrations-a2a-examples-${member.member}`}
+                                                    >
+                                                        {[
+                                                            a2aExamples(member.cardUrl, status.a2a.auth.envName).card,
+                                                            a2aExamples(member.cardUrl, status.a2a.auth.envName).send,
+                                                        ].join('\n')}
+                                                    </pre>
+                                                </>
+                                            ) : (
+                                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                    <code className="block break-all font-mono text-xs text-base-content/60">
+                                                        {member.cardUrl}
+                                                    </code>
+                                                    <span className="text-xs text-base-content/50">
+                                                        (A2A listener off)
+                                                    </span>
+                                                </div>
+                                            )}
                                         </>
                                     ) : (
-                                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                                            <code className="block break-all font-mono text-xs text-base-content/60">
-                                                {member.cardUrl}
-                                            </code>
-                                            <span className="text-xs text-base-content/50">(A2A listener off)</span>
-                                        </div>
+                                        <OutboundMember
+                                            member={member}
+                                            rows={receipts.find((entry) => entry.member === member.member)?.rows ?? []}
+                                        />
                                     )}
                                 </li>
                             ))}
@@ -281,62 +342,6 @@ export function A2aTab({
                                 })}
                             </tbody>
                         </table>
-                    )}
-                </CardBody>
-            </Card>
-
-            <Card>
-                <CardBody>
-                    <h2 className="text-sm font-semibold mb-2">Outbound</h2>
-                    {status.a2a.outbound.length === 0 ? (
-                        <p className="text-sm text-base-content/70">No outbound members declared.</p>
-                    ) : (
-                        <ul className="flex flex-col gap-3" data-testid="integrations-a2a-outbound">
-                            {status.a2a.outbound.map((member) => {
-                                const rows = receipts.find((entry) => entry.member === member.member)?.rows ?? [];
-                                return (
-                                    <li key={member.member} data-testid={`integrations-a2a-outbound-${member.member}`}>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-semibold text-sm">{member.member}</span>
-                                            <Badge variant="ghost" size="sm">
-                                                {member.kind}
-                                            </Badge>
-                                            <span className="font-mono text-xs break-all">{member.target}</span>
-                                        </div>
-                                        <div
-                                            className="mt-1 text-xs"
-                                            data-testid={`integrations-a2a-auth-${member.member}`}
-                                        >
-                                            {member.auth === undefined || member.auth.envName === '' ? (
-                                                <span className="text-base-content/60">no credential declared</span>
-                                            ) : (
-                                                <>
-                                                    <span className="font-mono">{member.auth.envName}</span>{' '}
-                                                    <Badge
-                                                        variant={member.auth.tokenPresent ? 'success' : 'warning'}
-                                                        size="sm"
-                                                    >
-                                                        {member.auth.tokenPresent ? 'set' : 'unset'}
-                                                    </Badge>
-                                                </>
-                                            )}
-                                        </div>
-                                        {rows.length === 0 ? (
-                                            <p className="text-xs text-base-content/60">No receipts.</p>
-                                        ) : (
-                                            <ul className="mt-1 flex flex-col gap-1 text-xs">
-                                                {rows.map((row) => (
-                                                    <li key={row.messageId} className="font-mono">
-                                                        {row.messageId} · {requestState(row)}
-                                                        <RemoteRefs row={row} />
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </li>
-                                );
-                            })}
-                        </ul>
                     )}
                 </CardBody>
             </Card>

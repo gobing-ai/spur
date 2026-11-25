@@ -1,4 +1,4 @@
-import type { IntegrationsStatus } from '@gobing-ai/spur-contracts';
+import type { IntegrationsOutboundMember, IntegrationsStatus } from '@gobing-ai/spur-contracts';
 import { withBase } from '../../lib/base-path';
 
 /**
@@ -143,6 +143,18 @@ function stdioCommand(transport: McpClientTransport, url: string): string[] {
     return transport === 'gateway-stdio' ? ['spur', 'mcp', '--gateway'] : ['spur', 'mcp', '--url', url];
 }
 
+/**
+ * The variables Codex must pass to the stdio child: Codex filters the bridge environment, so the
+ * token variable the bridge reads has to be allowlisted. Both bridges read the one `server.mcp`
+ * credential (K44 1450); the gateway bridge also resolves the port and switch — the same names
+ * `plugins/sp/mcp.json` declares.
+ */
+function codexEnvVars(status: IntegrationsStatus, transport: McpClientTransport): string[] {
+    const token = status.mcp.auth.envName || 'SPUR_MCP_TOKEN';
+    if (transport === 'gateway-stdio') return ['SPUR_GATEWAY_PORT', 'SPUR_MCP_ENABLED', 'SPUR_MCP_AUTH_ENV', token];
+    return ['SPUR_MCP_AUTH_ENV', token];
+}
+
 /** `key = "value"` with the JSON escaping TOML accepts for a basic string. */
 const tomlString = (value: string): string => JSON.stringify(value);
 
@@ -181,7 +193,8 @@ export function renderClientConfig(
             } else {
                 lines.push(`command = ${tomlString(command[0] ?? 'spur')}`);
                 lines.push(`args = [${args.map((part) => tomlString(part)).join(', ')}]`);
-                if (agent === 'codex') lines.push('env_vars = ["SPUR_MCP_AUTH_ENV", "SPUR_MCP_TOKEN"]');
+                if (agent === 'codex')
+                    lines.push(`env_vars = [${codexEnvVars(status, transport).map(tomlString).join(', ')}]`);
             }
             return lines.join('\n');
         }
@@ -284,7 +297,7 @@ export function renderClientConfig(
         if (transport === 'gateway-stdio')
             return status.gateway?.served === true && status.gateway.mcp?.enabled === true
                 ? 'Runs `spur mcp --gateway`, the shared stdio bridge in front of the gateway root.'
-                : 'The gateway MCP entry is off — enable server.gateway.mcp for this bridge to resolve.';
+                : 'The gateway MCP endpoint is off — enable server.mcp and restart the gateway for this bridge to resolve.';
         if (transport === 'project-stdio')
             return `Runs \`spur mcp --url ${url}\`, a stdio bridge in front of this project's own /mcp endpoint.`;
         return legacy
@@ -494,10 +507,15 @@ export function gatewayWithoutProjectMcp(status: IntegrationsStatus): boolean {
     return status.gateway?.served === true && status.gateway.mcp?.enabled === true && !status.mcp.enabled;
 }
 
+/** The peers this project calls: the outbound rows of the one A2A member list (K44 1451). */
+export function outboundMembers(status: IntegrationsStatus): IntegrationsOutboundMember[] {
+    return status.a2a.members.filter((member): member is IntegrationsOutboundMember => member.direction === 'outbound');
+}
+
 /** True when every surface (project MCP, A2A inbound, gateway MCP, and A2A outbound) is off — renders the empty state. */
 export function allSurfacesOff(status: IntegrationsStatus): boolean {
     const gatewayMcpOn = status.gateway?.served === true && status.gateway.mcp?.enabled === true;
-    const outboundOn = (status.a2a.outbound?.length ?? 0) > 0;
+    const outboundOn = outboundMembers(status).length > 0;
     return !status.mcp.enabled && !status.a2a.enabled && !gatewayMcpOn && !outboundOn;
 }
 

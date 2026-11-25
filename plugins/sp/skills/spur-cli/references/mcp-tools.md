@@ -107,8 +107,8 @@ Use the [Spur install guide](https://github.com/gobing-ai/spur/blob/main/docs/in
 and live `tools/list` and `server/discover` probes. The plugin ships one server in `mcp.json`,
 `spur` → `spur mcp --gateway`. Superskill owns writing the entry for supported targets.
 `--gateway` targets `http://localhost:<server.gateway.port>/mcp` and takes its bearer from the
-variable named by `server.gateway.mcp.authEnv` — the token stays in the environment, never in an agent
-config file. `--gateway` and `--url` are mutually exclusive, and a disabled gateway, an unset or empty
+variable named by `server.mcp.authEnv` (one token for the gateway and every project) — the token stays in the environment, never in an agent
+config file. `--gateway` and `--url` are mutually exclusive, and a disabled `server.mcp`, an unset or empty
 token variable, or a gateway that is not answering each fail with the remedy named.
 
 ## When the tools are absent

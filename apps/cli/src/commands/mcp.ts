@@ -183,26 +183,27 @@ export async function resolveMcpUrl(
 
 /**
  * Resolve the GATEWAY's own `/mcp` endpoint (task 1401 R1): the root route on the gateway port, with
- * the token from `server.gateway.mcp.authEnv`. Every refusal names the fix; no token value is ever
- * printed. Checked before any traffic, so a misconfiguration fails at launch, not mid-session.
+ * the token from `server.mcp.authEnv` — one MCP config drives both endpoints (K44 1450). Every
+ * refusal names the fix; no token value is ever printed. Checked before any traffic, so a
+ * misconfiguration fails at launch, not mid-session.
  */
 export async function resolveGatewayMcpUrl(
     env: Record<string, string | undefined>,
     spurConfig?: Pick<SpurConfig, 'server'> | null,
 ): Promise<{ url: string; authEnv: string | undefined; allowUnauthenticated: boolean }> {
     const config = buildConfigFromEnv(env, spurConfig);
-    const gateway = config.server.gateway;
-    if (!gateway.mcp.enabled) {
+    const { gateway, mcp } = config.server;
+    if (!mcp.enabled) {
         throw new CommandError(
-            'the gateway MCP entry is disabled; set server.gateway.mcp.enabled true (SPUR_GATEWAY_MCP_ENABLED) and name its token variable with server.gateway.mcp.authEnv',
+            'MCP is disabled; set server.mcp.enabled true (SPUR_MCP_ENABLED) and name its token variable with server.mcp.authEnv, or set allowUnauthenticated: true for loopback-only use',
         );
     }
-    const authEnv = gateway.mcp.authEnv;
-    const allowUnauthenticated = gateway.mcp.allowUnauthenticated === true;
+    const authEnv = mcp.authEnv;
+    const allowUnauthenticated = mcp.allowUnauthenticated === true;
     const value = authEnv !== undefined ? env[authEnv] : undefined;
     if ((value === undefined || value === '') && !allowUnauthenticated) {
         throw new CommandError(
-            `server.gateway.mcp.authEnv names "${authEnv ?? ''}" but that variable is unset or empty; the gateway would refuse every request`,
+            `server.mcp.authEnv names "${authEnv ?? ''}" but that variable is unset or empty; the gateway would refuse every request`,
         );
     }
     if (!(await isGatewayAnswering(gateway.port))) {

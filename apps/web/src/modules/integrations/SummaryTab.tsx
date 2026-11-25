@@ -6,6 +6,7 @@ import {
     formatLatency,
     formatWhen,
     gatewayWithoutProjectMcp,
+    outboundMembers,
     type ProtocolEventRow,
     stateTone,
     surfaceState,
@@ -70,6 +71,7 @@ export function summaryRows(
 ): SummaryRow[] {
     const mcp = mcpTotals(usage);
     const a2a = a2aTotals(usage);
+    const outbound = outboundMembers(status);
     const gateway = status.gateway.served ? status.gateway : null;
     const gatewayActivity = usage?.gatewayMcpActivity;
     const outboundActivity = usage?.outboundActivity;
@@ -113,8 +115,8 @@ export function summaryRows(
         {
             surface: 'a2a-outbound',
             label: 'A2A outbound',
-            state: status.a2a.outbound.length === 0 ? 'off' : 'on',
-            endpoint: status.a2a.outbound.map((member) => member.target).join(', '),
+            state: outbound.length === 0 ? 'off' : 'on',
+            endpoint: outbound.map((member) => member.target).join(', '),
             envName: '',
             calls: outboundActivity?.calls ?? null,
             errorRate: outboundActivity?.calls ? outboundActivity.failures / outboundActivity.calls : null,

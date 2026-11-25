@@ -59,15 +59,21 @@ const STATUS: IntegrationsStatus = {
         enabled: true,
         basePath: '/a2a' as const,
         auth: { envName: 'SPUR_A2A_TOKEN', tokenPresent: false },
-        inbound: [
+        members: [
             {
                 member: 'proj-coder',
+                direction: 'inbound' as const,
                 role: 'coder',
                 cardUrl: 'http://localhost:3007/a2a/members/proj-coder/.well-known/agent-card.json',
                 writeFenced: true,
             },
+            {
+                member: 'proj-peer',
+                direction: 'outbound' as const,
+                kind: 'a2a' as const,
+                target: 'https://peer.example',
+            },
         ],
-        outbound: [{ member: 'proj-peer', kind: 'a2a' as const, target: 'https://peer.example' }],
     },
     gateway: { served: false as const },
 };
@@ -415,7 +421,12 @@ describe('1424 — A2A tab (R5)', () => {
         expect(events.querySelector('a')?.getAttribute('href')).toBe(
             '/board/observability?tab=system-events&eventName=a2a.task.cancelled&runId=run-1',
         );
-        expect(view.getByTestId('integrations-a2a-outbound').textContent).toContain('proj-peer');
+        // K44 1451: both directions share the one members list, each row labelled with its direction.
+        const list = view.getByTestId('integrations-a2a-members');
+        expect(list.contains(view.getByTestId('integrations-a2a-member-proj-peer'))).toBe(true);
+        expect(view.getByTestId('integrations-a2a-direction-proj-coder').textContent).toBe('inbound');
+        expect(view.getByTestId('integrations-a2a-direction-proj-peer').textContent).toBe('outbound');
+        expect(view.queryByTestId('integrations-a2a-outbound')).toBeNull();
     });
 
     test('disabled A2A listener renders member card URL as non-clickable text', async () => {
@@ -439,7 +450,7 @@ describe('1424 — states (R7)', () => {
         overrides.status = () => ({
             ...STATUS,
             mcp: { ...STATUS.mcp, enabled: false, url: null },
-            a2a: { ...STATUS.a2a, enabled: false, inbound: [], outbound: [] },
+            a2a: { ...STATUS.a2a, enabled: false, members: [] },
         });
         const view = render(<IntegrationsModule seams={makeSeams()} />);
         await waitFor(() => expect(view.getByTestId('integrations-empty')).toBeTruthy());
@@ -817,7 +828,7 @@ describe('1440 — A2A inspection and trace links', () => {
         expect(examples).toContain('a2a card get -o json');
         expect(examples).toContain('a2a send -o json --request-payload');
         expect(examples).toContain('--credential-helper');
-        expect(examples).toContain(STATUS.a2a.inbound[0]?.cardUrl ?? '');
+        expect(examples).toContain('http://localhost:3007/a2a/members/proj-coder/.well-known/agent-card.json');
         expect(document.body.innerHTML).not.toContain('SPUR_MCP_TOKEN_VALUE');
     });
 
@@ -826,9 +837,10 @@ describe('1440 — A2A inspection and trace links', () => {
             ...STATUS,
             a2a: {
                 ...STATUS.a2a,
-                outbound: [
+                members: [
                     {
                         member: 'proj-peer',
+                        direction: 'outbound' as const,
                         kind: 'a2a' as const,
                         target: 'https://peer.example',
                         auth: { envName: 'PEER_A2A_TOKEN', tokenPresent: false },
@@ -853,12 +865,19 @@ describe('1440 — A2A inspection and trace links', () => {
             ...STATUS,
             a2a: {
                 ...STATUS.a2a,
-                outbound: [{ member: 'proj-peer', kind: 'a2a' as const, target: 'https://peer.example' }],
+                members: [
+                    {
+                        member: 'proj-peer',
+                        direction: 'outbound' as const,
+                        kind: 'a2a' as const,
+                        target: 'https://peer.example',
+                    },
+                ],
             },
         });
         const view = render(<IntegrationsModule seams={makeSeams()} />);
         await openA2a(view);
-        const outbound = view.getByTestId('integrations-a2a-outbound-proj-peer').textContent ?? '';
+        const outbound = view.getByTestId('integrations-a2a-member-proj-peer').textContent ?? '';
         expect(outbound).toContain('remote-t1');
         expect(outbound).toContain('ctx-1');
         expect(outbound).toContain('lane/one');
@@ -876,7 +895,10 @@ describe('1440 — A2A inspection and trace links', () => {
     });
 
     test('an enabled listener with no inbound members warns', async () => {
-        overrides.status = () => ({ ...STATUS, a2a: { ...STATUS.a2a, inbound: [] } });
+        overrides.status = () => ({
+            ...STATUS,
+            a2a: { ...STATUS.a2a, members: STATUS.a2a.members.filter((member) => member.direction === 'outbound') },
+        });
         const view = render(<IntegrationsModule seams={makeSeams()} />);
         await waitFor(() => expect(view.getAllByRole('tab').length).toBe(3));
         fireEvent.click(view.getByRole('tab', { name: 'A2A' }));
@@ -928,7 +950,7 @@ describe('1449 — diagnostics, client config tabs and readiness pins', () => {
         namespace: '/spur-new',
         rootMcpUrl: 'http://localhost:3070/mcp',
         counters: null,
-        mcp: { enabled: true, auth: { envName: 'SPUR_GATEWAY_MCP_TOKEN', tokenPresent: true } },
+        mcp: { enabled: true, auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true } },
     };
 
     async function openClientConfig(view: ReturnType<typeof render>) {

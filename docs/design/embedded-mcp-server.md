@@ -37,11 +37,10 @@ services. Stdio-only clients connect through the `spur mcp` CLI bridge
 | `server.mcp.namespace` | `SPUR_MCP_NAMESPACE` | — (optional project namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load naming the variable and grammar) |
 
 Mirrors `server.a2a` end to end (`packages/config/src/index.ts` schema + `superRefine`;
-`ServerBootConfig.mcp` in `apps/server/src/server-config.ts`). `server.mcp` governs the per-project
-`/<prefix>/mcp` endpoint, whereas `server.gateway.mcp` governs the separate gateway-root `/mcp`
-multi-project hub ([project-gateway.md](project-gateway.md#41a-gateway-hosted-mcp-entry-task-1382-feature-k41));
-because the gateway forwards `tools/call` to each project's loopback `/mcp`, target projects also
-need `server.mcp.enabled: true`.
+`ServerBootConfig.mcp` in `apps/server/src/server-config.ts`). `server.mcp` governs both the
+per-project `/<prefix>/mcp` endpoint and the gateway-root `/mcp` multi-project hub with one switch and
+one token (K44 1450; [project-gateway.md](project-gateway.md#41a-gateway-hosted-mcp-entry-task-1382-feature-k41)):
+the gateway forwards `tools/call` to each project's loopback `/mcp` with that same token.
 
 **Namespace resolution (task 1380):** `resolveMcpNamespace` in `packages/app/src/services/mcp-namespace.ts`
 resolves the project namespace once when `McpDispatcher` constructs:
@@ -218,7 +217,7 @@ loud `CommandError`, never a silent unauthenticated call. URL resolution order: 
 cwd project's canonical gateway prefix (`http://localhost:<gateway.port><prefix>/mcp` for every
 registered local entry, independent of gateway liveness) → direct `server.port` only when no local
 prefix can be derived (unregistered project). `--gateway` targets the gateway root at
-`server.gateway.port` and reads the bearer from the variable named by `server.gateway.mcp.authEnv`.
+`server.gateway.port` and reads the bearer from the variable named by `server.mcp.authEnv`.
 Both commands use the same env-derived configuration.
 
 For legacy stdio clients, the bridge verifies access with `server/discover` before accepting

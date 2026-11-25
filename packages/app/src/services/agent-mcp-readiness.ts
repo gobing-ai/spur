@@ -154,7 +154,6 @@ export const READINESS_AGENTS: readonly AgentSpec[] = [
 /** What the probe needs to know about the surfaces an entry should point at. */
 export interface AgentReadinessSurface {
     mcpEnabled: boolean;
-    gatewayMcpEnabled: boolean;
     /** The gateway port a `http://localhost:<port>/mcp` entry is expected to name. */
     gatewayPort: number;
     /** The project's own `/mcp` endpoint, when the surface is on. */
@@ -240,7 +239,7 @@ function entryIssue(spec: AgentSpec, entry: NativeEntry, surface: AgentReadiness
         if (spec.legacyRevision)
             return `${spec.label} speaks MCP before 2026-07-28, so a direct HTTP entry is rejected; point it at \`spur mcp\` instead`;
         const url = entry.url ?? '';
-        if (!surface.mcpEnabled && !surface.gatewayMcpEnabled) return 'the MCP surface is off on this server';
+        if (!surface.mcpEnabled) return 'the MCP surface is off on this server';
         let parsed: URL;
         try {
             parsed = new URL(url);

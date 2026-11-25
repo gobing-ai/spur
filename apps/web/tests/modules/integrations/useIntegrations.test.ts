@@ -30,8 +30,7 @@ const STATUS: IntegrationsStatus = {
         enabled: true,
         basePath: '/a2a',
         auth: { envName: 'SPUR_A2A_TOKEN', tokenPresent: true },
-        inbound: [],
-        outbound: [{ member: 'proj-peer', kind: 'a2a', target: 'https://peer.example' }],
+        members: [{ member: 'proj-peer', direction: 'outbound', kind: 'a2a', target: 'https://peer.example' }],
     },
     gateway: { served: false },
 };

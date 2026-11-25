@@ -3,12 +3,7 @@
         "spur": {
             "command": "spur",
             "args": ["mcp", "--gateway"],
-            "envVars": [
-                "SPUR_GATEWAY_PORT",
-                "SPUR_GATEWAY_MCP_ENABLED",
-                "SPUR_GATEWAY_MCP_AUTH_ENV",
-                "SPUR_GATEWAY_MCP_TOKEN"
-            ]
+            "envVars": ["SPUR_GATEWAY_PORT", "SPUR_MCP_ENABLED", "SPUR_MCP_AUTH_ENV", "SPUR_MCP_TOKEN"]
         }
     }
 }

@@ -14,7 +14,6 @@ import { MIN_MCP_PROTOCOL_VERSION } from '../src/modules/mcp/protocol';
  */
 const TOKEN = 'gateway-project-token-1383';
 const TOKEN_VAR = 'SPUR_E2E_PROJECT_MCP_TOKEN';
-const GW_TOKEN_VAR = 'SPUR_E2E_GATEWAY_TOKEN';
 
 interface Upstream {
     server: ReturnType<typeof Bun.serve>;
@@ -88,7 +87,6 @@ async function withGateway(
         projects: string[];
         portFor?: (path: string) => number;
         token?: string | undefined;
-        mcpToken?: string;
     },
     run: (call: (method: string, params?: unknown, token?: string) => Promise<Response>) => Promise<void>,
 ): Promise<void> {
@@ -97,9 +95,9 @@ async function withGateway(
         host: '127.0.0.1',
         mcp: {
             enabled: true,
-            authEnv: GW_TOKEN_VAR,
-            env: { [GW_TOKEN_VAR]: options.mcpToken ?? 'gateway-token', [TOKEN_VAR]: options.token },
-            projectTokenEnv: TOKEN_VAR,
+            // K44 1450: one `server.mcp` token authenticates the caller AND is forwarded upstream.
+            authEnv: TOKEN_VAR,
+            env: { [TOKEN_VAR]: options.token },
         },
         deps: {
             port: 0,
@@ -115,7 +113,7 @@ async function withGateway(
                 headers: {
                     'Content-Type': 'application/json',
                     'Mcp-Protocol-Version': MIN_MCP_PROTOCOL_VERSION,
-                    Authorization: `Bearer ${token ?? 'gateway-token'}`,
+                    Authorization: `Bearer ${token ?? options.token ?? TOKEN}`,
                 },
                 body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, ...(params === undefined ? {} : { params }) }),
             }),
@@ -130,7 +128,7 @@ describe('gateway MCP routing (task 1383)', () => {
     test('tools/list aggregates the built-ins once plus each project workflow tool (R1)', async () => {
         const alpha = project('alpha', { namespace: 'alphaspace', workflow: 'deploy' });
         const beta = project('beta', { namespace: 'betaspace', workflow: 'audit' });
-        await withGateway({ projects: [alpha, beta] }, async (call) => {
+        await withGateway({ projects: [alpha, beta], token: TOKEN }, async (call) => {
             const res = await call('tools/list');
             const body = (await res.json()) as { result: { tools: Array<{ name: string; inputSchema: unknown }> } };
             const names = body.result.tools.map((tool) => tool.name);
@@ -224,12 +222,15 @@ describe('gateway MCP routing (task 1383)', () => {
         const up = upstream();
         try {
             await withGateway({ projects: [alpha], portFor: () => up.port, token: undefined }, async (call) => {
+                // One token: with none configured the gateway refuses at its own guard, fail-closed,
+                // before any upstream is started.
                 const missing = await call('tools/call', {
                     name: 'sp_task_show',
                     arguments: { project: name, wbs: '1' },
                 });
+                expect(missing.status).toBe(500);
                 const message = ((await missing.json()) as { error: { message: string } }).error.message;
-                expect(message).toContain('no project MCP token');
+                expect(message).toContain('server.mcp.authEnv');
             });
         } finally {
             up.server.stop(true);

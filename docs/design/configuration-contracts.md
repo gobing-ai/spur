@@ -125,13 +125,10 @@ Env-derived config (`ln(env)`), consumed by both the CLI context and the server 
 | `server.webDistPath` | —                         | `null` (auto-resolve: cwd `dist/web`, package `web/` next to `spur.js`, binary-adjacent `web/`, monorepo `dist/web`) |
 | `server.a2a.enabled` | `SPUR_A2A_ENABLED`        | `false` (A2A listener in `spur self serve`; off mounts no route)                                                          |
 | `server.a2a.authEnv` | `SPUR_A2A_AUTH_ENV`       | — (NAME of the variable holding the A2A bearer token; required when `enabled` is true, never stored)                  |
-| `server.mcp.enabled`   | `SPUR_MCP_ENABLED`        | `false` (embedded MCP server in `spur self serve`; off mounts no route)                                                   |
+| `server.mcp.enabled`   | `SPUR_MCP_ENABLED`        | `false` (embedded MCP server in `spur self serve` **and** the gateway root `/mcp` — one switch and one token for both, K44 1450; off mounts no route)                                                   |
 | `server.mcp.authEnv`   | `SPUR_MCP_AUTH_ENV`       | — (NAME of the variable holding the MCP bearer token; required when `enabled` is true, never stored)                 |
 | `server.mcp.namespace` | `SPUR_MCP_NAMESPACE`      | — (optional project MCP namespace matching `/^[a-z][a-z0-9]{1,15}$/`; invalid value fails config load)               |
 | `server.gateway.port`  | `SPUR_GATEWAY_PORT`       | `3000` (shared by the gateway and its stdio bridge)                                                                      |
-| `server.gateway.mcp.enabled` | `SPUR_GATEWAY_MCP_ENABLED` | `false`, but **inherits `true` from `server.mcp.enabled`** when omitted and the gateway's own credential is satisfied (`server.gateway.mcp.authEnv` set, or an effective `allowUnauthenticated`) — 1449 R2 |
-| `server.gateway.mcp.authEnv` | `SPUR_GATEWAY_MCP_AUTH_ENV` | — (NAME of the gateway MCP token variable; **never** inherited from `server.mcp.authEnv`, ADR-151 K41)          |
-| `server.gateway.mcp.allowUnauthenticated` | — | inherits `server.mcp.allowUnauthenticated` when omitted (1449 R2)                                                |
 | `telemetry.enabled`  | `SPUR_TELEMETRY_ENABLED`  | `false`                                                                                                              |
 | `telemetry.endpoint` | `SPUR_TELEMETRY_ENDPOINT` | —                                                                                                                    |
 | `logging.level`      | `SPUR_LOG_LEVEL`          | `info` (debug\|info\|warn\|error)                                                                                    |

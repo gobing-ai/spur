@@ -6,6 +6,7 @@ import { eventsHistoryUrl } from '../observability/events-history';
 import {
     a2aRequests,
     type InboxRequestRow,
+    outboundMembers,
     type ProtocolEventRow,
     projectProtocolEvent,
     type ServerRuntime,
@@ -136,7 +137,7 @@ async function load(
     // receipt row IS the request row, so no second read and no N+1 per message.
     const receiptById = new Map(requestRows.map((row) => [row.messageId, row]));
     const receipts = await Promise.all(
-        status.a2a.outbound.map(async (member) => {
+        outboundMembers(status).map(async (member) => {
             try {
                 const page = await client.inbox.list({ member: member.member, direction: 'in', limit: 20 });
                 // Only request rows are outbound traffic; plain chat is not a receipt.

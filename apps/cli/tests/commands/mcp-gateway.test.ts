@@ -8,13 +8,13 @@ import { getEnvVars } from '@gobing-ai/spur-config';
 import { resolveGatewayMcpUrl, runMcpStdioBridge } from '../../src/commands/mcp';
 
 /**
- * Task 1401 R1 — `spur mcp --gateway` targets the gateway root `/mcp` with the GATEWAY's own token
- * variable, and every misconfiguration names the fix instead of failing mid-session.
+ * Task 1401 R1 — `spur mcp --gateway` targets the gateway root `/mcp`; K44 1450 — with the one
+ * `server.mcp` token variable. Every misconfiguration names the fix instead of failing mid-session.
  */
 const env = (overrides: Record<string, string | undefined> = {}) => ({
-    SPUR_GATEWAY_MCP_ENABLED: 'true',
-    SPUR_GATEWAY_MCP_AUTH_ENV: 'GW_TOKEN',
-    GW_TOKEN: 'gateway-secret',
+    SPUR_MCP_ENABLED: 'true',
+    SPUR_MCP_AUTH_ENV: 'MCP_TOKEN',
+    MCP_TOKEN: 'mcp-secret',
     ...overrides,
 });
 
@@ -24,27 +24,27 @@ function probe(answer: boolean): void {
 }
 
 describe('spur mcp --gateway resolution (task 1401 R1)', () => {
-    test('targets the gateway root on the configured port with its own token variable', async () => {
+    test('targets the gateway root on the configured port with the server.mcp token variable', async () => {
         probe(true);
         const resolved = await resolveGatewayMcpUrl(env());
         expect(resolved.url).toBe('http://localhost:3000/mcp');
-        expect(resolved.authEnv).toBe('GW_TOKEN');
+        expect(resolved.authEnv).toBe('MCP_TOKEN');
     }, 20_000);
 
-    test('refuses when the gateway MCP entry is disabled or has no token variable', async () => {
+    test('refuses when server.mcp is disabled or has no token variable', async () => {
         probe(true);
-        await expect(resolveGatewayMcpUrl(env({ SPUR_GATEWAY_MCP_ENABLED: 'false' }))).rejects.toThrow(/disabled/);
+        await expect(resolveGatewayMcpUrl(env({ SPUR_MCP_ENABLED: 'false' }))).rejects.toThrow(/disabled/);
         // The config schema refuses `enabled` without `authEnv` at load time, so the bridge never
         // sees that state; the message still names the variable.
-        await expect(resolveGatewayMcpUrl(env({ SPUR_GATEWAY_MCP_AUTH_ENV: undefined }))).rejects.toThrow(/authEnv/);
+        await expect(resolveGatewayMcpUrl(env({ SPUR_MCP_AUTH_ENV: undefined }))).rejects.toThrow(/authEnv/);
     });
 
     test('refuses an unset or empty token variable without echoing a value', async () => {
         probe(true);
-        const unset = resolveGatewayMcpUrl(env({ GW_TOKEN: undefined }));
+        const unset = resolveGatewayMcpUrl(env({ MCP_TOKEN: undefined }));
         await expect(unset).rejects.toThrow(/unset or empty/);
-        await expect(unset).rejects.not.toThrow(/gateway-secret/);
-        await expect(resolveGatewayMcpUrl(env({ GW_TOKEN: '' }))).rejects.toThrow(/unset or empty/);
+        await expect(unset).rejects.not.toThrow(/mcp-secret/);
+        await expect(resolveGatewayMcpUrl(env({ MCP_TOKEN: '' }))).rejects.toThrow(/unset or empty/);
     });
 
     test('refuses when no gateway is answering, naming the way to start it', async () => {
@@ -76,7 +76,7 @@ describe('spur mcp --gateway through the program (task 1401 R1)', () => {
         const code = await main(['mcp', '--gateway'], {
             cwd: process.cwd(),
             output: { write: () => {}, error: (message: string) => errors.push(message) },
-            env: env({ SPUR_GATEWAY_MCP_ENABLED: 'false' }),
+            env: env({ SPUR_MCP_ENABLED: 'false' }),
         });
         expect(code).toBe(1);
         expect(errors.join('\n')).toContain('disabled');
@@ -94,7 +94,7 @@ test('the installed stdio entry initializes and calls tools through a CLI-starte
             if (new URL(request.url).pathname !== '/mcp') return new Response(null, { status: 404 });
             const authorization = request.headers.get('authorization');
             requests.push(authorization);
-            if (authorization !== 'Bearer project-secret') return new Response(null, { status: 401 });
+            if (authorization !== 'Bearer mcp-secret') return new Response(null, { status: 401 });
             const { id, params } = (await request.json()) as { id: number; params: { arguments: { status?: string } } };
             const result =
                 params.arguments.status === 'todo'
@@ -113,9 +113,6 @@ test('the installed stdio entry initializes and calls tools through a CLI-starte
         ...env(),
         HOME: cwd,
         SPUR_PROJECTS_FILE: projectsFile,
-        SPUR_MCP_ENABLED: 'true',
-        SPUR_MCP_AUTH_ENV: 'PROJECT_TOKEN',
-        PROJECT_TOKEN: 'project-secret',
     };
     const gateway = Bun.spawn(['bun', entry, 'self', 'serve', '--gateway', '--port', '0', '--no-open'], {
         cwd,
@@ -142,7 +139,7 @@ test('the installed stdio entry initializes and calls tools through a CLI-starte
             headers: {
                 'Content-Type': 'application/json',
                 'Mcp-Protocol-Version': '2026-07-28',
-                Authorization: 'Bearer gateway-secret',
+                Authorization: 'Bearer mcp-secret',
             },
             body: call,
         });
@@ -150,7 +147,7 @@ test('the installed stdio entry initializes and calls tools through a CLI-starte
 
         const bridge = Bun.spawn(['bun', entry, 'mcp', '--gateway'], {
             cwd,
-            env: { ...gatewayEnv, PROJECT_TOKEN: undefined, SPUR_GATEWAY_PORT: port },
+            env: { ...gatewayEnv, SPUR_GATEWAY_PORT: port },
             stdin: new Blob([`${rpc(2, 'tools/list')}\n`]),
             stdout: 'pipe',
             stderr: 'pipe',
@@ -181,7 +178,7 @@ test('the installed stdio entry initializes and calls tools through a CLI-starte
         const errors: string[] = [];
         const exit = await runMcpStdioBridge({
             url,
-            token: 'gateway-secret',
+            token: 'mcp-secret',
             input: Readable.from([`${messages.join('\n')}\n`]),
             output: { write: (line) => replies.push(JSON.parse(line)), error: (message) => errors.push(message) },
         });
@@ -193,7 +190,7 @@ test('the installed stdio entry initializes and calls tools through a CLI-starte
         expect(replies[2]?.result).toEqual({ content: [{ type: 'text', text: '[{"arguments":{}}]' }] });
         expect(replies[3]?.result).toEqual({});
         expect(replies[4]?.result).toEqual({ content: [{ type: 'text', text: 'already wrapped' }] });
-        expect(requests).toEqual(Array(3).fill('Bearer project-secret'));
+        expect(requests).toEqual(Array(3).fill('Bearer mcp-secret'));
     } finally {
         gateway.kill();
         await gateway.exited;

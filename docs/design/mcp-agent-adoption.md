@@ -29,7 +29,7 @@ Transport verdicts come from the real-agent interoperability receipt. A classifi
 The plugin ships `plugins/sp/mcp.json` with a single server, `spur` → `spur mcp --gateway`.
 Superskill translates that entry for targets with an MCP config adapter. The bridge resolves
 `http://localhost:<server.gateway.port>/mcp` and takes the bearer from the variable named by
-`server.gateway.mcp.authEnv`, so **no token ever lands in an agent config file** — it is read from the
+`server.mcp.authEnv` (one token for the gateway and every project, K44), so **no token ever lands in an agent config file** — it is read from the
 environment when the bridge starts.
 
 Observed on a fixture HOME (artifact: `docs/tasks5/artifacts/1401/superskill-dry-run.txt`): one `spur`

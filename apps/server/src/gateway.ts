@@ -23,17 +23,15 @@ export interface StartGatewayOptions {
     /** Routing/upstream seams; the CLI composes registry + start path. */
     deps: GatewayDeps;
     /**
-     * Gateway-hosted MCP (task 1382). Enabled requires a token variable; the handler is composed
-     * here so `packages/app` never imports this transport.
+     * Gateway-hosted MCP (task 1382), driven by `server.mcp` (K44 1450): one switch and one token
+     * variable both authenticate callers here and are forwarded to each project's loopback `/mcp`.
+     * The handler is composed here so `packages/app` never imports this transport.
      */
     mcp?: {
         enabled: boolean;
         authEnv?: string;
         allowUnauthenticated?: boolean;
         env?: Record<string, string | undefined>;
-        /** NAME of the variable holding the per-project MCP token the gateway forwards on calls. */
-        projectTokenEnv?: string;
-        projectAllowUnauthenticated?: boolean;
     };
 }
 
@@ -70,43 +68,41 @@ export function startGateway(options: StartGatewayOptions): GatewayHandle {
  * Compose the root `/mcp` handler onto the gateway deps (task 1382 R2/R3).
  *
  * Disabled means no handler at all, so `/mcp` stays a 404 rather than a proxy attempt at a project
- * prefix. Enabled means the SAME bearer guard the project surfaces use, under its own realm and its
- * own token variable, plus a registry whose only job is discover (1383 fills tools and calls).
+ * prefix. Enabled means the SAME bearer guard and token variable the project surfaces use (K44
+ * 1450: one `server.mcp` credential), under its own realm, plus a registry whose only job is discover (1383 fills tools and calls).
  */
 function withGatewayMcp(deps: GatewayDeps, mcp: StartGatewayOptions['mcp']): GatewayDeps {
     if (mcp?.enabled !== true) return deps;
     const env = mcp.env ?? getEnvVars();
+    const allowUnauthenticated = mcp.allowUnauthenticated === true;
     const guard = bearerGuard({
         realm: 'spur-gateway-mcp',
         authEnv: mcp.authEnv ?? null,
-        allowUnauthenticated: mcp.allowUnauthenticated === true,
+        allowUnauthenticated,
         env,
         unauthenticated: () => ({ error: { code: 'UNAUTHENTICATED', message: 'a bearer token is required' } }),
         unconfigured: () => ({
             error: {
                 code: 'INTERNAL_ERROR',
                 message:
-                    'the gateway mcp endpoint has no token configured; set the variable named by server.gateway.mcp.authEnv',
+                    'the gateway mcp endpoint has no token configured; set the variable named by server.mcp.authEnv',
             },
         }),
     });
-    const projectTokenEnv = mcp.projectTokenEnv;
-    const projectAllowUnauthenticated = mcp.projectAllowUnauthenticated === true;
     return {
         ...deps,
         mcpAuth: {
             envName: mcp.authEnv ?? '',
             // 1449 R3: presence and policy are separate signals — an unauthenticated gateway has no token.
             tokenPresent: Boolean(mcp.authEnv && env[mcp.authEnv]),
-            ...(mcp.allowUnauthenticated === true ? { allowUnauthenticated: true } : {}),
+            ...(allowUnauthenticated ? { allowUnauthenticated: true } : {}),
         },
         // Task 1383 R1/R3: the five `sp_*` descriptors and the upstream protocol version.
         builtinTools: () => TOOL_DESCRIPTORS,
         projectMcpNamespace: env[SPUR_ENV_VARS.mcpNamespace],
         projectMcpToken: () => {
-            if (projectTokenEnv === undefined) return projectAllowUnauthenticated ? '' : undefined;
-            const value = env[projectTokenEnv];
-            if (value === undefined || value === '') return projectAllowUnauthenticated ? '' : undefined;
+            const value = mcp.authEnv === undefined ? undefined : env[mcp.authEnv];
+            if (value === undefined || value === '') return allowUnauthenticated ? '' : undefined;
             return value;
         },
         mcpProtocolVersion: MIN_MCP_PROTOCOL_VERSION,

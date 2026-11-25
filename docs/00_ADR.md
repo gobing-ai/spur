@@ -2979,11 +2979,19 @@ re-import pressure this entry already records).
   selected by path + host, and `/api/projects/start` accepts additive optional `host` so the exact
   entry reaches `startRegisteredProject`. Internal loopback URLs remain private start/diagnostic
   values; remote entries and explicit `--server`/`--url` overrides are unchanged.
+- **Amended 2026-11-25 (K44 1450):** the gateway-hosted root `/mcp` has no config of its own. The
+  K41 `server.gateway.mcp` block and `SPUR_GATEWAY_MCP_ENABLED`/`SPUR_GATEWAY_MCP_AUTH_ENV` are
+  removed; `server.mcp` (switch, `authEnv`, `allowUnauthenticated`) drives the root endpoint, and the
+  gateway forwards the same token to each project's loopback `/mcp`. The separate credential was no
+  real boundary — the same origin already proxies `/<prefix>/mcp` under that global token — and it
+  cost a second token, an inheritance rule and a split Codex allowlist. The process split (gateway vs.
+  per-project serves) is unchanged. Operator-approved breaking config change; a legacy block is
+  dropped by the schema and has no effect.
 - **Detail:** [Project gateway](design/project-gateway.md); [project switcher](design/project-switcher.md).
 
 ## ADR-152: spur serve embeds a stateless MCP 2.0+ server that delegates to spur-app services
 
-- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9 · **Amended:** 2026-11-17 (task 1379), 2026-11-20 (1417), 2026-11-22 (B93 1431)
+- **Status:** Accepted 2026-11-17 (feature B9, tasks 1370–1374 shipped) · **Date:** 2026-11-17 · **Feature:** B9 · **Amended:** 2026-11-17 (task 1379), 2026-11-20 (1417), 2026-11-22 (B93 1431), 2026-11-25 (K44 1450)
 - **Amended 2026-11-17 (task 1379):** the five built-in tool names moved into the `sp` namespace
   (`sp_task_show`, `sp_task_list`, `sp_workflow_status`, `sp_workflow_run`, `sp_workflow_continue`) —
   a breaking rename with no alias period; a call to an old unprefixed name is refused with a rename
@@ -3007,6 +3015,9 @@ re-import pressure this entry already records).
   project-local manifests — the same trust boundary as workflow `shell` actions (ADR-012: local
   plugins are operator-trusted and sandboxing is out of scope). Built-in `sp_*` tools continue to
   delegate exclusively in-process to `@gobing-ai/spur-app` with no CLI spawn.
+- **Amended 2026-11-25 (K44 1450):** `server.mcp` is the only MCP config. It governs this
+  per-project endpoint and the gateway root `/mcp` (ADR-151 amendment of the same date) with one
+  switch and one bearer token variable.
 - **Decision:** `spur serve` mounts `mcpModule` on `POST /mcp` (registered in the server module
   registry, off unless `server.mcp.enabled`) speaking stateless MCP 2.0+ Streamable HTTP only: a
   `2026-07-28` protocol-version floor is enforced on every request and legacy versions
