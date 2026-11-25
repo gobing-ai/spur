@@ -4,7 +4,7 @@ name: "Integrations MCP polish: config diagnostics, gateway inheritance, multi-a
 status: done
 template: feature-impl
 created_at: 2026-11-25T18:12:12.528Z
-updated_at: "2026-11-25T18:47:06.350Z"
+updated_at: "2026-11-25T18:57:14.740Z"
 feature_id: A82
 
 tags: ["integrations", "A82", "mcp"]
@@ -239,17 +239,17 @@ R4 — read-only per-agent readiness.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 embeddedSchemas + configDiagnostic + explicit gateway port + forwarded-host fallback + Board warnings | MET | `apps/server/src/serve.ts:201`, `apps/server/src/serve.ts:827-851`, `apps/server/src/server-config.ts:42-43`, `apps/server/src/server-config.ts:99`, `apps/server/src/modules/integrations/handlers.ts:92`, `apps/server/src/modules/integrations/handlers.ts:108`, `apps/server/src/modules/integrations/handlers.ts:218`, `apps/web/src/modules/integrations/helpers.ts:493`, `apps/web/src/modules/integrations/SummaryTab.tsx:201`, `apps/web/src/modules/integrations/McpTab.tsx:96`, `apps/cli/src/commands/self/serve.ts:90-107` |
-| R2 server.gateway.mcp conditional inheritance (allowUnauthenticated always, enabled only when gateway auth satisfied, authEnv never copied) | MET | `packages/config/src/index.ts:1630-1645`, `packages/config/src/index.ts:1664-1670`, `apps/cli/schemas/spur-config.schema.json:563-577`, `packages/config/tests/config.test.ts:193-245` |
-| R3 allowUnauthenticated on the wire + ModuleTabs per-agent Client config with resolved URLs, transport selector, auth guidance, preserved testids | MET | `packages/contracts/src/integrations.ts:45`, `packages/app/src/services/integrations-service.ts:139-146`, `apps/server/src/gateway.ts:97-102`, `apps/web/src/modules/integrations/helpers.ts:30-320`, `apps/web/src/modules/integrations/McpTab.tsx:384-440` |
-| R4 probeAgentMcpReadiness + integrations.agentReadiness + tolerant fetch + readiness pins | MET | `packages/app/src/services/agent-mcp-readiness.ts:326`, `packages/contracts/src/integrations.ts:318`, `apps/server/src/modules/integrations/handlers.ts:267`, `apps/web/src/modules/integrations/useIntegrations.ts:105`, `apps/web/src/modules/integrations/McpTab.tsx:457` |
+| R1 | MET | `apps/server/src/modules/integrations/handlers.ts:92-115` (env → explicit → loopback forwarded → 3000; non-loopback ignored), `apps/server/src/serve.ts:827-851`, `apps/server/src/server-config.ts:42-99`, `apps/web/src/modules/integrations/McpTab.tsx:96`; re-run `(cd apps/server && bun test tests/serve.test.ts tests/server-config.test.ts tests/modules/integrations/handlers.test.ts)` → 105 pass / 0 fail |
+| R2 | MET | `packages/config/src/index.ts:1627-1645` (allowUnauthenticated inherits; enabled only when gateway auth satisfied; authEnv never copied), `packages/config/tests/config.test.ts:193-245`; `(cd packages/config && bun test tests/config.test.ts)` → 27 pass / 0 fail |
+| R3 | MET | `packages/contracts/src/integrations.ts:45`, `apps/web/src/modules/integrations/helpers.ts:30-320`, `apps/web/src/modules/integrations/McpTab.tsx:392` (ModuleTabs idPrefix), `apps/web/src/modules/integrations/McpTab.tsx:413` + `:491` (testids kept); `(cd apps/web && bun test tests/modules/integrations/)` → 77 pass / 0 fail |
+| R4 | MET | `packages/app/src/services/agent-mcp-readiness.ts:326` (no write/spawn calls in file), `packages/contracts/src/integrations.ts:318`, `apps/server/src/modules/integrations/handlers.ts:267`, `apps/web/src/modules/integrations/useIntegrations.ts:105-110` (tolerant catch); `(cd packages/app && bun test tests/services/agent-mcp-readiness.test.ts)` → 5 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 configDiagnostic, loopback forwarded-host fallback, gateway/project warning | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts` (1449 gateway port precedence: loopback fallback, non-loopback ignored, env and explicit YAML wins; diagnostics + allowUnauthenticated wire), `apps/server/tests/serve.test.ts:2974` (diagnostic logged + carried), `apps/server/tests/server-config.test.ts` (explicit flag), `apps/web/tests/modules/integrations/integrations-module.test.tsx` (both warnings + config diagnostic) |
-| AC2 inheritance without breaking single-project configs, explicit false wins, authEnv independent | MET | test | `packages/config/tests/config.test.ts:193-245` (5 cases), `apps/server/tests/server-config.test.ts` (inherited mcp block + env override) |
-| AC3 native formats per agent, resolved URL, auth guidance, testids intact | MET | test | `apps/web/tests/modules/integrations/helpers.test.ts` (1449 per-agent client config: Codex TOML + env_vars, omp YAML, OpenCode/OpenClaw/Gemini JSON, no `<server>`, export line, unauthenticated header omission), `apps/web/tests/modules/integrations/integrations-module.test.tsx` (tab switch + transport toggle + preserved `integrations-mcp-project-command`) |
-| AC4 five readiness states, no writes, no token leak, 404-tolerant fetch | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts` (5 cases incl. before/after file fingerprints and a token value absent from the result), `apps/server/tests/modules/integrations/handlers.test.ts` (endpoint shape, no token), `apps/web/tests/modules/integrations/integrations-module.test.tsx` (pins + unavailable degradation) |
+| AC1 | MET | test | `apps/server/tests/modules/integrations/handlers.test.ts`, `apps/server/tests/serve.test.ts:2974`, `apps/web/tests/modules/integrations/integrations-module.test.tsx` — 105 + 77 pass this run |
+| AC2 | MET | test | `packages/config/tests/config.test.ts:193-245`, `apps/server/tests/server-config.test.ts` — pass this run |
+| AC3 | MET | test | `apps/web/tests/modules/integrations/helpers.test.ts`, `apps/web/tests/modules/integrations/integrations-module.test.tsx` — 77 pass this run |
+| AC4 | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts` (file fingerprints unchanged, no token in output), `apps/server/tests/modules/integrations/handlers.test.ts` — pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
