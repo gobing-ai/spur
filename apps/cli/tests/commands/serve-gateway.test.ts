@@ -17,7 +17,10 @@ type ActionFn = (options: {
 }) => Promise<void>;
 
 /** Minimal commander chain capture with an injected gateway launcher. */
-function captureGateway(context: CliContext): { action: ActionFn; launched: StartGatewayOptions[] } {
+function captureGateway(
+    context: CliContext,
+    loadProjectConfig?: StartGatewayOptions['deps']['loadProjectConfig'],
+): { action: ActionFn; launched: StartGatewayOptions[] } {
     const launched: StartGatewayOptions[] = [];
     let action: ActionFn | undefined;
     const chain = {
@@ -34,6 +37,7 @@ function captureGateway(context: CliContext): { action: ActionFn; launched: Star
             launched.push(options);
             return { port: options.port, url: `http://${options.host}:${options.port}`, stop: () => {} };
         }) as never,
+        ...(loadProjectConfig !== undefined ? { loadProjectConfig } : {}),
     });
     if (!action) throw new Error('serve action not registered');
     return { action, launched };
@@ -97,5 +101,19 @@ describe('spur self serve --gateway (K4 R3)', () => {
                 port: 0,
             }),
         ).rejects.toThrow(/Project path does not exist/);
+    });
+
+    test('a rejecting project-config loader still launches the gateway on the explicit port', async () => {
+        const { ctx, writes } = makeCtx();
+        const { action, launched } = captureGateway(ctx, async () => {
+            throw new Error('unreadable config');
+        });
+
+        await action({ gateway: true, port: 3313, host: '127.0.0.1' });
+
+        // A broken .spur/config.yaml must not stop the gateway: config falls back to env defaults.
+        expect(launched).toHaveLength(1);
+        expect(launched[0]?.port).toBe(3313);
+        expect(writes.join('\n')).toContain('Spur gateway listening on http://127.0.0.1:3313');
     });
 });
