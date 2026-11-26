@@ -697,3 +697,40 @@ describe('1440 — receipt remote refs', () => {
         expect(row?.remoteBranch ?? null).toBeNull();
     });
 });
+
+describe('A821 R2/R4 — inbox.timeline', () => {
+    test('serves the project timeline oldest first and leaves both tables unchanged', async () => {
+        const ctx = harness.ctx;
+        const first = await call<{ message: { id: string } }>('send', { to: 'proj-coder', body: 'first' });
+        const second = await call<{ message: { id: string } }>('send', {
+            from: 'proj-coder',
+            to: 'operator',
+            body: 'second',
+        });
+        const before = await counts();
+
+        const page = await call<{ messages: Array<{ id: string; body: string }>; nextCursor: string | null }>(
+            'timeline',
+            {},
+        );
+        // One millisecond can hold both rows, and the keyset order inside it is `id` — so this
+        // asserts membership; the DAO test pins the (createdAt, id) order itself.
+        expect(page.messages.map((row) => row.id).sort()).toEqual([first.message.id, second.message.id].sort());
+        expect(page.nextCursor).toBeNull();
+        expect(await counts()).toEqual(before);
+        expect(ctx).toBeDefined();
+    });
+
+    test('narrows to one member and rejects a malformed cursor as BAD_REQUEST', async () => {
+        await call('send', { to: 'proj-coder', body: 'inbound' });
+        await call('send', { from: 'proj-coder', to: 'operator', body: 'outbound' });
+
+        const out = await call<{ messages: Array<{ body: string }> }>('timeline', {
+            members: ['proj-coder'],
+            direction: 'out',
+        });
+        expect(out.messages.map((row) => row.body)).toEqual(['outbound']);
+
+        await expect(call('timeline', { cursor: 'not-a-cursor' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+});

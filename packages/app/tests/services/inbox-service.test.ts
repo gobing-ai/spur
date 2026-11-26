@@ -12,7 +12,12 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { CoordinationRunDao, createMigratedDb, type DbAdapter, SystemEventDao } from '@gobing-ai/spur-domain';
-import { InboxService, MAX_DELIVERY_ATTEMPTS, RESERVED_INBOX_IDS } from '../../src/services/inbox-service';
+import {
+    InboxService,
+    MAX_DELIVERY_ATTEMPTS,
+    RESERVED_INBOX_IDS,
+    TIMELINE_EXCERPT_CHARS,
+} from '../../src/services/inbox-service';
 
 const OPERATOR = 'operator';
 const SPUR = 'spur';
@@ -401,4 +406,49 @@ test('1271 — conflicting metadata cannot replay after a concurrent unique-key 
     expect(result.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
     expect(result.filter((row) => row.status === 'rejected')).toHaveLength(1);
     expect(await eventCount('message.sent')).toBe(1);
+});
+
+describe('A821 R2/R3 — the project-scoped timeline read', () => {
+    test('pages every address oldest first and cuts a long body to the excerpt', async () => {
+        const first = await service.send({ from: OPERATOR, to: MEMBER, body: 'first' });
+        nowMs += 1_000;
+        const second = await service.send({ from: MEMBER, to: PEER, body: 'y'.repeat(TIMELINE_EXCERPT_CHARS + 20) });
+        nowMs += 1_000;
+        const third = await service.send({ from: PEER, to: OPERATOR, body: 'third' });
+
+        const page = await service.timeline({}, { limit: 2 });
+        expect(page.messages.map((row) => row.id)).toEqual([first.message.id, second.message.id]);
+        expect(page.messages[1]?.body).toBe(`${'y'.repeat(TIMELINE_EXCERPT_CHARS)}…`);
+        expect(page.nextCursor).not.toBeNull();
+
+        const rest = await service.timeline({}, { limit: 2, cursor: page.nextCursor ?? '' });
+        expect(rest.messages.map((row) => row.id)).toEqual([third.message.id]);
+        expect(rest.nextCursor).toBeNull();
+    });
+
+    test('filters by member direction, kind and time window', async () => {
+        const outbound = await service.send({ from: MEMBER, to: PEER, body: 'out' });
+        nowMs += 1_000;
+        const inbound = await service.send({ from: PEER, to: MEMBER, body: 'in' });
+
+        expect((await service.timeline({ members: [MEMBER], direction: 'out' })).messages.map((r) => r.id)).toEqual([
+            outbound.message.id,
+        ]);
+        expect((await service.timeline({ members: [MEMBER], direction: 'in' })).messages.map((r) => r.id)).toEqual([
+            inbound.message.id,
+        ]);
+        expect((await service.timeline({ kind: 'chat' }, { limit: 10 })).messages).toHaveLength(2);
+        expect((await service.timeline({ since: inbound.message.createdAt }, { limit: 10 })).messages).toHaveLength(1);
+    });
+
+    test('is side-effect free — no event, no row mutation', async () => {
+        await service.send({ from: OPERATOR, to: MEMBER, body: 'hello' });
+        const before = { events: await eventCount(), rows: (await service.timeline({})).messages.length };
+        await service.timeline({});
+        expect({ events: await eventCount(), rows: (await service.timeline({})).messages.length }).toEqual(before);
+    });
+
+    test('a malformed cursor throws, which the handler maps to BAD_REQUEST', async () => {
+        await expect(service.timeline({}, { cursor: 'not-a-cursor' })).rejects.toThrow('malformed list cursor');
+    });
 });

@@ -320,3 +320,61 @@ describe('1334 R3 — claim-by-id and the remaining inbox read seams', () => {
         expect((await dao.listByTask('1334')).map((row) => row.id)).toEqual([root.id]);
     });
 });
+
+describe('A821 R2/R5 — the project-scoped timeline read', () => {
+    test('orders every address oldest first and pages forward without gaps or repeats', async () => {
+        const a = await seed({ fromId: 'operator', toId: 'proj-coder', createdAt: 10 });
+        const b = await seed({ fromId: 'proj-coder', toId: 'proj-reviewer', createdAt: 20 });
+        const c = await seed({ fromId: 'proj-reviewer', toId: 'operator', createdAt: 20 });
+        const d = await seed({ fromId: 'peer-external', toId: 'proj-coder', createdAt: 30 });
+
+        const first = await dao.timeline({}, 2);
+        // `limit + 1` rows are read so the caller can tell whether a next page exists — same
+        // contract as `list`; the service is what slices the page.
+        expect(first.map((row) => row.id)).toEqual([a.id, b.id, c.id]);
+        const last = first[1];
+        if (last === undefined) throw new Error('missing row');
+
+        const second = await dao.timeline({}, 2, { createdAt: last.createdAt, id: last.id });
+        expect(second.slice(0, 2).map((row) => row.id)).toEqual([c.id, d.id]);
+    });
+
+    test('narrows by member direction, kind, status, thread and an inclusive time window', async () => {
+        const outbound = await seed({ fromId: 'proj-coder', toId: 'proj-peer', createdAt: 10 });
+        const inbound = await seed({ fromId: 'proj-peer', toId: 'proj-coder', createdAt: 20 });
+        const request = await seed({
+            fromId: 'operator',
+            toId: 'proj-coder',
+            kind: 'request',
+            status: 'delivered',
+            createdAt: 20,
+        });
+        const other = await seed({ fromId: 'operator', toId: 'proj-reviewer', createdAt: 40 });
+
+        const onlyOut = await dao.timeline({ members: ['proj-coder'], direction: 'out' }, 10);
+        expect(onlyOut.map((row) => row.id)).toEqual([outbound.id]);
+
+        const both = await dao.timeline({ members: ['proj-coder'], direction: 'both' }, 10);
+        expect(both.map((row) => row.id)).toEqual([outbound.id, inbound.id, request.id]);
+
+        const requests = await dao.timeline({ kind: 'request', status: 'delivered' }, 10);
+        expect(requests.map((row) => row.id)).toEqual([request.id]);
+
+        // A member filter with no members narrows nothing (the sequence view's default query).
+        expect((await dao.timeline({ members: [], direction: 'in' }, 10)).map((row) => row.id)).toEqual([
+            outbound.id,
+            inbound.id,
+            request.id,
+            other.id,
+        ]);
+
+        const window = await dao.timeline({ since: 20, until: 20 }, 10);
+        expect(window.map((row) => row.id)).toEqual([inbound.id, request.id]);
+
+        const threaded = await dao.timeline({ threadId: inbound.threadId }, 10);
+        expect(threaded.map((row) => row.id)).toEqual([inbound.id]);
+
+        const reply = await seed({ inReplyTo: request.id, threadId: request.id, createdAt: 50 });
+        expect((await dao.timeline({ threadId: request.id }, 10)).map((row) => row.id)).toEqual([request.id, reply.id]);
+    });
+});

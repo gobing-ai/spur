@@ -53,6 +53,18 @@ export interface InboxRequestRow extends InboxMessage {
     runArtifactRefsJson: string | null;
 }
 
+/** Input for {@link InboxDao.timeline}; absent filters narrow nothing (A821 R2). */
+export interface InboxTimelineFilter {
+    /** Addresses to scope to; `direction` is relative to these and ignored when absent. */
+    members?: readonly string[];
+    direction?: 'in' | 'out' | 'both';
+    kind?: InboxMessageKind;
+    status?: InboxMessageStatus;
+    threadId?: string;
+    since?: number;
+    until?: number;
+}
+
 /** Input for {@link InboxDao.insert}; the service mints the id and thread root. */
 export interface NewInboxMessage {
     id: string;
@@ -463,6 +475,73 @@ export class InboxDao extends BaseDao {
              WHERE ${scope} ${cursor}
              ORDER BY created_at DESC, id DESC
              LIMIT ?2`,
+            ...params,
+        );
+        return rows.map(toMessage);
+    }
+
+    /**
+     * Project-scoped traffic, oldest first, keyset-paged (A821 R2).
+     *
+     * One query across every address: `list` is per-member and newest-first, so a view needing the whole
+     * project in time order could only get it by merging N pages. `after` is the last row of the previous
+     * page and advances FORWARD in time (the inverse predicate of {@link list}). Every filter is a bound
+     * parameter — never interpolated — and an absent filter is omitted from the WHERE entirely.
+     */
+    async timeline(
+        filter: InboxTimelineFilter,
+        limit: number,
+        after?: { createdAt: number; id: string },
+    ): Promise<InboxMessage[]> {
+        const params: unknown[] = [];
+        const conditions: string[] = [];
+        if (filter.members !== undefined && filter.members.length > 0) {
+            const start = params.length + 1;
+            const direction = filter.direction ?? 'both';
+            params.push(...filter.members);
+            const list = placeholders(filter.members, start);
+            // The `both` predicate names the member list twice, so the values are bound twice too.
+            if (direction === 'both') params.push(...filter.members);
+            conditions.push(
+                direction === 'in'
+                    ? `to_id IN (${list})`
+                    : direction === 'out'
+                      ? `from_id IN (${list})`
+                      : `(from_id IN (${list}) OR to_id IN (${list}))`,
+            );
+        }
+        if (filter.kind !== undefined) {
+            params.push(filter.kind);
+            conditions.push(`kind = ?${params.length}`);
+        }
+        if (filter.status !== undefined) {
+            params.push(filter.status);
+            conditions.push(`status = ?${params.length}`);
+        }
+        if (filter.threadId !== undefined) {
+            params.push(filter.threadId);
+            conditions.push(`thread_id = ?${params.length}`);
+        }
+        if (filter.since !== undefined) {
+            params.push(filter.since);
+            conditions.push(`created_at >= ?${params.length}`);
+        }
+        if (filter.until !== undefined) {
+            params.push(filter.until);
+            conditions.push(`created_at <= ?${params.length}`);
+        }
+        if (after !== undefined) {
+            const start = params.length + 1;
+            params.push(after.createdAt, after.id);
+            conditions.push(`(created_at > ?${start} OR (created_at = ?${start} AND id > ?${start + 1}))`);
+        }
+        params.push(Math.max(0, limit) + 1);
+        const where = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
+        const rows = await this.adapter.queryAll<InboxRow>(
+            `SELECT ${COLUMNS} FROM inbox_messages
+             ${where}
+             ORDER BY created_at ASC, id ASC
+             LIMIT ?${params.length}`,
             ...params,
         );
         return rows.map(toMessage);

@@ -54,6 +54,7 @@ export {
     type InboxReadReceipt,
     type InboxRequestRow,
     type InboxTaskAttempts,
+    type InboxTimelineFilter,
     type NewInboxMessage,
 } from './inbox-dao';
 export {

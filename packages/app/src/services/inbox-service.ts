@@ -8,6 +8,7 @@ import {
     type InboxMessage,
     type InboxMessageKind,
     type InboxTaskAttempts,
+    type InboxTimelineFilter,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import { MessageNotFoundError } from './agent-coordination-service';
@@ -151,6 +152,14 @@ function decodeCursor(cursor: string): { createdAt: number; id: string } {
     } catch {
         throw new Error('malformed list cursor');
     }
+}
+
+/** How much of a message body the timeline page carries; the full body stays in `thread` (A821 R3). */
+export const TIMELINE_EXCERPT_CHARS = 280;
+
+/** A body cut to the excerpt limit, marked with an ellipsis only when something was cut. */
+function excerpt(body: string): string {
+    return body.length > TIMELINE_EXCERPT_CHARS ? `${body.slice(0, TIMELINE_EXCERPT_CHARS)}…` : body;
 }
 
 /** Metadata-only event payload: message bodies stay in inbox storage. */
@@ -382,6 +391,29 @@ export class InboxService {
         const before = page?.cursor === undefined ? undefined : decodeCursor(page.cursor);
         const rows = await dao.list(member, direction, limit, before);
         const messages = rows.slice(0, limit);
+        const last = messages.at(-1);
+        return {
+            messages,
+            nextCursor: rows.length > limit && last !== undefined ? encodeCursor(last) : null,
+        };
+    }
+
+    /**
+     * Project-scoped traffic, oldest first, keyset-paged (A821 R2).
+     *
+     * Side-effect free by construction: no sweep, no claim, no event prune — this read exists so the
+     * Board's sequence view can look at cooperation without changing it. Bodies are excerpts here; the
+     * full body stays reachable through {@link thread}.
+     */
+    async timeline(
+        filter: InboxTimelineFilter,
+        page?: { limit?: number; cursor?: string },
+    ): Promise<{ messages: InboxMessage[]; nextCursor: string | null }> {
+        const dao = new InboxDao(await this.deps.getDb());
+        const limit = page?.limit ?? 200;
+        const after = page?.cursor === undefined ? undefined : decodeCursor(page.cursor);
+        const rows = await dao.timeline(filter, limit, after);
+        const messages = rows.slice(0, limit).map((row) => ({ ...row, body: excerpt(row.body) }));
         const last = messages.at(-1);
         return {
             messages,

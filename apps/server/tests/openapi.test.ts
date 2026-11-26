@@ -51,4 +51,17 @@ describe('openapi', () => {
             | undefined;
         expect(progress?.get).toBeDefined();
     });
+
+    test('documents the project-scoped inbox timeline read (A821 R5)', async () => {
+        const spec = await generateOpenApiSpec();
+        const paths = spec.paths ?? {};
+        const timeline = paths['/inbox/timeline'] as
+            | { get?: { responses?: Record<string, unknown>; parameters?: Array<{ name?: string }> } }
+            | undefined;
+        expect(timeline?.get).toBeDefined();
+        // The filters ride as query parameters, so the sequence view can be linked to.
+        const names = (timeline?.get?.parameters ?? []).map((parameter) => parameter.name);
+        expect(names).toContain('members');
+        expect(names).toContain('cursor');
+    });
 });

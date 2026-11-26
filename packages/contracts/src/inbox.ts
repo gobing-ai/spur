@@ -94,6 +94,32 @@ const inboxThreadInputSchema = z.object({
     id: z.string().min(1),
 });
 
+/**
+ * The project-scoped timeline read (A821 R2): every address's traffic in one oldest-first page.
+ * `direction` is relative to `members` and ignored when they are absent, which is what lets the
+ * Board's sequence view ask for the whole project or for one agent's side of it.
+ */
+const inboxTimelineInputSchema = z.object({
+    members: z.array(z.string().min(1)).optional(),
+    direction: z.enum(['in', 'out', 'both']).optional(),
+    kind: z.enum(INBOX_MESSAGE_KINDS).optional(),
+    status: z.enum(INBOX_MESSAGE_STATUSES).optional(),
+    threadId: z.string().min(1).optional(),
+    /** Inclusive epoch-ms lower bound on `createdAt`. */
+    since: z.coerce.number<number>().int().optional(),
+    /** Inclusive epoch-ms upper bound on `createdAt`. */
+    until: z.coerce.number<number>().int().optional(),
+    limit: z.coerce.number<number>().int().positive().max(500).optional(),
+    /** The `nextCursor` of the previous page; oldest-first, so it advances forward in time. */
+    cursor: z.string().optional(),
+});
+
+/** One timeline page plus the cursor for the next (absent on the last page). */
+export const inboxTimelineResponseSchema = z.object({
+    messages: z.array(inboxMessageSchema),
+    nextCursor: z.string().nullable(),
+});
+
 const inboxSendInputSchema = z.object({
     /**
      * Recipient. Omitted = the project's orchestrator member. `operator` and `spur` are valid
@@ -167,6 +193,16 @@ export const inboxContract = {
         })
         .input(inboxThreadInputSchema)
         .output(z.array(inboxMessageSchema)),
+
+    timeline: oc
+        .route({
+            method: 'GET',
+            path: '/inbox/timeline',
+            summary: 'List project inbox traffic oldest first, across every address',
+            tags: ['inbox'],
+        })
+        .input(inboxTimelineInputSchema)
+        .output(inboxTimelineResponseSchema),
 
     send: oc
         .route({

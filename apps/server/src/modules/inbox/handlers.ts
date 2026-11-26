@@ -182,6 +182,30 @@ export function createInboxHandlers(ctx: ServerContext) {
             }
         }),
 
+        /** A821 R4: a malformed cursor is the caller's error, mapped exactly as `list` maps it. */
+        timeline: os.inbox.timeline.handler(async ({ input }) => {
+            try {
+                const page = await ctx.inbox().timeline(
+                    {
+                        ...(input.members !== undefined ? { members: input.members } : {}),
+                        ...(input.direction !== undefined ? { direction: input.direction } : {}),
+                        ...(input.kind !== undefined ? { kind: input.kind } : {}),
+                        ...(input.status !== undefined ? { status: input.status } : {}),
+                        ...(input.threadId !== undefined ? { threadId: input.threadId } : {}),
+                        ...(input.since !== undefined ? { since: input.since } : {}),
+                        ...(input.until !== undefined ? { until: input.until } : {}),
+                    },
+                    {
+                        ...(input.limit !== undefined ? { limit: input.limit } : {}),
+                        ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
+                    },
+                );
+                return { messages: page.messages.map(toMessageDto), nextCursor: page.nextCursor };
+            } catch (error) {
+                throw toOrpcError(error, 'BAD_REQUEST');
+            }
+        }),
+
         thread: os.inbox.thread.handler(async ({ input }) => {
             const rows = await ctx.inbox().thread(input.id);
             if (rows.length === 0) throw new ORPCError('NOT_FOUND', { message: `no message ${input.id}` });
