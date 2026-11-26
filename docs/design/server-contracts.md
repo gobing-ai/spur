@@ -83,9 +83,10 @@ bootstrap:
 ```
 
 Mirrored for editor completion in `apps/cli/schemas/spur-config.schema.json` and documented in
-`config/config.example.yaml`. The JSON Schema is an IDE aid only — `runNodeApplication` is the
-validator of record and aborts startup with an issue path under
-`bootstrap.scheduler.jobs.<index>.<field>`.
+`config/config.example.yaml`. The CLI also checks the merged config against that JSON Schema at load
+(`packages/config/src/loader.ts`; skipped only under `NODE_ENV=test`), so a malformed job can fail there
+first; `runNodeApplication` remains the validator of record for scheduler semantics and aborts
+startup with an issue path under `bootstrap.scheduler.jobs.<index>.<field>`.
 
 **Ownership seam.** `@gobing-ai/ts-infra` owns the contract and the lifecycle; Spur owns execution:
 
