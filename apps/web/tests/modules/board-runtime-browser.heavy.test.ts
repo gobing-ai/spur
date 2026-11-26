@@ -61,7 +61,7 @@ beforeAll(async () => {
     workspace = await mkdtemp(join(tmpdir(), 'spur-proof-0988-'));
     tarballDir = join(workspace, 'pack');
 
-    tarball = packCliTarball(tarballDir);
+    tarball = await packCliTarball(tarballDir);
     consumer = await prepareDownstreamConsumer(tarball, workspace);
     proofBuild = await buildBoardToTemp({
         testAdapterDir: join(REPO_ROOT, 'apps/web/tests/fixtures/board-test-adapter'),

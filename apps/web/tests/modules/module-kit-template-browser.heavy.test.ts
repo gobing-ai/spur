@@ -100,7 +100,7 @@ function hostFrom(manifest: Record<string, unknown>): BoardHostRuntime {
 /** Copy the template out of the checkout, install the packed package and build it. */
 async function prepareFixture(): Promise<{ dir: string; dist: string; installed: string }> {
     const root = await mkdtemp(join(tmpdir(), 'spur-kit-template-'));
-    const tarball = packCliTarball(root);
+    const tarball = await packCliTarball(root);
     const dir = join(root, 'starter');
     await cp(TEMPLATE_DIR, dir, { recursive: true });
     await writeFile(

@@ -12,6 +12,7 @@
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withBoardBuildLock } from './board-build';
 
 /** Repository root (assertions use it to prove the consumer lives outside the checkout). */
 export const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -56,9 +57,15 @@ function must(result: { code: number; output: string }, label: string): void {
  * confusing `bundle-web` error rather than a clear one. This also keeps the helper's own contract —
  * that distribution evidence never comes from a `dist/web` that merely happens to exist.
  */
-export function packCliTarball(destination: string): string {
-    const boardBuild = run(['bun', 'run', '--filter', '@gobing-ai/spur-web', 'build'], REPO_ROOT, 600_000);
-    must(boardBuild, 'board build (dist/web)');
+export async function packCliTarball(destination: string): Promise<string> {
+    // Held under the shared lock: an unlocked build here raced a concurrent `buildBoardToTemp` over
+    // the workspace `.astro` cache ("Cannot find module … prerender-entry.<hash>.mjs").
+    await withBoardBuildLock(() =>
+        must(
+            run(['bun', 'run', '--filter', '@gobing-ai/spur-web', 'build'], REPO_ROOT, 600_000),
+            'board build (dist/web)',
+        ),
+    );
     const result = run(['bun', 'pm', 'pack', '--destination', destination, '--quiet'], join(REPO_ROOT, 'apps/cli'));
     must(result, 'bun pm pack');
     const tarball = result.output

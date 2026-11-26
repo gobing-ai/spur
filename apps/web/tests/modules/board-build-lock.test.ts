@@ -70,3 +70,37 @@ test('a board build lock file never exists without a pid', async () => {
         await rm(dir, { recursive: true, force: true });
     }
 }, 120_000);
+
+/**
+ * Every board build in the test helpers must hold the lock. `packCliTarball` once ran its
+ * `dist/web` build bare, so `test:heavy` raced it against a locked `buildBoardToTemp` over the
+ * shared `.astro` cache and lost the prerender entry.
+ */
+test('every board build in the test helpers runs under withBoardBuildLock', async () => {
+    const read = (name: string) => readFile(fileURLToPath(new URL(`../test-helpers/${name}`, import.meta.url)), 'utf8');
+    // The dist/web build sits directly inside a withBoardBuildLock callback.
+    const fixture = await read('downstream-fixture.ts');
+    const distBuild = fixture.indexOf("'@gobing-ai/spur-web', 'build'");
+    expect(distBuild).toBeGreaterThan(-1);
+    expect(fixture.slice(0, distBuild).lastIndexOf('withBoardBuildLock(')).toBeGreaterThan(distBuild - 200);
+    // The temp-dir astro build lives in buildBoardOnce, whose only caller holds the lock.
+    const builder = await read('board-build.ts');
+    expect(builder.match(/buildBoardOnce\(/g)?.length).toBe(2); // definition + one call
+    expect(builder).toContain('withBoardBuildLock(() => buildBoardOnce(options))');
+});
+
+test('withBoardBuildLock serializes holders and holds the lock file for the work', async () => {
+    const { BUILD_LOCK, withBoardBuildLock } = await import(HELPER);
+    let active = 0;
+    let maxActive = 0;
+    const holder = () =>
+        withBoardBuildLock(async () => {
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            expect(Number.parseInt(await readFile(BUILD_LOCK, 'utf8'), 10)).toBe(process.pid);
+            await Bun.sleep(20);
+            active -= 1;
+        });
+    await Promise.all([holder(), holder(), holder()]);
+    expect(maxActive).toBe(1);
+});

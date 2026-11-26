@@ -105,8 +105,24 @@ export async function acquireBuildLock(): Promise<void> {
  * Build the board into a fresh temporary distribution root and return that directory.
  * The caller owns cleanup (see {@link removeBoardBuild}).
  */
-export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise<string> {
-    const queued = buildQueue.then(() => buildBoardLocked(options));
+export function buildBoardToTemp(options: BoardBuildOptions = {}): Promise<string> {
+    return withBoardBuildLock(() => buildBoardOnce(options));
+}
+
+/**
+ * Run `work` holding the board build lock: queued behind this process's other builds (the lock is
+ * not re-entrant), then exclusive across processes. EVERY `astro build` of this root goes through
+ * here — including `packCliTarball`'s `dist/web` build — or it races the shared `.astro` cache.
+ */
+export function withBoardBuildLock<T>(work: () => Promise<T> | T): Promise<T> {
+    const queued = buildQueue.then(async () => {
+        await acquireBuildLock();
+        try {
+            return await work();
+        } finally {
+            releaseBuildLock();
+        }
+    });
     buildQueue = queued.catch(() => undefined);
     return queued;
 }
@@ -114,15 +130,6 @@ export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise
 /** Release {@link acquireBuildLock}. Exported with it for the cross-process exclusion test. */
 export function releaseBuildLock(): void {
     rmSync(BUILD_LOCK, { force: true });
-}
-
-async function buildBoardLocked(options: BoardBuildOptions): Promise<string> {
-    await acquireBuildLock();
-    try {
-        return await buildBoardOnce(options);
-    } finally {
-        releaseBuildLock();
-    }
 }
 
 async function buildBoardOnce(options: BoardBuildOptions): Promise<string> {
