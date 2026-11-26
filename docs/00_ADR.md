@@ -3048,3 +3048,22 @@ re-import pressure this entry already records).
   service signatures, and growing it requires surface consent. The bridge owns stdio compatibility.
   The server owns HTTP version enforcement, authorization, and execution.
 - **Detail:** [Embedded MCP server](design/embedded-mcp-server.md).
+
+## ADR-153: dsh Is Wrapped as a Coding Agent; Spur Never Hosts dsh (Cordis) Plugins
+
+- **Status:** Proposed 2026-11-26 · **Date:** 2026-11-26 · **Feature:** U
+- **Decision:** Spur integrates DeepSeek Harness by dispatching to `dsh --profile headless --json`
+  through a `dsh` shim in `@gobing-ai/ts-ai-runner`, like the other wrapped agents. dsh plugins reach
+  Spur runs only transitively, through the operator's dsh profile. Spur does not load, translate or
+  statically extract dsh plugins.
+- **Why:** dsh plugins are in-process Cordis packages bound to dsh runtime services with no
+  declarative manifest. Hosting them would embed a second agent runtime in Spur. Extraction
+  would recover only the fragments that happen to be data. Wrapping reuses the executor seam
+  unchanged and inherits the whole ecosystem at the cost of one shim.
+- **Alternatives:** host a Cordis context inside Spur (a second runtime and a dsh-version coupling
+  across Spur's core); extract skills/MCP declarations from plugin packages (partial, brittle, and
+  duplicating what dsh already loads).
+- **Consequence:** Spur's dsh support tracks the dsh headless NDJSON contract, so it is pinned to one
+  version with a contract test and a doctor mismatch report. Hooks and MCP installation into dsh
+  profiles belong to Superskill (feature U1); history import of dsh session logs is feature U2.
+- **Detail:** [dsh agent integration](design/dsh-agent-integration.md).
