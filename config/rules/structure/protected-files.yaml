@@ -68,6 +68,11 @@ rules:
       - "**/.env.*"
     exclude:
       - "**/.env.example"
+      # `vendors/` is a gitignored, read-only reference checkout (.gitignore), so nothing there can
+      # be committed — the rule would only fail every gate while a vendor clone happens to be on
+      # disk (observed 2026-11-26: `vendors/deepseek-harness/apps/desktop/.env.*.example`). Same
+      # reasoning as the `vendors/` exclusion in `no-hardcoded-secrets` above.
+      - "vendors/**"
 
 # NOTE: the ts-libs `no-github-workflows` rule (asserting .github/workflows must be
 # ABSENT) was intentionally NOT absorbed — ts-libs is a library repo with no CI,
