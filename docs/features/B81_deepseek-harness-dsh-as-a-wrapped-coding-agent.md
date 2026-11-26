@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "U"
+id: "B81"
 name: "DeepSeek Harness (dsh) as a wrapped coding agent"
 status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-26T19:33:42.587Z"
-updated_at: "2026-11-26T19:34:30.755Z"
+updated_at: "2026-11-26T22:05:55.120Z"
 ---
 
-# U: DeepSeek Harness (dsh) as a wrapped coding agent
+# B81: DeepSeek Harness (dsh) as a wrapped coding agent
 
 ## Goal
 
@@ -19,8 +19,8 @@ Spur can dispatch work to DeepSeek Harness (`dsh`) as a first-class wrapped codi
 
 **In scope**
 
-- A `dsh` agent shim in the released `@gobing-ai/ts-ai-runner` facade over `dsh --profile headless --json`: NDJSON event mapping, `--session-id` resume, permission-mode mapping, availability/auth detection, success = exit 0 and `final.reason.kind === 'completed'`.
-- Spur recognition of `dsh` across executor config (`config/config.global.yaml`, `config/config.example.yaml`), process identity, run-session observation, failure classification, MCP readiness and the Board integrations row.
+- Upgrade the existing `deepseek` agent shim (binary `dsh`) in the released `@gobing-ai/ts-ai-runner` facade to the `dsh --profile headless` 0.2.x contract: `--json` in json mode, `--session-id` resume, fixed unattended permission flags, availability detection. Success is dsh's exit status, which is 0 only for a completed final turn.
+- Spur recognition of the `deepseek` agent across executor config (`config/config.global.yaml`, `config/config.example.yaml`), process identity, run-session observation, failure classification, MCP readiness and the Board integrations row.
 - A pinned-version NDJSON contract test and a doctor-visible version mismatch.
 - Verification that the `sp-*` skills Superskill already writes to `~/.agents/skills` are discovered by dsh.
 - One repeatable E2E receipt: a real task dispatched to dsh that leaves a Spur run record.
@@ -28,8 +28,8 @@ Spur can dispatch work to DeepSeek Harness (`dsh`) as a first-class wrapped codi
 **Out of scope**
 
 - Hosting, loading, or statically extracting dsh/Cordis plugins inside Spur.
-- The Superskill `dsh` install target for hooks and the MCP profile patch (follow-up feature).
-- Importing Zstandard-compressed dsh session logs into the history plane (follow-up feature).
+- The Superskill `dsh` install target for hooks and the MCP profile patch (follow-up feature B811).
+- Spur history-plane coverage of the importer's existing `deepseek` source (follow-up feature E11).
 - `/sp:dev-*` slash commands inside dsh (dsh registers commands only in code).
 - ACP or SDK JSON-RPC transport for dsh.
 
@@ -43,25 +43,25 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
     # covers: I1, I2
     Given the ts-ai-runner dsh shim
     When a prompt is built for a fresh run in a working directory
-    Then the command is dsh --profile headless with --json and the task on stdin
+    Then the command is dsh --profile headless with the task as a --pinned positional after --
     And no dsh plugin is loaded, translated or inspected by Spur or the runner
 
   @core
-  Scenario: R2 — dsh NDJSON events map to runner events
+  Scenario: R2 — The dsh shim emits --json only in json mode
     # covers: I2
-    Given a dsh --json stream carrying session, status, text, thinking, tool_call, tool_result and final events
-    When the runner parses the stream
-    Then the session id comes from the opening session event
-    And assistant text, tool calls and tool results surface as the matching runner events
-    And an unknown event type is ignored without failing the run
+    Given the ts-ai-runner deepseek shim
+    When a prompt is built with output mode json
+    Then the command carries --json
+    And a text-mode prompt carries no --json
+    And the shim parses no dsh output events
 
   @core
   Scenario: R3 — Success requires exit zero and a completed final reason
     # covers: I3
-    Given a dsh process that exits 0
-    When its final event reason kind is not completed or no final event was emitted
-    Then the runner reports the run as failed with the final reason
-    And only exit 0 together with final.reason.kind completed reports success
+    Given recorded dsh --json runs, one completed and one not completed
+    When the contract test compares each exit status with its final event
+    Then exit 0 occurs only with final.reason.kind completed
+    And Spur treats the dsh exit status as the run outcome
 
   @core
   Scenario: R4 — A dsh run resumes by session id
@@ -72,12 +72,11 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
     And the dsh capability record declares resumeById true
 
   @core
-  Scenario: R5 — Spur permission intent maps to a dsh permission mode
+  Scenario: R5 — dsh runs carry fixed unattended permission flags
     # covers: I2
-    Given a stage requesting workspace-write execution
+    Given a fresh or resumed dsh prompt
     When the dsh command is built
-    Then it carries --permission-mode workspace-write
-    And an unattended full-access request maps to --permission-mode auto with --approval-policy never
+    Then it carries --permission-mode workspace-write and --approval-policy never
 
   @core
   Scenario: R6 — dsh availability is detected without Spur storing credentials
@@ -92,15 +91,15 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
     # covers: I4
     Given config/config.global.yaml and config/config.example.yaml
     When an operator lists the supported executors and enables dsh in a tier
-    Then dsh is a recognised agent name and executor selection can resolve it
+    Then deepseek is a recognised agent name and executor selection can resolve it
 
   @core
   Scenario: R8 — Spur services recognise dsh processes and failures
     # covers: I5
     Given a running dsh executor process
     When process identity, run-session observation and failure classification inspect it
-    Then the process is attributed to dsh
-    And a dsh quota or auth error is classified with provider dsh instead of unknown
+    Then the process is attributed to deepseek when its executable name is distinguishable
+    And the run's dsh session is observed through the importer's deepseek source
 
   @core
   Scenario: R9 — MCP readiness and the Board integrations row cover dsh
@@ -113,23 +112,23 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
   Scenario: R10 — sp skills are discovered by dsh
     # covers: I7
     Given Superskill has written sp-* skills to ~/.agents/skills
-    When dsh lists its session skill catalog
-    Then the sp skills appear with their names and descriptions
+    When a dsh --json run is asked to load one named sp skill
+    Then the stream carries a skill tool_call naming it and a non-error tool_result
 
   @core
   Scenario: R11 — A real task runs through dsh and leaves a Spur run record
     # covers: I10
     Given dsh is installed and configured with a model provider
     When the E2E proof dispatches one bounded task to the dsh executor
-    Then the run ends completed and a Spur run record names dsh as the executor
+    Then the run exits 0 and a Spur run record names the deepseek executor
     And the proof writes a repeatable receipt artifact with the dsh version and session id
 
   @core
   Scenario: R12 — The NDJSON contract is pinned to a dsh version
     # covers: I11, I14
     Given a recorded dsh --json fixture captured from the pinned dsh version
-    When the contract test replays it through the runner parser
-    Then every event the shim depends on parses
+    When the contract test replays it
+    Then the session id and final reason fields the proofs depend on parse
     And the dsh capability record names the version it was verified against
 
   @edge
@@ -143,8 +142,16 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 1457 | Spur wiring for the dsh executor: config, services, Board row and doctor version check | todo |
+| 1458 | dsh E2E proof: skill discovery and a real task run record | todo |
+| 1456 | dsh agent shim in ts-ai-runner with a pinned NDJSON contract | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-11-26T21:03:52.262Z moved U → B81 (system)
+

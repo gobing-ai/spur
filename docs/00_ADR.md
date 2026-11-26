@@ -3051,19 +3051,21 @@ re-import pressure this entry already records).
 
 ## ADR-153: dsh Is Wrapped as a Coding Agent; Spur Never Hosts dsh (Cordis) Plugins
 
-- **Status:** Proposed 2026-11-26 · **Date:** 2026-11-26 · **Feature:** U
+- **Status:** Proposed 2026-11-26 · **Date:** 2026-11-26 · **Feature:** B81
 - **Decision:** Spur integrates DeepSeek Harness by dispatching to `dsh --profile headless --json`
-  through a `dsh` shim in `@gobing-ai/ts-ai-runner`, like the other wrapped agents. dsh plugins reach
+  through the `deepseek` shim (binary `dsh`) that `@gobing-ai/ts-ai-runner` already ships, upgraded to
+  the 0.2.x headless contract, like the other wrapped agents. dsh plugins reach
   Spur runs only transitively, through the operator's dsh profile. Spur does not load, translate or
   statically extract dsh plugins.
 - **Why:** dsh plugins are in-process Cordis packages bound to dsh runtime services with no
   declarative manifest. Hosting them would embed a second agent runtime in Spur. Extraction
   would recover only the fragments that happen to be data. Wrapping reuses the executor seam
-  unchanged and inherits the whole ecosystem at the cost of one shim.
+  unchanged and inherits the whole ecosystem at the cost of one shim upgrade.
 - **Alternatives:** host a Cordis context inside Spur (a second runtime and a dsh-version coupling
   across Spur's core); extract skills/MCP declarations from plugin packages (partial, brittle, and
   duplicating what dsh already loads).
-- **Consequence:** Spur's dsh support tracks the dsh headless NDJSON contract, so it is pinned to one
-  version with a contract test and a doctor mismatch report. Hooks and MCP installation into dsh
-  profiles belong to Superskill (feature U1); history import of dsh session logs is feature U2.
+- **Consequence:** Spur's dsh support tracks the dsh headless argv and exit contract (exit 0 only for a
+  completed final turn), so it is pinned to one version with a recorded-fixture test and the existing
+  doctor capability-staleness report. Hooks and MCP installation into dsh
+  profiles belong to Superskill (feature B811); Spur history-plane coverage of the importer's existing `deepseek` source is feature E11.
 - **Detail:** [dsh agent integration](design/dsh-agent-integration.md).

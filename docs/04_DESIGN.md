@@ -26,7 +26,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Area | Reference |
 | --- | --- |
 | CLI grammar, initialization, agents, teams and rules | [cli-contracts](design/cli-contracts.md) |
-| Proposed dsh (DeepSeek Harness) wrapped-agent shim and Spur wiring (U) | [dsh-agent-integration](design/dsh-agent-integration.md) |
+| Proposed dsh (DeepSeek Harness) wrapped-agent shim and Spur wiring (B81) | [dsh-agent-integration](design/dsh-agent-integration.md) |
 | Proposed self install/status and staged builder tooling absorption (A93) | [concrete-spur-self](design/concrete-spur-self.md) |
 | Implemented downstream-usable absorption of remaining repository scripts (A94) | [downstream-tooling-absorption](design/downstream-tooling-absorption.md) |
 | History CLI and refresh contracts | [history-cli-contracts](design/history-cli-contracts.md) |
