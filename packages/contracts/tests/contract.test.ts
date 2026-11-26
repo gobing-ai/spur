@@ -402,9 +402,11 @@ describe('contract composition', () => {
         expect(keys).toContain('transition');
     });
 
-    test('inbox namespace exposes the seven procedures with their verbs (G11 R9)', () => {
+    test('inbox namespace exposes the eight procedures with their verbs (G11 R9, A821)', () => {
         const keys = Object.keys(contract.inbox).filter((k) => !k.startsWith('~'));
-        expect(keys.sort()).toEqual(['list', 'members', 'read', 'reply', 'requests', 'send', 'thread'].sort());
+        expect(keys.sort()).toEqual(
+            ['list', 'members', 'read', 'reply', 'requests', 'send', 'thread', 'timeline'].sort(),
+        );
         expect(routeOf(inboxContract.list)).toMatchObject({ method: 'GET', path: '/inbox/messages' });
         expect(routeOf(inboxContract.thread)).toMatchObject({ method: 'GET', path: '/inbox/messages/{id}/thread' });
         expect(routeOf(inboxContract.send)).toMatchObject({ method: 'POST', path: '/inbox/messages' });
@@ -412,6 +414,7 @@ describe('contract composition', () => {
         expect(routeOf(inboxContract.read)).toMatchObject({ method: 'POST', path: '/inbox/messages/{id}/read' });
         expect(routeOf(inboxContract.requests)).toMatchObject({ method: 'GET', path: '/inbox/requests' });
         expect(routeOf(inboxContract.members)).toMatchObject({ method: 'GET', path: '/inbox/members' });
+        expect(routeOf(inboxContract.timeline)).toMatchObject({ method: 'GET', path: '/inbox/timeline' });
     });
 
     test('inbox DTOs reject a null sender and an unknown status (G11 R5)', () => {
