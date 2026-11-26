@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Loading } from '@/ui';
+import { PinnableTooltip } from '../../components/ui/PinnableTooltip';
 import { subscribePlanningConnection, subscribePlanningEvents } from '../../lib/planning-events';
 import { fetchWithTimeout } from '../../lib/rpc-client';
 import ColumnCustomizer, {
@@ -1207,11 +1207,6 @@ function SystemEventsTable({
     );
 }
 
-/**
- * Event table row with a persistent, keyboard-reachable detail panel (R4).
- */
-const PAYLOAD_TOOLTIP_PIN_EVENT = 'system-events-payload-tooltip-pin';
-
 export function SeverityLabel({ severity }: { severity: SystemEventSeverity }) {
     const config = useMemo(() => {
         switch (severity) {
@@ -1234,6 +1229,9 @@ export function SeverityLabel({ severity }: { severity: SystemEventSeverity }) {
     );
 }
 
+/**
+ * Event table row with a persistent, keyboard-reachable detail panel (R4).
+ */
 function EventTableRow({
     event,
     tier,
@@ -1252,181 +1250,31 @@ function EventTableRow({
     );
     const colorClass = getPrefixColor(prefix);
     const [expanded, setExpanded] = useState(false);
-    const [hoveringName, setHoveringName] = useState(false);
-    const [pinned, setPinned] = useState(false);
-    const [pinPos, setPinPos] = useState<{ x: number; y: number } | null>(null);
-    const tooltipRef = useRef<HTMLDivElement>(null);
-    const nameBtnRef = useRef<HTMLButtonElement>(null);
-    const ignoreUnlockUntilRef = useRef(0);
-    const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const actorLabel = displayValue(event.actor);
-    const tooltipOpen = hoveringName || pinned;
-
-    const clearHoverLeaveTimer = useCallback(() => {
-        if (hoverLeaveTimerRef.current !== null) {
-            clearTimeout(hoverLeaveTimerRef.current);
-            hoverLeaveTimerRef.current = null;
-        }
-    }, []);
-
-    const unlockTooltip = useCallback(() => {
-        setPinned(false);
-        setPinPos(null);
-    }, []);
-
-    const pinTooltipAt = useCallback(
-        (clientX: number, clientY: number) => {
-            ignoreUnlockUntilRef.current = performance.now() + 400;
-            setPinned(true);
-            setHoveringName(false);
-            clearHoverLeaveTimer();
-            const x = Number.isFinite(clientX) && clientX > 0 ? clientX : 8;
-            const y = Number.isFinite(clientY) && clientY > 0 ? clientY : 8;
-            setPinPos({ x, y });
-            window.dispatchEvent(new CustomEvent(PAYLOAD_TOOLTIP_PIN_EVENT, { detail: { id: event.id } }));
-        },
-        [event.id, clearHoverLeaveTimer],
-    );
-
-    const pinFromNameElement = useCallback(
-        (el: HTMLElement, clientX?: number, clientY?: number) => {
-            const rect = el.getBoundingClientRect();
-            const x = clientX && clientX > 0 ? clientX : rect.left;
-            const y = clientY && clientY > 0 ? clientY + 4 : rect.bottom + 6;
-            pinTooltipAt(x, y);
-        },
-        [pinTooltipAt],
-    );
-
-    // Another row pinned → release this one.
-    useEffect(() => {
-        const onOtherPin = (e: Event) => {
-            const id = (e as CustomEvent<{ id: string }>).detail?.id;
-            if (id !== event.id) unlockTooltip();
-        };
-        window.addEventListener(PAYLOAD_TOOLTIP_PIN_EVENT, onOtherPin);
-        return () => window.removeEventListener(PAYLOAD_TOOLTIP_PIN_EVENT, onOtherPin);
-    }, [event.id, unlockTooltip]);
-
-    // While pinned: outside click or Escape unlocks.
-    useEffect(() => {
-        if (!pinned) return;
-        const onPointerDown = (e: PointerEvent) => {
-            if (performance.now() < ignoreUnlockUntilRef.current) return;
-            if (tooltipRef.current?.contains(e.target as Node)) return;
-            if (nameBtnRef.current?.contains(e.target as Node)) return;
-            unlockTooltip();
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                unlockTooltip();
-                e.stopPropagation();
-            }
-        };
-        document.addEventListener('pointerdown', onPointerDown, true);
-        document.addEventListener('keydown', onKey, true);
-        return () => {
-            document.removeEventListener('pointerdown', onPointerDown, true);
-            document.removeEventListener('keydown', onKey, true);
-        };
-    }, [pinned, unlockTooltip]);
-
-    useEffect(
-        () => () => {
-            clearHoverLeaveTimer();
-        },
-        [clearHoverLeaveTimer],
-    );
 
     const onToggle = useCallback(() => setExpanded((prev) => !prev), []);
-    const onKeyDown = useCallback(
-        (e: React.KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                if (pinned) {
-                    unlockTooltip();
-                    e.stopPropagation();
-                    return;
-                }
-                setExpanded(false);
-                e.stopPropagation();
-            }
-        },
-        [pinned, unlockTooltip],
-    );
+    const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key !== 'Escape') return;
+        setExpanded(false);
+        e.stopPropagation();
+    }, []);
 
-    const tooltipNode = tooltipOpen ? (
-        <div
-            ref={tooltipRef}
-            id={`system-event-tooltip-${event.id}`}
-            role="tooltip"
-            data-testid="system-event-payload-tooltip"
-            data-pinned={pinned ? 'true' : 'false'}
-            className={
-                pinned
-                    ? 'pointer-events-auto fixed z-50 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9] select-text cursor-text'
-                    : 'pointer-events-auto absolute left-0 top-full mt-1 z-30 rounded shadow-lg p-2.5 text-[11px] min-w-[min(400px,90vw)] max-w-[min(840px,95vw)] whitespace-normal border border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'
+    // The event-name detail surface. `PinnableTooltip` owns the interaction contract — hover,
+    // keyboard focus, pin, Escape, outside activation and the single-pinned rule — so this row
+    // owns only the content and the two pin guidances.
+    const eventTooltip = (
+        <PinnableTooltip
+            trigger={event.eventName}
+            triggerLabel={`Context for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
+            triggerTestId="system-event-name"
+            triggerClassName={`font-mono font-semibold truncate block max-w-full text-left cursor-pointer bg-transparent border-0 p-0 ${colorClass}`}
+            title={tooltipTitle(event, view)}
+            testId="system-event-payload-tooltip"
+            footer={({ pinned }) =>
+                pinned ? 'Select to copy · Esc or outside click to close' : 'Click event name to lock for copy'
             }
-            style={pinned && pinPos ? { top: pinPos.y, left: pinPos.x } : undefined}
-            onMouseEnter={() => {
-                clearHoverLeaveTimer();
-                setHoveringName(true);
-            }}
-            onMouseLeave={() => {
-                if (pinned) return;
-                clearHoverLeaveTimer();
-                hoverLeaveTimerRef.current = setTimeout(() => setHoveringName(false), 150);
-            }}
-            onFocusCapture={() => setHoveringName(true)}
-            onBlurCapture={(e) => {
-                if (!pinned && !e.currentTarget.contains(e.relatedTarget as Node | null)) setHoveringName(false);
-            }}
-            onPointerDown={(e) => {
-                if (pinned) e.stopPropagation();
-            }}
         >
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div
-                    className="text-[11px] font-sans font-semibold text-[#c9d1d9] truncate"
-                    data-testid="system-event-tooltip-title"
-                >
-                    {tooltipTitle(event, view)}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                    {!pinned && (
-                        <button
-                            type="button"
-                            data-testid="system-event-payload-tooltip-pin"
-                            className="text-[10px] text-[#c9d1d9] hover:text-white px-1.5 py-0.5 rounded border border-[#30363d] bg-[#21262d] cursor-pointer"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                const anchor = nameBtnRef.current;
-                                if (anchor) {
-                                    pinFromNameElement(anchor);
-                                } else {
-                                    pinTooltipAt(e.clientX, e.clientY);
-                                }
-                            }}
-                        >
-                            Pin
-                        </button>
-                    )}
-                    {pinned && (
-                        <button
-                            type="button"
-                            data-testid="system-event-payload-tooltip-close"
-                            className="text-[10px] text-[#8b949e] hover:text-[#c9d1d9] px-1 rounded border border-[#30363d] cursor-pointer"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                unlockTooltip();
-                            }}
-                        >
-                            close
-                        </button>
-                    )}
-                </div>
-            </div>
             <p className="mb-2 text-spur-text leading-relaxed" data-testid="system-event-description">
                 {view.description}
             </p>
@@ -1467,14 +1315,8 @@ function EventTableRow({
                     <code className="block mt-0.5 font-mono break-all select-text">{view.action.value}</code>
                 </div>
             )}
-            <div
-                className="mt-2 border-t border-[#30363d] pt-1.5 text-[10px] text-[#8b949e] font-sans"
-                data-testid="system-event-tooltip-footer"
-            >
-                {pinned ? 'Select to copy · Esc or outside click to close' : 'Click event name or Pin to lock for copy'}
-            </div>
-        </div>
-    ) : null;
+        </PinnableTooltip>
+    );
 
     const renderCell = (colKey: EventColumnKey) => {
         switch (colKey) {
@@ -1509,50 +1351,8 @@ function EventTableRow({
                                 {expanded ? '▾' : '▸'}
                             </button>
                             <div className="relative min-w-0 max-w-full flex items-center gap-1">
-                                <button
-                                    ref={nameBtnRef}
-                                    type="button"
-                                    className={`font-mono font-semibold truncate block max-w-full text-left cursor-pointer bg-transparent border-0 p-0 ${colorClass}`}
-                                    data-testid="system-event-name"
-                                    aria-label={`Context for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
-                                    aria-describedby={tooltipOpen ? `system-event-tooltip-${event.id}` : undefined}
-                                    onMouseEnter={() => {
-                                        clearHoverLeaveTimer();
-                                        setHoveringName(true);
-                                    }}
-                                    onFocus={() => {
-                                        clearHoverLeaveTimer();
-                                        setHoveringName(true);
-                                    }}
-                                    onBlur={(e) => {
-                                        if (!pinned && !tooltipRef.current?.contains(e.relatedTarget as Node | null)) {
-                                            setHoveringName(false);
-                                        }
-                                    }}
-                                    onMouseLeave={() => {
-                                        clearHoverLeaveTimer();
-                                        hoverLeaveTimerRef.current = setTimeout(() => {
-                                            if (!pinned) setHoveringName(false);
-                                        }, 200);
-                                    }}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (pinned) return;
-                                        pinFromNameElement(e.currentTarget, e.clientX, e.clientY);
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            if (pinned) return;
-                                            pinFromNameElement(e.currentTarget);
-                                        }
-                                    }}
-                                >
-                                    {event.eventName}
-                                </button>
+                                {eventTooltip}
                                 <CopyValueButton value={event.eventName} label="event name" />
-                                {!pinned && tooltipNode}
                             </div>
                         </div>
                     </td>
@@ -1659,55 +1459,8 @@ function EventTableRow({
                                         {expanded ? '▾' : '▸'}
                                     </button>
                                     <div className="relative min-w-0 max-w-full flex items-center gap-1">
-                                        <button
-                                            ref={nameBtnRef}
-                                            type="button"
-                                            className={`font-mono font-semibold truncate block max-w-full text-left cursor-pointer bg-transparent border-0 p-0 ${colorClass}`}
-                                            data-testid="system-event-name"
-                                            aria-label={`Context for ${event.eventName}. Hover to preview; click to pin for select and copy.`}
-                                            aria-describedby={
-                                                tooltipOpen ? `system-event-tooltip-${event.id}` : undefined
-                                            }
-                                            onMouseEnter={() => {
-                                                clearHoverLeaveTimer();
-                                                setHoveringName(true);
-                                            }}
-                                            onFocus={() => {
-                                                clearHoverLeaveTimer();
-                                                setHoveringName(true);
-                                            }}
-                                            onBlur={(e) => {
-                                                if (
-                                                    !pinned &&
-                                                    !tooltipRef.current?.contains(e.relatedTarget as Node | null)
-                                                ) {
-                                                    setHoveringName(false);
-                                                }
-                                            }}
-                                            onMouseLeave={() => {
-                                                clearHoverLeaveTimer();
-                                                hoverLeaveTimerRef.current = setTimeout(() => {
-                                                    if (!pinned) setHoveringName(false);
-                                                }, 200);
-                                            }}
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                if (pinned) return;
-                                                pinFromNameElement(e.currentTarget, e.clientX, e.clientY);
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    if (pinned) return;
-                                                    pinFromNameElement(e.currentTarget);
-                                                }
-                                            }}
-                                        >
-                                            {event.eventName}
-                                        </button>
+                                        {eventTooltip}
                                         <CopyValueButton value={event.eventName} label="event name" />
-                                        {!pinned && tooltipNode}
                                     </div>
                                 </div>
                                 <div className="flex flex-col gap-0.5 text-[10px] text-spur-text-muted min-w-0">
@@ -1819,8 +1572,6 @@ function EventTableRow({
                     </td>
                 </tr>
             )}
-            {/* Pinned tip is position:fixed — portal to body so <tbody> doesn't clip/invalidate markup. */}
-            {pinned && tooltipNode && typeof document !== 'undefined' ? createPortal(tooltipNode, document.body) : null}
         </>
     );
 }

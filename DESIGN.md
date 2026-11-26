@@ -435,7 +435,11 @@ the shared canvas/surface/hairline/type tokens above.
   complete value in the semantic tooltip.
 - Event-name tooltip uses `surface-3`, a strong hairline, mono value rows, a 400 px minimum when
   space permits, and a viewport-bounded maximum. Hover and keyboard focus open the same content;
-  pinning makes it selectable for copy; Escape and outside activation close it.
+  pinning makes it selectable for copy; Escape and outside activation close it. That interaction
+  contract - not the panel's content - is owned by
+  `apps/web/src/components/ui/PinnableTooltip.tsx`, which every in-place detail surface
+  (`dialog` while pinned, `tooltip` while previewing, one pinned per document) consumes instead of
+  re-implementing hover, pin, Escape and outside-click state.
 - The tooltip title is `eventName · correlator`, using the best available
   entity/run/execution/action/job identity and falling back to the persisted history-row id.
   Copy/pin instructions live in a muted footer; hover and pinned modes use their own guidance.

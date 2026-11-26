@@ -22,6 +22,11 @@ export { Button, type ButtonProps } from '../ui/Button';
 export { Card, CardBody, type CardBodyProps, type CardProps } from '../ui/Card';
 /** daisyUI spinner pinned to the kit's contract; imported from the ui seam, never re-styled. */
 export { Loading, type LoadingProps } from '../ui/Loading';
+/**
+ * The pinnable semantic tooltip (A821 R1): one interaction contract for every in-place detail
+ * surface, re-exported so a contribution does not re-implement hover/pin/Escape by hand.
+ */
+export { PinnableTooltip, type PinnableTooltipProps } from '../ui/PinnableTooltip';
 export { Diagnostic, type DiagnosticProps, type DiagnosticTone } from './Diagnostic';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { ModuleHeader, type ModuleHeaderProps } from './ModuleHeader';

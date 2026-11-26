@@ -20,6 +20,7 @@ export const MODULE_KIT_EXPORTS = [
     'CardBody',
     'Badge',
     'Button',
+    'PinnableTooltip',
     'basePath',
     'withBase',
     'resolveApiUrl',
