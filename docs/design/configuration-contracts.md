@@ -32,6 +32,10 @@ Two top-level concerns:
 - **Portable `bootstrap:` block** — consumed by `@gobing-ai/ts-infra` `runNodeApplication`. Shared across
   `spur-cli` and (future) `spur-server`. Keys map 1:1 to ts-infra's `LoggingOptions` /
   `TelemetryOptions` / `DatabaseOptions` / `SchedulerOptions`.
+- **Spur-owned keys inside `bootstrap:`** — `bootstrap.modules` is Spur's own declaration list, not
+  a ts-infra option; its contract is owned by
+  [downstream-board-modules](downstream-board-modules.md) §6, and the field-level mirror in
+  `apps/cli/schemas/spur-config.schema.json` stays parity-tested against the zod SSOT.
 - **Spur app section** — everything except `bootstrap:`, validated by the single merged
   `spurConfigSchema` in `@gobing-ai/spur-config` (ADR-027; the former CLI-local `SpurAppConfigSchema`
   was folded in). Keys are agent/rules/workflows/redaction/version/name, plus the planning-layer

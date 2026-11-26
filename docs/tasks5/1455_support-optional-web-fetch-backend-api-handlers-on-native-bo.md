@@ -4,7 +4,7 @@ name: Support optional Web-Fetch backend API handlers on native Board modules (/
 status: done
 template: feature-impl
 created_at: 2026-11-26T18:16:32.513Z
-updated_at: "2026-11-26T20:00:02.694Z"
+updated_at: "2026-11-26T20:01:06.290Z"
 
 priority: P1
 ac_numbering: task-local
@@ -132,7 +132,7 @@ Mount optional in-process Web-Fetch ESM handlers under `/api/modules/:id/*` insi
 
 ### Solution
 
-#### Approach
+**Approach**
 
 One optional `api` field on a `react` declaration names a project-relative built ESM bundle. Startup
 confines and resolves it (lexical + `isFile` + fail-closed `realPath`), and the existing Board server
@@ -146,7 +146,7 @@ sees a rebuilt file. The loader therefore resolves through `createRequire`, evic
 re-requires — keyed per real path and `mtimeMs`. The known limit (a bundle using top-level await
 cannot be re-evaluated) is recorded in the code and in the design satellite.
 
-#### Change map
+**Change map**
 
 | Change | Anchor |
 | --- | --- |
