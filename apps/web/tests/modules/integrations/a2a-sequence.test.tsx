@@ -587,6 +587,63 @@ describe('1454 — live updates (R6)', () => {
         expect(timelineCalls[1]?.members).toBeUndefined();
         expect(timelineCalls[1]?.cursor).toBeUndefined();
     });
+
+    test('a refresh that overflows one page follows its cursor, so the newest message still lands', async () => {
+        // The failure mode: past ~500 loaded rows the from-oldest refetch is capped, and a message
+        // newer than the cap never appears until reload. The refresh must page forward to the end.
+        globalThis.EventSource = FakePlanningSource as unknown as typeof EventSource;
+        const view = renderTab();
+        await waitFor(() => view.getByTestId('integrations-a2a-sequence-grid'));
+        const newest = row({ id: 'm9', fromId: 'proj-coder', toId: 'operator', createdAt: NOW + 1_000 });
+        timelineAnswer = async () =>
+            timelineCalls.length === 2
+                ? { messages: ROWS, nextCursor: 'after-m3' }
+                : { messages: [newest], nextCursor: null };
+        act(() => FakePlanningSource.latest.emit('message.created', { messageId: 'm9' }));
+        await waitFor(() => view.getByTestId('integrations-a2a-arrow-row-m9'));
+        expect(timelineCalls).toHaveLength(3);
+        expect(timelineCalls[2]?.cursor).toBe('after-m3');
+    });
+});
+
+describe('1454 — compact layout (R7)', () => {
+    // The failure modes: the grid still drawn at 639 px, a stacked row that drops the kind or status,
+    // and lifeline/arrow tooltips that vanish with the columns. Chromium's real-viewport proof lives
+    // in `a2a-sequence.heavy.test.ts`; this pins the same contract wherever a browser cannot launch.
+    const original = window.matchMedia;
+    beforeEach(() => {
+        window.matchMedia = ((query: string) => ({
+            matches: query === '(max-width: 639px)',
+            media: query,
+            onchange: null,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+            addListener: () => undefined,
+            removeListener: () => undefined,
+            dispatchEvent: () => false,
+        })) as unknown as typeof window.matchMedia;
+    });
+    afterEach(() => {
+        window.matchMedia = original;
+    });
+
+    test('at ≤639 px the sequence is a stacked list whose rows and tooltips stay intact', async () => {
+        const view = renderTab();
+        await waitFor(() => view.getByTestId('integrations-a2a-sequence-stacked'));
+        expect(view.queryByTestId('integrations-a2a-sequence-grid')).toBeNull();
+        // Filters survive the breakpoint.
+        expect(view.getByTestId('integrations-a2a-filters')).toBeTruthy();
+        const first = view.getByTestId('integrations-a2a-stacked-m1').textContent ?? '';
+        expect(first).toContain('operator → proj-coder');
+        expect(first).toContain('request');
+        expect(first).toContain('delivered');
+        // Lifelines are listed once above the list, so their tooltips remain reachable.
+        expect(view.getByTestId('integrations-a2a-compact-lifelines').textContent).toContain('proj-coder');
+        await act(async () => {
+            fireEvent.focusIn(view.getByTestId('integrations-a2a-arrow-trigger-m1'));
+        });
+        await waitFor(() => expect(view.getByTestId('integrations-a2a-arrow-detail-m1')).toBeTruthy());
+    });
 });
 
 describe('1454 — empty and degraded states (R8)', () => {

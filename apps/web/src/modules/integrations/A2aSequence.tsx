@@ -222,10 +222,21 @@ function useA2aTimeline(input: A2aTimelineInput, client: SequenceClient) {
                               limit: Math.min(500, loaded.length + 1),
                               since: Math.max(inputRef.current.since ?? 0, oldest.createdAt),
                           };
-                void client.timeline(request).then(
-                    (page) => {
+                // Page forward to the end: the first page is capped at 500, so once more rows than that
+                // are loaded, a single read would stop short of the message this frame announced.
+                const readAll = async (): Promise<InboxRow[]> => {
+                    const out: InboxRow[] = [];
+                    let cursor: string | undefined;
+                    do {
+                        const page = await client.timeline(cursor === undefined ? request : { ...request, cursor });
+                        out.push(...(page.messages as InboxRow[]));
+                        cursor = page.nextCursor ?? undefined;
+                    } while (cursor !== undefined && mounted.current);
+                    return out;
+                };
+                void readAll().then(
+                    (fresh) => {
                         if (!mounted.current) return;
-                        const fresh = page.messages as InboxRow[];
                         setState((previous) => ({
                             ...previous,
                             rows: oldest === undefined ? sortTimeline(fresh) : mergeTimelinePages(fresh, previous.rows),

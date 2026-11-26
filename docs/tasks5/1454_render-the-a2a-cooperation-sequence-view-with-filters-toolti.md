@@ -4,7 +4,7 @@ name: Render the A2A cooperation sequence view with filters, tooltips and config
 status: done
 template: feature-impl
 created_at: 2026-11-25T23:54:35.755Z
-updated_at: "2026-11-26T01:15:27.172Z"
+updated_at: "2026-11-26T03:27:35.307Z"
 feature_id: A821
 priority: P2
 
@@ -140,26 +140,26 @@ Out of scope: cross-project stitching (feature T); sending or replying from this
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:623` (grid, lanes, arrows, reply indent, self-loop, `+N` past `LANE_CAP` 8 at `helpers.ts:587`); tests `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:233` |
-| R2 | MET | `helpers.ts:662` (`A2aFilters`), `:687` (`encodeA2aFilters`), `:717` (`decodeA2aFilters`); filters map into the read and round-trip through the URL — `a2a-sequence.test.tsx:289` (mapping, window bound, round-trip, restore-from-URL) |
-| R3 | MET | `A2aSequence.tsx:623` lifeline headers use `PinnableTooltip`; card fetched once on first open, raw JSON when pinned, `Diagnostic` on failure, outbound shows target + `authEnv` + set/unset with no token text — `a2a-sequence.test.tsx:381` |
-| R4 | MET | Arrow detail (excerpt, kind, timeline with attempts/error, request key, UUID-only Trace link, remote refs) — `a2a-sequence.test.tsx:464` |
-| R5 | MET | `A2aConfigDrawer.tsx:156` holds the previous Members content; collapsed by default; the no-inbound warning sits above the grid — `A2aTab.tsx:1-60`, test `a2a-sequence.test.tsx:546` |
-| R6 | MET | `message.*` frames refetch through the oldest loaded row, other frames ignored — `a2a-sequence.test.tsx:565` |
-| R7 | MET | `A2aSequence.tsx:623` stacked fallback at ≤639 px; browser proof `apps/web/tests/a2a-sequence.heavy.test.ts` (PASS, 6.4 s, inside the light gate's related set) |
-| R8 | MET | Icon + text status (never color alone), empty state names `spur message send` / `a2a send` — `a2a-sequence.test.tsx:592` |
-| R9 | MET | `docs/design/integrations-module.md:218` §3.1 now reads "current" and describes the shipped surface |
+| R1 | MET | `apps/web/src/modules/integrations/helpers.ts:627` assignLanes; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:233`; `apps/web/tests/modules/integrations/helpers.test.ts:369` |
+| R2 | MET | `apps/web/src/modules/integrations/helpers.ts:687` encode/decode a2a.-prefixed; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:289`; `apps/web/tests/modules/integrations/helpers.test.ts:467` |
+| R3 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:445` lifeline PinnableTooltip; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:381` (card fetched once, Diagnostic, token never rendered) |
+| R4 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:488` ArrowDetail; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:464` (UUID-only Trace link, receipt by messageId) |
+| R5 | MET | `apps/web/src/modules/integrations/A2aConfigDrawer.tsx:175` native details keeps member testids; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:546` |
+| R6 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:213` message.* filter, refetch from oldest row; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:565`; overflow pages forward via nextCursor `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:591` |
+| R7 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:872` stacked list + compact lifelines; `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:630` (added by verify --fix all); Chromium proof `apps/web/tests/a2a-sequence.heavy.test.ts:194` not runnable in this sandbox |
+| R8 | MET | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:650` (empty state names spur message send / a2a send; icon plus text status) |
+| R9 | MET | `docs/design/integrations-module.md:186`; `docs/design/integrations-module.md:260` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — sequence view leads the tab (R1) | MET | test | `a2a-sequence.test.tsx:233`; `helpers.test.ts` (`assignLanes`) |
-| AC2 — filters narrow the view (R2) | MET | test | `a2a-sequence.test.tsx:289` |
-| AC3 — lifeline tooltip shows the Agent Card summary (R3) | MET | test | `a2a-sequence.test.tsx:381` |
-| AC4 — arrow tooltip shows message detail (R4) | MET | test | `a2a-sequence.test.tsx:464` |
-| AC5 — configuration stays reachable (R5) | MET | test | `a2a-sequence.test.tsx:546` |
-| AC6 — live updates (R6) | MET | test | `a2a-sequence.test.tsx:565` |
-| AC7 — compact stacked list (R7) | MET | command | `apps/web/tests/a2a-sequence.heavy.test.ts` via `spur task gate 1454 light` (PASS) |
-| AC8 — empty and degraded states (R8, R9) | MET | test | `a2a-sequence.test.tsx:592`; `docs/design/integrations-module.md:218` |
+| AC1 — A2A tab leads with a sequence view of agent cooperation | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:234` |
+| AC2 — Filters narrow the sequence view | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:290` |
+| AC3 — Agent lifeline tooltip shows the Agent Card summary | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:382` |
+| AC4 — Message arrow tooltip shows message detail | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:465` |
+| AC5 — Configuration detail stays reachable but out of the default view | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:547` |
+| AC6 — Sequence view updates live | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:572` |
+| AC7 — Compact layout falls back to a stacked list | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:630` (jsdom, matchMedia ≤639px); heavy Chromium proof blocked by sandbox (no DevTools port) |
+| AC8 — Empty and degraded states are explicit | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:650`; `docs/design/integrations-module.md:186` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
