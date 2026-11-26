@@ -4,7 +4,7 @@ name: Add project-scoped inbox.timeline read for the A2A sequence view
 status: done
 template: feature-impl
 created_at: 2026-11-25T23:54:35.752Z
-updated_at: "2026-11-26T00:18:57.379Z"
+updated_at: "2026-11-26T03:10:26.852Z"
 feature_id: A821
 priority: P2
 
@@ -106,15 +106,15 @@ Out of scope: cross-project stitching (feature T), any write path, Board UI (145
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/contracts/src/inbox.ts:102` (`inboxTimelineInputSchema`: `members[]`, `direction in\|out\|both`, `kind`, `status`, `threadId`, `since`, `until`, `limit` ≤ 500, `cursor`); `packages/contracts/src/inbox.ts:197` (`GET /inbox/timeline`, tag `inbox`); runtime spec carries the parameters — `apps/server/tests/openapi.test.ts:55` |
-| R2 | MET | `packages/domain/src/dao/inbox-dao.ts:491` — one `ORDER BY created_at ASC, id ASC` query, forward keyset predicate, all filters bound, `limit + 1`; `packages/app/src/services/inbox-service.ts:408` reuses `encodeCursor`/`decodeCursor` and defaults `limit` to 200; ordering/paging/filters pinned by `packages/domain/tests/dao/inbox-dao.test.ts:324` |
-| R3 | MET | `packages/app/src/services/inbox-service.ts:158` (`TIMELINE_EXCERPT_CHARS = 280`), `:161` (`excerpt`), `:408` (page-level truncation); no sweep/claim/prune call in the method; excerpt + side-effect-freedom + cursor cases in `packages/app/tests/services/inbox-service.test.ts:411` |
-| R4 | MET | `apps/server/src/modules/inbox/handlers.ts:186` (`try`/`toOrpcError(error, 'BAD_REQUEST')` around the read, identical to `list` at `:173`); `inbox.list` input/output untouched (`packages/contracts/src/inbox.ts:78`); `BAD_REQUEST` + unchanged-table-count cases in `apps/server/tests/modules/inbox/handlers.test.ts:701` |
-| R5 | MET | `docs/design/inter-agent-control-plane.md:335` (§13 surface table names `inbox.timeline` and the 280-char excerpt); `/inbox/timeline` asserted in `apps/server/tests/openapi.test.ts:55` |
+| R1 | MET | `packages/contracts/src/inbox.ts` timeline route GET /inbox/timeline with members/direction/kind/status/threadId/since/until/limit(max 500)/cursor; `apps/server/tests/modules/inbox/handlers.test.ts:701` |
+| R2 | MET | `packages/domain/src/dao/inbox-dao.ts` InboxDao.timeline ORDER BY created_at ASC, id ASC with forward keyset; `packages/domain/tests/dao/inbox-dao.test.ts:324`; `packages/app/tests/services/inbox-service.test.ts:412` |
+| R3 | MET | `packages/app/src/services/inbox-service.ts` TIMELINE_EXCERPT_CHARS=280 excerpt, no sweep/claim/prune; `apps/server/tests/modules/inbox/handlers.test.ts:702` leaves both tables unchanged |
+| R4 | MET | `apps/server/src/modules/inbox/handlers.ts` toOrpcError(error,'BAD_REQUEST'); `apps/server/tests/modules/inbox/handlers.test.ts:724`; list cursor test unchanged `apps/server/tests/modules/inbox/handlers.test.ts:364` |
+| R5 | MET | `docs/design/inter-agent-control-plane.md:335` §13 row names timeline; `apps/server/tests/openapi.test.ts:55` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Project-scoped inbox read serves the sequence view (req: R1–R5) | MET | test | DAO `packages/domain/tests/dao/inbox-dao.test.ts:324` (order, forward paging, member direction, kind/status, inclusive window, thread); service `packages/app/tests/services/inbox-service.test.ts:411` (page + excerpt, filters, side-effect freedom, malformed cursor); handler `apps/server/tests/modules/inbox/handlers.test.ts:701` (page, unchanged tables, member narrowing, `BAD_REQUEST`); spec `apps/server/tests/openapi.test.ts:55` |
+| AC1 — Project-scoped inbox read serves the sequence view | MET | test | `apps/server/tests/modules/inbox/handlers.test.ts:701`; `packages/app/tests/services/inbox-service.test.ts:411`; `apps/server/tests/openapi.test.ts:55` (domain 22, app 30, contracts 65, server 36 pass this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Extract the System Events pinned tooltip into a shared PinnableTooltip
 status: done
 template: feature-impl
 created_at: 2026-11-25T23:54:35.754Z
-updated_at: "2026-11-26T00:41:26.696Z"
+updated_at: "2026-11-26T03:10:27.386Z"
 feature_id: A821
 priority: P2
 
@@ -98,14 +98,14 @@ Out of scope: changing `ui/Tooltip.tsx`; adopting the component in other tabs (1
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/components/ui/PinnableTooltip.tsx:56` (component), `:26` (props); hover/focus open — `apps/web/tests/components/pinnable-tooltip.test.tsx:37`; pin makes the panel `role="dialog"` with `data-pinned="true"` — `:77`; Escape/outside/single-pin — same file; barrel + frozen list — `apps/web/src/components/module-kit/index.ts:3`, `apps/web/src/components/module-kit/exports.ts:23` |
-| R2 | MET | Trigger is a real `<button>` with `aria-label={triggerLabel}`, `aria-haspopup="dialog"`, `aria-expanded`, `aria-describedby` when open (`PinnableTooltip.tsx:56-120`); content renders in the DOM whenever open, so it is reachable by keyboard and touch, not hover only — `apps/web/tests/components/pinnable-tooltip.test.tsx` (focus + accessible-name cases) |
-| R3 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:1266` builds the single `eventTooltip`, consumed at `:1354` (table) and the compact cell; the description/`<dl>`/remediation block moved in unchanged; `apps/web/tests/modules/observability/system-events-tab.test.ts` green |
-| R4 | MET | `DESIGN.md:440` names `apps/web/src/components/ui/PinnableTooltip.tsx` as the owner of the pinnable semantic tooltip contract |
+| R1 | MET | `apps/web/src/components/ui/PinnableTooltip.tsx:1`; `apps/web/src/components/module-kit/exports.ts:23`; `apps/web/tests/components/pinnable-tooltip.test.tsx:123` single pinned per document |
+| R2 | MET | `apps/web/src/components/ui/PinnableTooltip.tsx:217` aria-label/aria-describedby/aria-expanded; `apps/web/tests/components/pinnable-tooltip.test.tsx:53`; `apps/web/tests/components/pinnable-tooltip.test.tsx:68` |
+| R3 | MET | `apps/web/src/modules/observability/SystemEventsTab.tsx:1267` uses PinnableTooltip; system-events-tab tests pass this run |
+| R4 | MET | `DESIGN.md:440` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Pinnable semantic tooltip is a shared component (req: R1, R2, R3, R4) | MET | test | `apps/web/tests/components/pinnable-tooltip.test.tsx` (7 cases: hover, focus, pin/role, selectable, Escape, outside, single-pin, name) · `apps/web/tests/components/module-kit/exports.test.ts` (barrel parity) · `apps/web/tests/modules/observability/system-events-tab.test.ts` (regression) · `bun run lint` clean · `spur task gate 1453 light` PASS |
+| AC1 — Pinnable semantic tooltip is a shared component | MET | test | `apps/web/tests/components/pinnable-tooltip.test.tsx:37`; `apps/web/tests/components/pinnable-tooltip.test.tsx:77` (Escape, outside pointerdown, second pin releases first) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
