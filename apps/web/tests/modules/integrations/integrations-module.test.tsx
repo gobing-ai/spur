@@ -204,6 +204,8 @@ let overrides: {
     receipts?: Array<{ id: string; kind: string; requestKey: string | null; status: string; taskId: string | null }>;
     /** Per-agent readiness the probe endpoint answers (1449 R4); default: not reported. */
     readiness?: IntegrationsAgentReadiness;
+    /** The A2A sequence's timeline page (1454 R1/R2); default: no traffic in the window. */
+    timeline?: () => { messages: unknown[]; nextCursor: string | null };
     /** The readiness read failing outright — the tolerant-fetch case. */
     readinessError?: Error;
 } = {};
@@ -248,6 +250,10 @@ function makeSeams(): IntegrationsSeams {
         inbox: {
             requests: async () => REQUESTS,
             list: async () => ({ messages: overrides.receipts ?? [], nextCursor: null }),
+            // 1454: the sequence view's only source; empty by default so the drawer tests below see
+            // the same panel they always did.
+            timeline: async () =>
+                overrides.timeline === undefined ? { messages: [], nextCursor: null } : overrides.timeline(),
         },
     };
     /** The card inspector's own seam (1440 R1): the same fake backend, keyed by the card path. */
@@ -456,6 +462,47 @@ describe('1424 — A2A tab (R5)', () => {
         expect(member.querySelector('a')).toBeNull();
         expect(member.textContent).toContain('agent-card.json');
         expect(member.textContent).toContain('A2A listener off');
+    });
+});
+
+// ─── 1454: the A2A tab leads with the sequence, and the drawer is one disclosure below it ───────
+describe('1454 — the sequence leads the A2A tab through the module shell (R1/R5)', () => {
+    test('the shell wires the sequence ahead of a collapsed configuration drawer', async () => {
+        overrides.timeline = () => ({
+            messages: [
+                {
+                    id: 'm1',
+                    fromId: 'operator',
+                    toId: 'proj-coder',
+                    body: 'implement task 1454',
+                    kind: 'request',
+                    status: 'delivered',
+                    attempts: 1,
+                    error: null,
+                    claimedAt: Date.now() - 2_000,
+                    deliveredAt: Date.now() - 1_500,
+                    readAt: Date.now() - 1_000,
+                    inReplyTo: null,
+                    threadId: 'm1',
+                    requestKey: 'a2a:proj-coder:m1',
+                    taskId: null,
+                    parentRunId: null,
+                    createdAt: Date.now() - 3_000,
+                },
+            ],
+            nextCursor: null,
+        });
+        const view = render(<IntegrationsModule seams={makeSeams()} />);
+        await waitFor(() => expect(view.getAllByRole('tab').length).toBe(3));
+        fireEvent.click(view.getByRole('tab', { name: 'A2A' }));
+        const grid = await waitFor(() => view.getByTestId('integrations-a2a-sequence-grid'));
+        // The arrow is drawn for the row the shell's own seam returned.
+        expect(view.getByTestId('integrations-a2a-arrow-trigger-m1').textContent).toContain('operator → proj-coder');
+        const drawer = view.getByTestId('integrations-a2a-config-drawer');
+        expect(drawer.hasAttribute('open')).toBe(false);
+        expect(grid.compareDocumentPosition(drawer) & 4).toBe(4);
+        // The Members content is still reachable inside the disclosure (no capability loss).
+        expect(view.getByTestId('integrations-a2a-members')).toBeTruthy();
     });
 });
 

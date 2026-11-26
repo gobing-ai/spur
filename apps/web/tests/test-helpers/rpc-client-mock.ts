@@ -76,6 +76,8 @@ const defaultApi = {
     },
     inbox: {
         list: async () => ({ messages: [], nextCursor: null }),
+        // A821 R2: the project-scoped timeline read the A2A sequence view mounts on (1454).
+        timeline: async () => ({ messages: [], nextCursor: null }),
         members: async () => [],
         requests: async () => [],
         read: async () => ({ readAt: 0, transitioned: false }),

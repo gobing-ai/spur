@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Render the A2A cooperation sequence view with filters, tooltips and config drawer
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-25T23:54:35.755Z
-updated_at: "2026-11-26T00:02:56.218Z"
+updated_at: "2026-11-26T01:15:27.172Z"
 feature_id: A821
 priority: P2
 
 dependencies: ["1452", "1453"]
 estimate_hours: 10
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1454. Render the A2A cooperation sequence view with filters, tooltips and config drawer
@@ -31,35 +33,35 @@ Rubric: E14 D1 L1 C1 R1 = 18 → one task. All eight scenarios share one file su
 
 ### Requirements
 
-- [ ] R1. The A2A tab's primary content is a CSS-grid sequence: one lifeline per participating address, one arrow per message in `(createdAt, id)` order, replies indented under their thread, self-messages as loops; more than 8 lifelines collapse into an expandable `+N` column.
-- [ ] R2. Filters (agent, direction, kind, status, thread, time range from `TimeRangePresets`) drive `inbox.timeline` and round-trip through the URL query.
-- [ ] R3. Lifeline header tooltips: an inbound member shows the Agent Card summary, fetched on first open, with raw JSON when pinned and a `Diagnostic` on failure; an outbound peer shows the target, `authEnv` name and set/unset, never the token.
-- [ ] R4. Arrow tooltips: body excerpt, kind, status timeline (queued, claimed, delivered, read, with attempts and error), request key, UUID-only Trace link, and remote task/context/branch refs when that receipt persisted them.
-- [ ] R5. The existing Members content moves into a collapsed Configuration disclosure with no capability loss; the no-inbound-member warning stays above the sequence.
-- [ ] R6. `message.*` frames refetch through the oldest loaded row.
-- [ ] R7. At ≤639 px the view becomes a stacked `sender → receiver · kind · status · time` list with filters and tooltips intact.
-- [ ] R8. Status uses icon plus text; the empty state names `spur message send` / `a2a send`.
-- [ ] R9. `docs/design/integrations-module.md` §3 A2A row and §3.1 updated from planned to current.
+- [x] R1. The A2A tab's primary content is a CSS-grid sequence: one lifeline per participating address, one arrow per message in `(createdAt, id)` order, replies indented under their thread, self-messages as loops; more than 8 lifelines collapse into an expandable `+N` column.
+- [x] R2. Filters (agent, direction, kind, status, thread, time range from `TimeRangePresets`) drive `inbox.timeline` and round-trip through the URL query.
+- [x] R3. Lifeline header tooltips: an inbound member shows the Agent Card summary, fetched on first open, with raw JSON when pinned and a `Diagnostic` on failure; an outbound peer shows the target, `authEnv` name and set/unset, never the token.
+- [x] R4. Arrow tooltips: body excerpt, kind, status timeline (queued, claimed, delivered, read, with attempts and error), request key, UUID-only Trace link, and remote task/context/branch refs when that receipt persisted them.
+- [x] R5. The existing Members content moves into a collapsed Configuration disclosure with no capability loss; the no-inbound-member warning stays above the sequence.
+- [x] R6. `message.*` frames refetch through the oldest loaded row.
+- [x] R7. At ≤639 px the view becomes a stacked `sender → receiver · kind · status · time` list with filters and tooltips intact.
+- [x] R8. Status uses icon plus text; the empty state names `spur message send` / `a2a send`.
+- [x] R9. `docs/design/integrations-module.md` §3 A2A row and §3.1 updated from planned to current.
 
 Out of scope: cross-project stitching (feature T); sending or replying from this view (InboxView owns actions); new server reads beyond 1452.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A2A tab leads with a sequence view of agent cooperation (req: R1)
+- [x] AC1 — A2A tab leads with a sequence view of agent cooperation (req: R1)
   - Test layers: helpers `apps/web/tests/modules/integrations/helpers.test.ts` (`assignLanes` order, reply indent, self-loop, `+N` collapse at cap 8); component `apps/web/tests/modules/integrations/integrations-module.test.tsx` (grid renders first).
-- [ ] AC2 — Filters narrow the sequence view (req: R2)
+- [x] AC2 — Filters narrow the sequence view (req: R2)
   - Test layers: helpers (`encodeA2aFilters`/`decodeA2aFilters` round-trip, unknown keys dropped); component (filter change calls `inbox.timeline` with mapped input).
-- [ ] AC3 — Agent lifeline tooltip shows the Agent Card summary (req: R3)
+- [x] AC3 — Agent lifeline tooltip shows the Agent Card summary (req: R3)
   - Test layers: component (card fetched once on first open; `Diagnostic` on non-OK; outbound shows `auth.env` name and set/unset with no token text).
-- [ ] AC4 — Message arrow tooltip shows message detail (req: R4)
+- [x] AC4 — Message arrow tooltip shows message detail (req: R4)
   - Test layers: component (excerpt, status timeline, Trace link only for UUID run ids, remote refs from `inbox.requests({messageId})` when present).
-- [ ] AC5 — Configuration detail stays reachable but out of the default view (req: R5)
+- [x] AC5 — Configuration detail stays reachable but out of the default view (req: R5)
   - Test layers: component (drawer collapsed by default; existing Members testids still reachable when expanded; warning above grid).
-- [ ] AC6 — Sequence view updates live (req: R6)
+- [x] AC6 — Sequence view updates live (req: R6)
   - Test layers: component (a `message.*` planning event triggers a refetch bounded by the oldest loaded row; non-message frames ignored).
-- [ ] AC7 — Compact layout falls back to a stacked list (req: R7)
+- [x] AC7 — Compact layout falls back to a stacked list (req: R7)
   - Test layers: heavy browser proof `apps/web/tests/a2a-sequence.heavy.test.ts` (`test:heavy`, 639 px viewport → stacked rows, tooltip still opens).
-- [ ] AC8 — Empty and degraded states are explicit (req: R8, R9)
+- [x] AC8 — Empty and degraded states are explicit (req: R8, R9)
   - Test layers: component (empty state names `spur message send` / `a2a send`; timeline error renders `Diagnostic` without blanking the drawer; status icon + text); doc update checked in review.
 
 ### Q&A
@@ -115,18 +117,68 @@ Out of scope: cross-project stitching (feature T); sending or replying from this
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `apps/web/src/modules/integrations/A2aSequence.tsx` | 1-978 | The sequence surface: CSS-grid lifelines and arrows from `inbox.timeline` rows in `(createdAt, id)` order, reply indent by `threadId`, self-message loops, `+N` collapse past 8 lanes, filters (agent, direction, kind, status, thread, `TimeRangePresets` window) pushed into the read and round-tripped through the URL, `PinnableTooltip` lifeline headers (Agent Card summary fetched on first open, raw JSON when pinned, `Diagnostic` on failure) and arrow detail (excerpt, kind, delivery timeline, attempts, error, request key, UUID-only Trace link, remote refs), `message.*` refetch bounded by the oldest loaded row, ≤639 px stacked fallback, icon+text status, and the empty state naming `spur message send` / `a2a send`. |
+| `apps/web/src/modules/integrations/A2aConfigDrawer.tsx` | 1-385 | The previous Members content moved verbatim into a collapsed Configuration disclosure — card URL, inspector, CLI examples, intake counts, refusals, receipts — so the sequence owns the default view without losing a capability. |
+| `apps/web/src/modules/integrations/A2aTab.tsx` | 1-60 | Thin composition: no-inbound warning above the grid, then `A2aSequence`, then `A2aConfigDrawer`. |
+| `apps/web/src/modules/integrations/helpers.ts` | 587 (cap), 627 (`assignLanes`), 662 (`A2aFilters`), 687 (`encodeA2aFilters`), 717 (`decodeA2aFilters`) | Pure projections the view and its tests share: lane assignment with the 8-lane cap, and the `a2a.`-prefixed query codec that drops unknown keys so other tabs' params survive. |
+| `apps/web/src/modules/integrations/IntegrationsModule.tsx` | 13, 40-60 | Passes the typed oRPC client down as `SequenceClient`, so the sequence calls `inbox.timeline` through the client (never a hand-built URL — `members` is deepObject). |
+| `docs/design/integrations-module.md` | 218-244 | §3.1 flips planned → current; §3 A2A row describes the surface that ships. |
+| `apps/web/tests/modules/integrations/a2a-sequence.test.tsx` | 233-620 | R1 (grid first, lanes/arrows, reply indent, self-loop, +N), R2 (filter → `inbox.timeline` mapping, window bound, URL round-trip and restore), R3 (card once, raw JSON, `Diagnostic`, outbound credential with no token), R4 (arrow detail, non-UUID run, failed delivery), R5 (drawer collapsed + warning above grid), R6 (`message.*` refetch, other frames ignored), R8 (empty copy, timeline failure keeps the drawer, icon+text). |
+| `apps/web/tests/a2a-sequence.heavy.test.ts` | — | AC7 browser proof at 639 px: stacked rows with a working tooltip (runs in the light gate's related set: PASS). |
+| `apps/web/tests/modules/integrations/helpers.test.ts` | +208 | `assignLanes` order/indent/self-loop/cap and the filter codec round-trip. |
+| `apps/web/tests/test-helpers/rpc-client-mock.ts` | +2 | The mock grows `inbox.timeline`, since the sequence reads through the client. |
+
+**Notes.** The 639 px fallback is the same data rendered as a stacked list — no separate query, so filters and tooltips survive the breakpoint. Status is icon plus text; color only supplements. `A2aTab` sheds 330 lines and keeps only composition, which is what made the drawer move mechanical rather than a rewrite.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:623` (grid, lanes, arrows, reply indent, self-loop, `+N` past `LANE_CAP` 8 at `helpers.ts:587`); tests `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:233` |
+| R2 | MET | `helpers.ts:662` (`A2aFilters`), `:687` (`encodeA2aFilters`), `:717` (`decodeA2aFilters`); filters map into the read and round-trip through the URL — `a2a-sequence.test.tsx:289` (mapping, window bound, round-trip, restore-from-URL) |
+| R3 | MET | `A2aSequence.tsx:623` lifeline headers use `PinnableTooltip`; card fetched once on first open, raw JSON when pinned, `Diagnostic` on failure, outbound shows target + `authEnv` + set/unset with no token text — `a2a-sequence.test.tsx:381` |
+| R4 | MET | Arrow detail (excerpt, kind, timeline with attempts/error, request key, UUID-only Trace link, remote refs) — `a2a-sequence.test.tsx:464` |
+| R5 | MET | `A2aConfigDrawer.tsx:156` holds the previous Members content; collapsed by default; the no-inbound warning sits above the grid — `A2aTab.tsx:1-60`, test `a2a-sequence.test.tsx:546` |
+| R6 | MET | `message.*` frames refetch through the oldest loaded row, other frames ignored — `a2a-sequence.test.tsx:565` |
+| R7 | MET | `A2aSequence.tsx:623` stacked fallback at ≤639 px; browser proof `apps/web/tests/a2a-sequence.heavy.test.ts` (PASS, 6.4 s, inside the light gate's related set) |
+| R8 | MET | Icon + text status (never color alone), empty state names `spur message send` / `a2a send` — `a2a-sequence.test.tsx:592` |
+| R9 | MET | `docs/design/integrations-module.md:218` §3.1 now reads "current" and describes the shipped surface |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — sequence view leads the tab (R1) | MET | test | `a2a-sequence.test.tsx:233`; `helpers.test.ts` (`assignLanes`) |
+| AC2 — filters narrow the view (R2) | MET | test | `a2a-sequence.test.tsx:289` |
+| AC3 — lifeline tooltip shows the Agent Card summary (R3) | MET | test | `a2a-sequence.test.tsx:381` |
+| AC4 — arrow tooltip shows message detail (R4) | MET | test | `a2a-sequence.test.tsx:464` |
+| AC5 — configuration stays reachable (R5) | MET | test | `a2a-sequence.test.tsx:546` |
+| AC6 — live updates (R6) | MET | test | `a2a-sequence.test.tsx:565` |
+| AC7 — compact stacked list (R7) | MET | command | `apps/web/tests/a2a-sequence.heavy.test.ts` via `spur task gate 1454 light` (PASS) |
+| AC8 — empty and degraded states (R8, R9) | MET | test | `a2a-sequence.test.tsx:592`; `docs/design/integrations-module.md:218` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-11-26T01:14:58.143Z todo → wip (system)
+- 2026-11-26T01:15:24.631Z wip → testing (system)
+- 2026-11-26T01:15:26.978Z testing → done (system)
+

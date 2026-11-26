@@ -2,7 +2,7 @@
 kind: design
 title: "Integrations Board Module and MCP/A2A Protocol Fixes (A82)"
 created_at: 2026-11-21
-updated_at: 2026-11-23
+updated_at: 2026-11-26
 related: [A82, A8, B9, G9, G91, I61, J94, K42, A81]
 tags: [system, A82, web, mcp, a2a]
 doc: design/integrations-module
@@ -183,7 +183,7 @@ failed identity read leaves the rest of the status visible (1437 R6).
 | --- | --- | --- |
 | Summary | One row per surface — `MCP · project endpoint`, `MCP · gateway root`, `A2A · received`, `A2A · sent` (one config per protocol drives each pair; the rows split runtime endpoints and traffic direction): state chip (`off` / `on` / `on · token unset` as error), endpoint URL, auth env name and whether it is set, 24h calls, error rate, last call, auth denials. Plus the window's six usage slices — tool latency (p50/p95 with unmeasured calls counted and a null percentile as `—`), resource reads, actor attribution, A2A intake, auth refusals by surface and reason, and repeated `(tool, errorCode)` failures with their first→last range — each with its own empty state. Plus a gateway counters strip when served | status + usage |
 | MCP | Namespace line (`namespace <ns> · from <config\|plugin-manifest\|none>`), tool table (origin badge, read/write badge, the window's calls / failures / p50-p95 / last call joined from `usage.tools` by name — an uncalled but advertised tool reads `0 / 0 / — / —` — and a schema drawer) with a case-insensitive name filter that never hides the exposure findings or the `spur://` list and a header badge totalling the window's call attempts, exposure findings with their remedies, the window's usage rows whose tool the catalog no longer advertises (latency, counted unmeasured calls), resource reads and repeated failures, `spur://` resource list, recent calls (tool, duration, outcome, errorCode), a **per-agent Client config TabView** (1449 R3 — nine `ModuleTabs` agents in their own native format: Codex/Grok TOML, omp YAML, the JSON trees for Claude Code, pi, Gemini, OpenCode, OpenClaw and a generic HTTP client; a transport selector for the gateway stdio bridge, the project stdio bridge and direct HTTP with the 2026-07-28 floor; the endpoint always resolved from the status or the Board's own origin; and inline auth guidance that names the variable, never a stored value), the project command `spur mcp --url <endpoint>`, the gateway command `spur mcp --gateway` only when the gateway's own MCP entry is on, a JSON-RPC `server/discover` probe expanding the auth variable name only, and the **readiness pins** from §2.2 | status + usage + events + readiness |
-| A2A | One **Members** list, each row labelled `inbound` or `outbound`. Inbound rows: card URL, write-fenced badge with an on-demand **card inspector** (public JSON fetched under the current Board mount, with inline retry, while the listener is on) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project rows with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning, because nothing can reach the project. | status + usage + inbox + events |
+| A2A | A **cooperation sequence** is the primary content (A821, §3.1): one lifeline per participating inbox address, one arrow per message in `(createdAt, id)` order, replies indented under their thread, self-messages as loops, and lifelines past eight collapsed into an expandable `+N` column — a CSS grid with no chart dependency. Filters (agent, direction, kind, status, thread, plus the header's window) are pushed into `inbox.timeline` and mirrored to the URL under `a2a.`-prefixed keys; detail lives in the shared `PinnableTooltip`. Below it, a collapsed **Configuration** disclosure holds today's **Members** list with nothing removed, each row labelled `inbound` or `outbound`. Inbound rows: card URL, write-fenced badge with an on-demand **card inspector** (public JSON fetched under the current Board mount, with inline retry, while the listener is on) and the copyable `a2a card get -o json` / `a2a send -o json --request-payload …` examples, which name the card and the `--credential-helper` option but never a token; the window's per-member intake and this surface's own auth refusals; A2A tasks (sender `a2a`) with run state → Projects › Inbox and, for a UUID run, the **exact run** in Observability › Trace; outbound/cross-project rows with their declared credential state (`authEnv` name + set/unset) and one receipt list each, where every receipt shows the `remoteTaskId` / `remoteContextId` / `remoteBranch` ITS OWN run persisted (a ref it never wrote stays absent); event rows → Observability › System Events. An enabled listener with no inbound member renders a warning above the sequence, because nothing can reach the project. | status + usage + inbox + events |
 
 States: a loading skeleton; an `EmptyState` when every surface is off, with the config keys that
 enable each one; a `Diagnostic` with retry when `integrations.status` fails. Two inline warnings are
@@ -215,7 +215,7 @@ places and follows light/dark without a second palette. Every other prefix keeps
 and an uncatalogued prefix keeps its fallback (hashed palette entry in Summary, muted text in System
 Events); the text label is always rendered, so color is never the only signal.
 
-### 3.1 A2A cooperation sequence (A821, planned)
+### 3.1 A2A cooperation sequence (A821, current)
 
 The A2A tab leads with a **sequence view**: one lifeline per inbox address that took part in the
 window, and one arrow per `inbox_messages` row from `fromId` to `toId` in `(createdAt, id)` order.
@@ -250,9 +250,10 @@ window is the module header's `TimeRangePresets` window.
 - **Status.** Status is shown as an icon plus text on the arrow label. Color only supplements it,
   following DESIGN.md.
 - **Narrow screens.** At 639 px or less the grid becomes a stacked list of
-  `sender → receiver · kind · status · time` rows.
-- **Filters.** Filters are serialized to the URL query (`?tab=a2a&members=…&kind=…`) so a view can
-  be shared and restored.
+  `sender → receiver · kind · status · time` rows, with the filter row and the tooltips intact.
+- **Filters.** Filters are serialized to the URL query under `a2a.`-prefixed keys
+  (`?tab=a2a&a2a.members=…&a2a.kind=…`) so a view can be shared and restored, and an unknown key is
+  dropped on read. The prefix is what keeps another tab's query params intact through a write.
 - **Live updates.** `message.*` frames refetch the newest page through the oldest loaded row, the
   same refresh rule Projects › Inbox uses.
 
@@ -277,9 +278,12 @@ The tooltip content depends on what it is attached to:
   remote task, context and branch refs when that receipt persisted them (1440 R2).
 
 **Configuration drawer.** Today's Members list moves into a collapsed **Configuration** disclosure
-below the sequence, with nothing removed: card URL, inspector, CLI examples, intake counts, auth
-refusals, receipt lists and the no-inbound-member warning. The no-inbound-member warning stays
-visible above the sequence. When the window has no traffic, the empty state names
+below the sequence, with nothing removed and no `data-testid` renamed: member rows with their
+direction labels, card URL, inspector, CLI examples, intake counts, auth refusals, the A2A task
+list, receipt lists and the event rows. The collapsed state is the default, so the sequence owns
+the view. The no-inbound-member warning is the one exception: it stays visible **above** the
+sequence, because a listener that serves no inbound member is unusable and an operator must not
+have to open a disclosure to learn that. When the window has no traffic, the empty state names
 `spur message send` or `a2a send` as the first step.
 
 The boundary with Projects › Inbox: Inbox is where you act (compose, reply, mark read) on one

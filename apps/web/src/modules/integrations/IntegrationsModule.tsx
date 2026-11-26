@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import ModuleIcon from '../../components/ModuleIcon';
 import {
     Button,
@@ -10,6 +10,7 @@ import {
     ModuleTabs,
     TimeRangePresets,
 } from '../../components/module-kit';
+import type { SequenceClient } from './A2aSequence';
 import { A2aTab } from './A2aTab';
 import { allSurfacesOff, enablementKeys, formatUptime, USAGE_WINDOWS, type UsageWindow } from './helpers';
 import { McpTab } from './McpTab';
@@ -32,6 +33,9 @@ function boardOrigin(): string | undefined {
 export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeams } = {}) {
     const data = useIntegrations(seams);
     const [activeId, setActiveId] = useState<string>(INTEGRATIONS_TABS[0]?.id ?? 'summary');
+    // The A2A sequence's client seam, memoized: `api.inbox` is a proxy rebuilt per property access, so
+    // an inline read would hand its effects a new identity every render and refetch in a loop.
+    const sequenceClient = useMemo<SequenceClient | undefined>(() => seams?.api?.inbox, [seams?.api]);
 
     const surfacesOn = data.status !== null && !allSurfacesOff(data.status);
     const chip = data.loading
@@ -134,6 +138,8 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
                         receipts={data.receipts}
                         events={data.a2aEvents}
                         usage={data.usage}
+                        window={data.window}
+                        {...(sequenceClient === undefined ? {} : { client: sequenceClient })}
                         {...(seams?.fetchCard === undefined ? {} : { fetchCard: seams.fetchCard })}
                     />
                 ) : (

@@ -546,3 +546,246 @@ export function formatUptime(seconds: number): string {
     if (minutes > 0) return `${minutes}m`;
     return `${whole}s`;
 }
+
+// ─── A2A cooperation sequence (A821 1454) ───────────────────────────────────────────────────────
+// The sequence view is a projection of `inbox.timeline` rows: lanes are addresses, arrows are
+// messages. Everything here is pure so the lane order, the reply indent, the `+N` collapse and the
+// filter codec are pinned without mounting a tree.
+
+/**
+ * One inbox row as the sequence reads it. The contract's `inboxMessageSchema` row is assignable to
+ * this shape; the list is deliberately narrower than the wire type so a fixture states only what the
+ * view consumes.
+ */
+export interface InboxRow {
+    id: string;
+    fromId: string;
+    toId: string;
+    body: string;
+    kind: 'chat' | 'request';
+    status: 'queued' | 'claimed' | 'delivered' | 'failed';
+    attempts: number;
+    error: string | null;
+    claimedAt: number | null;
+    deliveredAt: number | null;
+    readAt: number | null;
+    inReplyTo: string | null;
+    threadId: string;
+    requestKey: string | null;
+    taskId: string | null;
+    parentRunId: string | null;
+    createdAt: number;
+}
+
+/**
+ * The one column every address past the cap joins. It is not a legal inbox address (which is a
+ * member id, a task id, `operator` or `spur`), so it cannot collide with a real lifeline.
+ */
+export const OVERFLOW_LANE = '…';
+
+/** The column cap before the `+N` column takes over (design §3.1: "columns past eight"). */
+export const LANE_CAP = 8;
+
+/** One message as the grid draws it: which two columns it spans, and how deep it is indented. */
+export interface SequenceArrow {
+    /** The message id, so the caller can key the row and its tooltip. */
+    id: string;
+    /** The sender's column key (or {@link OVERFLOW_LANE}). */
+    fromLane: string;
+    /** The receiver's column key (or {@link OVERFLOW_LANE}). */
+    toLane: string;
+    /** Reply level: 0 for a thread root, then 1 + the parent's own depth. */
+    depth: number;
+    /** True when sender and receiver are the same address — drawn as a loop, never an arc. */
+    self: boolean;
+}
+
+/** The lifeline assignment for one page of rows. */
+export interface LaneAssignment {
+    /** The columns to draw, ranked by first appearance in `(createdAt, id)` order. */
+    lanes: string[];
+    /** The addresses past the cap; empty when every participant has its own column. */
+    overflow: string[];
+    /** One arrow per row, in the same `(createdAt, id)` order. */
+    arrows: SequenceArrow[];
+}
+
+/**
+ * The timeline's one order: `(createdAt, id)`. The server already returns oldest-first, but two rows
+ * written in the same millisecond are ordered by id so a re-sort cannot reshuffle them.
+ */
+export function sortTimeline(rows: readonly InboxRow[]): InboxRow[] {
+    return [...rows].sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/**
+ * Rank the participants by first appearance, then assign every message to its two columns.
+ *
+ * `lanes` arrives as a `+N` column when more than `cap` addresses took part: the arrows that touch an
+ * overflow address point at {@link OVERFLOW_LANE}, which is what the collapsed grid draws.
+ */
+export function assignLanes(rows: readonly InboxRow[], cap: number = LANE_CAP): LaneAssignment {
+    const ordered = sortTimeline(rows);
+    const participants: string[] = [];
+    const seen = new Set<string>();
+    for (const row of ordered) {
+        for (const address of [row.fromId, row.toId]) {
+            if (seen.has(address)) continue;
+            seen.add(address);
+            participants.push(address);
+        }
+    }
+    const limit = Number.isFinite(cap) ? Math.max(1, Math.floor(cap)) : participants.length;
+    const lanes = participants.slice(0, limit);
+    const overflow = participants.slice(lanes.length);
+    const laneSet = new Set(lanes);
+    const laneOf = (address: string): string => (laneSet.has(address) ? address : OVERFLOW_LANE);
+    // A reply's indent comes from its parent when that parent is on this page; a reply whose root is
+    // outside the page is still a reply, so it indents one level rather than claiming to be a root.
+    const depths = new Map<string, number>();
+    const arrows = ordered.map((row): SequenceArrow => {
+        const parent = row.inReplyTo === null ? undefined : depths.get(row.inReplyTo);
+        const depth = row.inReplyTo === null ? 0 : (parent ?? 0) + 1;
+        depths.set(row.id, depth);
+        return {
+            id: row.id,
+            fromLane: laneOf(row.fromId),
+            toLane: laneOf(row.toId),
+            depth,
+            self: row.fromId === row.toId,
+        };
+    });
+    return { lanes, overflow, arrows };
+}
+
+/** The five filters the sequence view owns; the time window stays with the module header. */
+export interface A2aFilters {
+    members?: string[];
+    direction?: 'in' | 'out' | 'both';
+    kind?: 'chat' | 'request';
+    status?: 'queued' | 'claimed' | 'delivered' | 'failed';
+    threadId?: string;
+    /** Inclusive ISO lower bound; absent = the header's window. */
+    since?: string;
+    /** Inclusive ISO upper bound. */
+    until?: string;
+}
+
+/** The query-key prefix every filter carries, so another tab's params survive a write. */
+const A2A_FILTER_PREFIX = 'a2a.';
+
+const A2A_DIRECTIONS: ReadonlyArray<NonNullable<A2aFilters['direction']>> = ['in', 'out', 'both'];
+const A2A_KINDS: ReadonlyArray<NonNullable<A2aFilters['kind']>> = ['chat', 'request'];
+const A2A_STATUSES: ReadonlyArray<NonNullable<A2aFilters['status']>> = ['queued', 'claimed', 'delivered', 'failed'];
+
+/** One of `values`, or undefined — an unknown value is dropped, never coerced into a default. */
+function oneOf<T extends string>(value: string | null, values: readonly T[]): T | undefined {
+    return value !== null && (values as readonly string[]).includes(value) ? (value as T) : undefined;
+}
+
+/** Encode the filters as `a2a.`-prefixed query params (multiple `a2a.members` entries per address). */
+export function encodeA2aFilters(filters: A2aFilters): URLSearchParams {
+    const params = new URLSearchParams();
+    for (const member of filters.members ?? []) {
+        if (member !== '') params.append(`${A2A_FILTER_PREFIX}members`, member);
+    }
+    for (const key of ['direction', 'kind', 'status', 'threadId', 'since', 'until'] as const) {
+        const value = filters[key];
+        if (value !== undefined && value !== '') params.set(`${A2A_FILTER_PREFIX}${key}`, value);
+    }
+    return params;
+}
+
+/**
+ * The search string with this view's filters replaced: every other param is preserved exactly as it
+ * was, so writing a filter cannot clobber another tab's state (or the host's).
+ */
+export function withA2aFilters(currentSearch: string, filters: A2aFilters): string {
+    const params = new URLSearchParams(currentSearch);
+    for (const key of [...params.keys()]) {
+        if (key.startsWith(A2A_FILTER_PREFIX)) params.delete(key);
+    }
+    for (const [key, value] of encodeA2aFilters(filters)) params.append(key, value);
+    return params.toString();
+}
+
+/**
+ * Decode the filters this view owns from a query string. Every other param — another tab's, the
+ * host's — is dropped here and left untouched in the URL, because this codec only ever writes its
+ * own prefix.
+ */
+export function decodeA2aFilters(query: string | URLSearchParams): A2aFilters {
+    const params = typeof query === 'string' ? new URLSearchParams(query) : query;
+    const filters: A2aFilters = {};
+    const members = params.getAll(`${A2A_FILTER_PREFIX}members`).filter((member) => member !== '');
+    if (members.length > 0) filters.members = members;
+    const direction = oneOf(params.get(`${A2A_FILTER_PREFIX}direction`), A2A_DIRECTIONS);
+    if (direction !== undefined) filters.direction = direction;
+    const kind = oneOf(params.get(`${A2A_FILTER_PREFIX}kind`), A2A_KINDS);
+    if (kind !== undefined) filters.kind = kind;
+    const status = oneOf(params.get(`${A2A_FILTER_PREFIX}status`), A2A_STATUSES);
+    if (status !== undefined) filters.status = status;
+    const threadId = params.get(`${A2A_FILTER_PREFIX}threadId`);
+    if (threadId !== null && threadId !== '') filters.threadId = threadId;
+    const since = params.get(`${A2A_FILTER_PREFIX}since`);
+    if (since !== null && since !== '') filters.since = since;
+    const until = params.get(`${A2A_FILTER_PREFIX}until`);
+    if (until !== null && until !== '') filters.until = until;
+    return filters;
+}
+
+/** How many rows one sequence page reads; the contract caps a page at 500. */
+export const SEQUENCE_PAGE_LIMIT = 200;
+
+/** The `inbox.timeline` input the sequence asks for (epoch-ms bounds, like the procedure). */
+export interface A2aTimelineInput {
+    members?: string[];
+    direction?: 'in' | 'out' | 'both';
+    kind?: 'chat' | 'request';
+    status?: 'queued' | 'claimed' | 'delivered' | 'failed';
+    threadId?: string;
+    since?: number;
+    until?: number;
+    limit?: number;
+    cursor?: string;
+}
+
+/** An ISO bound as the procedure's inclusive epoch-ms filter; an unparseable one is dropped. */
+function epochMs(value: string | undefined): number | undefined {
+    if (value === undefined || value === '') return undefined;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Map the view's filters onto the timeline procedure: the filters themselves, plus the header's
+ * `TimeRangePresets` window as the lower bound unless the filters name one.
+ */
+export function a2aTimelineInput(
+    filters: A2aFilters,
+    window?: UsageWindow,
+    page: { limit?: number; cursor?: string } = {},
+): A2aTimelineInput {
+    const input: A2aTimelineInput = { limit: page.limit ?? SEQUENCE_PAGE_LIMIT };
+    if (filters.members !== undefined && filters.members.length > 0) input.members = filters.members;
+    if (filters.direction !== undefined) input.direction = filters.direction;
+    if (filters.kind !== undefined) input.kind = filters.kind;
+    if (filters.status !== undefined) input.status = filters.status;
+    if (filters.threadId !== undefined) input.threadId = filters.threadId;
+    if (page.cursor !== undefined) input.cursor = page.cursor;
+    const since = filters.since ?? (window === undefined ? undefined : sinceForWindow(window));
+    const sinceMs = epochMs(since);
+    if (sinceMs !== undefined) input.since = sinceMs;
+    const untilMs = epochMs(filters.until);
+    if (untilMs !== undefined) input.until = untilMs;
+    return input;
+}
+
+/**
+ * Merge a fresh page over the rows already on screen: the fresh copy of a row wins, a row the page no
+ * longer carries stays (older pages are still loaded), and the result keeps the one timeline order.
+ */
+export function mergeTimelinePages(fresh: readonly InboxRow[], loaded: readonly InboxRow[]): InboxRow[] {
+    const freshIds = new Set(fresh.map((row) => row.id));
+    return sortTimeline([...fresh, ...loaded.filter((row) => !freshIds.has(row.id))]);
+}
