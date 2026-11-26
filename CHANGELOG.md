@@ -142,7 +142,7 @@
 - inbox and system-event deep links go through `withBase` and stay inside the gateway prefix, and the empty state counts gateway MCP and A2A outbound members before declaring every surface off (a19639d83)
   <!-- src: apps/web/src/modules/integrations/helpers.ts:182, apps/web/src/modules/integrations/helpers.ts:187, apps/web/src/modules/integrations/helpers.ts:236 · confidence: HIGH -->
 - behind a TLS proxy the caller base URL honours `x-forwarded-proto` instead of falling back to `http`, and a disabled fleet member's card URL renders as text rather than a link that answers 404 (2100e6358)
-  <!-- src: packages/app/src/services/integrations-service.ts:104, apps/web/src/modules/integrations/A2aTab.tsx:176 · confidence: HIGH -->
+  <!-- src: packages/app/src/services/integrations-service.ts:135, apps/web/src/modules/integrations/A2aConfigDrawer.tsx:228 · confidence: HIGH -->
 - an A2A cancel answers the task with `metadata.runStopped`, the card inspector fetches under the current Board mount with credentials omitted and redirects refused, and gateway MCP discovery reuses the one project listing so the root snapshot and the routing table agree (b1feb3203)
   <!-- src: apps/server/src/modules/a2a/projection.ts:49, apps/web/src/modules/integrations/A2aTab.tsx:37, packages/app/src/services/project-gateway.ts:988 · confidence: HIGH -->
 - the pipeline's `escalate` hop reads the operator question through the `options.path` key its action declares, so an implement escalation pauses on the question instead of failing the run with `file.read.into-var: path is required` (b4493ae83)
@@ -1012,7 +1012,7 @@ filings) and assert no code, API or version fact._
 - launch a Windows async workflow worker through `Start-Process` with a data-only argv handoff, refusing a `.cmd`/`.bat` launcher that would re-expand the arguments (31134da87)
   <!-- src: apps/cli/src/commands/workflow/shared.ts:38, apps/cli/src/commands/workflow/shared.ts:61 · confidence: HIGH -->
 - run inbox row/event mutations through the adapter's synchronous transaction facade instead of a chained `BEGIN IMMEDIATE` on the shared connection, so a failed event write rolls back only its own mutation (69c2d9d61)
-  <!-- src: packages/domain/src/dao/inbox-dao.ts:165, patches/README.md:3 · confidence: HIGH -->
+  <!-- src: packages/domain/src/dao/inbox-dao.ts:179 · confidence: HIGH -->
 - fence inbox settle and release to the exact claim generation (`{id, attempts}`), so a stale claimant cannot mutate a replacement claim, and return claims in created order (69c2d9d61)
   <!-- src: packages/domain/src/dao/inbox-dao.ts:12, packages/domain/src/dao/inbox-dao.ts:276, packages/app/src/services/inbox-service.ts:282 · confidence: HIGH -->
 - reject a replayed request key whose task or parent-run metadata conflicts with the stored row, instead of serving that row as the idempotent answer (69c2d9d61)
@@ -1032,7 +1032,7 @@ filings) and assert no code, API or version fact._
 
 ### Changed
 - upgrade the `@gobing-ai/ts-*` catalog from 0.5.32 to 0.5.33 and superskill from 0.3.39 to 0.3.42: the engine bump is what supplies the per-job scheduler `timeoutMs`, the ts-db synchronous-transaction patch is regenerated at 0.5.33, and the retired dual-workflow-engine 0.5.28 patch is dropped (f327408ef)
-  <!-- src: package.json:37, package.json:44, package.json:143, package.json:144, patches/README.md:3 · confidence: HIGH -->
+  <!-- src: package.json:37, package.json:44, packages/domain/src/dao/inbox-dao.ts:179 · confidence: HIGH -->
 
 ### Other
 - align the role-SSOT references with ADR-078 and note the shipped todo projection's declared ordering in D7 (55ec783a8)
