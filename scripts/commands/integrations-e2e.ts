@@ -593,8 +593,10 @@ export async function runIntegrationsE2e(
     } finally {
         loop?.kill();
         serve?.kill();
-        if (!keep) rmSync(scratch, { recursive: true, force: true });
+        // A failed run keeps its scratch: the member-loop and serve logs are the only evidence of why.
+        if (!keep && rows.every((row) => row.status === 'passed')) rmSync(scratch, { recursive: true, force: true });
     }
+    const kept = keep || rows.some((row) => row.status !== 'passed');
 
     // Self-check before writing: a receipt must never carry a token, even after redaction failed.
     const leaked = rows.some((row) => row.evidence.includes(MCP_TOKEN) || row.evidence.includes(A2A_TOKEN));
@@ -615,7 +617,7 @@ export async function runIntegrationsE2e(
     const receipt = {
         artifact: ARTIFACT,
         generatedAt: new Date().toISOString(),
-        context: { port, scratch: keep ? scratch : '(removed)', member },
+        context: { port, scratch: kept ? scratch : '(removed)', member },
         steps: rows,
         passed: rows.filter((row) => row.status === 'passed').length,
         failed,
@@ -636,7 +638,7 @@ export async function runIntegrationsE2e(
             `integrations-e2e: ${failed} step(s) failed: ${rows
                 .filter((row) => row.status === 'failed')
                 .map((row) => row.step)
-                .join(', ')}`,
+                .join(', ')}; logs kept in ${scratch}/.spur/logs`,
         );
         return 1;
     }
