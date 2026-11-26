@@ -87,7 +87,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | Capability                                                 | Command                                            | Backed by                                  |
 | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
 | Local planning Board and launcher | Existing Board/task/feature API | server/web contracts |
-| Project-owned Board contributions | Embedded project configuration and the installed Board; native React contributions and URL-backed iframe compatibility | A8; [contribution contract](design/downstream-board-modules.md) |
+| Project-owned Board contributions | Embedded project configuration and the installed Board; native React contributions, optional in-process module API routes and URL-backed iframe compatibility | A8, A84; [contribution contract](design/downstream-board-modules.md) |
 | Project scaffold                                           | `spur self init`                                        | local CLI + DAOs                           |
 | Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
@@ -127,7 +127,7 @@ Legacy top-level `init`, `serve`, `status`, `maintain`, and `migrate` remain hid
 - **Meta-tooling, research, and context layers** — stay live in cc-agents until the core stabilizes.
 - **Spur-owned capability conversion** — installation and per-platform adapter generation belong
   to Superskill (ADR-032); reconsider only if that ownership boundary changes.
-- **General web plugin container & multi-workspace** — remain deferred (ADR-012 lesson). A8 reactivates the narrower project-owned UI contribution capability above; it does not include backend plugins, process management, or simultaneous multi-workspace composition.
+- **General web plugin container & multi-workspace** — remain deferred (ADR-012 lesson). A8 reactivates the narrower project-owned UI contribution capability above; its follow-up A84 adds only one optional same-origin API handler inside the project's own `spur` server. Neither includes a general backend plugin container, process management, or simultaneous multi-workspace composition.
 - **Scheduler auto-trigger** — lifecycle events exist on the engine's EventBus seam (ADR-022);
   the scheduler consumer comes later.
 - **Asset inspection / SSOT asset model** — old `@spur/assets` discarded; rebuild only if needed.

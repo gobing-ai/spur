@@ -3,8 +3,8 @@ kind: design
 title: Downstream Board module configuration and contributions
 status: accepted
 created_at: 2026-09-27
-updated_at: 2026-11-06
-related: [A8, docs/plans/2026-09-27-dynamic-board-modules-brainstorm.md]
+updated_at: 2026-11-26
+related: [A8, A84, docs/plans/2026-09-27-dynamic-board-modules-brainstorm.md]
 tags: [contract, A8, web, config]
 ---
 
@@ -109,6 +109,23 @@ When concrete interaction requires a bridge, add narrowly defined versioned post
 Validate/resolve config and establish fixed catalog/asset handlers before Bun.serve. Browser imports happen after the listener starts and before registry/router construction; they do not add server routes. Changes to config or native builds require server restart and browser reload. No watcher, live registry updates, ESM cache invalidation, or resource-draining protocol is part of v1. Each project server owns its own catalog/assets; project switching follows the existing origin navigation.
 
 No downstream server entry is required or imported. Native components may call existing supported APIs; an application-specific backend remains separately owned. This proposal changes the local Bun Board; Cloudflare Worker deployments do not acquire filesystem module loading. Future Worker support needs a deployment-specific asset/catalog contract.
+
+### 4.5 Optional module backend API handlers — accepted, not implemented (A84)
+
+A `type: react` declaration may also carry `api`: a non-empty project-relative path to one built ESM bundle. It resolves against the project root rather than the module `directory`, so several modules can share one bundle. Startup rejects an absolute path, a lexical escape, a missing or non-file target, and a symlink resolving outside the real project root; the resolved path stays on the internal asset root and never enters the public catalog. The bundle exports a Web-Fetch handler, published as type-only exports of `@gobing-ai/spur/board`:
+
+```ts
+export interface BoardModuleApiContext {
+    readonly projectPath: string;
+    readonly moduleId: string;
+}
+
+export interface BoardModuleApiHandler {
+    fetch(request: Request, ctx: BoardModuleApiContext): Response | Promise<Response>;
+}
+```
+
+The project server mounts `/api/modules/<id>` and `/api/modules/<id>/*` ahead of its oRPC `/api/*` handlers, so the host guard and CSRF still apply and the gateway reaches the route same-origin as `/<project>/api/modules/<id>/*`. The prefix is stripped with the query string, method, headers and body preserved; unknown, disabled or API-less modules answer 404 JSON, and a throwing or malformed handler answers 500 JSON without stopping the server. Handlers load lazily and are cached per resolved path and `mtimeMs`, so a rebuilt bundle takes effect on the next request while adding or removing a declaration still needs a restart. The Board trusts this code inside the server process: keep paths confined, cache-busted and error-isolated, and do not extend the contract to subprocess or non-JavaScript backends.
 
 ## 5. Tradeoffs and proof sequence
 

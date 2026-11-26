@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-28T01:13:21.763Z"
-updated_at: "2026-11-07T02:26:45.409Z"
+updated_at: "2026-11-26T18:59:52.289Z"
 ---
 
 # A8: Downstream Spur Board modules and embedded resources
@@ -208,6 +208,10 @@ All 15 feature scenarios are linked. Planning checks and 35 ready-checklist rows
 Robin approved this plan and requested feature updates/new features and implementation tasks on 2026-11-05; continued the same corpus conversion in the next message. Approval covers planning this scope, not deployment, new public verbs, new dependencies, gate weakening, or production data changes.
 
 Plan: `docs/plans/2026-11-05-simplification-and-product-enhancement.md`. Review: `docs/reports/2026-11-05-codebase-review.md`. Historical scenarios, completed tasks and verification receipts remain intact; new scenarios describe follow-up work and do not retroactively certify implementation. Conditional cleanup remains unscheduled until the named decision/evidence gate is met.
+
+### Backend API handlers delegated to A84 — 2026-11-26
+
+A8's `Out` list keeps its delivered boundary: this feature added no server entry and imported no downstream backend code. Module-served backend routes are a later, bounded extension owned by child feature **A84** (`Board module backend API handlers: optional in-process Web-Fetch routes (/api/modules/:id/*)`, task 1455). A84 keeps the parts of this boundary that mattered — no required server entry, no generic server plugin container — and confines the optional handler to one declared project-relative ESM bundle behind the existing host guard and CSRF. Decision record: ADR-128 amendment of 2026-11-26.
 
 ## History
 
