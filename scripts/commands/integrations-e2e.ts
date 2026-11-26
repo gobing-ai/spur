@@ -115,6 +115,9 @@ function scaffold(dir: string, webDistPath?: string): string {
             'version: "1.2"',
             'name: integrations-e2e',
             'agent:',
+            // The drain resolves `inline` through agent.default (a role; coder = the stub's standard tier),
+            // not the member's pin; without it raw-binary priority picked a real `pi` on PATH.
+            '  default: coder',
             '  executors:',
             `    - name: ${EXECUTOR}`,
             `      agent: ${AGENT_TYPE}`,
@@ -187,6 +190,7 @@ function startServe(dir: string, port: number, mcpToken = MCP_TOKEN): Subprocess
             // Throwaway roots must never touch the operator's real project registry.
             SPUR_PROJECTS_FILE: join(dir, 'projects.json'),
             SPUR_SLASH_COMMANDS_FILE: join(dir, 'slash_commands.json'),
+            SPUR_SKIP_GLOBAL_CONFIG: 'true',
             SPUR_MCP_ENABLED: '1',
             SPUR_MCP_AUTH_ENV: MCP_AUTH_ENV,
             // A configured namespace plus the scaffolded workflows: the status read's namespace
@@ -213,6 +217,9 @@ function startMemberLoop(dir: string, binDir: string, specId: string) {
         env: {
             ...getEnvVars(),
             PATH: `${binDir}:${getEnvVar('PATH') ?? ''}`,
+            // The operator's global roster must not outrank the scratch stub: under `bun run`,
+            // node_modules/.bin puts a real `pi` on PATH and a global pi executor won the drain.
+            SPUR_SKIP_GLOBAL_CONFIG: 'true',
         },
     });
 }
