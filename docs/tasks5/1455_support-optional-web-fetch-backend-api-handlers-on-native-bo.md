@@ -4,7 +4,7 @@ name: Support optional Web-Fetch backend API handlers on native Board modules (/
 status: done
 template: feature-impl
 created_at: 2026-11-26T18:16:32.513Z
-updated_at: "2026-11-26T20:01:06.290Z"
+updated_at: "2026-11-26T20:34:57.135Z"
 
 priority: P1
 ac_numbering: task-local
@@ -177,21 +177,21 @@ routes contract (`docs/design/downstream-board-modules.md`), the end-user trust 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/config/src/board-modules.ts:94` adds `api: z.string().min(1).optional()` to the strict react variant only; `apps/cli/schemas/spur-config.schema.json:189` mirrors it for the `$schema` path. Tests: `packages/config/tests/board-modules.test.ts` ("a react declaration carries a non-empty project-relative api path", "an empty api or one on an iframe declaration is rejected by the schema", "the shipped JSON Schema mirrors the field"). |
-| R2 | MET | `apps/web/src/modules/contribution.ts:47` and `:64` declare `BoardModuleApiContext` / `BoardModuleApiHandler`; `apps/cli/board/index.d.ts:46` and `:62` are the regenerated published declarations (`spur builder emit-board-types` reports `board:changed`, kit unchanged). `bun run typecheck` passes across all workspaces, and the entry carries no value import. |
-| R3 | MET | `packages/app/src/services/board-catalog-service.ts:130` resolves `api` against the project root and rejects absolute/escaping paths; `:284` adds the `isFile` + fail-closed `realPath` confinement; `:39` exposes `apiPath` on `BoardModuleAssetRoot` only, which is absent from the catalog DTO asserted in the same test file ("a valid project-relative bundle lands on the asset root only"). |
-| R4 | MET | `apps/server/src/modules/board/index.ts:217` rewrites and dispatches, `:297` mounts ahead of the oRPC `/api/*` handler. Tests in `apps/server/tests/board-module-api.test.ts`: GET/POST rewrite with query + body + `{ projectPath, moduleId }`, 404 for unknown/disabled/API-less, 500 for a throwing or fetch-less bundle with the server still serving, and a post-startup symlink escape refused at request time. |
-| R5 | MET | `apps/server/src/modules/board/index.ts:171` caches per real path and `mtimeMs`, `:201` evicts the previous evaluation before re-requiring. Tests: "a rebuilt bundle takes effect on the next request" (v1 → v2 without restart) and "two modules sharing one bundle share one loaded instance". |
-| R6 | MET | `apps/server/tests/board-module-api.test.ts` "module API through the gateway (R6/AC6)" drives `createGatewayHandler` against a real `Bun.serve` upstream: GET with a query string and POST with a JSON body both reach the handler through `/<project>/api/modules/<id>/...`, and no `access-control-allow-origin` header appears anywhere. Authoring docs updated in the same change: `docs/design/downstream-board-modules.md` §4.5/§6.1/§6.6, `docs/help/how_to_customize_project_modules.md` §7, `docs/03_ARCHITECTURE.md`. |
+| R1 | MET | `packages/config/src/board-modules.ts:94` adds optional non-empty `api` to the strict react variant; `apps/cli/schemas/spur-config.schema.json:189` mirrors it (`minLength: 1`). `(cd packages/config && bun test tests/board-modules.test.ts)` → 20 pass, 0 fail (re-run 2026-11-26). |
+| R2 | MET | `apps/web/src/modules/contribution.ts:47` / `:64` declare `BoardModuleApiContext` / `BoardModuleApiHandler`; `apps/cli/board/index.d.ts:46` / `:62` carry the emitted interfaces. `bun run typecheck` → all workspaces exit 0 (re-run). |
+| R3 | MET | `packages/app/src/services/board-catalog-service.ts:130` resolves `api` against the project root; `packages/app/src/services/board-catalog-service.ts:284` enforces `isFile` + fail-closed `realPath`; `packages/app/src/services/board-catalog-service.ts:39` keeps `apiPath` on `BoardModuleAssetRoot` only. `(cd packages/app && bun test tests/services/board-catalog-service.test.ts)` → 21 pass, 0 fail. |
+| R4 | MET | `apps/server/src/modules/board/index.ts:217` dispatch (404 before bundle touch, request-time real-path re-check, prefix strip, 500 isolation); `apps/server/src/modules/board/index.ts:297` mounts inside `registerModules`, which `apps/server/src/bootstrap.ts:37` runs after `mountMiddleware` and before oRPC. `apps/server/tests/board-module-api.test.ts:140` through `:240` pass. |
+| R5 | MET | `apps/server/src/modules/board/index.ts:171` per-real-path `mtimeMs` cache; `apps/server/src/modules/board/index.ts:201` evicts the require cache entry before re-evaluation (documented deviation from `?v=`, Solution §Approach). `apps/server/tests/board-module-api.test.ts:262` and `:282` pass. |
+| R6 | MET | `apps/server/tests/board-module-api.test.ts:306` drives `createGatewayHandler` against a real upstream with GET+query and POST+JSON body, asserting no CORS header; docs updated in the same commit 63d226ecf (`docs/design/downstream-board-modules.md`, `docs/help/how_to_customize_project_modules.md`, `docs/03_ARCHITECTURE.md`). `(cd apps/server && bun test tests/board-module-api.test.ts)` → 18 pass, 0 fail. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Config schema accepts optional `api` on react modules and rejects invalid shapes (req: R1) | MET | test | `packages/config/tests/board-modules.test.ts` — api accepted on react; `api: ""` and `api` on an iframe throw `z.ZodError`; `additionalProperties: false` still asserted for both variants. |
-| AC2 — `@gobing-ai/spur/board` publishes the type-only API handler contract (req: R2) | MET | test | `apps/cli/board/index.d.ts:46`, `:62` carry both interfaces after `spur builder emit-board-types`; `bun run typecheck` PASS (all workspaces, incl. the emitted declarations). |
-| AC3 — Startup preparation fails closed on missing or escaping `api` paths (req: R3) | MET | test | `packages/app/tests/services/board-catalog-service.test.ts` — absolute path, `../` escape, missing file and escaping symlink each throw `BoardModuleConfigError` naming `"kanban"` and the reason; a valid bundle lands on `roots[].apiPath` and never in `catalog`. |
-| AC4 — `/api/modules/:id/*` dispatches rewritten requests and isolates errors (req: R4) | MET | test | `apps/server/tests/board-module-api.test.ts` — `path === "/items"` with `?limit=5` and `{ projectPath, moduleId: "demo" }`; POST body preserved; 404 JSON for unknown/disabled/API-less; 500 JSON for throwing and fetch-less bundles while `/api/health` still answers. |
-| AC5 — Rebuilding `api.js` reloads automatically on mtime change (req: R5) | MET | test | `apps/server/tests/board-module-api.test.ts` — `/api/modules/demo/version` returns `v1`, the bundle is rewritten with an advanced `mtimeMs`, the next request returns `v2` with no restart; the shared-bundle case reports one evaluation for both modules. |
-| AC6 — Gateway proxies `/<project>/api/modules/:id/*` same-origin end-to-end (req: R6) | MET | test | `apps/server/tests/board-module-api.test.ts` "module API through the gateway (R6/AC6)" — GET and POST through `createGatewayHandler` reach the real upstream handler with query string and body intact and no CORS header configured. |
+| AC1 — Config schema accepts optional `api` on react modules and rejects invalid shapes (req: R1) | MET | test | `packages/config/tests/board-modules.test.ts` — 20 pass (re-run this session). |
+| AC2 — `@gobing-ai/spur/board` publishes the type-only API handler contract (req: R2) | MET | command | `apps/cli/board/index.d.ts:46`, `:62`; `bun run typecheck` exit 0 across workspaces (re-run). |
+| AC3 — Startup preparation fails closed on missing or escaping `api` paths (req: R3) | MET | test | `packages/app/tests/services/board-catalog-service.test.ts` — 21 pass (re-run). |
+| AC4 — `/api/modules/:id/*` dispatches rewritten requests and isolates errors (req: R4) | MET | test | `apps/server/tests/board-module-api.test.ts:140`, `:172`, `:194`, `:217`, `:240` — pass (re-run). |
+| AC5 — Rebuilding `api.js` reloads automatically on mtime change (req: R5) | MET | test | `apps/server/tests/board-module-api.test.ts:262`, `:282` — pass (re-run). |
+| AC6 — Gateway proxies `/<project>/api/modules/:id/*` same-origin end-to-end (req: R6) | MET | test | `apps/server/tests/board-module-api.test.ts:306` — pass (re-run). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
