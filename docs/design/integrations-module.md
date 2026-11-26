@@ -215,6 +215,77 @@ places and follows light/dark without a second palette. Every other prefix keeps
 and an uncatalogued prefix keeps its fallback (hashed palette entry in Summary, muted text in System
 Events); the text label is always rendered, so color is never the only signal.
 
+### 3.1 A2A cooperation sequence (A821, planned)
+
+The A2A tab leads with a **sequence view**: one lifeline per inbox address that took part in the
+window, and one arrow per `inbox_messages` row from `fromId` to `toId` in `(createdAt, id)` order.
+A reply is indented under its `threadId`, and its `inReplyTo` parent is named in the tooltip. All
+participants come from inbox rows, so nothing new is persisted:
+
+- local fleet members are plain addresses;
+- inbound A2A callers are the `a2a` sender of the `a2a:` request-key family;
+- outbound peers are the recipient address of a local member's request.
+
+The remote side's own dialog is not visible locally, so it is a separate feature (T).
+
+**Read (additive).** `inbox.timeline` sits beside `inbox.list`, which is unchanged. It is a
+project-scoped, side-effect-free read with these inputs:
+
+- optional `members[]`, `direction` (`in|out|both` relative to `members`), `kind`, `status`,
+  `threadId`, `since` and `until`;
+- `limit` (at most 500) and the same opaque `{createdAt, id}` keyset cursor `list` uses, ordered
+  oldest-first.
+
+Each row is the existing message projection: id, from, to, kind, status, thread, reply, request
+key, run and timestamps. The body is truncated to an excerpt, and the full body stays in
+`inbox.thread`. Filters are pushed into the DAO query and never applied in the client. The default
+window is the module header's `TimeRangePresets` window.
+
+**Rendering.** The view is a CSS grid with no chart dependency:
+
+- **Columns.** Each column is a lifeline. Columns past eight collapse into a `+N` column that can be
+  expanded.
+- **Rows.** Each row is one message. The arrow spans the sender and receiver columns, and a
+  self-message is drawn as a loop.
+- **Status.** Status is shown as an icon plus text on the arrow label. Color only supplements it,
+  following DESIGN.md.
+- **Narrow screens.** At 639 px or less the grid becomes a stacked list of
+  `sender → receiver · kind · status · time` rows.
+- **Filters.** Filters are serialized to the URL query (`?tab=a2a&members=…&kind=…`) so a view can
+  be shared and restored.
+- **Live updates.** `message.*` frames refetch the newest page through the oldest loaded row, the
+  same refresh rule Projects › Inbox uses.
+
+**Tooltips.** The tooltip is a shared `PinnableTooltip` (module-kit), extracted from the System
+Events event-name tooltip without changing that tooltip's behavior. It has these properties:
+
+- hover and keyboard focus open the same content;
+- clicking pins it so its text can be selected and copied;
+- Escape or a click outside closes it;
+- opening one pinned tooltip releases the previous one;
+- the content is reachable without hover, so it works by keyboard and touch.
+
+The tooltip content depends on what it is attached to:
+
+- **Inbound lifeline header.** An Agent Card summary: name, description, skills, endpoint and auth
+  scheme. The card is fetched on first open through the existing card route. The pinned state adds
+  the raw card JSON. A card that fails to load shows a `Diagnostic`.
+- **Outbound peer header.** The target, plus `authEnv` name and set/unset. The token value never
+  crosses the port.
+- **Arrow.** The body excerpt, kind, status timeline (queued → claimed → delivered → read, with
+  attempts and error), request key, the exact-run Trace link (UUID only, 1440 R3), and the
+  remote task, context and branch refs when that receipt persisted them (1440 R2).
+
+**Configuration drawer.** Today's Members list moves into a collapsed **Configuration** disclosure
+below the sequence, with nothing removed: card URL, inspector, CLI examples, intake counts, auth
+refusals, receipt lists and the no-inbound-member warning. The no-inbound-member warning stays
+visible above the sequence. When the window has no traffic, the empty state names
+`spur message send` or `a2a send` as the first step.
+
+The boundary with Projects › Inbox: Inbox is where you act (compose, reply, mark read) on one
+member's mail. The A2A sequence is where you observe cooperation across members, so it is
+read-only.
+
 ## 4. Verification
 
 Two legs. The protocol leg is `scripts/commands/integrations-e2e.ts`, alongside the existing
