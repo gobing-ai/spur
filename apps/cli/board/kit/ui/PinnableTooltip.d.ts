@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 export interface PinnableTooltipProps {
     /** The focusable trigger's content; rendered inside the component's own button. */
     trigger: ReactNode;

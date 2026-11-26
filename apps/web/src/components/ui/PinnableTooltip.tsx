@@ -1,4 +1,5 @@
-import { type HTMLAttributes, type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 /**
  * The pinnable semantic tooltip (A821 R1, DESIGN.md "Pinnable tooltip").
