@@ -86,6 +86,12 @@ export const boardModuleDeclarationSchema = z.discriminatedUnion('type', [
             directory: z.string().min(1),
             /** Project-relative entry module inside `directory`. */
             entry: z.string().min(1),
+            /**
+             * Project-relative path to one built ESM bundle serving this module's own HTTP API
+             * (task 1455 R1). Project-relative rather than `directory`-relative so several
+             * modules can share one built bundle; the server confines it to the project root.
+             */
+            api: z.string().min(1).optional(),
             /** Project-relative stylesheets, applied in order. Defaults to none. */
             styles: z
                 .array(z.string().min(1))

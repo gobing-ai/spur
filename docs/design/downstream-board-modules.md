@@ -110,7 +110,7 @@ Validate/resolve config and establish fixed catalog/asset handlers before Bun.se
 
 No downstream server entry is required or imported. Native components may call existing supported APIs; an application-specific backend remains separately owned. This proposal changes the local Bun Board; Cloudflare Worker deployments do not acquire filesystem module loading. Future Worker support needs a deployment-specific asset/catalog contract.
 
-### 4.5 Optional module backend API handlers — accepted, not implemented (A84)
+### 4.5 Optional module backend API handlers (A84)
 
 A `type: react` declaration may also carry `api`: a non-empty project-relative path to one built ESM bundle. It resolves against the project root rather than the module `directory`, so several modules can share one bundle. Startup rejects an absolute path, a lexical escape, a missing or non-file target, and a symlink resolving outside the real project root; the resolved path stays on the internal asset root and never enters the public catalog. The bundle exports a Web-Fetch handler, published as type-only exports of `@gobing-ai/spur/board`:
 
@@ -121,11 +121,11 @@ export interface BoardModuleApiContext {
 }
 
 export interface BoardModuleApiHandler {
-    fetch(request: Request, ctx: BoardModuleApiContext): Response | Promise<Response>;
+    readonly fetch: (request: Request, ctx: BoardModuleApiContext) => Response | Promise<Response>;
 }
 ```
 
-The project server mounts `/api/modules/<id>` and `/api/modules/<id>/*` ahead of its oRPC `/api/*` handlers, so the host guard and CSRF still apply and the gateway reaches the route same-origin as `/<project>/api/modules/<id>/*`. The prefix is stripped with the query string, method, headers and body preserved; unknown, disabled or API-less modules answer 404 JSON, and a throwing or malformed handler answers 500 JSON without stopping the server. Handlers load lazily and are cached per resolved path and `mtimeMs`, so a rebuilt bundle takes effect on the next request while adding or removing a declaration still needs a restart. The Board trusts this code inside the server process: keep paths confined, cache-busted and error-isolated, and do not extend the contract to subprocess or non-JavaScript backends.
+The project server mounts `/api/modules/<id>` and `/api/modules/<id>/*` ahead of its oRPC `/api/*` handlers, so the host guard and CSRF still apply and the gateway reaches the route same-origin as `/<project>/api/modules/<id>/*`. The prefix is stripped with the query string, method, headers and body preserved; unknown, disabled or API-less modules answer 404 JSON, and a throwing or malformed handler answers 500 JSON without stopping the server. Handlers load lazily and are cached per resolved path and `mtimeMs`, so a rebuilt bundle takes effect on the next request while adding or removing a declaration still needs a restart. Load the bundle through a cache-evicting loader, not `import()` with a `?v=` buster: Bun keys a module by file path and ignores the query, so only an evicted entry really re-reads a rebuilt file (a bundle using top-level await is the known limit). The Board trusts this code inside the server process: keep paths confined, cache-busted and error-isolated, and do not extend the contract to subprocess or non-JavaScript backends.
 
 ## 5. Tradeoffs and proof sequence
 
@@ -175,6 +175,7 @@ bootstrap:
       directory: board/team-board/dist
       entry: index.js
       styles: [index.css]
+      api: board/team-board/dist/api.js
       order: 10
     - id: docs
       name: Documentation
@@ -185,8 +186,9 @@ bootstrap:
 ```
 
 A `react` declaration uses `directory` (project-relative asset directory), `entry` (project-relative
-entry inside it) and optional `styles` (project-relative stylesheets applied in order). An `iframe`
-declaration uses `url` instead. A declaration may not carry the other variant's fields.
+entry inside it), optional `styles` (project-relative stylesheets applied in order) and optional `api`
+(project-relative path to one built ESM backend bundle, §6.6). An `iframe` declaration uses `url`
+instead. A declaration may not carry the other variant's fields.
 
 ### 6.2 The native contribution
 
@@ -245,8 +247,35 @@ explicit `imports` map. A project whose enabled modules need a host with a diffe
 `directory`, `entry` and `styles` resolve relative to the selected project root (independent of shell
 cwd) and must stay inside their module directory; absolute paths, traversal and symlink escapes are
 refused. Assets are served read-only under `/modules/<id>/*` with correct MIME types and `no-store`; a
-missing asset is a real 404, never the Board document. There is **no server entry**: the Board never
-imports or starts downstream backend code.
+missing asset is a real 404, never the Board document. `api` is the one path resolved against the
+project root instead of the module directory (§6.6), so several modules can share one backend bundle.
+
+### 6.6 Optional module backend routes
+
+A module that needs its own HTTP API declares `api` and builds one self-contained ESM bundle exporting
+a Web-Fetch handler (§4.5). The server mounts it at `/api/modules/<id>/*` in the project's own process,
+behind the existing host guard and CSRF, so there is no second port, no CORS configuration and the
+gateway reaches it same-origin as `/<project>/api/modules/<id>/*`:
+
+```ts
+export function fetch(request: Request, ctx: { projectPath: string; moduleId: string }): Response {
+    const url = new URL(request.url);
+    if (url.pathname === '/items') return Response.json({ items: [], limit: url.searchParams.get('limit') });
+    return Response.json({ error: 'not found' }, { status: 404 });
+}
+```
+
+`request.url`'s path is the module-relative remainder (`/items` for `/api/modules/<id>/items`); the
+query string, method, headers and body are preserved. The handler may be the bundle's default export
+as `{ fetch }` or a named `fetch` export. Startup fails closed on an absolute `api`, a `../` escape, a
+missing target or a symlink resolving outside the project root; a module without `api`, a disabled
+module and an unknown id all answer 404 JSON, and a handler that throws or exports no `fetch` answers
+500 JSON while the server keeps serving. `moduleId` lets one shared bundle serve several declarations.
+
+A rebuilt bundle is picked up on the next request (the loader caches per real path and `mtimeMs`, and
+evicts the previous evaluation); adding or removing a declaration still needs a server restart. Bundles
+using top-level await cannot be re-evaluated that way and are the known limit of the reload behaviour.
+No subprocess, Unix socket or non-JavaScript backend is supported.
 
 ### 6.6 Trust and style boundaries
 

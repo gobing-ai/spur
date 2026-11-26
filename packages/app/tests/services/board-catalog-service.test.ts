@@ -317,3 +317,100 @@ describe('prepareBoardModules fail-closed canonical verification (task 1208 R1)'
         }
     });
 });
+
+// Task 1455 R3 — the optional backend bundle: project-root confinement rather than the module
+// directory `entry`/`styles` are confined to, proven on the real paths like every other asset.
+describe('optional module API bundle (task 1455 R3/AC3)', () => {
+    /** The R3 fixture tree: one contained module, one project-root api bundle, one escaping symlink. */
+    async function apiTree(): Promise<{ root: string; cleanup: () => Promise<void> }> {
+        const root = await mkdtemp(join(tmpdir(), 'spur-board-1455-'));
+        const outside = await mkdtemp(join(tmpdir(), 'spur-board-1455-outside-'));
+        const moduleDir = join(root, 'board', 'kanban');
+        await mkdir(moduleDir, { recursive: true });
+        await mkdir(join(root, 'api'), { recursive: true });
+        await writeFile(join(moduleDir, 'index.js'), 'export const webModule = 1;\n');
+        await writeFile(join(root, 'api', 'handler.js'), 'export function fetch() { return new Response("ok"); }\n');
+        await writeFile(join(outside, 'handler.js'), 'export function fetch() { return new Response("leak"); }\n');
+        await symlink(join(outside, 'handler.js'), join(root, 'api', 'escape.js'));
+        return {
+            root,
+            cleanup: async () => {
+                await rm(root, { recursive: true, force: true });
+                await rm(outside, { recursive: true, force: true });
+            },
+        };
+    }
+
+    /** `boardModuleProbe`'s shape: a missing path is `false`, never a thrown ENOENT. */
+    function statProbe(): BoardModuleFileProbe {
+        return {
+            isFile: async (path) => (await stat(path).catch(() => null))?.isFile() ?? false,
+            isDirectory: async (path) => (await stat(path).catch(() => null))?.isDirectory() ?? false,
+            realPath: (path) => realpathSync(path),
+        };
+    }
+
+    test('a valid project-relative bundle lands on the asset root only', async () => {
+        const { root, cleanup } = await apiTree();
+        try {
+            const prepared = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule({ api: 'api/handler.js' })],
+                host,
+                probe: statProbe(),
+            });
+            expect(prepared.roots[0]?.apiPath).toBe(join(root, 'api', 'handler.js'));
+            expect(prepared.catalog.modules[0]).toMatchObject({ id: 'kanban', type: 'react' });
+            expect(JSON.stringify(prepared.catalog)).not.toContain(root);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('modules sharing one bundle each resolve the same api path', async () => {
+        const { root, cleanup } = await apiTree();
+        try {
+            const second = join(root, 'board', 'notes');
+            await mkdir(second, { recursive: true });
+            await writeFile(join(second, 'index.js'), 'export const webModule = 2;\n');
+            const prepared = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [
+                    reactModule({ api: 'api/handler.js' }),
+                    reactModule({ id: 'notes', directory: 'board/notes', api: 'api/handler.js' }),
+                ],
+                host,
+                probe: statProbe(),
+            });
+            expect(prepared.roots.map((entry) => entry.apiPath)).toEqual([
+                join(root, 'api', 'handler.js'),
+                join(root, 'api', 'handler.js'),
+            ]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.each([
+        ['an absolute path', join('ABS', 'handler.js'), 'must be relative to the project root'],
+        ['a lexical escape', '../outside.js', 'escapes the project root'],
+        ['a missing bundle', 'api/missing.js', 'was not found in the project root'],
+        ['an escaping symlink', 'api/escape.js', 'resolves outside the project root'],
+    ])('%s fails closed naming the module and the reason', async (_label, api, reason) => {
+        const { root, cleanup } = await apiTree();
+        try {
+            const declared = api.startsWith('ABS') ? join(root, 'api', 'handler.js') : api;
+            const error = await prepareBoardModules({
+                projectRoot: root,
+                declarations: [reactModule({ api: declared })],
+                host,
+                probe: statProbe(),
+            }).catch((thrown: unknown) => thrown);
+            expect(error).toBeInstanceOf(BoardModuleConfigError);
+            expect((error as Error).message).toContain('"kanban"');
+            expect((error as Error).message).toContain(reason);
+        } finally {
+            await cleanup();
+        }
+    });
+});

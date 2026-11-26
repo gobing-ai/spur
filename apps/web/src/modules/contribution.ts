@@ -36,3 +36,32 @@ export interface BoardModuleContribution {
  * name for the renderer).
  */
 export declare const webModule: BoardModuleContribution;
+
+/**
+ * Request-scoped facts a module API handler is given (A84 / task 1455 R2).
+ *
+ * Deliberately tiny: the handler runs inside the project's own server process, so it already
+ * has the project root as a path and the module id as configuration. Nothing about the host
+ * process (ports, tokens, the Board's own state) is exported.
+ */
+export interface BoardModuleApiContext {
+    /** Absolute path of the project whose server is dispatching this request. */
+    readonly projectPath: string;
+    /** The declaring module's id, as written under `bootstrap.modules`. */
+    readonly moduleId: string;
+}
+
+/**
+ * The contract a module's `api` bundle publishes (task 1455 R2).
+ *
+ * One Web-Fetch handler per module: the server mounts it at `/api/modules/<id>/*`, strips the
+ * mount prefix and hands over a rewritten `Request` whose path is the module-relative
+ * remainder (query string, method, headers and body preserved).
+ *
+ * The declaration may point several modules at one bundle, so a bundle can share this
+ * shape across ids and read `moduleId` to tell them apart.
+ */
+export interface BoardModuleApiHandler {
+    /** Property signature (not a method) so the contract is one exact function type. */
+    readonly fetch: (request: Request, ctx: BoardModuleApiContext) => Response | Promise<Response>;
+}

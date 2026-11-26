@@ -431,8 +431,15 @@ preflight.
 - **Trusted code only.** Loading a `react` entry evaluates its code inside the Board page. Declare only
   modules you trust. Failures after load are contained: a module that fails to load or throws while
   rendering shows a diagnostic on its own route, and the built-in modules stay usable.
-- **No backend entry.** Spur never imports or starts downstream server code. A module may call the
-  existing Spur API; your own backend is yours to run.
+- **No backend entry.** Spur imports no server code unless you declare `api`. A module may call the
+  existing Spur API; declare `api` only for a module that needs its own routes, and keep any other
+  backend yours to run.
+- **Declared `api` bundles run in-process.** With `api: <project-relative bundle>`, your bundle's
+  Web-Fetch handler serves `/api/modules/<id>/*` from the project's own server, behind the host guard
+  and CSRF — no second port and no CORS setup. Declare only code you trust: it runs inside the server
+  process. Startup refuses an absolute path, a `../` escape, a missing file and a symlink resolving
+  outside the project; a rebuilt bundle is picked up on the next request, while adding or removing a
+  declaration needs a restart.
 - **Scoped CSS.** Use class names you own; no global resets or shell-wide Tailwind output — your CSS
   shares the page with the Board.
 - **Frames are not a sandbox.** Spur frames the URL verbatim, sets no `sandbox`, sends no messages and

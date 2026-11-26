@@ -1360,12 +1360,13 @@ proofs. Configuration and native asset changes require server restart and browse
 deployments do not acquire project-filesystem loading. Exact declarations, lifecycle rules and
 compatibility limits: [downstream Board module contract](design/downstream-board-modules.md).
 
-Accepted, not built (A84; ADR-128 amendment of 2026-11-26): a native declaration may additionally
-name one project-relative built ESM bundle whose Web-Fetch `fetch` serves `/api/modules/<id>/*`
-in the project's own server process, behind the existing host guard and CSRF. The bundle is loaded
-lazily per request under lexical and `realPath` project-root confinement, cached by file `mtimeMs`,
-and error-isolated; no module route is required for a project to start, and non-JavaScript backends
-stay out of scope. Until it ships, the shipped behavior remains the paragraph above.
+Built (A84; ADR-128 amendment of 2026-11-26): a native declaration may additionally name one
+project-relative built ESM bundle whose Web-Fetch `fetch` serves `/api/modules/<id>/*` in the
+project's own server process, mounted ahead of oRPC so the existing host guard and CSRF still apply
+and the gateway reaches it same-origin. The bundle is loaded lazily per request under lexical and
+`realPath` project-root confinement, cached per real path and file `mtimeMs` (evicting the previous
+evaluation, because Bun ignores `?v=` module cache busters), and error-isolated; no module route is
+required for a project to start, and non-JavaScript backends stay out of scope.
 
 Built (ADR-150): the Board also shares one Spur-owned shell-primitive module through the same
 facade mechanism, rendered by built-in shells and native contributions alike. The kit lives in

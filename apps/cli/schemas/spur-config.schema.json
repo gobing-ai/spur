@@ -186,6 +186,10 @@
                                         "type": "string",
                                         "minLength": 1
                                     },
+                                    "api": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
                                     "styles": {
                                         "default": [],
                                         "type": "array",

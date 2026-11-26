@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Support optional Web-Fetch backend API handlers on native Board modules (/api/modules/:id/*)
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-26T18:16:32.513Z
-updated_at: "2026-11-26T18:59:17.118Z"
+updated_at: "2026-11-26T20:00:02.694Z"
 
 priority: P1
 ac_numbering: task-local
 ac_altitude: task-local
 estimate_hours: 6
 feature_id: A84
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1455. Support optional Web-Fetch backend API handlers on native Board modules (/api/modules/:id/*)
@@ -30,12 +32,12 @@ Because `spur self serve` already runs Hono on Bun with `mountMiddleware` (host 
 
 ### Requirements
 
-- [ ] R1. Extend `bootstrap.modules` (`type: 'react'`) in `packages/config/src/board-modules.ts` and `schemas/spur-config.schema.json` with an optional `api?: string` field (non-empty project-relative path to a built ESM bundle); reject `api` on `type: 'iframe'` and keep `.strict()` / `additionalProperties: false`.
-- [ ] R2. Export `BoardModuleApiContext` (`{ readonly projectPath: string; readonly moduleId: string }`) and `BoardModuleApiHandler` (`{ fetch(request: Request, ctx: BoardModuleApiContext): Response | Promise<Response> }`) from `apps/web/src/modules/contribution.ts` and regenerate `apps/cli/board/index.d.ts` via `packages/app/src/builder/emit-board-types.ts`.
-- [ ] R3. Validate and resolve `declaration.api` in `prepareBoardModules` (`packages/app/src/services/board-catalog-service.ts`): reject absolute paths, lexical escapes outside `projectRoot`, missing/non-file targets, and fail-closed `realPath` escapes outside `realProjectRoot`; expose `readonly apiPath?: string` on `BoardModuleAssetRoot` only (never in the public `BoardModuleDescriptor` catalog DTO).
-- [ ] R4. Mount `/api/modules/:id` and `/api/modules/:id/*` in `boardModule` (`apps/server/src/modules/board/index.ts`): return 404 JSON for unknown/disabled modules or modules without `apiPath`; re-verify fail-closed `realPath` confinement inside `realProjectRoot` at request time; strip `/api/modules/:id` (defaulting empty remainder to `/`, preserving query string, method, headers, and body) before calling `handler.fetch(rewrittenRequest, { projectPath, moduleId })`; isolate thrown errors or malformed exports into a 500 JSON response without crashing the server.
-- [ ] R5. Cache loaded handlers by `(realApiPath, mtimeMs)` using dynamic ESM import with a `?v=<mtimeMs>` cache-buster so rebuilding `api.js` takes effect on the next request without restarting `spur self serve`, and multiple modules pointing at the same `api.js` share one loaded instance.
-- [ ] R6. Verify same-origin gateway proxying (`/<project>/api/modules/:id/*`) works end-to-end across `GET`/`POST` requests (including query strings and request/response bodies) through `createGatewayHandler` without CORS headers or a separate loopback port, and update Spur module authoring docs in the same commit.
+- [x] R1. Extend `bootstrap.modules` (`type: 'react'`) in `packages/config/src/board-modules.ts` and `schemas/spur-config.schema.json` with an optional `api?: string` field (non-empty project-relative path to a built ESM bundle); reject `api` on `type: 'iframe'` and keep `.strict()` / `additionalProperties: false`.
+- [x] R2. Export `BoardModuleApiContext` (`{ readonly projectPath: string; readonly moduleId: string }`) and `BoardModuleApiHandler` (`{ fetch(request: Request, ctx: BoardModuleApiContext): Response | Promise<Response> }`) from `apps/web/src/modules/contribution.ts` and regenerate `apps/cli/board/index.d.ts` via `packages/app/src/builder/emit-board-types.ts`.
+- [x] R3. Validate and resolve `declaration.api` in `prepareBoardModules` (`packages/app/src/services/board-catalog-service.ts`): reject absolute paths, lexical escapes outside `projectRoot`, missing/non-file targets, and fail-closed `realPath` escapes outside `realProjectRoot`; expose `readonly apiPath?: string` on `BoardModuleAssetRoot` only (never in the public `BoardModuleDescriptor` catalog DTO).
+- [x] R4. Mount `/api/modules/:id` and `/api/modules/:id/*` in `boardModule` (`apps/server/src/modules/board/index.ts`): return 404 JSON for unknown/disabled modules or modules without `apiPath`; re-verify fail-closed `realPath` confinement inside `realProjectRoot` at request time; strip `/api/modules/:id` (defaulting empty remainder to `/`, preserving query string, method, headers, and body) before calling `handler.fetch(rewrittenRequest, { projectPath, moduleId })`; isolate thrown errors or malformed exports into a 500 JSON response without crashing the server.
+- [x] R5. Cache loaded handlers by `(realApiPath, mtimeMs)` using dynamic ESM import with a `?v=<mtimeMs>` cache-buster so rebuilding `api.js` takes effect on the next request without restarting `spur self serve`, and multiple modules pointing at the same `api.js` share one loaded instance.
+- [x] R6. Verify same-origin gateway proxying (`/<project>/api/modules/:id/*`) works end-to-end across `GET`/`POST` requests (including query strings and request/response bodies) through `createGatewayHandler` without CORS headers or a separate loopback port, and update Spur module authoring docs in the same commit.
 
 ### Acceptance Criteria
 
@@ -130,15 +132,117 @@ Mount optional in-process Web-Fetch ESM handlers under `/api/modules/:id/*` insi
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### Approach
+
+One optional `api` field on a `react` declaration names a project-relative built ESM bundle. Startup
+confines and resolves it (lexical + `isFile` + fail-closed `realPath`), and the existing Board server
+module mounts `/api/modules/<id>/*` ahead of oRPC so a module's Web-Fetch handler inherits the host
+guard and CSRF. Nothing about the deployment changes: no second process, no port, no CORS, and a
+module without `api` keeps the shipped asset-only behaviour.
+
+Loading deviates from the task's planned `?v=<mtimeMs>` import cache-buster: Bun keys its module
+registry by file path and ignores query/hash cache busters (verified directly), so `import()` never
+sees a rebuilt file. The loader therefore resolves through `createRequire`, evicts that entry, and
+re-requires — keyed per real path and `mtimeMs`. The known limit (a bundle using top-level await
+cannot be re-evaluated) is recorded in the code and in the design satellite.
+
+#### Change map
+
+| Change | Anchor |
+| --- | --- |
+| Optional `api` on the strict react declaration variant | `packages/config/src/board-modules.ts:94` |
+| The mirrored JSON-Schema property (react branch only) | `apps/cli/schemas/spur-config.schema.json:189` |
+| Published type-only handler contract (`BoardModuleApiContext`, `BoardModuleApiHandler`) | `apps/web/src/modules/contribution.ts:47` |
+| Generated declaration entry carrying both interfaces | `apps/cli/board/index.d.ts:46` |
+| `apiPath` on the server-only asset root (never the catalog DTO) | `packages/app/src/services/board-catalog-service.ts:39` |
+| Project-root-relative resolution of the declared bundle | `packages/app/src/services/board-catalog-service.ts:130` |
+| Startup confinement: lexical escape, `isFile`, fail-closed `realPath` | `packages/app/src/services/board-catalog-service.ts:284` |
+| `/api/modules` mount prefix | `apps/server/src/modules/board/index.ts:122` |
+| Path split into module id + module-relative suffix | `apps/server/src/modules/board/index.ts:149` |
+| Per-real-path, `mtimeMs`-keyed bundle cache with request-time confinement | `apps/server/src/modules/board/index.ts:171` |
+| Cache-evicting evaluation of a rebuilt bundle | `apps/server/src/modules/board/index.ts:201` |
+| Rewritten dispatch, 404/500 JSON isolation | `apps/server/src/modules/board/index.ts:217` |
+| Mount registration ahead of the oRPC `/api/*` handler | `apps/server/src/modules/board/index.ts:297` |
+
+Documentation in the same change: the authoring guide's declaration example and the new §6.6 backend
+routes contract (`docs/design/downstream-board-modules.md`), the end-user trust section
+(`docs/help/how_to_customize_project_modules.md`), and the architecture paragraph that still said
+"accepted, not built" (`docs/03_ARCHITECTURE.md`).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/config/src/board-modules.ts:94` adds `api: z.string().min(1).optional()` to the strict react variant only; `apps/cli/schemas/spur-config.schema.json:189` mirrors it for the `$schema` path. Tests: `packages/config/tests/board-modules.test.ts` ("a react declaration carries a non-empty project-relative api path", "an empty api or one on an iframe declaration is rejected by the schema", "the shipped JSON Schema mirrors the field"). |
+| R2 | MET | `apps/web/src/modules/contribution.ts:47` and `:64` declare `BoardModuleApiContext` / `BoardModuleApiHandler`; `apps/cli/board/index.d.ts:46` and `:62` are the regenerated published declarations (`spur builder emit-board-types` reports `board:changed`, kit unchanged). `bun run typecheck` passes across all workspaces, and the entry carries no value import. |
+| R3 | MET | `packages/app/src/services/board-catalog-service.ts:130` resolves `api` against the project root and rejects absolute/escaping paths; `:284` adds the `isFile` + fail-closed `realPath` confinement; `:39` exposes `apiPath` on `BoardModuleAssetRoot` only, which is absent from the catalog DTO asserted in the same test file ("a valid project-relative bundle lands on the asset root only"). |
+| R4 | MET | `apps/server/src/modules/board/index.ts:217` rewrites and dispatches, `:297` mounts ahead of the oRPC `/api/*` handler. Tests in `apps/server/tests/board-module-api.test.ts`: GET/POST rewrite with query + body + `{ projectPath, moduleId }`, 404 for unknown/disabled/API-less, 500 for a throwing or fetch-less bundle with the server still serving, and a post-startup symlink escape refused at request time. |
+| R5 | MET | `apps/server/src/modules/board/index.ts:171` caches per real path and `mtimeMs`, `:201` evicts the previous evaluation before re-requiring. Tests: "a rebuilt bundle takes effect on the next request" (v1 → v2 without restart) and "two modules sharing one bundle share one loaded instance". |
+| R6 | MET | `apps/server/tests/board-module-api.test.ts` "module API through the gateway (R6/AC6)" drives `createGatewayHandler` against a real `Bun.serve` upstream: GET with a query string and POST with a JSON body both reach the handler through `/<project>/api/modules/<id>/...`, and no `access-control-allow-origin` header appears anywhere. Authoring docs updated in the same change: `docs/design/downstream-board-modules.md` §4.5/§6.1/§6.6, `docs/help/how_to_customize_project_modules.md` §7, `docs/03_ARCHITECTURE.md`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Config schema accepts optional `api` on react modules and rejects invalid shapes (req: R1) | MET | test | `packages/config/tests/board-modules.test.ts` — api accepted on react; `api: ""` and `api` on an iframe throw `z.ZodError`; `additionalProperties: false` still asserted for both variants. |
+| AC2 — `@gobing-ai/spur/board` publishes the type-only API handler contract (req: R2) | MET | test | `apps/cli/board/index.d.ts:46`, `:62` carry both interfaces after `spur builder emit-board-types`; `bun run typecheck` PASS (all workspaces, incl. the emitted declarations). |
+| AC3 — Startup preparation fails closed on missing or escaping `api` paths (req: R3) | MET | test | `packages/app/tests/services/board-catalog-service.test.ts` — absolute path, `../` escape, missing file and escaping symlink each throw `BoardModuleConfigError` naming `"kanban"` and the reason; a valid bundle lands on `roots[].apiPath` and never in `catalog`. |
+| AC4 — `/api/modules/:id/*` dispatches rewritten requests and isolates errors (req: R4) | MET | test | `apps/server/tests/board-module-api.test.ts` — `path === "/items"` with `?limit=5` and `{ projectPath, moduleId: "demo" }`; POST body preserved; 404 JSON for unknown/disabled/API-less; 500 JSON for throwing and fetch-less bundles while `/api/health` still answers. |
+| AC5 — Rebuilding `api.js` reloads automatically on mtime change (req: R5) | MET | test | `apps/server/tests/board-module-api.test.ts` — `/api/modules/demo/version` returns `v1`, the bundle is rewritten with an advanced `mtimeMs`, the next request returns `v2` with no restart; the shared-bundle case reports one evaluation for both modules. |
+| AC6 — Gateway proxies `/<project>/api/modules/:id/*` same-origin end-to-end (req: R6) | MET | test | `apps/server/tests/board-module-api.test.ts` "module API through the gateway (R6/AC6)" — GET and POST through `createGatewayHandler` reach the real upstream handler with query string and body intact and no CORS header configured. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Disposition:** approve with recorded residuals. Gate: full tier PASS (`attempts: 1`,
+receipt digest `dd3645f487b0`); `bun run test-cf` PASS.
+
+**P1 (blocker).** None.
+
+**P2 (major).**
+
+- *Reload seam is not the planned `?v=` cache-buster.* Verified directly: Bun keys its module registry
+  by file path and ignores both `?v=` and `#` busters, so `import()` returns the already-evaluated
+  module and a rebuilt bundle would never take effect — the AC5 behaviour the task specified. The
+  loader now resolves through `createRequire`, evicts that entry and re-requires, keyed by real path
+  and `mtimeMs`. Residual: a bundle using top-level await cannot be re-evaluated, so its rebuild
+  requires a server restart. Recorded as a `shortcut:` comment beside the loader, in
+  `docs/design/downstream-board-modules.md` §6.6 and in `docs/03_ARCHITECTURE.md`.
+- *Coverage gate vs dynamically loaded fixtures.* The gate failed on the test fixture bundles under
+  the OS temp dir (bun attributes their coverage per run). Excluded `**/spur-board-api-*/**` in
+  `bunfig.toml` alongside the existing `spur-wf-ext-*` precedent — fixture attribution noise, not
+  product code.
+
+**P3 (minor).**
+
+- `moduleApiCache` keeps one entry per real path for the process lifetime; a declaration removed from
+  config leaves its entry behind (a few hundred bytes, process-scoped, no code executed). Acceptable
+  while declarations only change on restart.
+- Two `realPath` syscalls per module-API request (project root + bundle) are deliberate: the fail-closed
+  confinement must be re-proven at request time, not cached from startup.
+- A module handler receives the still-encoded pathname; it decodes with `new URL(request.url)`, which is
+  standard Web-Fetch behaviour rather than a project convention.
+
+**P4 (advisory).**
+
+- Request bodies are buffered (`arrayBuffer()`) rather than streamed before dispatch. Chosen so a
+  handler sees a replayable body and the dispatch mirrors the gateway's own buffering; revisit only if
+  a module needs multi-hundred-MB uploads.
+- Inbound `content-length` is forwarded verbatim on body-less methods; harmless for the JSON-shaped
+  module APIs this contract targets.
+
+**Security review.** No request-derived path reaches the filesystem: the mount is resolved from the
+declaration, the split id only ever indexes the prepared roots, and the bundle path is the startup
+real-path checked again per request. Unknown, disabled and API-less modules are indistinguishable
+(404 JSON before any bundle is touched), handler failures surface as generic 500 JSON with the detail
+kept in the server log, and the host guard + CSRF still apply because the mount sits ahead of oRPC.
+
+**Architecture.** The route lives in the existing Board server module (no new seam), the contract
+stays type-only in the published entry, and `apiPath` remains server-side on `BoardModuleAssetRoot`
+— never in the catalog DTO. Trust boundary (declared project code inside the server process) is the
+one ADR-128's 2026-11-26 amendment already accepted.
 
 ### References
 
@@ -155,4 +259,7 @@ Mount optional in-process Web-Fetch ESM handlers under `/api/modules/:id/*` insi
 ### History
 
 - 2026-11-26T18:46:34.314Z backlog → todo (system)
+- 2026-11-26T19:59:55.478Z todo → wip (system)
+- 2026-11-26T19:59:58.963Z wip → testing (system)
+- 2026-11-26T20:00:02.687Z testing → done (system)
 

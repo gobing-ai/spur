@@ -96,6 +96,39 @@ describe('bootstrap.modules declaration shape (R1)', () => {
     });
 });
 
+describe('optional module API bundle (task 1455 R1/AC1)', () => {
+    test('a react declaration carries a non-empty project-relative api path', () => {
+        const parsed = parseBoardModuleDeclarations([{ ...reactDeclaration, api: 'apps/cli/dist/board/api.js' }]);
+        expect(parsed[0]).toMatchObject({ type: 'react', api: 'apps/cli/dist/board/api.js' });
+        expect(parseBoardModuleDeclarations([reactDeclaration])[0]).not.toHaveProperty('api');
+    });
+
+    test('an empty api or one on an iframe declaration is rejected by the schema', () => {
+        const cases: unknown[] = [
+            { ...reactDeclaration, api: '' },
+            { id: 'docs', name: 'Docs', icon: 'D', type: 'iframe', url: 'https://example.com', api: 'api.js' },
+        ];
+        for (const declaration of cases) {
+            expect(() => parseBoardModuleDeclarations([declaration])).toThrow(z.ZodError);
+        }
+    });
+
+    test('the shipped JSON Schema mirrors the field, so `$schema` validation accepts it too', async () => {
+        const schema = JSON.parse(
+            await readFile(new URL('../../../apps/cli/schemas/spur-config.schema.json', import.meta.url), 'utf8'),
+        ) as { properties: { bootstrap: { properties: { modules: { items: { oneOf: unknown[] } } } } } };
+        const [reactVariant, iframeVariant] = schema.properties.bootstrap.properties.modules.items.oneOf as Array<{
+            properties: Record<string, unknown>;
+            additionalProperties: boolean;
+        }>;
+        expect(reactVariant?.properties.api).toEqual({ type: 'string', minLength: 1 });
+        // No iframe variant declares it, and both variants still forbid unknown keys (AC1).
+        expect(iframeVariant?.properties.api).toBeUndefined();
+        expect(reactVariant?.additionalProperties).toBe(false);
+        expect(iframeVariant?.additionalProperties).toBe(false);
+    });
+});
+
 describe('frame URLs are configuration errors when unusable (R2/AC4)', () => {
     test('absolute credential-free http(s) URLs keep their value', () => {
         expect(isSafeFrameUrl('https://docs.example.com/board?x=1')).toBe(true);

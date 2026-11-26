@@ -31,6 +31,12 @@ export interface BoardModuleAssetRoot {
     readonly entryPath: string;
     /** Absolute stylesheets inside {@link root}, in declaration order. */
     readonly stylePaths: readonly string[];
+    /**
+     * Absolute project-root-relative path to the module's built backend bundle (task 1455 R3),
+     * when the declaration named one. Confined to the project root, never its module directory —
+     * several modules may share one bundle — and never published in the catalog DTO.
+     */
+    readonly apiPath?: string;
 }
 
 /**
@@ -111,6 +117,25 @@ function resolveContained(
 export function isInsideRoot(root: string, target: string): boolean {
     const rel = relative(root, target);
     return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
+}
+
+/**
+ * Resolve and confine one declaration's optional backend bundle (task 1455 R3).
+ *
+ * `api` is project-relative on purpose (several modules may share one built bundle), so the
+ * containment root is the project root rather than the module directory `entry`/`styles` use.
+ * Absolute, lexically escaping and missing targets are configuration errors; the symlink half
+ * is proven by the caller on the real paths, immediately after this returns.
+ */
+function resolveModuleApi(projectRoot: string, declaredApi: string, index: number, id: string): string {
+    if (isAbsolute(declaredApi)) {
+        throw new BoardModuleConfigError(index, id, `api "${declaredApi}" must be relative to the project root`);
+    }
+    const target = resolve(projectRoot, declaredApi);
+    if (!isInsideRoot(projectRoot, target)) {
+        throw new BoardModuleConfigError(index, id, `api "${declaredApi}" escapes the project root`);
+    }
+    return target;
 }
 
 /**
@@ -253,6 +278,30 @@ export async function prepareBoardModules(input: {
             requireInsideModule(style.declared, verifiedRealPath(index, declaration.id, style.absolute, 'style asset'));
         }
 
+        // R3 (task 1455): the optional backend bundle is project-relative, so its containment
+        // root is the project root while `entry`/`styles` stay inside the module directory.
+        // Lexical escape, absence, then the symlink half — the same fail-closed order as above.
+        let apiPath: string | undefined;
+        if (declaration.api !== undefined) {
+            const lexicalApi = resolveModuleApi(input.projectRoot, declaration.api, index, declaration.id);
+            if (!(await input.probe.isFile(lexicalApi))) {
+                throw new BoardModuleConfigError(
+                    index,
+                    declaration.id,
+                    `api bundle "${declaration.api}" was not found in the project root`,
+                );
+            }
+            const realApi = verifiedRealPath(index, declaration.id, lexicalApi, 'api bundle');
+            if (!isInsideRoot(projectRootRealPath(index, declaration.id), realApi)) {
+                throw new BoardModuleConfigError(
+                    index,
+                    declaration.id,
+                    `api "${declaration.api}" resolves outside the project root`,
+                );
+            }
+            apiPath = lexicalApi;
+        }
+
         descriptors.push({
             ...descriptorBase(declaration),
             type: 'react',
@@ -261,7 +310,14 @@ export async function prepareBoardModules(input: {
             styles: stylePaths.map((stylePath) => assetUrl(declaration.id, root, stylePath)),
         });
         roots.push(
-            Object.freeze({ id: declaration.id, route, root, entryPath, stylePaths: Object.freeze(stylePaths) }),
+            Object.freeze({
+                id: declaration.id,
+                route,
+                root,
+                entryPath,
+                stylePaths: Object.freeze(stylePaths),
+                ...(apiPath !== undefined ? { apiPath } : {}),
+            }),
         );
     }
 

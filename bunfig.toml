@@ -23,6 +23,9 @@ coveragePathIgnorePatterns = [
     "**/*.tsx",
     "**/tests/**/fixtures/**",
     "**/spur-wf-ext-*/**",
+    # Board module backend-bundle fixtures (task 1455) under OS tmp: dynamically required
+    # (`createRequire`) at request time, so bun attributes their coverage per test run.
+    "**/spur-board-api-*/**",
     "tests/setup.ts",
     "apps/server/src/index.ts",
     "../ts-libs/**",
