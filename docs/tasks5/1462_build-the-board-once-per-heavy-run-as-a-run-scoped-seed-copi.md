@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Build the Board once per heavy run as a run-scoped seed copied per caller
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-27T07:07:41.709Z
-updated_at: "2026-11-27T07:20:28.002Z"
+updated_at: "2026-11-27T17:11:31.955Z"
 feature_id: H162
 priority: P2
 tags:
@@ -12,6 +12,8 @@ tags:
   - performance
 
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1462. Build the Board once per heavy run as a run-scoped seed copied per caller
@@ -26,18 +28,18 @@ Feature H162 (under H16; design `docs/design/heavy-suite-lanes.md` §3.2). Six h
 
 ### Requirements
 
-- [ ] R1. `scripts/commands/run-tests.ts` adds `SPUR_TEST_BOARD_SEED_DIR=<registryDir>/board-seed` to the child env (directory not created up front).
-- [ ] R2. With that variable set, `buildBoardToTemp()` without `testAdapterDir`, inside the existing build lock, builds the seed if absent (astro build into `<seed>.staging-<pid>`, then rename to the seed path); then, after the lock is released, copies the seed into a fresh `mkdtemp(tmpdir(), 'spur-board-0988-')` dir and returns it. Callers keep owning cleanup; `removeBoardBuild` is unchanged.
-- [ ] R3. `testAdapterDir` builds, and every call when the variable is unset (direct `bun test`), keep today's behaviour: one fresh build per call.
-- [ ] R4. A failed seed build leaves no seed (staging dir removed) and throws the existing `board build failed` error; the next caller retries the build.
-- [ ] R5. No heavy assertion, timeout or skip condition changes.
+- [x] R1. `scripts/commands/run-tests.ts` adds `SPUR_TEST_BOARD_SEED_DIR=<registryDir>/board-seed` to the child env (directory not created up front).
+- [x] R2. With that variable set, `buildBoardToTemp()` without `testAdapterDir`, inside the existing build lock, builds the seed if absent (astro build into `<seed>.staging-<pid>`, then rename to the seed path); then, after the lock is released, copies the seed into a fresh `mkdtemp(tmpdir(), 'spur-board-0988-')` dir and returns it. Callers keep owning cleanup; `removeBoardBuild` is unchanged.
+- [x] R3. `testAdapterDir` builds, and every call when the variable is unset (direct `bun test`), keep today's behaviour: one fresh build per call.
+- [x] R4. A failed seed build leaves no seed (staging dir removed) and throws the existing `board build failed` error; the next caller retries the build.
+- [x] R5. No heavy assertion, timeout or skip condition changes.
 
 Out of scope: lane scheduling (1463); caching across launcher runs; changing `withBoardBuildLock`, `packCliTarball` or the lock protocol.
 
 ### Acceptance Criteria
 
-- [ ] R3 — The browser and board heavy files reuse one Board build per heavy run
-- [ ] R5 — No heavy proof is dropped, skipped, weakened, or moved to the default path
+- [x] R3 — The browser and board heavy files reuse one Board build per heavy run
+- [x] R5 — No heavy proof is dropped, skipped, weakened, or moved to the default path
 
 ### Q&A
 
@@ -74,15 +76,48 @@ Out of scope: lane scheduling (1463); caching across launcher runs; changing `wi
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `scripts/commands/run-tests.ts:105-108` | Child env gains `SPUR_TEST_BOARD_SEED_DIR=<registryDir>/board-seed` (directory created lazily, never up front). | R1: one seed per launcher run, living exactly as long as the run's registry dir — no second run id, no second cleanup path. |
+| `apps/web/tests/test-helpers/board-build.ts:34-41` | `BOARD_SEED_ENV` constant documenting the direction of the contract. | The helper names the variable the launcher sets; no other layer needs to know it. |
+| `apps/web/tests/test-helpers/board-build.ts:182-217` | `buildBoardToTemp` seeds when the variable is set and `testAdapterDir` is absent, otherwise keeps one fresh build per call; `ensureBoardSeed` (build into `<seed>.staging-<pid>` under the existing lock, then `renameSync` to publish, staging removed on failure); `copyBoardSeed` (`mkdtemp` + `cp`, outside the lock). | R2/R3/R4: rename is the publish step so no caller sees a half-built seed; the copy keeps `board-base-path` from mutating a shared tree; a failed build leaves no seed, so the next caller retries. |
+| `apps/web/tests/test-helpers/board-build.ts:250-269` | `astroBuildInto` extracted from `buildBoardOnce` (adapter injection window + one `astro build` + the existing `board build failed` error), plus `setBoardBuildForTest` seam and `buildImpl` indirection. | The seed rules are decisions about *when* a build happens, so their failure modes are testable without paying 9 s of real build each. |
+| `apps/web/tests/modules/board-build-lock.test.ts:135-225` | 4 seed tests: one build per run with private copies (mutating a copy leaves the seed intact), adapter builds never seeded, failed build leaves no seed and the next caller rebuilds, variable unset builds per call. | R2–R4 pinned before implementation. |
+| `.spur/run/heavy-profile.json` (1461), `/tmp/board-seed-run1.log` | Evidence: the six board heavy files ran together in one launcher call. | Before: 84.6 s summed per-file (1461 profile). After: 50.6 s for all six in one call, 34 pass / 1 skip / 0 fail — the same assertions as the profile. |
+
+**Why no seed for adapter builds:** `testAdapterDir` output contains the injected proof adapter, and `runtime-distribution.test.ts` fails if a production build ever contains it — seeding that output would poison every later caller.
+
+**Why the copy is outside the lock:** the seed is immutable once renamed, so holding the build lock through a recursive copy would serialize callers for nothing.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/run-tests.ts:105-108` adds `SPUR_TEST_BOARD_SEED_DIR: join(registryDir, 'board-seed')` to the child env; nothing creates the directory (the first builder does, `apps/web/tests/test-helpers/board-build.ts:147`). |
+| R2 | MET | `buildBoardToTemp` (`.../board-build.ts:182-192`) seeds when the variable is set and no `testAdapterDir`; `ensureBoardSeed` (`:198-217`) runs inside `withBoardBuildLock`, builds into `<seed>.staging-<pid>` (`:205`), publishes with `renameSync` (`:207`); `copyBoardSeed` (`:226-236`) `mkdtemp`s `spur-board-0988-*` and `cp`s the seed after the lock is released; `removeBoardBuild` untouched (`:272-275`). |
+| R3 | MET | `testAdapterDir` and an unset variable both take the unchanged `withBoardBuildLock(() => buildBoardOnce(options))` path (`.../board-build.ts:189-191`); both asserted in `apps/web/tests/modules/board-build-lock.test.ts:196-225`. |
+| R4 | MET | Staging dir removed on failure and no seed published (`.../board-build.ts:209-213`), original `board build failed` error preserved (`:255-259`), next caller rebuilds — asserted at `board-build-lock.test.ts:201-215`. |
+| R5 | MET | The six board heavy files ran together: 34 pass / 1 skip / 0 fail, identical to the 1461 profile's totals for those files; no heavy file was edited (diff touches only the helper and the launcher). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R3 | MET | command | `bun scripts/spur-dev.ts run-tests --config=bunfig.heavy.toml test --reporter=dots <six board heavy files>` → 50.6 s, exit 0, 34 pass / 1 skip / 0 fail (summed per-file before: 84.6 s). |
+| R5 | MET | test | `apps/web/tests/modules/board-build-lock.test.ts:135-225` (4 seed cases) + the unchanged heavy-file run above. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -91,3 +126,8 @@ Out of scope: lane scheduling (1463); caching across launcher runs; changing `wi
 - `scripts/commands/run-tests.ts:96-115` (registryDir + env), `:297-298` (cleanup).
 
 ### History
+
+- 2026-11-27T17:11:05.490Z todo → wip (system)
+- 2026-11-27T17:11:29.594Z wip → testing (system)
+- 2026-11-27T17:11:31.948Z testing → done (system)
+

@@ -4,11 +4,12 @@
  * The task's distribution evidence must come from a build made by the test, never from a
  * `dist/web` that happens to exist (the plan's step 0 precondition).
  */
-import { cpSync, linkSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { cpSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/spur-config';
 
 /** `apps/web` — the workspace whose Astro build emits the board distribution. */
 export const WEB_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -26,6 +27,14 @@ const ASTRO_BIN = join(WEB_ROOT, 'node_modules/.bin/astro');
  * leftover.
  */
 export const TEST_ADAPTER_MODULE_DIR = join(WEB_ROOT, 'src/modules/__tests-board-adapter__');
+
+/**
+ * Environment variable the launcher sets to the run-scoped seed directory (task 1462 R1).
+ *
+ * Set only by `scripts/commands/run-tests.ts`, so a direct `bun test` never seeds: the seed lives
+ * exactly as long as that launcher's registry directory.
+ */
+export const BOARD_SEED_ENV = 'SPUR_TEST_BOARD_SEED_DIR';
 
 /** Options for {@link buildBoardToTemp}. */
 export interface BoardBuildOptions {
@@ -103,10 +112,66 @@ export async function acquireBuildLock(): Promise<void> {
 
 /**
  * Build the board into a fresh temporary distribution root and return that directory.
- * The caller owns cleanup (see {@link removeBoardBuild}).
+ *
+ * With {@link BOARD_SEED_ENV} set and no `testAdapterDir`, the build is done once per launcher run
+ * into the run-scoped seed and every caller gets a copy of it (task 1462 R2). Callers keep owning
+ * cleanup (see {@link removeBoardBuild}), and a copy is what they get because callers such as
+ * `board-base-path` write into their build dir.
  */
-export function buildBoardToTemp(options: BoardBuildOptions = {}): Promise<string> {
-    return withBoardBuildLock(() => buildBoardOnce(options));
+export async function buildBoardToTemp(options: BoardBuildOptions = {}): Promise<string> {
+    // An adapter build injects a test-only module, so its output can never serve as the shared seed.
+    const seedDir = options.testAdapterDir === undefined ? getEnvVar(BOARD_SEED_ENV) : undefined;
+    if (seedDir === undefined || seedDir === '') return withBoardBuildLock(() => buildBoardOnce(options));
+    await withBoardBuildLock(() => ensureBoardSeed(seedDir));
+    return copyBoardSeed(seedDir);
+}
+
+/**
+ * Publishes the run-scoped seed if it is absent, holding the build lock.
+ *
+ * The build lands in `<seed>.staging-<pid>` and is renamed onto the seed path, so a caller never
+ * observes a half-built seed; a failed build removes the staging dir and leaves no seed, which lets
+ * the next caller retry (task 1462 R4).
+ *
+ * @param seedDir - Absolute seed directory (absent until the first caller builds).
+ * @param build - Build step writing a complete distribution into the given directory.
+ */
+export async function ensureBoardSeed(
+    seedDir: string,
+    build: (dir: string) => Promise<void> = (dir) => buildImpl(dir, {}),
+): Promise<void> {
+    if (existsSync(seedDir)) return;
+    const staging = `${seedDir}.staging-${process.pid}`;
+    rmSync(staging, { recursive: true, force: true });
+    try {
+        // Own the staging dir: the build writes into it, and `astro build` tolerates an empty outDir.
+        mkdirSync(staging, { recursive: true });
+        await build(staging);
+        renameSync(staging, seedDir);
+    } catch (error) {
+        rmSync(staging, { recursive: true, force: true });
+        throw error;
+    }
+}
+
+/**
+ * Copies the seed into a fresh temp root for one caller.
+ *
+ * Runs outside the build lock: the seed is immutable once published, and holding the lock for a
+ * copy would serialize callers for no reason.
+ *
+ * @param seedDir - The published seed directory.
+ * @returns A caller-owned copy.
+ */
+export async function copyBoardSeed(seedDir: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'spur-board-0988-'));
+    try {
+        await cp(seedDir, dir, { recursive: true });
+        return dir;
+    } catch (error) {
+        await rm(dir, { recursive: true, force: true });
+        throw error;
+    }
 }
 
 /**
@@ -135,6 +200,17 @@ export function releaseBuildLock(): void {
 async function buildBoardOnce(options: BoardBuildOptions): Promise<string> {
     const dir = await mkdtemp(join(tmpdir(), 'spur-board-0988-'));
     try {
+        await buildImpl(dir, options);
+        return dir;
+    } catch (error) {
+        rmSync(dir, { recursive: true, force: true });
+        throw error;
+    }
+}
+
+/** One `astro build` into `dir`, with the test-adapter injection window around it. */
+async function astroBuildInto(dir: string, options: BoardBuildOptions): Promise<void> {
+    try {
         if (options.testAdapterDir) {
             // Keep injection, the blocking build and removal in one synchronous turn.
             // An awaited copy lets other tests discover the proof adapter in their
@@ -152,14 +228,24 @@ async function buildBoardOnce(options: BoardBuildOptions): Promise<string> {
                 `board build failed (exit ${proc.exitCode}):\n${proc.stdout.toString()}\n${proc.stderr.toString()}`,
             );
         }
-        return dir;
-    } catch (error) {
-        rmSync(dir, { recursive: true, force: true });
-        throw error;
     } finally {
         rmSync(TEST_ADAPTER_MODULE_DIR, { recursive: true, force: true });
     }
 }
+
+/**
+ * Test-only build seam (task 1462 R2-R4).
+ *
+ * The seed rules are decisions about *when* a build happens, so the failure modes have to be
+ * exercised without paying for a real `astro build` each time.
+ *
+ * @param next - Replacement build step; omit to restore the real `astro build`.
+ */
+export function setBoardBuildForTest(next?: (dir: string, options: BoardBuildOptions) => Promise<void>): void {
+    buildImpl = next ?? astroBuildInto;
+}
+
+let buildImpl: (dir: string, options: BoardBuildOptions) => Promise<void> = astroBuildInto;
 
 /** Delete a temporary distribution root. */
 export async function removeBoardBuild(dir: string | undefined): Promise<void> {

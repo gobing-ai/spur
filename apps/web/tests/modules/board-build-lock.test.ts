@@ -12,11 +12,20 @@
  * pid.
  */
 
-import { expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { existsSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVars } from '@gobing-ai/spur-config';
+import {
+    BOARD_SEED_ENV,
+    type BoardBuildOptions,
+    buildBoardToTemp,
+    removeBoardBuild,
+    setBoardBuildForTest,
+} from '../test-helpers/board-build';
 
 const HELPER = fileURLToPath(new URL('../test-helpers/board-build.ts', import.meta.url));
 const WORKERS = 4;
@@ -103,4 +112,108 @@ test('withBoardBuildLock serializes holders and holds the lock file for the work
         });
     await Promise.all([holder(), holder(), holder()]);
     expect(maxActive).toBe(1);
+});
+
+/**
+ * Run-scoped board seed (task 1462 R2-R4).
+ *
+ * Failure modes first — each one would either lose a caller's proof or pay the ~9 s build per
+ * caller anyway:
+ *   - the seed is rebuilt on every caller (no win) or only once per process (a second worker misses it)
+ *   - a caller receives the seed path itself, so `board-base-path`'s writes corrupt it for everyone
+ *   - a `testAdapterDir` build is seeded, leaking the test-only module into every later build
+ *   - a failed build leaves a seed behind, so every later caller silently reuses a broken tree
+ *   - with the variable unset, a direct `bun test` starts sharing builds it must not share
+ */
+describe('run-scoped board seed', () => {
+    const env = getEnvVars();
+    const seeds: string[] = [];
+    const builds: string[] = [];
+
+    afterEach(async () => {
+        setBoardBuildForTest();
+        delete env[BOARD_SEED_ENV];
+        for (const dir of seeds.splice(0)) await rm(dir, { recursive: true, force: true });
+    });
+
+    const seedDir = async (): Promise<string> => {
+        const root = await mkdtemp(join(tmpdir(), 'spur-board-seed-test-'));
+        seeds.push(root);
+        const dir = join(root, 'board-seed');
+        env[BOARD_SEED_ENV] = dir;
+        return dir;
+    };
+
+    const stubBuild = (fail = false): void => {
+        setBoardBuildForTest(async (dir: string, _options: BoardBuildOptions) => {
+            builds.push(dir);
+            if (fail) throw new Error('board build failed (exit 1):\nstub\nstub');
+            writeFileSync(join(dir, 'index.html'), 'seed', { flag: 'w' });
+        });
+    };
+
+    test('builds once for the run and hands every caller a private copy', async () => {
+        const dir = await seedDir();
+        builds.length = 0;
+        stubBuild();
+        const first = await buildBoardToTemp();
+        const second = await buildBoardToTemp();
+        try {
+            expect(builds).toEqual([`${dir}.staging-${process.pid}`]);
+            expect(first).not.toBe(second);
+            expect(existsSync(join(first, 'index.html'))).toBe(true);
+            expect(existsSync(dir)).toBe(true);
+            writeFileSync(join(first, 'index.html'), 'mutated');
+            expect(await readFile(join(dir, 'index.html'), 'utf8')).toBe('seed');
+        } finally {
+            await removeBoardBuild(first);
+            await removeBoardBuild(second);
+        }
+    });
+
+    test('never seeds a test-adapter build', async () => {
+        const dir = await seedDir();
+        builds.length = 0;
+        stubBuild();
+        const adapter = await seedDir();
+        const build = await buildBoardToTemp({ testAdapterDir: adapter });
+        try {
+            expect(builds).toHaveLength(1);
+            expect(builds[0]).not.toContain('board-seed');
+            expect(existsSync(dir)).toBe(false);
+        } finally {
+            await removeBoardBuild(build);
+        }
+    });
+
+    test('leaves no seed after a failed build and rebuilds on the next caller', async () => {
+        const dir = await seedDir();
+        builds.length = 0;
+        stubBuild(true);
+        await expect(buildBoardToTemp()).rejects.toThrow(/board build failed/);
+        expect(existsSync(dir)).toBe(false);
+        expect(existsSync(`${dir}.staging-${process.pid}`)).toBe(false);
+
+        stubBuild();
+        const build = await buildBoardToTemp();
+        try {
+            expect(existsSync(dir)).toBe(true);
+        } finally {
+            await removeBoardBuild(build);
+        }
+    });
+
+    test('builds per call when the launcher did not set the variable', async () => {
+        builds.length = 0;
+        stubBuild();
+        const first = await buildBoardToTemp();
+        const second = await buildBoardToTemp();
+        try {
+            expect(builds).toHaveLength(2);
+            expect(first).not.toBe(second);
+        } finally {
+            await removeBoardBuild(first);
+            await removeBoardBuild(second);
+        }
+    });
 });

@@ -101,6 +101,10 @@ const env: Record<string, string | undefined> = {
     // .spur/config.yaml.
     SPUR_SKIP_GLOBAL_CONFIG: 'true',
     SPUR_SKIP_PROJECT_CONFIG: 'true',
+    // One Board build per run (task 1462 R1): the web heavy files hand every caller a copy of a
+    // single seeded build instead of paying ~9 s of `astro build` each. The directory is created
+    // lazily by the first builder, so a run that never builds the Board creates nothing.
+    SPUR_TEST_BOARD_SEED_DIR: join(registryDir, 'board-seed'),
     // Global files a mounted server writes (apps/server/src/serve.ts upserts the project
     // root; the slash-command catalog is generated alongside it).
     SPUR_PROJECTS_FILE: join(registryDir, 'projects.json'),
