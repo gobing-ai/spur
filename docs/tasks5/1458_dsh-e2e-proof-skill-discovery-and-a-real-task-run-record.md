@@ -4,7 +4,7 @@ name: "dsh E2E proof: skill discovery and a real task run record"
 status: done
 template: feature-impl
 created_at: 2026-11-26T20:35:39.278Z
-updated_at: "2026-11-27T05:03:55.400Z"
+updated_at: "2026-11-27T06:23:07.330Z"
 feature_id: B81
 priority: P2
 tags:
@@ -101,13 +101,13 @@ documented one-line opt-in (`disabled: false` plus `executionCapabilities`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R10 | MET | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:150-176` runs a real `dsh 0.2.2-rc.1` `--json` turn asking for the `sp-brainstorm` skill and asserts three things from the NDJSON stream: a `tool_call` with `tool: skill` and `input.name === 'sp-brainstorm'`, its paired `tool_result` with `status: completed`, and `final.reason.kind === 'completed'` under exit 0. Receipt records `skill: {name: sp-brainstorm, status: completed}` (`.spur/run/e2e/dsh-executor-receipt.json`) |
-| R11 | MET | Same test `:177-203`: `spur agent run … --agent deepseek --json` in a temp project exits 0 with `resolved.executor === 'deepseek'`, and the durable record `.spur/memory/runs/<runId>.md` is headed `spur agent run <runId> — deepseek — started …`; the receipt carries `dshVersion: 0.2.2-rc.1`, `sessionId`, `runId`, `executor: deepseek` |
+| R10 | MET | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:154-170` asserts `tool_call` `tool: skill` + paired completed `tool_result` + exit 0; last green run's receipt `.spur/run/e2e/dsh-executor-receipt.json` (capturedAt 2026-11-27T05:50:16Z, skill `sp-brainstorm` completed) and its dsh session `~/.dsh/sessions/…/session-3cfd3b91-81fa-4494-b3c0-f0f7843432e8` exist (inspected this run). Re-run this session is sandbox-blocked: dsh EPERM rewriting `~/.dsh/profiles/headless/cordis.yml`; task Plan step 6 requires running outside the agent sandbox |
+| R11 | MET | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:177-215` asserts `spur agent run --agent deepseek` exit 0, `resolved.executor === 'deepseek'`, `.spur/memory/runs/<runId>.md` record; receipt carries dshVersion 0.2.2-rc.1, sessionId, runId bdb9cb0f-…, executor deepseek |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:150-176` — real dsh `skill` tool_call + completed tool_result for `sp-brainstorm` (green: 8.8 s, receipt `.spur/run/e2e/dsh-executor-receipt.json`) |
-| AC2 | MET | test | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:177-203` — exit 0, `resolved.executor = deepseek`, run record `.spur/memory/runs/<runId>.md` naming the executor; re-run after the env fix: 1 pass / 0 fail |
+| AC1 | MET | test | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:154-170` + receipt `.spur/run/e2e/dsh-executor-receipt.json` (green outside sandbox 2026-11-27T05:50Z; in-sandbox re-run blocked by EPERM on `~/.dsh`) |
+| AC2 | MET | test | `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:177-215` + same receipt (runId, executor deepseek, runRecord path) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -136,6 +136,8 @@ Tier decision recorded in `docs/00_ADR.md:3052-3082`: ADR-153 → Accepted, `dee
 `disabled` with no tier (operator opt-in).
 
 Verdict: PASS
+
+**Residual closure (2026-11-27):** the P4 `--add-dir` deferral is closed as not needed — executors never commit; worktree commits are driver-owned (`plugins/sp/skills/spur-dev/references/execution-worktree.md:381-396`). See the Q&A entry of 2026-11-27.
 
 ### References
 

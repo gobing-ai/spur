@@ -4,7 +4,7 @@ name: dsh agent shim in ts-ai-runner with a pinned NDJSON contract
 status: done
 template: feature-impl
 created_at: 2026-11-26T20:35:39.274Z
-updated_at: "2026-11-27T00:13:46.738Z"
+updated_at: "2026-11-27T06:23:06.974Z"
 feature_id: B81
 priority: P2
 tags:
@@ -75,6 +75,10 @@ Capture the fixture from a real `dsh --json` run of the pinned version; do not h
 - Fixed permission flags; `--add-dir` deferred until 1458 shows it is needed. Reason: `PromptOptions` has no grant field.
 - AC titles AC2/AC5 keep their identity keys; their wording now reads against the corrected R2/R5.
 
+#### Q&A entry — 2026-11-27T06:22:59.877Z
+
+Residual closed (B81 verifyall, 2026-11-27): the `--add-dir <git-common-dir>` deferral's trigger cannot fire in Spur. A dispatched executor never runs `git commit`; worktree commits belong to the batch driver (WT-3b in `plugins/sp/skills/spur-dev/references/execution-worktree.md:381-396`, staged through `spur workflow commit-guard-stage`), and `packages/app/src` has no executor-side commit path. No shim emits a git-common-dir grant for any agent. Decision: no `PromptOptions` grant field and no ts-ai-runner release. Reopen only if an executor is ever made to commit.
+
 ### Design
 
 Approach: edit the existing `dshShim` (`shims.ts:424`) and its `deepseek` row in `AGENT_SESSION_CAPABILITY` (:634); `AGENT_SHIMS`, `TIER1_PRIORITY` and `DISPLAY_ORDER` already list `deepseek` and stay unchanged. `getPromptCommand` builds `['--profile','headless', …mode/session/permission flags, '--', input]`. `ShimCommand` is `{command, args}` only (`shims.ts:23-28`), so stdin is not available; `--` pins dash-leading prompts as the positional, the same as `fmShim`. Capability row: `supportsResumeById: true`, `supportsStructuredOutput: true`, `supportsSessionDir: false`, `supportsPersistentStdin: false`, `verifiedAgainst: '<installed dsh version>'`. Reason: the facade owns every shim, so Spur gets no workaround.
@@ -122,23 +126,23 @@ must commit from a worktree (`PromptOptions` carries no grant field).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `../ts-libs/packages/ai-runner/src/agents/shims.ts:432-446` builds `--profile headless … -- <task>`; tested by `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:569` (`getPromptCommand builds the 0.2.x headless one-shot argv (R1)`) and `:576` (task is the last argv element, after `--`) |
-| R2 | MET | `../ts-libs/packages/ai-runner/src/agents/shims.ts:434` pushes `--json` only when `mode === 'json'`; `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:590` (`emits --json only for mode: json (R2)`); the shim returns `{command,args}` and parses no events (`shims.ts:23-28`, `:432-447`) |
-| R3 | MET | Exit status is authoritative — no event parsing in the shim; `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:644` (`a recorded fixture ties exit 0 to a completed final reason (R3)`) replays `../ts-libs/packages/ai-runner/tests/fixtures/dsh/completed.jsonl` (exit 0) and `not-completed.jsonl` (exit 1) |
-| R4 | MET | `../ts-libs/packages/ai-runner/src/agents/shims.ts:437-443`: `--session-id <id>` then the repeated permission flags; capability row `:647-655` sets `supportsResumeById: true`; `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:608` |
-| R5 | MET | `../ts-libs/packages/ai-runner/src/agents/shims.ts:443` always emits `--permission-mode workspace-write --approval-policy never` (resume included); asserted by `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:556` / `:570`; `--add-dir` intentionally deferred (note at `shims.ts:417-424`, Q&A 2026-11-26) |
-| R6 | MET | `../ts-libs/packages/ai-runner/src/agents/shims.ts:448` `getAuthCommand: () => null`, version probe `dsh --version` (`shims.ts:431`); `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:622`; live probe `dsh --version` → `0.2.2-rc.1` |
-| R12 | MET | Capability `verifiedAgainst: '0.2.2-rc.1'` (`../ts-libs/packages/ai-runner/src/agents/shims.ts:652`) equals the installed `dsh --version`; fixtures captured from that binary (`../ts-libs/packages/ai-runner/tests/fixtures/dsh/README.md`); `verifiedAgainst` asserted at `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:628-641` |
+| R1 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` line 433-447 — `getPromptCommand` builds `--profile headless … -- <input>`; installed 0.8.5 dist carries it (`node_modules/@gobing-ai/ts-ai-runner/dist/agents/shims.js`); ts-libs commit 26a09d56 is an ancestor of release b0612dca (git merge-base, 2026-11-26 re-verify) |
+| R2 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` line 435 — `--json` only when `mode === 'json'`; no event parsing in the shim |
+| R3 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 530-552 replays `tests/fixtures/dsh/{completed,not-completed}.jsonl`; `bun test tests/agents/shims.test.ts -t "deepseek\|dsh"` → 11 pass / 0 fail (this run) |
+| R4 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` line 440, 445 (`--session-id` + permission flags on every call) and line 647-655 (`supportsResumeById: true`); covered by the same 11-test run |
+| R5 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` line 445 — `--permission-mode workspace-write --approval-policy never` unconditional; `--add-dir` deferred per Design |
+| R6 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` line 432 (`dsh --version`) and line 449 (`getAuthCommand: () => null`); `dsh --version` → `0.2.2-rc.1` (this run) |
+| R12 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/src/agents/shims.ts` line 652 `verifiedAgainst: '0.2.2-rc.1'` equals installed `dsh --version`; fixtures are real 0.2.2-rc.1 captures (`tests/fixtures/dsh/README.md`); Spur pins 0.8.5 at `package.json:32` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `../ts-libs/packages/ai-runner/src/agents/shims.ts:432-446`; `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:569` |
-| AC2 | MET | test | `../ts-libs/packages/ai-runner/src/agents/shims.ts:434`; `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:590` |
-| AC3 | MET | test | `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:644` over `../ts-libs/packages/ai-runner/tests/fixtures/dsh/completed.jsonl` + `not-completed.jsonl` |
-| AC4 | MET | test | `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:608`; capability row `../ts-libs/packages/ai-runner/src/agents/shims.ts:647-655` |
-| AC5 | MET | test | `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:556`, `:570`; `../ts-libs/packages/ai-runner/src/agents/shims.ts:443` |
-| AC6 | MET | test | `../ts-libs/packages/ai-runner/tests/agents/shims.test.ts:622`; `dsh --version` → `0.2.2-rc.1`; `getAuthCommand` null |
-| AC7 | MET | command | `verifiedAgainst: '0.2.2-rc.1'` (`../ts-libs/packages/ai-runner/src/agents/shims.ts:652`) against installed `dsh 0.2.2-rc.1`; fixture provenance in `../ts-libs/packages/ai-runner/tests/fixtures/dsh/README.md` |
+| AC1 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 554-633 — one-shot argv; 11 pass / 0 fail (this run) |
+| AC2 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 554-633 — json-mode gating case; 11 pass / 0 fail |
+| AC3 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 530-552 — exit 0 ⇔ `final.reason.kind === "completed"` over real fixtures |
+| AC4 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 554-633 — resume repeats permission flags; capability row `supportsResumeById: true` |
+| AC5 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 554-633 — fixed grant flags asserted on one-shot and resume |
+| AC6 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 554-633 — version command + null auth command; `dsh --version` → 0.2.2-rc.1 |
+| AC7 | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/agents/shims.test.ts` line 530-552 — fixture replay pinned to `verifiedAgainst: '0.2.2-rc.1'` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -182,6 +186,8 @@ Gate evidence: `spur task gate 1456` light/full receipt for this tree passed (pi
 run `9d4987d6`). ts-libs `bun test tests/agents/shims.test.ts` → 80 pass / 0 fail.
 
 Verdict: PASS
+
+**Residual closure (2026-11-27):** the P4 `--add-dir` deferral is closed as not needed — executors never commit; worktree commits are driver-owned (`plugins/sp/skills/spur-dev/references/execution-worktree.md:381-396`). See the Q&A entry of 2026-11-27.
 
 ### References
 

@@ -4,7 +4,7 @@ name: "Spur wiring for the dsh executor: config, services, Board row and doctor 
 status: done
 template: feature-impl
 created_at: 2026-11-26T20:35:39.278Z
-updated_at: "2026-11-27T01:43:50.984Z"
+updated_at: "2026-11-27T06:04:23.149Z"
 feature_id: B81
 priority: P2
 tags:
@@ -109,17 +109,17 @@ signature to classify. No `process-identity.ts` change, per the observation abov
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R7 | MET | `config/config.global.yaml:140-148` and `config/config.example.yaml:178-186` declare `{name: deepseek, agent: deepseek, model: deepseek-chat, disabled: true}` with no `tier`, so no rung can route to it; both rows parse against `AgentExecutorConfigSchema` (`bun -e` over `packages/config/src/index.ts`, 2026-11-26). The canonical-id comment lists `deepseek` (`config/config.global.yaml:79-81`) |
-| R8 | MET | `packages/app/src/services/run-session-observer.ts:15-31` maps `deepseek: 'deepseek'`, proven by `packages/app/tests/services/run-session-observer.test.ts:452-461` (also asserts the importer's `.dsh/sessions` default root). `process-identity.ts` and `failure-classification.ts` are deliberately unchanged, with the observation recorded in `packages/app/tests/services/process-identity.test.ts:118-127` (live dsh 0.2.2-rc.1 reads `comm=node`) and in `docs/design/dsh-agent-integration.md:38-46` |
-| R9 | MET | `packages/app/src/services/agent-mcp-readiness.ts:63-82` reads the profile patch entry (`@deepseek-ai/dsh-mcp-client` with `config.serverName: spur`) and `:148-161` registers the `deepseek` spec (`binary: dsh`, `format: yaml`, `~/.dsh/profiles/headless/cordis.patch.yml`, read-only); `apps/web/src/modules/integrations/helpers.ts:53-65,71-82,181-186,200-219` adds dsh to the Board's agents with its own YAML shape. Tests: `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230`, `apps/web/tests/modules/integrations/helpers.test.ts:541-562` |
-| R13 | MET | No new code: the generic `capability-declaration-stale` path (`packages/app/src/services/agent-doctor-ops.ts:287`) now compares against `verifiedAgainst: '0.2.2-rc.1'` (1456). Regression assertion `packages/app/tests/services/agent-service.test.ts:4967-4985` (0899 R3, deepseek core drift warns, executor not disabled) — 4 pass / 0 fail under `--test-name-pattern 0899` |
+| R7 | MET | `config/config.global.yaml:145-152` and `config/config.example.yaml:186-193` — `deepseek` executor, `disabled: true`, no `tier`; both files parse (`bun -e` yaml parse, this run); `packages/config` tests 341 pass / 0 fail (this run). Fix pass refreshed the stale "until 1458 passes" comment in both files to the ADR-153 opt-in decision |
+| R8 | MET | `packages/app/src/services/run-session-observer.ts:15-31` (`deepseek: 'deepseek'`); `packages/app/tests/services/run-session-observer.test.ts:452-461`; `process-identity.ts`/`failure-classification.ts` unchanged by observation (`packages/app/tests/services/process-identity.test.ts:118-127`, `docs/design/dsh-agent-integration.md:38-46`); 36 pass / 0 fail across the 3 service files (this run) |
+| R9 | MET | `packages/app/src/services/agent-mcp-readiness.ts:63-82,148-161`; `apps/web/src/modules/integrations/helpers.ts:53-65,181-186,200-219`; tests `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230` and `apps/web/tests/modules/integrations/helpers.test.ts:541-562` (33 pass / 0 fail, this run) |
+| R13 | MET | `packages/app/src/services/agent-doctor-ops.ts:281-290` warns only (no disable); regression `packages/app/tests/services/agent-service.test.ts:4967-4985` asserts the `0.2.2-rc.1` core in the warning; `--test-name-pattern 0899` → 4 pass / 0 fail (this run) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `config/config.global.yaml:140-148`, `config/config.example.yaml:178-186`; both rows parse as `AgentExecutorConfigSchema` (`{"name":"deepseek","agent":"deepseek","model":"deepseek-chat","disabled":true}`) |
-| AC2 | MET | test | `packages/app/tests/services/run-session-observer.test.ts:452-461`, `packages/app/tests/services/process-identity.test.ts:118-127` (17 + 19 tests pass across the two service files; light gate PASS) |
-| AC3 | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230` (configured / not-configured / not-installed), `apps/web/tests/modules/integrations/helpers.test.ts:541-562` (dsh profile-patch snippet), and the Board browser proof `apps/web/tests/modules/integrations-browser.heavy.test.ts` → PASS with receipt `.spur/run/integrations-proof/integrations-e2e-receipt.json` and screenshots `integrations-e2e-summary-{light,dark}.png` |
-| AC4 | MET | test | `packages/app/tests/services/agent-service.test.ts:4967-4985` (0899 R3) — a dsh version drift warns `capability-declaration-stale` without disabling the executor |
+| AC1 | MET | command | `config/config.global.yaml:145-152`, `config/config.example.yaml:186-193`; yaml parse + `packages/config` suite 341 pass (this run) |
+| AC2 | MET | test | `packages/app/tests/services/run-session-observer.test.ts:452-461`, `packages/app/tests/services/process-identity.test.ts:118-127` (pass, this run) |
+| AC3 | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230`, `apps/web/tests/modules/integrations/helpers.test.ts:541-562` (pass, this run); Board browser receipt `.spur/run/integrations-proof/integrations-e2e-receipt.json` (prior run) |
+| AC4 | MET | test | `packages/app/tests/services/agent-service.test.ts:4967-4985` — 0899 pattern 4 pass / 0 fail (this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
