@@ -187,6 +187,19 @@ export {
     validateCoverageCertification,
 } from './rules/coverage-certification';
 export {
+    classifyTestFiles,
+    diffLaneManifest,
+    type LaneDrift,
+    type LaneDriftKind,
+    type LaneEntry,
+    type LaneManifest,
+    type LaneManifestRoot,
+    type LaneReason,
+    parseJunitTimings,
+    readLaneManifest,
+    type TestSource,
+} from './rules/test-lanes';
+export {
     type CheckShimsOptions,
     type CheckShimsResult,
     checkShims,

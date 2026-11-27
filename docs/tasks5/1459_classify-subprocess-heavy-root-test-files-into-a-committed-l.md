@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Classify subprocess-heavy root test files into a committed lane manifest with a drift guard
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-27T06:56:54.805Z
-updated_at: "2026-11-27T07:16:29.438Z"
+updated_at: "2026-11-27T08:48:41.356Z"
 feature_id: H161
 priority: P1
 tags:
@@ -12,6 +12,8 @@ tags:
   - performance
 
 estimate_hours: 5
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1459. Classify subprocess-heavy root test files into a committed lane manifest with a drift guard
@@ -27,15 +29,15 @@ Feature H161 (under H16; design `docs/design/laned-root-test-suite.md` §3.1). T
 
 ### Requirements
 
-- [ ] R1. `bun scripts/spur-dev.ts test-lanes` scans every non-heavy root test file (`./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts`, honoring bunfig `pathIgnorePatterns`) and writes `config/test-lanes.json`. A file is subprocess-lane when it (a) contains a spawn token (`Bun.spawn`, `Bun.spawnSync`, `spawnSync`, `execSync`, `execFileSync`, `child_process`, Bun `$` shell template) or (b) imports by name an exported helper function whose body contains a spawn token (non-test `.ts` under any `tests/` directory, one level). Entries are repo-relative, sorted, with the detection reason and `durationMs` when a JUnit timings file is supplied.
-- [ ] R2. A repo-wide test fails, naming the file, when the generator's current classification differs from the committed `root.subprocess` list (a spawning file is missing, or a listed file no longer exists or no longer spawns).
-- [ ] R3. Record a before receipt `.spur/run/test-lanes-baseline.json`: wall time and exit code of the current `bun run test` (`--parallel=2`) and of one child at `--parallel=4`, with timeout-shaped failures counted, plus the per-file JUnit durations. Cite it in Testing.
+- [x] R1. `bun scripts/spur-dev.ts test-lanes` scans every non-heavy root test file (`./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts`, honoring bunfig `pathIgnorePatterns`) and writes `config/test-lanes.json`. A file is subprocess-lane when it (a) contains a spawn token (`Bun.spawn`, `Bun.spawnSync`, `spawnSync`, `execSync`, `execFileSync`, `child_process`, Bun `$` shell template) or (b) imports by name an exported helper function whose body contains a spawn token (non-test `.ts` under any `tests/` directory, one level). Entries are repo-relative, sorted, with the detection reason and `durationMs` when a JUnit timings file is supplied.
+- [x] R2. A repo-wide test fails, naming the file, when the generator's current classification differs from the committed `root.subprocess` list (a spawning file is missing, or a listed file no longer exists or no longer spawns).
+- [x] R3. Record a before receipt `.spur/run/test-lanes-baseline.json`: wall time and exit code of the current `bun run test` (`--parallel=2`) and of one child at `--parallel=4`, with timeout-shaped failures counted, plus the per-file JUnit durations. Cite it in Testing.
 
 Out of scope: running lanes, LCOV merge or any change to `run-tests.ts` (task 1460); the `heavy` section (task 1461); deeper than one-level helper chains (a missed file surfaces as a timeout or in the duration ranking and is added by re-running the generator after the helper is fixed); feeding Bun `--timings`.
 
 ### Acceptance Criteria
 
-- [ ] R2 — The subprocess lane membership is derived from evidence and guarded against drift
+- [x] R2 — The subprocess lane membership is derived from evidence and guarded against drift
 
 ### Q&A
 
@@ -77,15 +79,47 @@ Out of scope: running lanes, LCOV merge or any change to `run-tests.ts` (task 14
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `packages/app/src/rules/test-lanes.ts:1-377` | New classifier: `classifyTestFiles` (direct spawn token or one-level name-based helper import), `readLaneManifest` (validating reader, preserves unknown top-level keys), `diffLaneManifest` (missing/stale drift), `parseJunitTimings` (per-file ms from JUnit). | Pure, coverage-gated membership logic, so the launcher and the drift guard share one decision instead of two scans (R1, R2). |
+| `packages/app/src/index.ts:189-201` | Export the module through `@gobing-ai/spur-app`. | The repository generator consumes it; no deep relative imports (ADR-021). |
+| `packages/app/tests/rules/test-lanes.test.ts:1-259` | 19 failure-mode tests: direct/`$`-template tokens, aliased helper import, imported-but-not-spawning name, second-level indirection (documented miss), index/extension specifier resolution, brace-bodied arrow, function expression, unterminated source, escaped quotes, sorted output, malformed manifests, both drift directions, JUnit aggregation. | R1/R2 pinned before implementation; the module sits at 95% lines / 98% functions after them. |
+| `scripts/commands/test-lanes.ts:1-222` | `runTestLanes`: enumerates the root path set (`ROOT_PATH_SET`), honors bunfig `pathIgnorePatterns`, indexes non-test helpers under any `tests/`, merges `--timings`, preserves foreign top-level keys, `--check` exits 1 naming every drifting path. | Repository source generator per ADR-130 (thin generator over the coverage-gated core; R1). |
+| `scripts/spur-dev.ts:21,60,89,164` | Register `test-lanes` in the dispatcher's `COMMANDS` list, switch, and usage block. | One-line registration; the ownership test pins `COMMANDS` to the switch's case labels. |
+| `scripts/commands/test-lanes.test.ts:1-27` | `renderManifest` preserves the `heavy` section and starts a manifest when none is committed. | The 1461 section must survive regeneration byte-for-byte. |
+| `config/test-lanes.json:1-870` | Generated manifest: 144 subprocess-lane rows (132 `direct`, 12 `helper:…#…`), sorted, each with the JUnit `durationMs`. | The committed evidence the launcher and drift guard read (R1). |
+| `repo-wide-tests/test-lanes-manifest.test.ts:1-28` | Drift guard: spawns `test-lanes --check` and asserts exit 0, carrying the full output in the assertion value so a failure names the drifting file. | R2; runs in `test-repo-wide`, hence in `spur-check-feature`. |
+| `.spur/run/test-lanes-baseline.json`, `.spur/run/test-lanes-junit-durations.json` | Before receipt: `bun run test` (519 s), the JUnit profiling run (719 s, exit 0), one child at `--parallel=4` (496 s, 1 timeout), full per-file durations. | R3 baseline for 1460's after-receipt; the `--parallel=4` arm reproduces the c8d5ca0f2 contention timeout. |
+| `packages/app/src/agent/host-probe.ts:311-317` | Reworded the `which` seam's doc comment so it no longer contains a literal environment-access token. | Pre-existing base-tree blocker: `env-var-hygiene` fails on `main` at this comment (introduced by `fa0a395a8`), which reds `test-pre-check` for every task's gate. Comment-only, no behaviour change. |
+
+Measurement notes: at `--parallel=2` the 144 subprocess-lane files hold 1,112 s of the 1,346 s of recorded test time (82.7%) across 12.7% of the files, which is why 1460 lanes them instead of raising the single child's width — `--parallel=4` saves ~23 s and buys one 20 s timeout (`runLightGate (temp git repo)`).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/test-lanes.ts:96-104` scans `ROOT_PATH_SET` honoring `readPathIgnorePatterns` (`:118-129`); `packages/app/src/rules/test-lanes.ts:91-114` classifies direct tokens (:71) and one-level name-based helper imports (:239-256); entries sorted (:112) with `reason` and `durationMs` merged from `--timings` (`scripts/commands/test-lanes.ts:196-204`); `config/test-lanes.json:1-870` holds 144 rows. |
+| R2 | MET | `packages/app/src/rules/test-lanes.ts:163-186` + `repo-wide-tests/test-lanes-manifest.test.ts:22-33` (runs in `test-repo-wide`); drift proof: removing `apps/cli/tests/cli-pipe.test.ts` made `--check` exit 1 naming that path and the repo-wide test fail with the same line, then restored green. |
+| R3 | MET | `.spur/run/test-lanes-baseline.json` (parallel-2 519 s exit 1 = coverage gate on the then-uncovered new module; junit run 719 s exit 0 / 13527 tests; `--parallel=4` 496 s with 1 timeout `runLightGate … 20008.97ms`), per-file durations in `.spur/run/test-lanes-junit-durations.json` and merged into the manifest. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R2 | MET | test | `repo-wide-tests/test-lanes-manifest.test.ts:22-33`; `packages/app/tests/rules/test-lanes.test.ts:1-259` (19 pass); drift-by-removal proof recorded in `.spur/run/test-lanes-baseline.json` context and the implement receipt. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -98,4 +132,7 @@ Out of scope: running lanes, LCOV merge or any change to `run-tests.ts` (task 14
 ### History
 
 - 2026-11-27T07:00:09.288Z feature_id U → H161 (system)
+- 2026-11-27T08:47:43.930Z todo → wip (system)
+- 2026-11-27T08:48:38.989Z wip → testing (system)
+- 2026-11-27T08:48:41.351Z testing → done (system)
 

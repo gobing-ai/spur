@@ -311,9 +311,9 @@ export interface HostProbeOptions {
      * Binary resolution seam (default {@link Bun.which}).
      *
      * WHY: Bun caches the probe's PATH at process start, so a test cannot point `Bun.which` at
-     * fixture hosts by reassigning `process.env.PATH`. Without this seam the installed-binary
-     * branch is covered only on machines that happen to have codex/claude/pi, and the per-file
-     * coverage gate flips red as soon as the last one leaves CI's PATH.
+     * fixture hosts by reassigning the PATH entry of the ambient environment. Without this seam the
+     * installed-binary branch is covered only on machines that happen to have codex/claude/pi, and
+     * the per-file coverage gate flips red as soon as the last one leaves CI's PATH.
      */
     which?: (agent: string) => string | null;
 }

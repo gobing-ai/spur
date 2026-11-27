@@ -18,6 +18,7 @@
  *
  *   L2 test runner / coverage
  *   run-tests <bun test args>                  run the suite with the repo's hermetic env; owns coverage certification
+ *   test-lanes [--timings <junit.xml>] [--check]  regenerate/verify config/test-lanes.json (task 1459)
  *
  *   L3 repo contract checks
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
@@ -56,6 +57,7 @@ import { runDelegateWorkflowE2e } from './commands/delegate-workflow-e2e';
 import { runFleetE2e } from './commands/fleet-e2e';
 import { runIntegrationsE2e } from './commands/integrations-e2e';
 import { runMcpAgentInterop } from './commands/mcp-agent-interop';
+import { runTestLanes } from './commands/test-lanes';
 
 /**
  * L2–L4 modules that own their own argv parsing and exit code (A92 R5). They run as a child
@@ -84,6 +86,7 @@ const COMMANDS = [
     'delegate-workflow-e2e',
     'integrations-e2e',
     'mcp-agent-interop',
+    'test-lanes',
 ];
 
 /**
@@ -157,6 +160,9 @@ try {
             break;
         case 'mcp-agent-interop':
             process.exit(await runMcpAgentInterop(args));
+            break;
+        case 'test-lanes':
+            process.exit(await runTestLanes(args));
             break;
         default: {
             const module = command === undefined ? undefined : DELEGATED[command];

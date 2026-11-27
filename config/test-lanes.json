@@ -1,0 +1,727 @@
+{
+    "version": 1,
+    "root": {
+        "subprocess": [
+            {
+                "path": "apps/cli/tests/cli-pipe.test.ts",
+                "reason": "direct",
+                "durationMs": 843
+            },
+            {
+                "path": "apps/cli/tests/commands/agent/join-renewal.test.ts",
+                "reason": "direct",
+                "durationMs": 3046
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/artifacts.e2e.test.ts",
+                "reason": "direct",
+                "durationMs": 37501
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/build.test.ts",
+                "reason": "direct",
+                "durationMs": 1061
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/bump-ver.test.ts",
+                "reason": "direct",
+                "durationMs": 1646
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/compile.e2e.test.ts",
+                "reason": "direct",
+                "durationMs": 19868
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/drop-tags.test.ts",
+                "reason": "direct",
+                "durationMs": 1267
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/pr.test.ts",
+                "reason": "direct",
+                "durationMs": 1463
+            },
+            {
+                "path": "apps/cli/tests/commands/builder/show-branches.test.ts",
+                "reason": "direct",
+                "durationMs": 47086
+            },
+            {
+                "path": "apps/cli/tests/commands/dispatch-inspect.test.ts",
+                "reason": "direct",
+                "durationMs": 7549
+            },
+            {
+                "path": "apps/cli/tests/commands/feature-inventory-sync.test.ts",
+                "reason": "direct",
+                "durationMs": 116
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/advance.test.ts",
+                "reason": "direct",
+                "durationMs": 3068
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/check.test.ts",
+                "reason": "direct",
+                "durationMs": 118
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/create.test.ts",
+                "reason": "direct",
+                "durationMs": 57
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/index.test.ts",
+                "reason": "direct",
+                "durationMs": 43
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/list.test.ts",
+                "reason": "direct",
+                "durationMs": 20
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/move.test.ts",
+                "reason": "direct",
+                "durationMs": 98
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/refresh.test.ts",
+                "reason": "direct",
+                "durationMs": 83
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/show.test.ts",
+                "reason": "direct",
+                "durationMs": 70
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/sync.test.ts",
+                "reason": "direct",
+                "durationMs": 9668
+            },
+            {
+                "path": "apps/cli/tests/commands/feature/update.test.ts",
+                "reason": "direct",
+                "durationMs": 6125
+            },
+            {
+                "path": "apps/cli/tests/commands/init-search.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 7303
+            },
+            {
+                "path": "apps/cli/tests/commands/mcp-gateway.test.ts",
+                "reason": "direct",
+                "durationMs": 1990
+            },
+            {
+                "path": "apps/cli/tests/commands/mcp.test.ts",
+                "reason": "direct",
+                "durationMs": 1220
+            },
+            {
+                "path": "apps/cli/tests/commands/projects.test.ts",
+                "reason": "direct",
+                "durationMs": 1277
+            },
+            {
+                "path": "apps/cli/tests/commands/rule/certify-coverage.test.ts",
+                "reason": "direct",
+                "durationMs": 403
+            },
+            {
+                "path": "apps/cli/tests/commands/rule/check-coverage-cert.test.ts",
+                "reason": "direct",
+                "durationMs": 135
+            },
+            {
+                "path": "apps/cli/tests/commands/self/exec.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 20400
+            },
+            {
+                "path": "apps/cli/tests/commands/self/init.test.ts",
+                "reason": "direct",
+                "durationMs": 86592
+            },
+            {
+                "path": "apps/cli/tests/commands/self/install.e2e.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 28719
+            },
+            {
+                "path": "apps/cli/tests/commands/self/search.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 2631
+            },
+            {
+                "path": "apps/cli/tests/commands/self/status.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 49305
+            },
+            {
+                "path": "apps/cli/tests/commands/task/create.test.ts",
+                "reason": "direct",
+                "durationMs": 1051
+            },
+            {
+                "path": "apps/cli/tests/commands/task/diffstat.test.ts",
+                "reason": "direct",
+                "durationMs": 263
+            },
+            {
+                "path": "apps/cli/tests/commands/task/run-link.test.ts",
+                "reason": "direct",
+                "durationMs": 105
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/cancel.test.ts",
+                "reason": "direct",
+                "durationMs": 7993
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/commit-guard.test.ts",
+                "reason": "direct",
+                "durationMs": 456
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/eval.test.ts",
+                "reason": "direct",
+                "durationMs": 29810
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/progress.test.ts",
+                "reason": "direct",
+                "durationMs": 254
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/promote.e2e.test.ts",
+                "reason": "direct",
+                "durationMs": 4385
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/show.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 4074
+            },
+            {
+                "path": "apps/cli/tests/commands/workflow/trace.test.ts",
+                "reason": "direct",
+                "durationMs": 672
+            },
+            {
+                "path": "apps/cli/tests/config-layering.test.ts",
+                "reason": "helper:apps/cli/tests/helpers.ts#runCli",
+                "durationMs": 9987
+            },
+            {
+                "path": "apps/cli/tests/helpers.test.ts",
+                "reason": "direct",
+                "durationMs": 3462
+            },
+            {
+                "path": "apps/cli/tests/release-ops.test.ts",
+                "reason": "direct",
+                "durationMs": 11893
+            },
+            {
+                "path": "apps/cli/tests/script-absorption-pr5-parity.test.ts",
+                "reason": "helper:apps/cli/tests/fixtures/script-absorption-pr5/harness.ts#runCase",
+                "durationMs": 89180
+            },
+            {
+                "path": "apps/cli/tests/script-absorption-pr6-parity.test.ts",
+                "reason": "helper:apps/cli/tests/script-absorption-pr6/harness.ts#runSide",
+                "durationMs": 59016
+            },
+            {
+                "path": "apps/cli/tests/script-absorption-pr7-parity.test.ts",
+                "reason": "helper:apps/cli/tests/script-absorption-pr7/harness.ts#runSide",
+                "durationMs": 46020
+            },
+            {
+                "path": "apps/cli/tests/test-shim-launcher.test.ts",
+                "reason": "direct",
+                "durationMs": 2796
+            },
+            {
+                "path": "apps/cli/tests/workflow-decision-scan.test.ts",
+                "reason": "direct",
+                "durationMs": 346
+            },
+            {
+                "path": "apps/cli/tests/workflow/idea-pipeline-rescue.test.ts",
+                "reason": "direct",
+                "durationMs": 174
+            },
+            {
+                "path": "apps/server/tests/context.test.ts",
+                "reason": "direct",
+                "durationMs": 306
+            },
+            {
+                "path": "apps/server/tests/mcp-e2e.test.ts",
+                "reason": "direct",
+                "durationMs": 4141
+            },
+            {
+                "path": "apps/server/tests/modules/a2a/routes.test.ts",
+                "reason": "direct",
+                "durationMs": 12228
+            },
+            {
+                "path": "apps/server/tests/modules/events/ledger-relay-loop.test.ts",
+                "reason": "direct",
+                "durationMs": 4111
+            },
+            {
+                "path": "apps/server/tests/modules/health.test.ts",
+                "reason": "direct",
+                "durationMs": 1521
+            },
+            {
+                "path": "apps/server/tests/modules/mcp-module.test.ts",
+                "reason": "direct",
+                "durationMs": 8366
+            },
+            {
+                "path": "apps/web/tests/lib/rpc-fetch.test.ts",
+                "reason": "direct",
+                "durationMs": 13
+            },
+            {
+                "path": "apps/web/tests/modules/board-build-lock.test.ts",
+                "reason": "direct",
+                "durationMs": 4754
+            },
+            {
+                "path": "apps/web/tests/modules/projects/member-terminal-identity.test.ts",
+                "reason": "direct",
+                "durationMs": 0
+            },
+            {
+                "path": "apps/web/tests/modules/runtime-distribution.test.ts",
+                "reason": "direct",
+                "durationMs": 259
+            },
+            {
+                "path": "apps/web/tests/modules/task-kanban/markdown-safety.test.ts",
+                "reason": "direct",
+                "durationMs": 25
+            },
+            {
+                "path": "packages/app/tests/builder/binaries.test.ts",
+                "reason": "direct",
+                "durationMs": 20
+            },
+            {
+                "path": "packages/app/tests/builder/verify-pack.test.ts",
+                "reason": "direct",
+                "durationMs": 116
+            },
+            {
+                "path": "packages/app/tests/helpers.test.ts",
+                "reason": "direct",
+                "durationMs": 19
+            },
+            {
+                "path": "packages/app/tests/observability/agent-execution.test.ts",
+                "reason": "direct",
+                "durationMs": 299
+            },
+            {
+                "path": "packages/app/tests/rules/coverage-certification.test.ts",
+                "reason": "direct",
+                "durationMs": 30435
+            },
+            {
+                "path": "packages/app/tests/rules/test-lanes.test.ts",
+                "reason": "direct",
+                "durationMs": 0
+            },
+            {
+                "path": "packages/app/tests/services/agent-loop-service.test.ts",
+                "reason": "direct",
+                "durationMs": 3861
+            },
+            {
+                "path": "packages/app/tests/services/agent-process-status.test.ts",
+                "reason": "direct",
+                "durationMs": 2680
+            },
+            {
+                "path": "packages/app/tests/services/corpus-check.test.ts",
+                "reason": "direct",
+                "durationMs": 14366
+            },
+            {
+                "path": "packages/app/tests/services/daily-summary.test.ts",
+                "reason": "direct",
+                "durationMs": 1771
+            },
+            {
+                "path": "packages/app/tests/services/dogfood/pipeline-detect.test.ts",
+                "reason": "direct",
+                "durationMs": 1629
+            },
+            {
+                "path": "packages/app/tests/services/feature-service.test.ts",
+                "reason": "direct",
+                "durationMs": 2088
+            },
+            {
+                "path": "packages/app/tests/services/fleet-integration-queue.test.ts",
+                "reason": "direct",
+                "durationMs": 3511
+            },
+            {
+                "path": "packages/app/tests/services/fleet-lanes-e2e.test.ts",
+                "reason": "direct",
+                "durationMs": 4486
+            },
+            {
+                "path": "packages/app/tests/services/guest-lease-renewer.test.ts",
+                "reason": "direct",
+                "durationMs": 1443
+            },
+            {
+                "path": "packages/app/tests/services/history-anatomy-cli.test.ts",
+                "reason": "direct",
+                "durationMs": 1958
+            },
+            {
+                "path": "packages/app/tests/services/parallel-supervisor.test.ts",
+                "reason": "direct",
+                "durationMs": 4224
+            },
+            {
+                "path": "packages/app/tests/services/pr-review/pr-review.test.ts",
+                "reason": "direct",
+                "durationMs": 4859
+            },
+            {
+                "path": "packages/app/tests/services/project-registry.test.ts",
+                "reason": "direct",
+                "durationMs": 3513
+            },
+            {
+                "path": "packages/app/tests/services/project-server-owner.test.ts",
+                "reason": "direct",
+                "durationMs": 509
+            },
+            {
+                "path": "packages/app/tests/services/project-start.test.ts",
+                "reason": "direct",
+                "durationMs": 558
+            },
+            {
+                "path": "packages/app/tests/services/quality-gate-affected-scope.test.ts",
+                "reason": "direct",
+                "durationMs": 2136
+            },
+            {
+                "path": "packages/app/tests/services/quality-gate-lock.test.ts",
+                "reason": "direct",
+                "durationMs": 609
+            },
+            {
+                "path": "packages/app/tests/services/quality-gate-tree-receipt.test.ts",
+                "reason": "direct",
+                "durationMs": 1150
+            },
+            {
+                "path": "packages/app/tests/services/quality-gate.test.ts",
+                "reason": "direct",
+                "durationMs": 3188
+            },
+            {
+                "path": "packages/app/tests/services/run-storage.test.ts",
+                "reason": "direct",
+                "durationMs": 227
+            },
+            {
+                "path": "packages/app/tests/services/task-record.test.ts",
+                "reason": "direct",
+                "durationMs": 4317
+            },
+            {
+                "path": "packages/app/tests/services/workflow-clean-ops.test.ts",
+                "reason": "direct",
+                "durationMs": 166
+            },
+            {
+                "path": "packages/app/tests/services/workflow-run-recording.test.ts",
+                "reason": "direct",
+                "durationMs": 2
+            },
+            {
+                "path": "packages/app/tests/services/workflow-service.test.ts",
+                "reason": "direct",
+                "durationMs": 4424
+            },
+            {
+                "path": "packages/app/tests/workflow/actions/agent-run.test.ts",
+                "reason": "direct",
+                "durationMs": 2749
+            },
+            {
+                "path": "packages/app/tests/workflow/actions/command-gate.test.ts",
+                "reason": "direct",
+                "durationMs": 8266
+            },
+            {
+                "path": "packages/app/tests/workflow/actions/proof-fingerprint.test.ts",
+                "reason": "direct",
+                "durationMs": 669
+            },
+            {
+                "path": "packages/app/tests/workflow/actions/run-artifact.test.ts",
+                "reason": "direct",
+                "durationMs": 2392
+            },
+            {
+                "path": "packages/app/tests/workflow/checkpoint-contract.test.ts",
+                "reason": "direct",
+                "durationMs": 0
+            },
+            {
+                "path": "packages/app/tests/workflow/commit-guard.test.ts",
+                "reason": "direct",
+                "durationMs": 2021
+            },
+            {
+                "path": "packages/app/tests/workflow/feature-lifecycle-adapter.test.ts",
+                "reason": "direct",
+                "durationMs": 7815
+            },
+            {
+                "path": "packages/app/tests/workflow/feature-lifecycle-verifying-entry.test.ts",
+                "reason": "direct",
+                "durationMs": 19315
+            },
+            {
+                "path": "packages/app/tests/workflow/feature-verification-receipt.test.ts",
+                "reason": "direct",
+                "durationMs": 3062
+            },
+            {
+                "path": "packages/app/tests/workflow/guard-parity.test.ts",
+                "reason": "direct",
+                "durationMs": 64
+            },
+            {
+                "path": "packages/app/tests/workflow/idea-pipeline-definition.test.ts",
+                "reason": "direct",
+                "durationMs": 1306
+            },
+            {
+                "path": "packages/app/tests/workflow/idea-pipeline-routing.test.ts",
+                "reason": "direct",
+                "durationMs": 5503
+            },
+            {
+                "path": "packages/app/tests/workflow/migrated-gates.test.ts",
+                "reason": "direct",
+                "durationMs": 47
+            },
+            {
+                "path": "packages/app/tests/workflow/persist-check.test.ts",
+                "reason": "direct",
+                "durationMs": 111
+            },
+            {
+                "path": "packages/app/tests/workflow/pipeline-eval.test.ts",
+                "reason": "direct",
+                "durationMs": 3657
+            },
+            {
+                "path": "packages/app/tests/workflow/proof-input-fingerprint.test.ts",
+                "reason": "direct",
+                "durationMs": 389
+            },
+            {
+                "path": "packages/app/tests/workflow/proportional-routing-pilots.test.ts",
+                "reason": "direct",
+                "durationMs": 3993
+            },
+            {
+                "path": "packages/app/tests/workflow/sdlc-action-workflow-defaults.test.ts",
+                "reason": "direct",
+                "durationMs": 2746
+            },
+            {
+                "path": "packages/app/tests/workflow/step-profile-cli.test.ts",
+                "reason": "direct",
+                "durationMs": 3881
+            },
+            {
+                "path": "packages/app/tests/workflow/task-diffstat.test.ts",
+                "reason": "direct",
+                "durationMs": 2880
+            },
+            {
+                "path": "packages/app/tests/workflow/task-pipeline-proof-chain.test.ts",
+                "reason": "direct",
+                "durationMs": 45096
+            },
+            {
+                "path": "packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts",
+                "reason": "direct",
+                "durationMs": 86
+            },
+            {
+                "path": "packages/app/tests/workflow/task-pipeline-triage-routing.test.ts",
+                "reason": "direct",
+                "durationMs": 19984
+            },
+            {
+                "path": "packages/app/tests/workflow/wrapup-pipeline-e2e.test.ts",
+                "reason": "direct",
+                "durationMs": 48816
+            },
+            {
+                "path": "packages/app/tests/workflow/wrapup-pipeline.test.ts",
+                "reason": "direct",
+                "durationMs": 64236
+            },
+            {
+                "path": "packages/app/tests/workflow/wrapup/steps.test.ts",
+                "reason": "direct",
+                "durationMs": 7424
+            },
+            {
+                "path": "packages/config/tests/executor-update.test.ts",
+                "reason": "direct",
+                "durationMs": 7173
+            },
+            {
+                "path": "packages/config/tests/loader-layers.test.ts",
+                "reason": "direct",
+                "durationMs": 1182
+            },
+            {
+                "path": "packages/config/tests/loader.test.ts",
+                "reason": "direct",
+                "durationMs": 912
+            },
+            {
+                "path": "packages/domain/tests/analytics/history-parity-evidence.test.ts",
+                "reason": "direct",
+                "durationMs": 118
+            },
+            {
+                "path": "packages/domain/tests/dao/migration-ownership.test.ts",
+                "reason": "direct",
+                "durationMs": 198
+            },
+            {
+                "path": "packages/domain/tests/helpers.test.ts",
+                "reason": "direct",
+                "durationMs": 50
+            },
+            {
+                "path": "plugins/sp/tests/cli-surface-parity.test.ts",
+                "reason": "direct",
+                "durationMs": 20808
+            },
+            {
+                "path": "plugins/sp/tests/command-flag-parity.test.ts",
+                "reason": "direct",
+                "durationMs": 34
+            },
+            {
+                "path": "plugins/sp/tests/dispatch-handoff-contract.test.ts",
+                "reason": "direct",
+                "durationMs": 4738
+            },
+            {
+                "path": "plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts",
+                "reason": "direct",
+                "durationMs": 6149
+            },
+            {
+                "path": "plugins/sp/tests/feature-verification-scope.test.ts",
+                "reason": "direct",
+                "durationMs": 3326
+            },
+            {
+                "path": "plugins/sp/tests/help-docs-parity.test.ts",
+                "reason": "helper:plugins/sp/tests/helpers/cli-surface.ts#captureCliSurface",
+                "durationMs": 14
+            },
+            {
+                "path": "plugins/sp/tests/helpers/cli-surface.test.ts",
+                "reason": "direct",
+                "durationMs": 654
+            },
+            {
+                "path": "plugins/sp/tests/hooks/agent-lifecycle.test.ts",
+                "reason": "direct",
+                "durationMs": 182
+            },
+            {
+                "path": "plugins/sp/tests/hooks/careful-guard.test.ts",
+                "reason": "direct",
+                "durationMs": 703
+            },
+            {
+                "path": "plugins/sp/tests/hooks/context-hooks.test.ts",
+                "reason": "direct",
+                "durationMs": 46898
+            },
+            {
+                "path": "plugins/sp/tests/hooks/destructive-policy.test.ts",
+                "reason": "direct",
+                "durationMs": 3057
+            },
+            {
+                "path": "plugins/sp/tests/hooks/task-write-guard.test.ts",
+                "reason": "direct",
+                "durationMs": 1358
+            },
+            {
+                "path": "plugins/sp/tests/issue-finding-fallback.test.ts",
+                "reason": "helper:plugins/sp/tests/helpers/cli-surface.ts#captureCliSurface",
+                "durationMs": 406
+            },
+            {
+                "path": "plugins/sp/tests/parallel-integration-git.test.ts",
+                "reason": "direct",
+                "durationMs": 684
+            },
+            {
+                "path": "plugins/sp/tests/skill-structure.test.ts",
+                "reason": "direct",
+                "durationMs": 81
+            },
+            {
+                "path": "plugins/sp/tests/sp-bot-bootstrap.test.ts",
+                "reason": "direct",
+                "durationMs": 719
+            },
+            {
+                "path": "plugins/sp/tests/task-pipeline-resilience.test.ts",
+                "reason": "direct",
+                "durationMs": 826
+            },
+            {
+                "path": "scripts/commands/fleet-e2e-perf.test.ts",
+                "reason": "direct",
+                "durationMs": 7541
+            },
+            {
+                "path": "scripts/commands/install-sh.test.ts",
+                "reason": "direct",
+                "durationMs": 824
+            },
+            {
+                "path": "scripts/commands/release-alias.test.ts",
+                "reason": "direct",
+                "durationMs": 224
+            }
+        ]
+    }
+}
