@@ -8019,3 +8019,48 @@ Skipped: no full `spur-check` / `spur-check-feature` run (this is a wrapup doc r
 - Every derived manifest ships with a repo-wide guard that runs in `test-repo-wide` (hence `spur-check-feature`, never the per-task pipeline, per ADR-119) and names the offending file.
 - Doc sync for a "checker + committed config" change is T3 to the owning `docs/design/<slug>.md` satellite only: numbers measured by the task replace estimates in place, built vs not-built steps are labelled explicitly, and `updated_at` moves with the edit. No ADR (no lasting cross-module boundary), no `03`/`04` edit (mechanism and index rows unchanged), and `config/test-lanes.json` is owned by its test-suite satellite, not duplicated into `configuration-contracts.md`.
 - Recurring shape for performance work here: measure the naive alternative first, keep the receipt, and park the bigger design (1460) on the measured falsification rather than shipping it.
+## 2026-11-27 — 1473 (review-lane remediate hop)
+
+- **A bunfig `[test] timeout` key does not exist.** Setting it is silently ignored (oven-sh/bun#7789,
+  still an open PR). Bun's per-test default is 5000 ms, and the project's own budget
+  (`--timeout 20000`) lives only in the `package.json` scripts. Real consequence: the light gate's
+  `test-changed` binding (`cd <workspace> && bun test <paths>`) ran every related suite at 5 s, so two
+  `quality-gate-receipt` fixtures that legitimately take ~5.0–5.2 s reddened the light tier on an
+  otherwise green tree — reproducible on the untouched `main` tree.
+- **`setDefaultTimeout` from a preload covers only the first test FILE.** `bun test a.test.ts` with a
+  preload calling `setDefaultTimeout(20_000)` honours it; `bun test a.test.ts b.test.ts …` falls back to
+  5000 ms for the later files. Do not use it as a project-wide switch.
+- **The owner of the per-test budget is the repo's own scoped action binding.** `.spur/config.yaml`
+  `builder.actions.test-changed` is the designed override surface ("adjust here instead of patching
+  release code"); the preset default lives in `packages/app/src/services/sdlc-actions.ts`.
+- **Before spending repair hops on a red gate, reproduce it on a clean baseline tree.** Both
+  `qualityGateMaxFixAttempts` hops went to `retry-exhausted` chasing an environment/configuration flake
+  that the baseline reproduced identically; the fix belonged to infrastructure, not the diff.
+- **Editing `config/workflows/task-pipeline.yaml` during `implement` drifts the run's definition digest**,
+  so `workflow continue` refuses to resume (correctly). Cancel the drifted run and launch a fresh one
+  against the edited definition — do not `--force` a definition that changed.
+- **`--auto` still pauses at the review approval gate.** The review tail's `hitl.confirm` carries
+  `decision: {mode: evidence}`; under the host executor it surfaces to the operator and is answered with
+  `spur workflow continue <run> --answer yes`.
+- **A host-executor `agent.run` pause resumes on a receipt file, not free text**: write
+  `.spur/run/<runId>/receipts/<state>.json` (`{runId, state, executor: host, outcome: done, files}`) and
+  pass its path as `--answer-text`. Declared `expectFiles` must exist before the resume is accepted.
+
+## 2026-11-27 — 1474 (`builder.scopeTestMap`)
+
+- **A new key with a zod default still breaks every `BuilderConfig` literal.** `.default([])` only fires on
+  parse; hand-built partials typed as `BuilderConfig` (`apps/cli/src/commands/self/init.ts`, two test
+  fixtures) fail `tsc` the moment the key joins the type. Grep for `preset: 'none'` / `dependencyScope`
+  literals when adding a field to a parsed config type.
+- **The JSON-Schema mirror is enforced by a property-path walker**, so a Zod key without a
+  `schemas/spur-config.schema.json` entry fails `apps/cli/tests/config/spur-config-schema-parity.test.ts`
+  — add both in the same edit, and keep the value plain JSON (a compiled `RegExp` in config would break it).
+- **`lightScope`'s `plugins/sp/**` branch `continue`s**, so any new per-file mapping must be applied before
+  it or it silently skips plugin prose paths.
+- **Test admission is per test path, not per workspace.** Widening `scope.workspaces` to admit a declared
+  test would also drag an unrelated typecheck into the plan; `planLightChecks` already derives the
+  `test:<ws>` check from each test path.
+- **Fixture `exists` predicates that return `true` for everything manufacture phantom workspaces**
+  (`workspaceOf` sees `<dir>/package.json`), which made an "empty workspaces" assertion fail for a reason
+  that had nothing to do with the code under test.
+
