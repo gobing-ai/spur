@@ -37,6 +37,9 @@ export interface DecisionLogRow {
     confidence: number | null;
     /** Redacted maker error or rejection message (≤ 2 KiB); null when nothing failed. */
     error: string | null;
+    /** The model the accepted backend actually served (P12); null for a fallback, a rejection, a
+     * non-typesafe maker, or a row written before migration 0057. */
+    served_model: string | null;
     /** Invocation start — the caller's evidence-reading clock when it supplied one. ISO string. */
     started_at: string;
     ended_at: string;
@@ -134,6 +137,7 @@ const SUMMARY_COLUMNS = [
     'reason',
     'confidence',
     'error',
+    'served_model',
     'started_at',
     'ended_at',
     'duration_ms',
@@ -190,9 +194,9 @@ export class DecisionLogDao {
                 id, decision_id, decision_type, caller, run_id, workflow_name, node_id, wbs,
                 maker_name, maker_source, catalog_layer, catalog_source, min_confidence,
                 question, input_json, input_keys_json, evidence_digest, outcome, value,
-                fallback_value, source, reason, confidence, error, started_at, ended_at,
+                fallback_value, source, reason, confidence, error, served_model, started_at, ended_at,
                 duration_ms, phases_json, schema_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             row.id,
             row.decision_id,
             row.decision_type,
@@ -217,6 +221,7 @@ export class DecisionLogDao {
             row.reason,
             row.confidence,
             row.error,
+            row.served_model,
             row.started_at,
             row.ended_at,
             row.duration_ms,

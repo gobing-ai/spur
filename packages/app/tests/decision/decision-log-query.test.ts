@@ -74,6 +74,21 @@ describe('DecisionLogQueryService.list', () => {
         adapter.close();
     });
 
+    test('maps the served model through the summary select (P12 R3)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new DecisionLogDao(adapter);
+        await dao.insert(
+            buildDecisionLogRow({ dao, secrets: [], mode: 'full' }, record({ id: 'dcl_served', servedModel: 'm-x' })),
+        );
+        await dao.insert(buildDecisionLogRow({ dao, secrets: [], mode: 'full' }, record({ id: 'dcl_plain' })));
+        const page = await new DecisionLogQueryService(dao).list({ limit: 10 });
+        const byId = new Map(page.rows.map((row) => [row.id, row.servedModel]));
+        expect(byId.get('dcl_served')).toBe('m-x');
+        expect(byId.get('dcl_plain')).toBeNull();
+        adapter.close();
+    });
+
     test('cursor resumes the next older page; malformed cursors fall back to the newest page', async () => {
         const { service, adapter } = await seededService(10);
         const page1 = await service.list({ limit: 4 });

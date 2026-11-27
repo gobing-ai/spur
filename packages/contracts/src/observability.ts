@@ -336,6 +336,8 @@ export const decisionLogRowSchema = z.object({
     confidence: z.number().nullable(),
     confidenceLevel: z.enum(['HIGH', 'MEDIUM', 'LOW']),
     error: z.string().nullable(),
+    /** The model the backend actually served (feature P12); null when nothing was served. */
+    servedModel: z.string().nullable(),
     startedAt: z.string(),
     endedAt: z.string(),
     durationMs: z.number(),

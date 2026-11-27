@@ -98,6 +98,8 @@ export interface DecisionLogRecord {
     readonly reason?: string;
     readonly confidence?: number | null;
     readonly error?: string;
+    /** The model the accepted backend actually served (P12); never the requested/configured one. */
+    readonly servedModel?: string;
     readonly startedAtMs: number;
     readonly endedAtMs: number;
     readonly phases: readonly DecisionPhase[];
@@ -168,6 +170,9 @@ export function buildDecisionLogRow(sink: DecisionLogSink, record: DecisionLogRe
         confidence: record.confidence ?? null,
         error:
             record.error === undefined ? null : redactAndBound(record.error, sink.secrets, DECISION_LOG_TEXT_MAX_CHARS),
+        // Only an accepted answer served a model: a fallback, a rejection and a non-typesafe maker
+        // store NULL, and so does the configured model (never reported by the hub).
+        served_model: record.outcome === 'accepted' ? (record.servedModel ?? null) : null,
         started_at: new Date(record.startedAtMs).toISOString(),
         ended_at: new Date(record.endedAtMs).toISOString(),
         duration_ms: Math.max(0, record.endedAtMs - record.startedAtMs),

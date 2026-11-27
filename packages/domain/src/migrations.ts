@@ -259,6 +259,15 @@ ALTER TABLE coordination_runs ADD COLUMN remote_context_id TEXT;
 `;
 
 /**
+ * The model a backend actually served, per decision row (feature P12 R1, task 1467). Nullable and
+ * additive: a pre-0057 row, a non-typesafe maker, a fallback and a rejection all read NULL, because
+ * none of them served a model answer. Mirrored in `drizzle/0057_spur_cli_decision_logs_served_model.sql`.
+ */
+export const DECISION_LOGS_SERVED_MODEL_SCHEMA_SQL = `
+ALTER TABLE decision_logs ADD COLUMN served_model TEXT;
+`;
+
+/**
  * DDL for the `decision_logs` table (task 1100): one row per decision invocation, keyed by the
  * `decision.start` invocationId. Rows carry the served result (`outcome`/`value`/`fallback_value`/
  * `source`/`reason`/`confidence`), the caller context (`caller`, run correlation, maker and catalog
@@ -1653,6 +1662,12 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0056_spur_cli_coordination_runs_a2a_remote_context',
         sql: COORDINATION_RUNS_A2A_REMOTE_CONTEXT_SCHEMA_SQL,
         addColumnIfMissing: { table: 'coordination_runs', column: 'remote_context_id' },
+    },
+    {
+        // P12 (task 1467): the served model rides the existing decision row, never a new table.
+        id: '0057_spur_cli_decision_logs_served_model',
+        sql: DECISION_LOGS_SERVED_MODEL_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'decision_logs', column: 'served_model' },
     },
 ];
 

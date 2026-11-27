@@ -29,6 +29,7 @@ function row(overrides: Partial<CreateDecisionLogInput> = {}): CreateDecisionLog
         reason: 'confidence',
         confidence: 0.9,
         error: null,
+        served_model: null,
         started_at: '2026-07-04T01:00:00.000Z',
         ended_at: '2026-07-04T01:00:01.000Z',
         duration_ms: 1000,
@@ -54,6 +55,20 @@ describe('DecisionLogDao', () => {
         expect(page.rows[0]).not.toHaveProperty('input_json');
         expect(page.rows[0]).not.toHaveProperty('question');
         expect(page.rows[0]).not.toHaveProperty('phases_json');
+        adapter.close();
+    });
+
+    test('round-trips the served model through insert and the summary select (P12 R2)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(adapter);
+        const dao = new DecisionLogDao(adapter);
+        await dao.insert(row({ id: 'dcl_served', served_model: 'm-x' }));
+        await dao.insert(row({ id: 'dcl_plain', served_model: null, started_at: '2026-07-04T05:00:00.000Z' }));
+
+        const page = await dao.list({ limit: 10 });
+        const byId = new Map(page.rows.map((entry) => [entry.id, entry.served_model]));
+        expect(byId.get('dcl_served')).toBe('m-x');
+        expect(byId.get('dcl_plain')).toBeNull();
         adapter.close();
     });
 

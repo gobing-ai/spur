@@ -92,6 +92,8 @@ export interface DecisionEndFields {
     readonly reason?: string;
     readonly maker?: string;
     readonly confidence?: number | null;
+    /** The model the backend actually served (P12); present only on an accepted model answer. */
+    readonly servedModel?: string;
 }
 
 /** The one lifecycle opened by {@link beginDecisionInvocation}. */
@@ -279,6 +281,7 @@ export function beginDecisionInvocation(
                     ...(fields.source !== undefined ? { source: fields.source } : {}),
                     ...(fields.reason !== undefined ? { reason: fields.reason } : {}),
                     ...(fields.confidence !== undefined ? { confidence: fields.confidence } : {}),
+                    ...(fields.servedModel !== undefined ? { servedModel: fields.servedModel } : {}),
                     ...(log.error !== undefined ? { error: log.error } : {}),
                     startedAtMs: log.prelude?.startedAt ?? log.startedAt,
                     endedAtMs: Date.now(),

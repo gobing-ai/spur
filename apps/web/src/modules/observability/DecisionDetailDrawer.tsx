@@ -135,6 +135,8 @@ export default function DecisionDetailDrawer({ row, onClose, onNavigate }: Decis
     if (view.wbs !== null) fields.push({ label: 'WBS', value: view.wbs });
     if (view.runId !== null) fields.push({ label: 'Run', value: view.runId });
     if (view.decisionType !== null) fields.push({ label: 'Type', value: view.decisionType });
+    // P12 R3: the served model is optional evidence, so the row exists only when a backend reported one.
+    if (view.servedModel !== null) fields.push({ label: 'Served model', value: view.servedModel });
 
     return (
         <div

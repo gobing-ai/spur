@@ -67,6 +67,25 @@ describe('decision log row builder', () => {
         expect(row.source).toBe('default');
     });
 
+    test('the served model is stored only on an accepted answer (P12 R2/R4)', () => {
+        const accepted = buildDecisionLogRow(sink(), record({ servedModel: 'm-x' }));
+        expect(accepted.served_model).toBe('m-x');
+        // A driver that reports no model (fm-local, laya-local, llm-agent) stores nothing.
+        expect(buildDecisionLogRow(sink(), record()).served_model).toBeNull();
+        // A fallback served no model answer, so a stray value on the record is dropped.
+        expect(
+            buildDecisionLogRow(
+                sink(),
+                record({ outcome: 'fallback', source: 'default', reason: 'low-confidence', servedModel: 'm-x' }),
+            ).served_model,
+        ).toBeNull();
+        // A rejection has no served answer at all.
+        expect(
+            buildDecisionLogRow(sink(), record({ outcome: 'rejected', source: undefined, servedModel: 'm-x' }))
+                .served_model,
+        ).toBeNull();
+    });
+
     test('rejected rows null value/source and keep the redacted error', () => {
         const row = buildDecisionLogRow(
             sink(),

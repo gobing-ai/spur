@@ -49,6 +49,8 @@ export interface DecisionLogSummaryEntry {
     /** Derived level (HIGH ≥ 0.8, MEDIUM ≥ 0.5, LOW otherwise; absent/out-of-range → LOW). */
     confidenceLevel: ConfidenceLevel;
     error: string | null;
+    /** The model the backend actually served (P12); null when nothing was served. */
+    servedModel: string | null;
     startedAt: string;
     endedAt: string;
     durationMs: number;
@@ -139,6 +141,7 @@ function toSummaryEntry(row: DecisionLogSummaryRow): DecisionLogSummaryEntry {
         confidence: row.confidence,
         confidenceLevel: confidenceLevel(row.confidence),
         error: row.error,
+        servedModel: row.served_model,
         startedAt: row.started_at,
         endedAt: row.ended_at,
         durationMs: row.duration_ms,

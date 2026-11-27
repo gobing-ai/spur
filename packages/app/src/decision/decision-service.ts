@@ -640,6 +640,7 @@ export class DecisionService {
                           reason: outcome.reason,
                           maker: outcome.maker,
                           confidence: outcome.confidence,
+                          ...(outcome.servedModel !== undefined ? { servedModel: outcome.servedModel } : {}),
                       }
                     : { durationMs: 0, reason: 'error', maker: name },
             );
