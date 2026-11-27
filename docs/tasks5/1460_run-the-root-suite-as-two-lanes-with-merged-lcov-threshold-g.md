@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Run the root suite as two lanes with merged-LCOV threshold gate and prove the wall-time drop
-status: todo
+status: blocked
 template: feature-impl
 created_at: 2026-11-27T06:56:54.808Z
-updated_at: "2026-11-27T07:16:29.798Z"
+updated_at: "2026-11-27T16:48:53.202Z"
 feature_id: H161
 priority: P1
 tags:
@@ -91,7 +91,27 @@ Out of scope: manifest generation (1459); heavy-suite lanes (H162 / 1463); chang
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**No code shipped — the task's premise is falsified by measurement (operator decision 2026-11-27: park H161 laning, keep 1459's evidence, continue H162).**
+
+| File | Change | Why |
+| --- | --- | --- |
+| `scripts/commands/run-tests.ts` | No net change (lane wiring implemented, measured, then reverted). | The two-lane split does not reduce wall time: it re-cuts the same work, and the subprocess lane's 144 files are latency-bound rather than core-bound. |
+| `packages/app/src/rules/coverage-lanes.ts` | Implemented (`parseLcov` / `mergeLcov` / `evaluateCoverageThresholds`, 10 tests green at 90.9% funcs / 100% lines), then removed with the launcher revert. | A merge gate with no lane to merge is dead code and a per-file coverage liability. |
+| `.spur/run/test-lanes-baseline.json`, `.spur/run/lane-measurements/*` | Measurement receipts: baseline, four laned runs, one isolated subprocess-lane run. | The negative result is the deliverable; 1459's manifest stays as the classification evidence any future plan needs. |
+
+**Measured (this host, 10 cores, load1 ~13–16):**
+
+| Configuration | Wall | Result |
+| --- | --- | --- |
+| single child `--parallel=2` (baseline) | 519 s | green |
+| lanes: sub `--parallel=2` + inproc `--parallel=10` | 501 s | 24 in-process timeouts, 170 merged coverage breaches |
+| lanes: sub `--parallel=4` + inproc `SPUR_TEST_INPROC_PARALLEL=6` | 356 s | 23 in-process + 1 subprocess timeout, 168 breaches |
+| subprocess lane **alone** `--parallel=4` | 286 s | green, 0 fail |
+| in-process lane **alone** `--parallel=10` | 165 s | green |
+
+**Conclusion.** The 144 subprocess-lane files hold 3,959 tests at ~126 ms each — 96% of the suite's wall time — and their time is spent waiting on spawned children, so file width is their only lever: width 2 = 499 s, width 4 = 286 s. Two concurrent suites oversubscribe 10 cores and starve the in-process lane into timeouts, which is what the merged coverage breaches are a symptom of. Reaching R4's 250 s needs the subprocess lane ~13 files wide, which the c8d5ca0f2 timeout constraint forbids; the measured floor for any lane configuration here is ~345 s (in-process 165 s + subprocess@8 ~180 s, sequential, unverified). R4/R5's "≤250 s with three green runs" is therefore unattainable on this hardware at any width, and the operator chose not to re-baseline the AC.
+
+**Follow-up (not this task):** the real lever is per-test child cost in the 144 spawn-heavy files (`spur` CLI startup ~100–300 ms × 3,959 tests), not scheduling. Recorded for H161's re-scope.
 
 ### Testing
 
@@ -111,4 +131,5 @@ Out of scope: manifest generation (1459); heavy-suite lanes (H162 / 1463); chang
 ### History
 
 - 2026-11-27T07:00:09.288Z feature_id U → H161 (system)
+- 2026-11-27T16:48:53.202Z todo → blocked (system)
 
