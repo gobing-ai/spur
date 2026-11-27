@@ -382,7 +382,7 @@ describe('init command', () => {
             const { text, builder } = await initAndParse(cwd);
 
             expect(text).toContain('builder:\n  preset: bun');
-            expect(builder).toEqual({ preset: 'bun', actions: {}, dependencyScope: [] });
+            expect(builder).toEqual({ preset: 'bun', actions: {}, scopeTestMap: [], dependencyScope: [] });
         }
     });
 
@@ -424,7 +424,7 @@ describe('init command', () => {
 
         const { text, builder } = await initAndParse(cwd);
 
-        expect(builder).toEqual({ preset: 'none', actions: {}, dependencyScope: [] });
+        expect(builder).toEqual({ preset: 'none', actions: {}, scopeTestMap: [], dependencyScope: [] });
         expect(text).toContain('  # actions:');
         expect(text).toContain('  #   build: <command>');
         expect(text).toContain('  #   test-changed: <command>');
@@ -494,6 +494,7 @@ describe('JavaScript action onboarding (1303)', () => {
         const { text, builder, cwd, options } = await scaffold(JSON.stringify({ scripts, packageManager }), [...locks]);
         expect(builder).toEqual({
             preset: 'none',
+            scopeTestMap: [],
             dependencyScope: [],
             actions: {
                 build: `${manager} run build`,
@@ -576,7 +577,7 @@ describe('JavaScript action onboarding (1303)', () => {
         [null, ['package-lock.json'], 'no package.json'],
     ] as const)('keeps ambiguous or malformed input unbound: %s %j', async (manifest, locks, diagnostic) => {
         const { text, builder } = await scaffold(manifest, [...locks]);
-        expect(builder).toEqual({ preset: 'none', actions: {}, dependencyScope: [] });
+        expect(builder).toEqual({ preset: 'none', actions: {}, scopeTestMap: [], dependencyScope: [] });
         expect(text).toContain(diagnostic);
         expect(text).toContain('#   build: <command>');
     });
@@ -608,7 +609,7 @@ describe('JavaScript action onboarding (1303)', () => {
         const make = await scaffold(manifest, ['package-lock.json'], 'build:\n\ttouch discovery-ran\n');
         expect(make.builder.actions).toEqual({ build: 'make build' });
         const bun = await scaffold(manifest, ['bun.lock', 'package-lock.json'], 'build:\n');
-        expect(bun.builder).toEqual({ preset: 'bun', actions: {}, dependencyScope: [] });
+        expect(bun.builder).toEqual({ preset: 'bun', actions: {}, scopeTestMap: [], dependencyScope: [] });
     });
 
     test('re-init preserves every byte of custom actions even when discovery evidence conflicts', async () => {
@@ -666,6 +667,7 @@ describe('language and package-root onboarding (1304)', () => {
         });
         expect(builder).toEqual({
             preset: 'none',
+            scopeTestMap: [],
             dependencyScope: [],
             actions: {
                 build: 'cargo build',
@@ -760,6 +762,7 @@ describe('language and package-root onboarding (1304)', () => {
         });
         expect(builder).toEqual({
             preset: 'none',
+            scopeTestMap: [],
             dependencyScope: [],
             actions: { check: `cd ./child && ${manager} run check` },
         });

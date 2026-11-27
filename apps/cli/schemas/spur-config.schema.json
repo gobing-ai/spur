@@ -675,6 +675,31 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "scopeTestMap": {
+                    "default": [],
+                    "type": "array",
+                    "description": "Declared corpus->test mappings (1474). `when` is a regular expression matched against each repo-relative changed path; `tests` are repo-relative suites the light gate then selects.",
+                    "items": {
+                        "type": "object",
+                        "required": ["when", "tests"],
+                        "properties": {
+                            "when": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Regular expression matched against each changed path, e.g. ^plugins/kk/workflows/.*\\.yaml$"
+                            },
+                            "tests": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                },
+                                "description": "Repo-relative test paths to select when the pattern matches."
+                            }
+                        }
+                    }
                 }
             }
         },

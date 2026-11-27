@@ -140,6 +140,27 @@ reference only resolvable actions; composite cycles are rejected with the cycle 
 `*-changed` action the light-gate planner supplies it for (`lint-changed` `{files}`, `typecheck-changed`
 `{workspace}`, `test-changed` `{workspace}` `{paths}`), so a load-valid binding never throws at render time. Errors name the key path.
 
+**Declared corpus→test mappings (`builder.scopeTestMap`, 1474).** The light tier selects tests from
+code paths only (`<ws>/src/x.ts` → `<ws>/tests/x.test.ts`), so a change to workflow YAML, action
+presets or a plugin manifest selects no suite and the regression surfaces at the feature-level full
+gate. A project declares what guards those paths:
+
+```yaml
+builder:
+  scopeTestMap:
+    - when: "^plugins/kk/workflows/.*\\.yaml$"          # regex over each repo-relative changed path
+      tests: ["apps/cli/tests/kk-news-generate-dag.test.ts"]   # repo-relative suites to select
+```
+
+Every matching entry contributes each of its `tests` that exists, deduped with all other selections;
+the mapping is a **union**, never an override — a matching file keeps its generic mapping, and an
+entry that matches nothing is not an error (R2). It never widens `scope.workspaces`: admission is per
+test path, so the typecheck set stays exactly what the change implies (a compiled-in `RegExp` would
+break the JSON Schema mirror, so `when`/`tests` stay plain strings). A malformed `when` fails config
+load naming `builder.scopeTestMap.<i>.when`; a `tests` path that no longer exists is silently skipped
+(R4). Markdown is not special-cased: `plugins/sp/**` keeps its built-in mapping, and migrating that
+block onto this key is a separate, behaviour-preserving change.
+
 ### 3.3 Executor: `spur self exec`
 
 ```text

@@ -1179,6 +1179,37 @@ function refineBuilderActions(
 }
 
 /**
+ * One `builder.scopeTestMap` entry: `when` is a regular expression matched against each
+ * repo-relative changed path, `tests` are repo-relative suites that guard those paths (1474 R1).
+ */
+export const ScopeTestMapEntrySchema = z.object({
+    when: z.string().min(1),
+    tests: z.array(z.string().min(1)).min(1),
+});
+
+/** Effective `builder.scopeTestMap` entry. */
+export type ScopeTestMapEntry = z.infer<typeof ScopeTestMapEntrySchema>;
+
+/**
+ * Validate the declared path regexes at load (1474 R4): a malformed `when` would otherwise surface
+ * only when a change happens to match, i.e. as a gate crash inside `lightScope`. The `tests` entries
+ * are deliberately NOT checked against the filesystem — a renamed test degrades to "not selected".
+ */
+function refineScopeTestMap(value: { scopeTestMap: ScopeTestMapEntry[] }, ctx: z.RefinementCtx): void {
+    value.scopeTestMap.forEach((entry, index) => {
+        try {
+            new RegExp(entry.when);
+        } catch (error) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['scopeTestMap', index, 'when'],
+                message: `builder.scopeTestMap.${index}.when: invalid regular expression: ${(error as Error).message}`,
+            });
+        }
+    });
+}
+
+/**
  * Schema for the `builder` section: release plumbing knobs plus the SDLC action binding.
  *
  * `preset` defaults to `bun`, so an existing project resolves every reserved action to today's
@@ -1198,8 +1229,14 @@ export const BuilderConfigSchema = z
          * inheriting `@gobing-ai/*` (A94 1411).
          */
         dependencyScope: z.array(z.string()).default([]),
+        /**
+         * Declared corpus→test mappings (1474): a change to a non-code path (workflow YAML, presets,
+         * manifests) selects the suites that guard it, which the `src → tests` mapping cannot see.
+         */
+        scopeTestMap: z.array(ScopeTestMapEntrySchema).default([]),
     })
-    .superRefine(refineBuilderActions);
+    .superRefine(refineBuilderActions)
+    .superRefine(refineScopeTestMap);
 
 /** Effective `builder` configuration after schema defaults apply. */
 export type BuilderConfig = z.infer<typeof BuilderConfigSchema>;

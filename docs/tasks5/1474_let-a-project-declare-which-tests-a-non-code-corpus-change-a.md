@@ -1,16 +1,18 @@
 ---
 schema_version: 1
 name: Let a project declare which tests a non-code corpus change affects
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-27T18:20:16.898Z
-updated_at: "2026-11-27T20:21:34.865Z"
+updated_at: "2026-11-27T22:23:01.087Z"
 feature_id: H16
 
 ac_altitude: task-local
 ac_numbering: task-local
 priority: P2
 estimate_hours: 3
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1474. Let a project declare which tests a non-code corpus change affects
@@ -54,11 +56,11 @@ itself has one production caller (`:946`) and test callers in `quality-gate-rece
 
 ### Requirements
 
-- [ ] R1. `builder.scopeTestMap` is an optional list of `{ when: string; tests: string[] }` in `.spur/config.yaml`; `when` is a regular expression matched against each repo-relative changed path; `tests` are repo-relative test paths (non-empty list).
-- [ ] R2. `lightScope` applies every matching entry per changed file, adding each declared test that passes the injected `exists` filter, deduped with all other selections; this runs before (and in addition to) the `plugins/sp/**` block and the generic `src → tests` mapping.
-- [ ] R3. No `scopeTestMap` (or an empty one) leaves `lightScope` output byte-identical for every existing caller and fixture.
-- [ ] R4. An invalid `when` regex or an empty `tests` list fails config load with a message naming `builder.scopeTestMap.<i>`; a declared test path that does not exist is silently skipped by `exists`.
-- [ ] R5. The key is in the JSON Schema (`apps/cli/schemas/spur-config.schema.json`) and documented in `docs/design/sdlc-actions.md` §3.2.
+- [x] R1. `builder.scopeTestMap` is an optional list of `{ when: string; tests: string[] }` in `.spur/config.yaml`; `when` is a regular expression matched against each repo-relative changed path; `tests` are repo-relative test paths (non-empty list).
+- [x] R2. `lightScope` applies every matching entry per changed file, adding each declared test that passes the injected `exists` filter, deduped with all other selections; this runs before (and in addition to) the `plugins/sp/**` block and the generic `src → tests` mapping.
+- [x] R3. No `scopeTestMap` (or an empty one) leaves `lightScope` output byte-identical for every existing caller and fixture.
+- [x] R4. An invalid `when` regex or an empty `tests` list fails config load with a message naming `builder.scopeTestMap.<i>`; a declared test path that does not exist is silently skipped by `exists`.
+- [x] R5. The key is in the JSON Schema (`apps/cli/schemas/spur-config.schema.json`) and documented in `docs/design/sdlc-actions.md` §3.2.
 
 **Out of scope:** migrating the hardcoded `plugins/sp/**` block onto the map (separate behaviour-preserving task); glob syntax; any change to the full tier; editing knowledge-kit's config.
 
@@ -154,15 +156,56 @@ of these files (2026-11-27); no `wip` tasks. 1473 also edits `quality-gate.ts` (
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+One optional config key, applied where the light tier selects tests. No CLI surface, no engine change, no
+new dependency (the regex is `RegExp`, not a glob library).
+
+| Changed file | Change and why |
+| --- | --- |
+| `packages/config/src/index.ts:1185` | `ScopeTestMapEntrySchema` (`when` non-empty string, `tests` non-empty string list) and the exported `ScopeTestMapEntry` type; `builder.scopeTestMap` defaults to `[]` at `:1236`, so every existing config parses unchanged (R1, R3). |
+| `packages/config/src/index.ts:1198` | `refineScopeTestMap` compiles each `when` at load and raises `builder.scopeTestMap.<i>.when: invalid regular expression: …` on failure; `tests` paths are deliberately not filesystem-checked, so a renamed test degrades to "not selected" instead of failing load (R4). |
+| `apps/cli/schemas/spur-config.schema.json:679` | The hand-written JSON Schema mirror (`array` of `{when, tests}`, `minItems: 1`) that the loader enforces and the parity test compares against Zod (R5). |
+| `packages/app/src/services/quality-gate.ts:659` | `lightScope` takes a fourth `scopeTestMap` parameter, compiles the patterns once, and applies every matching entry per changed file *before* the `plugins/sp/` branch — whose `continue` would otherwise skip it — admitting each declared test that passes the injected `exists` filter, deduped with all other selections. `scope.workspaces` is untouched (R2). |
+| `packages/app/src/services/quality-gate.ts:964` | `runLightGate` passes `options.builder?.scopeTestMap`, the same `builder` object the CLI already supplies from `context.spurConfig?.builder` (R2 wiring). |
+| `docs/design/sdlc-actions.md:143` | §3.2 documents the key, the union semantics, the no-widening rule and the load-time failure (R5, same commit — T3). |
+| `packages/config/tests/builder-actions-schema.test.ts:120` | Zod parse: default `[]`, a valid map, an invalid regex naming `scopeTestMap.0.when`, an empty `tests` list and a blank `when` (R4). |
+| `apps/cli/src/commands/self/init.ts:291` | The one production caller that builds a partial `BuilderConfig` literal now carries the defaulted `scopeTestMap: []`, so `resolveAction` keeps accepting it after the key became part of the type. Same for the two test files that assert on such literals (`apps/cli/tests/commands/self/init.test.ts:385`, `packages/app/tests/services/sdlc-actions.test.ts:205`). |
+| `packages/app/tests/services/quality-gate-affected-scope.test.ts:244` | AC1 (a declared YAML mapping selects a cross-workspace test and `planLightChecks` emits `test:apps/cli` carrying it, with `workspaces` still empty), AC2 (no map ⇒ byte-identical selection), and the union/dedupe and unmatched/stale cases (R2, R3). |
+
+**Deliberate omissions.** No `scope.workspaces` widening (test admission is per test path, so a widening would add
+an unrelated typecheck); no glob syntax; no `RegExp` stored in config (it would break the JSON Schema mirror); no
+validation of `tests` paths at load; no change to `planLightChecks`, the full tier, or the hardcoded
+`plugins/sp/**` block — migrating that block onto this key is the deferred follow-up named in the task's Q&A.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/config/src/index.ts:1185` declares `ScopeTestMapEntrySchema` (`when`: non-empty string, `tests`: non-empty `string[]`) and exports `ScopeTestMapEntry`; `:1236` binds it as `builder.scopeTestMap` with a `[]` default, so `.spur/config.yaml` accepts the declared list and every existing config parses unchanged. Pinned by `packages/config/tests/builder-actions-schema.test.ts:120` (default + a valid mapping round-trip). |
+| R2 | MET | `packages/app/src/services/quality-gate.ts:659` takes the map as a fourth parameter, `:665` compiles the patterns once, and `:668` applies every matching entry per changed file *before* the `plugins/sp/` branch (whose `continue` would skip it), adding each declared test that passes the injected `exists` and deduping into the existing set; `:964` passes `options.builder?.scopeTestMap` from the same builder object the CLI already supplies. Pinned by `packages/app/tests/services/quality-gate-affected-scope.test.ts:244` (AC1 selects a cross-workspace suite and `planLightChecks` emits `test:apps/cli` carrying it; the union/dedupe case at `:277`). |
+| R3 | MET | No map ⇒ the fourth parameter defaults to `[]`, no entry can match, and the function body is otherwise unchanged; the AC2 test asserts `lightScope(changed, exists, graph, [])` is `toEqual(lightScope(changed, exists, graph))` plus 40 passing `quality-gate-receipt` tests on the unchanged selection path (`packages/app/tests/services/quality-gate-affected-scope.test.ts:262`). Existing callers keep their 3-argument form. |
+| R4 | MET | `packages/config/src/index.ts:1198` compiles each `when` at load and raises `builder.scopeTestMap.<i>.when: invalid regular expression: …` (asserted at `packages/config/tests/builder-actions-schema.test.ts:135`); the `tests` list is deliberately not filesystem-checked, and the stale-path case is asserted to select nothing (`packages/app/tests/services/quality-gate-affected-scope.test.ts:290`). |
+| R5 | MET | `apps/cli/schemas/spur-config.schema.json:679` mirrors the key (array of `{when, tests}` with `minItems: 1`); the Zod↔JSON-Schema parity test passes (`cd apps/cli && bun test tests/config/spur-config-schema-parity.test.ts` → 1 pass). `docs/design/sdlc-actions.md:143` documents the key, union semantics, the no-widening rule and the load-time failure in the same commit (T3). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — A declared corpus mapping selects its test across workspaces (req: R1, R2) | MET | test | `packages/app/tests/services/quality-gate-affected-scope.test.ts:244` (`lightScope` selects `apps/cli/tests/kk-news-generate-dag.test.ts` for the declared YAML change, `workspaces` stays empty, and `planLightChecks` yields a `test:apps/cli` plan naming it) — 22 pass / 0 fail in that file. |
+| AC2 — The map never widens a project that declares none (req: R3) | MET | test | `packages/app/tests/services/quality-gate-affected-scope.test.ts:265` asserts equality with the pre-change selection for an absent map; the untouched `quality-gate-receipt` suite (40 pass) exercises the same selection path through `runLightGate`. |
+| AC3 — A bad mapping fails config load, a stale one degrades quietly (req: R4, R5) | MET | test | `packages/config/tests/builder-actions-schema.test.ts:120` (invalid regex names `scopeTestMap.0.when`; empty `tests` and blank `when` rejected) — 18 pass / 0 fail; `apps/cli/tests/config/spur-config-schema-parity.test.ts` 1 pass for the mirrored key; the stale path case is asserted at `packages/app/tests/services/quality-gate-affected-scope.test.ts:290`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -173,4 +216,7 @@ of these files (2026-11-27); no `wip` tasks. 1473 also edits `quality-gate.ts` (
 ### History
 
 - 2026-11-27T18:20:58.087Z backlog → todo (system)
+- 2026-11-27T22:17:24.198Z todo → wip (system)
+- 2026-11-27T22:22:54.375Z wip → testing (system)
+- 2026-11-27T22:23:01.054Z testing → done (system)
 

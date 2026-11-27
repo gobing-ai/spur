@@ -116,3 +116,34 @@ describe('BuilderConfigSchema — load-time rejection names the key path (task 1
         expect(BuilderConfigSchema.safeParse({ actions: { build: 42 } }).success).toBe(false);
     });
 });
+
+describe('BuilderConfigSchema — scopeTestMap (task 1474)', () => {
+    test('a declared corpus mapping parses and is empty by default', () => {
+        expect(BuilderConfigSchema.parse({}).scopeTestMap).toEqual([]);
+        const parsed = BuilderConfigSchema.parse({
+            scopeTestMap: [
+                {
+                    when: '^plugins/kk/workflows/.*\\.yaml$',
+                    tests: ['apps/cli/tests/kk-news-generate-dag.test.ts'],
+                },
+            ],
+        });
+        expect(parsed.scopeTestMap).toEqual([
+            { when: '^plugins/kk/workflows/.*\\.yaml$', tests: ['apps/cli/tests/kk-news-generate-dag.test.ts'] },
+        ]);
+    });
+
+    test('an invalid regular expression fails naming the entry and the field', () => {
+        const found = issues({ scopeTestMap: [{ when: '([', tests: ['a/b.test.ts'] }] });
+        expect(found.length).toBeGreaterThan(0);
+        expect(found.join('\n')).toContain('scopeTestMap.0.when');
+        expect(found.join('\n')).toContain('invalid regular expression');
+    });
+
+    test('an empty tests list and a blank when are rejected', () => {
+        expect(issues({ scopeTestMap: [{ when: '^x$', tests: [] }] }).join('\n')).toContain('scopeTestMap.0.tests');
+        expect(issues({ scopeTestMap: [{ when: '', tests: ['a/b.test.ts'] }] }).join('\n')).toContain(
+            'scopeTestMap.0.when',
+        );
+    });
+});

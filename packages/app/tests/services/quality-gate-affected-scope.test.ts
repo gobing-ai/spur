@@ -15,6 +15,7 @@ import { type BuilderConfig, BuilderConfigSchema } from '@gobing-ai/spur-config'
 import {
     dependentsOf,
     lightScope,
+    planLightChecks,
     readBaseSha,
     readWorkspaceGraph,
     runLightGate,
@@ -234,6 +235,79 @@ describe('affected-scope selection (1322 R3)', () => {
                 existsSync(join(dir, p)),
             );
             expect(scope.workspaces).toEqual(['packages/shared-lib']);
+        } finally {
+            cleanup();
+        }
+    });
+});
+
+describe('declared corpus test mappings (1474)', () => {
+    test('AC1: a declared mapping selects its test across workspaces', () => {
+        const { dir, cleanup } = monorepoFixture();
+        try {
+            const scopeTestMap = [
+                {
+                    when: '^plugins/kk/workflows/.*\\.yaml$',
+                    tests: ['apps/cli/tests/kk-news-generate-dag.test.ts'],
+                },
+            ];
+            // Only the declared test path exists: the fixture's own workspaces are irrelevant to a
+            // declared corpus mapping, which admits the test path and never a workspace.
+            const onlyDeclared = (path: string): boolean => path === 'apps/cli/tests/kk-news-generate-dag.test.ts';
+            const scope = lightScope(
+                ['plugins/kk/workflows/kk-news-generate.yaml'],
+                onlyDeclared,
+                readWorkspaceGraph(dir),
+                scopeTestMap,
+            );
+            expect(scope.tests).toEqual(['apps/cli/tests/kk-news-generate-dag.test.ts']);
+            // The map never widens the typecheck set: admission is per test path, not scope.workspaces.
+            expect(scope.workspaces).toEqual([]);
+            const plans = planLightChecks(scope, () => true, BuilderConfigSchema.parse({}));
+            const plan = plans.find((entry) => entry.id === 'test:apps/cli');
+            expect(plan?.cmd).toContain('tests/kk-news-generate-dag.test.ts');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('AC2: a project that declares no map selects exactly what it did before', () => {
+        const { dir, cleanup } = monorepoFixture();
+        try {
+            const changed = ['apps/leaf-app/src/index.ts', 'packages/shared-lib/src/index.ts'];
+            const exists = (p: string): boolean => existsSync(join(dir, p));
+            const withoutMap = lightScope(changed, exists, readWorkspaceGraph(dir));
+            const withEmptyMap = lightScope(changed, exists, readWorkspaceGraph(dir), []);
+            expect(withEmptyMap).toEqual(withoutMap);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('the map unions with the generic selection and dedupes', () => {
+        const { dir, cleanup } = monorepoFixture();
+        try {
+            const exists = (p: string): boolean => existsSync(join(dir, p));
+            const scope = lightScope(['apps/leaf-app/src/index.ts'], exists, readWorkspaceGraph(dir), [
+                { when: '^apps/leaf-app/src/', tests: ['apps/leaf-app/tests/leaf-app.test.ts'] },
+                { when: '^apps/leaf-app/src/', tests: ['apps/leaf-app/tests/leaf-app.test.ts'] },
+            ]);
+            expect(scope.tests).toEqual(['apps/leaf-app/tests/leaf-app.test.ts']);
+            expect(scope.workspaces).toEqual(['apps/leaf-app']);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('an unmatched pattern and a stale test path select nothing', () => {
+        const { dir, cleanup } = monorepoFixture();
+        try {
+            const exists = (p: string): boolean => existsSync(join(dir, p));
+            const scope = lightScope(['plugins/kk/workflows/one.yaml'], exists, readWorkspaceGraph(dir), [
+                { when: '^plugins/kk/other/', tests: ['apps/leaf-app/tests/leaf-app.test.ts'] },
+                { when: '^plugins/kk/workflows/', tests: ['apps/leaf-app/tests/gone.test.ts'] },
+            ]);
+            expect(scope.tests).toEqual([]);
         } finally {
             cleanup();
         }

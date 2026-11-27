@@ -60,7 +60,7 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { BuilderConfig } from '@gobing-ai/spur-config';
+import type { BuilderConfig, ScopeTestMapEntry } from '@gobing-ai/spur-config';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { DEFAULT_EXCLUDE_GLOBS } from '../workflow/proof-input-fingerprint';
 import { renderScoped, resolveAction, type ScopedValues } from './sdlc-actions';
@@ -656,12 +656,22 @@ export function lightScope(
     changedFiles: string[],
     exists: (p: string) => boolean = existsSync,
     graph?: WorkspaceGraph,
+    scopeTestMap: readonly ScopeTestMapEntry[] = [],
 ): LightScope {
     const files: string[] = [];
     const workspaces = new Set<string>();
     const tests = new Set<string>();
+    // Compiled once: a config-declared regex is matched against every changed path.
+    const declared = scopeTestMap.map((entry) => ({ re: new RegExp(entry.when), tests: entry.tests }));
     for (const file of changedFiles) {
         files.push(file);
+        // 1474 R2: declared corpus→test mappings run first, before the `plugins/sp/` branch below —
+        // its `continue` would otherwise skip them — and never touch `workspaces`: test admission is
+        // per test path (planLightChecks), so widening the typecheck set would add unrelated work.
+        for (const entry of declared) {
+            if (!entry.re.test(file)) continue;
+            for (const test of entry.tests) if (exists(test)) tests.add(test);
+        }
         // Task 1142 R2: Plugin prose changes map to their structure tests.
         // A changed path under plugins/sp/{skills,commands,agents,references}/** adds
         // plugins/sp/tests/skill-structure.test.ts to the plugins/sp workspace's tests.
@@ -947,7 +957,12 @@ export function runLightGate(env: QualityGateEnv, options: QualityGateOptions = 
     if (!capture.ok) {
         appendFileSync(abs(logFile), `--- light receipt: no git tree identity — ${capture.error}\n`);
     }
-    const scope = lightScope(changed, (p) => existsSync(abs(p)), readWorkspaceGraph(cwd));
+    const scope = lightScope(
+        changed,
+        (p) => existsSync(abs(p)),
+        readWorkspaceGraph(cwd),
+        options.builder?.scopeTestMap,
+    );
     // Sibling suites (`tests/**/<base>-*.test.ts`) usually carry most of a large module's
     // coverage; running them up front avoids the workspace-wide coverage re-measure.
     const siblings = new Set(scope.tests);

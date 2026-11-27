@@ -202,6 +202,7 @@ describe('parallel action form (A94 wave 6a)', () => {
         const builder = {
             preset: 'bun' as const,
             dependencyScope: [],
+            scopeTestMap: [],
             actions: { dev: { parallel: ['a', 'b'], graceMs: 100 } },
         };
         expect(resolveAction(builder, 'dev')).toEqual({
@@ -215,7 +216,12 @@ describe('parallel action form (A94 wave 6a)', () => {
     });
 
     test('graceMs defaults to 3000 and the binding lists as a parallel group', () => {
-        const builder = { preset: 'bun' as const, dependencyScope: [], actions: { dev: { parallel: ['a', 'b'] } } };
+        const builder = {
+            preset: 'bun' as const,
+            dependencyScope: [],
+            scopeTestMap: [],
+            actions: { dev: { parallel: ['a', 'b'] } },
+        };
         const resolved = resolveAction(builder, 'dev');
         expect(resolved.kind === 'parallel' ? resolved.graceMs : null).toBe(3000);
         expect(listActions(builder).find((row) => row.name === 'dev')?.kind).toBe('parallel');
