@@ -4,7 +4,7 @@ name: Register the deepseek history source with a real-session full-fidelity dec
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:48.306Z
-updated_at: "2026-11-27T22:04:18.059Z"
+updated_at: "2026-11-27T22:30:23.052Z"
 feature_id: E11
 
 estimate_hours: 2
@@ -115,18 +115,18 @@ Gate: `spur task gate 1471 light` → PASS (6 changed files, 7 checks).
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `../ts-libs/packages/llm-jsonl-importer/src/sources.ts:222-226` keeps the v3 patterns and adds `session.v4.jsonl` / `session.v4.jsonl.zstd`; `../ts-libs/packages/llm-jsonl-importer/tests/deepseek-importer.test.ts:274` writes both v4 forms under a temp dsh tree and asserts `scannedFiles: 2`, and `:287` proves the v4 envelope maps through `dshSplit` (header + both message roles, torn tail skipped). Package suite `bun test packages/llm-jsonl-importer` → 410 pass / 0 fail. |
-| R2 | MET | `package.json`/`bun.lock` carry the `@gobing-ai/ts-*` catalog at `0.8.7` (published: `@gobing-ai/ts-llm-jsonl-importer@0.8.7` returns 200 from the registry), `packages/app/src/services/history-service.ts:460` adds `'deepseek'` to `SOURCES`, `:467` adds it to `FULL_FIDELITY_SOURCES`, `apps/cli/src/commands/shared-options.ts:73` lists it in the `--source` grammar, and `docs/design/history-cli-contracts.md:174` in the full-fidelity enumeration. Proven by the real import below (the source is read at all) and by `packages/app/tests/services/history-service.test.ts:1565` (coverage lists it). |
-| R3 | MET | `packages/app/tests/services/history-service.test.ts:2140-2210`: a temp `~/.dsh/sessions` tree imports with the header stored as `meta` and both message roles in order, the torn final line skipped (`entry.status === 'ok'`), and a second full import adds no rows. Coverage inclusion asserted at `:1565` and `:1623`. |
-| R4 | MET | Real receipt on Robin's `~/.dsh/sessions` (session JSONL only) in this worktree's isolated DB: `spur history import --source deepseek --dry-run --json` → `{ status: ok, files: 54, messages: 293, parseErrors: 0, importer: 0.8.7 }`; the real run reproduced `54 / 293`, and `.spur/spur.db` reports `293` message rows across `105` sessions; a second real run reported `files: 54, messages: 0` with the row count unchanged. |
+| R1 | PARTIAL | @gobing-ai/ts-llm-jsonl-importer `packages/llm-jsonl-importer/src/sources.ts` line 220 retains v3 and discovers both v4 variants. Thirteen focused importer tests passed after the tool-call fix. The fresh repository gate did not pass. |
+| R2 | MET | `package.json:42` and `packages/app/src/services/history-service.ts:458` resolve the released importer and enroll deepseek; `docs/design/history-cli-contracts.md:174` and the CLI help list it. |
+| R3 | PARTIAL | `packages/app/tests/services/history-service.test.ts:2154` proves v4 message import, torn-line tolerance and repeatability. The released importer emits no dsh tool-call rows. An isolated Spur checkout using upstream 4e4d9e30 imported one linked tool call and zero on repeat. The fix at @gobing-ai/ts-llm-jsonl-importer `packages/llm-jsonl-importer/tests/deepseek-importer.test.ts` line 314 needs a release and adoption in Spur. |
+| R4 | MET | The source CLI ran dry-run, import and repeat with the installed 0.8.7 importer. 54 files, 293 messages, 105 sessions and zero messages on the second import. Sanitized receipts: `.spur/run/verifyall-1464-1472/1471-import.json` and 1471-repeat.json. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — dsh sessions import and refresh like other agents (req: R1; R2; R3; R4) | MET | test | `../ts-libs/packages/llm-jsonl-importer/tests/deepseek-importer.test.ts:274` (v4 discovery + mapping) and `packages/app/tests/services/history-service.test.ts:2140` (attribution, torn line, idempotent re-run, `entry.status === 'ok'`); coverage inclusion at `:1565`. Real proof: `spur history import --source deepseek` → 54 files / 293 messages, non-zero, dry-run first then real. |
+| AC1 — dsh sessions import and refresh like other agents | PARTIAL | test | Real session receipt and the targeted suites passed. Published Spur dependency still omits dsh tool calls and the upstream repository gate remains outstanding. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
