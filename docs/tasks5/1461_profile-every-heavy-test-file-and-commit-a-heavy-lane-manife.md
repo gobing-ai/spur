@@ -4,7 +4,7 @@ name: Profile every heavy test file and commit a heavy lane manifest with a drif
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:07:41.707Z
-updated_at: "2026-11-27T17:04:56.251Z"
+updated_at: "2026-11-27T18:57:04.611Z"
 feature_id: H162
 priority: P2
 tags:
@@ -104,14 +104,14 @@ Out of scope: running lanes (1463); the Board seed (1462); changing any heavy te
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/test-lanes.ts:150-175` (`--profile-heavy`) runs each `.heavy.test.` file alone through `run-tests --config=bunfig.heavy.toml` (:186-199), then `bun run test:heavy` (:246-256), then one production build (:258-270); receipt `.spur/run/heavy-profile.json` carries `{sandboxed:false, baselineWallMs:278395, baselineExitCode:0, boardBuildMs:9316, cores:10, startedAt}` and per-file `{path, wallMs, pass, fail, skip, exitCode, buildsBoard}` (:280-292). |
-| R2 | MET | `config/test-lanes.json` `heavy`: 20 rows sorted by path, `{path, lane, shares, reason}`, shares drawn from `HEAVY_SHARES` (`packages/app/src/rules/test-lanes.ts:38-48`); 13 concurrent / 7 serial; every `timing-sensitive` row is serial, and the two forced-serial files are serial (`:60-64`). |
-| R3 | MET | `diffHeavyLanes` (`packages/app/src/rules/test-lanes.ts:194-247`) + `checkManifest` (`scripts/commands/test-lanes.ts:150-156`); drift proof: deleting `rule-busy` from `heavy` printed `drift missing apps/cli/tests/commands/rule-busy.heavy.test.ts`, flipping it to concurrent printed `drift invalid … a timing-sensitive file must run in the serial phase`, then restored green. |
+| R1 | MET | `scripts/commands/test-lanes.ts` `profileHeavy` (per-file `run-tests --config=bunfig.heavy.toml`, then `bun run test:heavy`, then one web build, receipt write); receipt `.spur/run/heavy-profile.json` inspected 2026-11-27: `sandboxed:false`, `baselineWallMs:278395`, `baselineExitCode:0`, `boardBuildMs:9316`, `cores:10`, 20 file rows, 0 rows with fail>0 or exitCode≠0. |
+| R2 | MET | `config/test-lanes.json` `heavy`: 20 rows, 13 concurrent / 7 serial; membership equals `rg --files -g '*.heavy.test.ts'` (diff empty, 2026-11-27); every serial row carries `timing-sensitive` or `operator-env`, incl. `scripts/commands/fleet-e2e-batch-perf.heavy.test.ts` and `plugins/sp/tests/quality-gate-lock.heavy.test.ts`; shape validated by `packages/app/src/rules/test-lanes.ts:62` (`HEAVY_SHARES`) + `:156`. |
+| R3 | MET | `packages/app/src/rules/test-lanes.ts:245` (`diffHeavyLanes`), wired in `--check`; `packages/app/tests/rules/test-lanes.test.ts:268-333` (7 cases, pass 2026-11-27); mutation 2026-11-27: deleting heavy[0] and flipping serve-gateway to concurrent → `--check` exit 1 naming `apps/cli/tests/commands/rule-busy.heavy.test.ts` (missing) and `apps/cli/tests/commands/serve-gateway.heavy.test.ts` (timing-sensitive must be serial); manifest restored, `git diff` clean. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 | MET | command | `bun scripts/spur-dev.ts test-lanes --profile-heavy` → `.spur/run/heavy-profile.json` (20 files, 87 assertions pass, 1 skip, 0 fail, `sandboxed:false`, exit 0). |
-| R2 | MET | test | `packages/app/tests/rules/test-lanes.test.ts:238-320` (8 heavy cases) + `repo-wide-tests/test-lanes-manifest.test.ts:22-45`. |
+| R1 — A per-file heavy profile and end-to-end baseline are recorded as a receipt | MET | command | `jq "{sandboxed,baselineExitCode,n:(.files |
+| R2 — Every heavy file is classified concurrent-safe or serial in a committed manifest guarded against drift | MET | test | `repo-wide-tests/test-lanes-manifest.test.ts:28` (pass); heavy mutation proof above |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

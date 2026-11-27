@@ -4,7 +4,7 @@ name: Build the Board once per heavy run as a run-scoped seed copied per caller
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:07:41.709Z
-updated_at: "2026-11-27T17:11:31.955Z"
+updated_at: "2026-11-27T18:57:05.079Z"
 feature_id: H162
 priority: P2
 tags:
@@ -97,16 +97,16 @@ Out of scope: lane scheduling (1463); caching across launcher runs; changing `wi
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/run-tests.ts:105-108` adds `SPUR_TEST_BOARD_SEED_DIR: join(registryDir, 'board-seed')` to the child env; nothing creates the directory (the first builder does, `apps/web/tests/test-helpers/board-build.ts:147`). |
-| R2 | MET | `buildBoardToTemp` (`.../board-build.ts:182-192`) seeds when the variable is set and no `testAdapterDir`; `ensureBoardSeed` (`:198-217`) runs inside `withBoardBuildLock`, builds into `<seed>.staging-<pid>` (`:205`), publishes with `renameSync` (`:207`); `copyBoardSeed` (`:226-236`) `mkdtemp`s `spur-board-0988-*` and `cp`s the seed after the lock is released; `removeBoardBuild` untouched (`:272-275`). |
-| R3 | MET | `testAdapterDir` and an unset variable both take the unchanged `withBoardBuildLock(() => buildBoardOnce(options))` path (`.../board-build.ts:189-191`); both asserted in `apps/web/tests/modules/board-build-lock.test.ts:196-225`. |
-| R4 | MET | Staging dir removed on failure and no seed published (`.../board-build.ts:209-213`), original `board build failed` error preserved (`:255-259`), next caller rebuilds — asserted at `board-build-lock.test.ts:201-215`. |
-| R5 | MET | The six board heavy files ran together: 34 pass / 1 skip / 0 fail, identical to the 1461 profile's totals for those files; no heavy file was edited (diff touches only the helper and the launcher). |
+| R1 | MET | `scripts/commands/run-tests.ts:105-108` sets `SPUR_TEST_BOARD_SEED_DIR: join(registryDir, 'board-seed')`; no mkdir of it in the launcher. |
+| R2 | MET | `apps/web/tests/test-helpers/board-build.ts:121-127` (seed path when env set and no adapter), `:139-155` `ensureBoardSeed` (staging-<pid> → `renameSync` under `withBoardBuildLock`), `:166` `copyBoardSeed` (`mkdtemp(tmpdir(),'spur-board-0988-')` + `cp`, outside lock); test `apps/web/tests/modules/board-build-lock.test.ts:155` (pass 2026-11-27). |
+| R3 | MET | `apps/web/tests/test-helpers/board-build.ts:123-124` (adapter builds and unset env → `buildBoardOnce`); tests `apps/web/tests/modules/board-build-lock.test.ts:174,206` (pass). |
+| R4 | MET | `apps/web/tests/test-helpers/board-build.ts:150-153` (staging removed, error rethrown); test `apps/web/tests/modules/board-build-lock.test.ts:189` (pass). |
+| R5 | MET | `git show --stat e59f7d70a`: only `board-build-lock.test.ts`, `board-build.ts`, `run-tests.ts` and the task file changed — no `.heavy.test.` file touched. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R3 | MET | command | `bun scripts/spur-dev.ts run-tests --config=bunfig.heavy.toml test --reporter=dots <six board heavy files>` → 50.6 s, exit 0, 34 pass / 1 skip / 0 fail (summed per-file before: 84.6 s). |
-| R5 | MET | test | `apps/web/tests/modules/board-build-lock.test.ts:135-225` (4 seed cases) + the unchanged heavy-file run above. |
+| R3 — The browser and board heavy files reuse one Board build per heavy run | MET | test | `apps/web/tests/modules/board-build-lock.test.ts:155` (one build, private copies; `cd apps/web && bun test tests/modules/board-build-lock.test.ts` → 7 pass 0 fail, 2026-11-27); run evidence in Solution (six board files, one launcher call, 34 pass / 1 skip / 0 fail) |
+| R5 — No heavy proof is dropped, skipped, weakened, or moved to the default path | MET | command | `git show --name-only --format= e59f7d70a \| grep -c '\.heavy\.test\.'` → 0 (2026-11-27); `bun scripts/spur-dev.ts test-lanes --check` → exit 0 (heavy membership + lanes unchanged, 20 files) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Classify subprocess-heavy root test files into a committed lane manifest w
 status: done
 template: feature-impl
 created_at: 2026-11-27T06:56:54.805Z
-updated_at: "2026-11-27T08:48:41.356Z"
+updated_at: "2026-11-27T18:57:04.076Z"
 feature_id: H161
 priority: P1
 tags:
@@ -102,13 +102,13 @@ Measurement notes: at `--parallel=2` the 144 subprocess-lane files hold 1,112 s 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `scripts/commands/test-lanes.ts:96-104` scans `ROOT_PATH_SET` honoring `readPathIgnorePatterns` (`:118-129`); `packages/app/src/rules/test-lanes.ts:91-114` classifies direct tokens (:71) and one-level name-based helper imports (:239-256); entries sorted (:112) with `reason` and `durationMs` merged from `--timings` (`scripts/commands/test-lanes.ts:196-204`); `config/test-lanes.json:1-870` holds 144 rows. |
-| R2 | MET | `packages/app/src/rules/test-lanes.ts:163-186` + `repo-wide-tests/test-lanes-manifest.test.ts:22-33` (runs in `test-repo-wide`); drift proof: removing `apps/cli/tests/cli-pipe.test.ts` made `--check` exit 1 naming that path and the repo-wide test fail with the same line, then restored green. |
-| R3 | MET | `.spur/run/test-lanes-baseline.json` (parallel-2 519 s exit 1 = coverage gate on the then-uncovered new module; junit run 719 s exit 0 / 13527 tests; `--parallel=4` 496 s with 1 timeout `runLightGate … 20008.97ms`), per-file durations in `.spur/run/test-lanes-junit-durations.json` and merged into the manifest. |
+| R1 | MET | `scripts/commands/test-lanes.ts:117-123` (`buildLaneEntries` over `ROOT_PATH_SET`, bunfig `pathIgnorePatterns` via `:135-141`); classifier `packages/app/src/rules/test-lanes.ts:126` (direct token + one-level name-based helper import); `packages/app/tests/rules/test-lanes.test.ts:37-180` (11 classify cases); re-verified 2026-11-27: `bun scripts/spur-dev.ts test-lanes --check` → "matches the tree (144 file(s))", exit 0. |
+| R2 | MET | `packages/app/src/rules/test-lanes.ts:212` (`diffLaneManifest`) + `repo-wide-tests/test-lanes-manifest.test.ts:28`; re-run 2026-11-27: `bun test repo-wide-tests/test-lanes-manifest.test.ts scripts/commands/test-lanes.test.ts` → 4 pass 0 fail; `packages/app` `tests/rules/test-lanes.test.ts` → 27 pass 0 fail. |
+| R3 | MET | `.spur/run/test-lanes-baseline.json` (inspected 2026-11-27: `bun run test` --parallel=2 519 s, 13523 tests, 0 test failures, exit 1 = then-uncovered new module; junit profile 720 s exit 0; --parallel=4 arm with 1 timeout) + `.spur/run/test-lanes-junit-durations.json`; cited in Solution. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R2 | MET | test | `repo-wide-tests/test-lanes-manifest.test.ts:22-33`; `packages/app/tests/rules/test-lanes.test.ts:1-259` (19 pass); drift-by-removal proof recorded in `.spur/run/test-lanes-baseline.json` context and the implement receipt. |
+| R2 — The subprocess lane membership is derived from evidence and guarded against drift | MET | test | `repo-wide-tests/test-lanes-manifest.test.ts:28` (pass 2026-11-27); `packages/app/tests/rules/test-lanes.test.ts:225-260` (diffLaneManifest both directions, pass) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
