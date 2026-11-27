@@ -14,6 +14,19 @@ const CARD_SUFFIX = '.well-known/agent-card.json';
 /** What a `project` + `member` declaration resolves to, or why it cannot (never a throw). */
 export type ProjectCardTarget = { url: string } | { error: string };
 
+/** Why a project cannot be addressed through the LOCAL gateway (1468 R1/R2). */
+export type ProjectGatewayRefusal = 'no-entry' | 'remote-host' | 'ambiguous' | 'no-gateway';
+
+/**
+ * A registered project's base URL on the local gateway, or the refusal that stopped it.
+ *
+ * Extracted (1468 R1) so the Agent Card URL and the remote inbox read share ONE prefix rule: a
+ * second derivation is how a card and a dialog drift onto different URLs.
+ */
+export type ProjectGatewayBase =
+    | { base: string; prefix: string; name: string }
+    | { error: string; reason: ProjectGatewayRefusal };
+
 /** One `project` + `member` declaration plus the seams needed to resolve it (1395 R2). */
 export interface ProjectCardTargetInput {
     /** Registry name or gateway prefix the member declaration named. */
@@ -35,6 +48,26 @@ export interface ProjectCardTargetInput {
  * `authEnv` value passed through unchanged.
  */
 export async function resolveProjectCardTarget(input: ProjectCardTargetInput): Promise<ProjectCardTarget> {
+    const resolved = await resolveProjectGatewayBase(input);
+    if ('error' in resolved) return { error: resolved.error };
+    const instanceId = `${resolved.name}-${input.member}`;
+    return { url: `${resolved.base}/a2a/members/${encodeURIComponent(instanceId)}/${CARD_SUFFIX}` };
+}
+
+/**
+ * Resolve a registered LOCAL project to its gateway base (`http://localhost:<port><prefix>`).
+ *
+ * The single prefix rule (1468 R1): a name or prefix matches one local registry entry, a remote
+ * entry is refused (project-addressed traffic is local-only), and the gateway must be answering on
+ * its own port. Every refusal carries a machine-readable `reason` so a caller can distinguish
+ * "belongs to another gateway" from "the gateway is down" without parsing prose.
+ */
+export async function resolveProjectGatewayBase(input: {
+    project: string;
+    gatewayPort: number;
+    listProjects: () => Promise<ProjectEntry[]>;
+    fetchImpl?: typeof fetch;
+}): Promise<ProjectGatewayBase> {
     const wanted = input.project.trim();
     const asPrefix = normalizePrefix(wanted);
     const entries = await input.listProjects();
@@ -48,12 +81,14 @@ export async function resolveProjectCardTarget(input: ProjectCardTargetInput): P
             .join(', ');
         return {
             error: `no registered project "${wanted}" — run \`spur projects list\` (registered: ${known || 'none'})`,
+            reason: 'no-entry',
         };
     }
     const remote = matches.find((entry) => !isLocalHost(entry.host));
     if (remote !== undefined) {
         return {
             error: `project "${wanted}" is registered on ${remote.host} — a project-addressed member is local-only; declare its card URL with \`a2a\` instead`,
+            reason: 'remote-host',
         };
     }
     if (matches.length > 1) {
@@ -62,6 +97,7 @@ export async function resolveProjectCardTarget(input: ProjectCardTargetInput): P
             .join(', ');
         return {
             error: `project "${wanted}" is ambiguous: ${identities} — address it by its distinct name or prefix`,
+            reason: 'ambiguous',
         };
     }
 
@@ -70,12 +106,9 @@ export async function resolveProjectCardTarget(input: ProjectCardTargetInput): P
     const prefix = resolveProjectPrefix(entry) ?? `/${slugifyProjectName(entry.name)}`;
 
     const gateway = await probeGateway(input.gatewayPort, input.fetchImpl ?? fetch);
-    if (gateway !== null) return { error: gateway };
+    if (gateway !== null) return { error: gateway, reason: 'no-gateway' };
 
-    const instanceId = `${entry.name}-${input.member}`;
-    return {
-        url: `http://localhost:${input.gatewayPort}${prefix}/a2a/members/${encodeURIComponent(instanceId)}/${CARD_SUFFIX}`,
-    };
+    return { base: `http://localhost:${input.gatewayPort}${prefix}`, prefix, name: entry.name };
 }
 
 /** A gateway must be answering on its own port, or the resolved URL would dead-end (R2). */

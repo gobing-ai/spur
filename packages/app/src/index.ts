@@ -215,7 +215,10 @@ export {
     createProjectCardRefResolver,
     envProjectCardRefResolver,
     type ProjectCardTarget,
+    type ProjectGatewayBase,
+    type ProjectGatewayRefusal,
     resolveProjectCardTarget,
+    resolveProjectGatewayBase,
 } from './services/a2a-member-address';
 export {
     A2A_WRITE_FENCING_EXTENSION,
@@ -233,6 +236,11 @@ export {
     a2aTaskToReceipt,
     a2aWriteFencingSupported,
 } from './services/a2a-member-transport';
+export {
+    type ReadRemoteDialogInput,
+    type RemoteDialogResult,
+    readRemoteDialog,
+} from './services/a2a-remote-dialog';
 export type {
     AgentCoordinationServiceContext,
     AgentCoordinationServiceOutput,

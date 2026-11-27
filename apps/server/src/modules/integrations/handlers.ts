@@ -6,6 +6,7 @@ import {
     normalizeProjectPath,
     ProjectRegistry,
     probeAgentMcpReadiness,
+    readRemoteDialog,
 } from '@gobing-ai/spur-app';
 import { buildConfigFromEnv, isLocalHost, resolveProjectGatewayUrl, SPUR_ENV_VARS } from '@gobing-ai/spur-config';
 import { contract, type IntegrationsAuth, integrationsGatewayHealthSchema } from '@gobing-ai/spur-contracts';
@@ -281,6 +282,33 @@ export function createIntegrationsHandlers(ctx: ServerContext) {
                     gatewayPort: gatewayPort(env, boot?.gateway),
                     projectUrl: settings.enabled && base !== '' ? `${base}/mcp` : null,
                 },
+            });
+        }),
+
+        /**
+         * The remote half of one outbound receipt's dialog (1468 R1/R3/R4): resolve the member from
+         * this project's own fleet declaration, then read the peer's thread through the local
+         * gateway. Read-only, loopback-only, and never a throw — the union carries the marker.
+         */
+        remoteDialog: os.integrations.remoteDialog.handler(async ({ input, context }) => {
+            const env = bearerEnv(ctx);
+            const members = (await service().status(requestContextOf(context))).a2a.members;
+            const member = members.find((entry) => entry.member === input.member);
+            if (member === undefined || member.direction !== 'outbound') {
+                return {
+                    status: 'unavailable' as const,
+                    reason: `no outbound member "${input.member}" on this project`,
+                };
+            }
+            const boot = ctx.bootConfig?.();
+            // The same env slice this handler already trusts for the gateway port: a caller-injected
+            // env (tests, an embedding host) must select the registry too, not only the process env.
+            const registry = new ProjectRegistry(env.SPUR_PROJECTS_FILE);
+            return readRemoteDialog({
+                member,
+                remoteContextId: input.remoteContextId,
+                gatewayPort: gatewayPort(env, boot?.gateway),
+                listProjects: async () => registry.peek().projects,
             });
         }),
     };

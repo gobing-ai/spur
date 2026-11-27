@@ -313,6 +313,9 @@ describe('1334 R3 — claim-by-id and the remaining inbox read seams', () => {
             (await dao.list('proj-coder', 'both', 3, { createdAt: 3, id: outbound.id })).map((row) => row.id),
         ).toEqual([reply.id, root.id]);
         expect((await dao.thread(root.id)).map((row) => row.id)).toEqual([root.id, reply.id]);
+        // 1468 Plan step 1: the remote reader keys the thread by the contextId, which the receiving
+        // project stores as the root's threadId — so a threadId must select the same dialog.
+        expect((await dao.thread(root.threadId ?? root.id)).map((row) => row.id)).toEqual([root.id, reply.id]);
         expect((await dao.requests()).map((row) => row.id)).toEqual([root.id]);
         expect((await dao.requests(['proj-coder'], reply.id)).map((row) => row.id)).toEqual([reply.id]);
         expect(await dao.requests([])).toEqual([]);

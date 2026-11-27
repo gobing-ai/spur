@@ -36,6 +36,8 @@ export const inboxMessageSchema = z.object({
     parentRunId: z.string().nullable(),
     createdAt: z.number().int(),
 });
+/** Inferred type for {@link inboxMessageSchema}. */
+export type InboxMessage = z.infer<typeof inboxMessageSchema>;
 
 /** One address that owns inbox rows, with its queue and unread counts (the member list). */
 export const inboxMemberSchema = z.object({

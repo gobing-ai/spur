@@ -59,6 +59,8 @@ export { featureCreateInputSchema, featureListResponseSchema, featureShowRespons
 // Hono-served; the contracts document them for the generated OpenAPI.
 export * from './fleet';
 export * from './history';
+// The inbox message shape a remote-dialog read returns (1468): the integrations procedure embeds it.
+export { type InboxMessage, inboxMessageSchema } from './inbox';
 export * from './integrations';
 export * from './observability';
 export * from './planning-documents';

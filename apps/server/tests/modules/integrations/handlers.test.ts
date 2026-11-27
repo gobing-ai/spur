@@ -535,6 +535,125 @@ describe('1440 — outbound credential state (R2)', () => {
     });
 });
 
+// ─── 1468 R3: the remote dialog read on the served API ─────────────────────────────────────
+const REMOTE_THREAD = [
+    {
+        id: 'msg-root',
+        fromId: 'ts-libs-coder',
+        toId: 'operator',
+        body: 'remote root',
+        kind: 'chat',
+        status: 'delivered',
+        attempts: 1,
+        error: null,
+        claimedAt: null,
+        deliveredAt: 1_000,
+        readAt: null,
+        inReplyTo: null,
+        threadId: 'ctx-1',
+        requestKey: null,
+        taskId: null,
+        parentRunId: null,
+        createdAt: 1_000,
+    },
+];
+
+describe('1468 — integrations.remoteDialog (R3/R4)', () => {
+    /** The route under test, through the served API. */
+    async function remoteDialogOf(ctx: ServerContext, query: string): Promise<{ status: number; body: unknown }> {
+        const res = (await appFor(ctx).fetch(
+            new Request(`http://127.0.0.1:3007/api/integrations/remote-dialog?${query}`),
+        )) as Response;
+        return { status: res.status, body: await res.json().catch(() => null) };
+    }
+
+    /** The outbound member ids the status read lists — the same ids the dialog input addresses. */
+    async function outboundMembers(
+        ctx: ServerContext,
+    ): Promise<Array<{ member: string; direction: string; kind: string; target: string }>> {
+        const body = (await (await statusOf(ctx)).json()) as {
+            a2a: { members: Array<{ member: string; direction: string; kind: string; target: string }> };
+        };
+        return body.a2a.members.filter((entry) => entry.direction === 'outbound');
+    }
+
+    /** The outbound member ids the status read lists — the same ids the dialog input addresses. */
+    async function outboundIds(ctx: ServerContext): Promise<string[]> {
+        return (await outboundMembers(ctx)).map((entry) => entry.member);
+    }
+
+    test('an a2a-kind peer is marked outside the gateway, never guessed', async () => {
+        const { ctx, close } = await makeCtx({
+            a2a: { enabled: false, authEnv: null },
+            config: { agent: { fleet: { members: [{ id: 'peer', a2a: 'https://peer.example/a2a' }] } } },
+        });
+        try {
+            const [peer] = await outboundIds(ctx);
+            expect(peer).toBeDefined();
+            const { status, body } = await remoteDialogOf(ctx, `member=${peer}&remoteContextId=ctx-1`);
+            expect(status).toBe(200);
+            expect(body).toEqual({ status: 'outside-gateway' });
+        } finally {
+            await close();
+        }
+    });
+
+    test('a member this project does not declare is unavailable, with the reason', async () => {
+        const { ctx, close } = await makeCtx();
+        try {
+            const { status, body } = await remoteDialogOf(ctx, 'member=ghost&remoteContextId=ctx-1');
+            expect(status).toBe(200);
+            expect(body).toEqual({ status: 'unavailable', reason: 'no outbound member "ghost" on this project' });
+        } finally {
+            await close();
+        }
+    });
+
+    test('a same-gateway project member reads the remote thread through the gateway', async () => {
+        const dir = await mkdtempSync(join(tmpdir(), 'remote-dialog-'));
+        const registryPath = join(dir, 'projects.json');
+        // The supported writer (the same one `serve` and the neighbour tests use).
+        await new ProjectRegistry(registryPath).upsert({
+            name: 'ts-libs',
+            path: '/tmp/ts-libs',
+            prefix: '/tslibs',
+            port: 0,
+        });
+        const requested: string[] = [];
+        const gateway = Bun.serve({
+            port: 0,
+            hostname: '127.0.0.1',
+            fetch: (req) => {
+                const url = new URL(req.url);
+                if (url.pathname === '/api/health') return Response.json({ ok: true, gateway: true });
+                requested.push(`${req.method} ${url.pathname}`);
+                return Response.json(REMOTE_THREAD);
+            },
+        });
+        const { ctx, close } = await makeCtx({
+            a2a: { enabled: false, authEnv: null },
+            env: { SPUR_PROJECTS_FILE: registryPath, SPUR_GATEWAY_PORT: String(gateway.port) },
+            config: { agent: { fleet: { members: [{ id: 'tslibs-coder', project: 'ts-libs', member: 'coder' }] } } },
+        });
+        try {
+            const outbound = await outboundMembers(ctx);
+            expect(outbound).toHaveLength(1);
+            expect(outbound[0]?.kind).toBe('project');
+            expect(outbound[0]?.target).toBe('ts-libs/coder');
+            const { status, body } = await remoteDialogOf(ctx, `member=${outbound[0]?.member}&remoteContextId=ctx-1`);
+            expect(status).toBe(200);
+            const result = body as { status: string; messages?: Array<{ id: string }> };
+            expect(result.status).toBe('remote');
+            expect(result.messages?.map((m) => m.id)).toEqual(['msg-root']);
+            expect(requested).toEqual(['GET /tslibs/api/inbox/messages/ctx-1/thread']);
+        } finally {
+            gateway.stop(true);
+            await close();
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
 // ─── 1449 R1: gateway port precedence and startup config diagnostics ──────────────────────
 // The failure modes: probing a gateway nobody configured (default 3000 while the caller reached a
 // different loopback port), trusting a tunnel's :443 as a local port, an explicit port losing to a

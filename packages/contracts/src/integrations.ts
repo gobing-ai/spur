@@ -1,5 +1,6 @@
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
+import { inboxMessageSchema } from './inbox';
 
 // ─── Integrations Board module wire shapes (feature A82, task 1423) ───
 // The read-only status/usage pair the Board's Integrations module renders
@@ -308,6 +309,32 @@ export const integrationsAgentReadinessSchema = z.object({
 /** Inferred type for {@link integrationsAgentReadinessSchema}. */
 export type IntegrationsAgentReadiness = z.infer<typeof integrationsAgentReadinessSchema>;
 
+/**
+ * The remote dialog read (feature A822 / task 1468 R3): the outbound receipt's remote context id,
+ * resolved through the local gateway. A Board-only procedure — no public `spur` CLI verb.
+ */
+export const integrationsRemoteDialogInputSchema = z.object({
+    /** Outbound member instance id, as the integrations status lists it. */
+    member: z.string().min(1),
+    /** The `remoteContextId` the receipt persisted; the remote inbox thread root. */
+    remoteContextId: z.string().min(1),
+});
+/** Inferred type for {@link integrationsRemoteDialogInputSchema}. */
+export type IntegrationsRemoteDialogInput = z.infer<typeof integrationsRemoteDialogInputSchema>;
+
+/**
+ * The remote half of a dialog, or the marker that explains its absence (1468 R2). `remote` carries
+ * the transcript oldest first; `outside-gateway` means the peer is not behind this gateway;
+ * `unavailable` names why a same-gateway read failed.
+ */
+export const integrationsRemoteDialogSchema = z.discriminatedUnion('status', [
+    z.object({ status: z.literal('remote'), messages: z.array(inboxMessageSchema) }),
+    z.object({ status: z.literal('outside-gateway') }),
+    z.object({ status: z.literal('unavailable'), reason: z.string() }),
+]);
+/** Inferred type for {@link integrationsRemoteDialogSchema}. */
+export type IntegrationsRemoteDialog = z.infer<typeof integrationsRemoteDialogSchema>;
+
 /** The Integrations procedures: status, windowed usage and agent readiness. */
 export const integrationsContract = {
     status: oc
@@ -335,4 +362,17 @@ export const integrationsContract = {
             tags: ['integrations'],
         })
         .output(integrationsAgentReadinessSchema),
+    /**
+     * The remote half of one outbound receipt's dialog (1468 R3): resolved through the local
+     * gateway only, so a peer behind another gateway is marked rather than guessed.
+     */
+    remoteDialog: oc
+        .route({
+            method: 'GET',
+            path: '/integrations/remote-dialog',
+            summary: 'Read the remote inbox thread of one outbound A2A receipt through the local gateway',
+            tags: ['integrations'],
+        })
+        .input(integrationsRemoteDialogInputSchema)
+        .output(integrationsRemoteDialogSchema),
 };
