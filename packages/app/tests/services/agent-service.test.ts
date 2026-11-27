@@ -4926,7 +4926,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
             { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.164.0' },
             { name: 'omp-exec', agent: 'omp', version: 'omp/18.2.3' },
             { name: 'openclaw-exec', agent: 'openclaw', version: 'OpenClaw 2026.6.11 (e085fa1)' },
-            { name: 'ds-exec', agent: 'deepseek', version: 'deepseek-cli 0.1.5-rc.1' },
+            { name: 'ds-exec', agent: 'deepseek', version: 'deepseek-cli 0.2.2-rc.1' },
         ] as const;
         for (const c of cases) {
             const { lines, output } = captureOutput();
@@ -4981,7 +4981,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         const warning = errors.find((e) => e.includes('capability-declaration-stale'));
         expect(warning).toBeDefined();
         expect(warning).toContain('"deepseek-cli 0.1.5-rc.2" (core 0.1.5-rc.2)');
-        expect(warning).toContain('"0.1.5-rc.1" (core 0.1.5-rc.1)');
+        expect(warning).toContain('"0.2.2-rc.1" (core 0.2.2-rc.1)');
     });
 
     test('0899 R2: the stale warning quotes raw values and names the normalized cores', async () => {
