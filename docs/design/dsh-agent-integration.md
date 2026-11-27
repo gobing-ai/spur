@@ -32,7 +32,7 @@ Shims are pure argv builders (`ShimCommand = {command, args}`), so the runner pa
 | --- | --- |
 | One-shot | `dsh --profile headless [--json] --permission-mode workspace-write --approval-policy never -- <task>`; `--json` only in json mode; cwd = run worktree |
 | Resume | `--session-id <id>` plus the same permission flags; the recorded cwd must match |
-| Permission | fixed: `PromptOptions` has no permission field. `--add-dir <git-common-dir>` is deferred until the E2E shows a worktree commit needs it |
+| Permission | fixed: `PromptOptions` has no permission field. `--add-dir <git-common-dir>` is not needed: the dispatched executor never commits — worktree commits are driver-owned (WT-3b, `plugins/sp/skills/spur-dev/references/execution-worktree.md` §WT-3b, through `spur workflow commit-guard-stage`) |
 | Success | dsh's exit status: 0 only for a completed final `turn/end`, else 1 (headless README, exit mapping) |
 | Capability record | `supportsResumeById: true`, `supportsSessionDir: false`, `supportsStructuredOutput: true`, `supportsPersistentStdin: false`, `verifiedAgainst: <pinned>` |
 | Availability | `dsh --version` on PATH; no credential read or stored (provider keys stay in the dsh profile) |
