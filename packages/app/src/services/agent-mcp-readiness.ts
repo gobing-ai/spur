@@ -59,13 +59,15 @@ const opencodeEntry = (document: unknown): unknown => read(document, ['mcp', 'sp
 /** `mcp.servers.spur` (OpenClaw). */
 const openclawEntry = (document: unknown): unknown => read(document, ['mcp', 'servers', 'spur']);
 /**
- * The `spur` MCP server in a dsh profile patch (task 1457). `cordis.patch.yml` is a top-level
- * YAML array of loader entries; an MCP server is one `@deepseek-ai/dsh-mcp-client` entry whose
- * `config.serverName` names the server (`dsh-mcp-client` README, minimal configuration).
+ * Prefer native dsh insert entries. Older profile files may still declare the loader flat.
  */
 const dshPatchEntry = (document: unknown): unknown => {
     if (!Array.isArray(document)) return undefined;
-    for (const entry of document) {
+    const inserts = document.flatMap((patch: unknown) => {
+        const insert = read(patch, ['insert']);
+        return Array.isArray(insert) ? insert : [];
+    });
+    for (const entry of [...inserts, ...document]) {
         if (entry === null || typeof entry !== 'object') continue;
         const node = entry as Record<string, unknown>;
         if (node.name !== '@deepseek-ai/dsh-mcp-client') continue;

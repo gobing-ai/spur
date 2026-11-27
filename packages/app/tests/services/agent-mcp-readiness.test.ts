@@ -225,6 +225,32 @@ describe('dsh MCP readiness (task 1457 R9)', () => {
         expect(dsh?.label).toBe('dsh');
     });
 
+    test('prefers the native insert over a stale flat entry', async () => {
+        const { cwd, home } = workspace();
+        const path = join(home, '.dsh', 'profiles', 'headless', 'cordis.patch.yml');
+        write(
+            path,
+            patch('spur') +
+                [
+                    '- insert:',
+                    '    - id: superskill-mcp-spur',
+                    "      name: '@deepseek-ai/dsh-mcp-client'",
+                    '      config:',
+                    '        serverName: spur',
+                    '        transport: stdio',
+                    '        command: spur',
+                    '        args: [mcp, --gateway]',
+                    '',
+                ].join('\n'),
+        );
+
+        const result = await probeAgentMcpReadiness(deps(cwd, home));
+        expect(result.agents.find((entry) => entry.agent === 'deepseek')).toMatchObject({
+            state: 'configured',
+            transport: 'stdio',
+        });
+    });
+
     test('an empty patch array is not-configured, and another server name does not count', async () => {
         const { cwd, home } = workspace();
         const path = join(home, '.dsh', 'profiles', 'headless', 'cordis.patch.yml');

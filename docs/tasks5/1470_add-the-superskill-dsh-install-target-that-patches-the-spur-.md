@@ -4,7 +4,7 @@ name: Add the superskill dsh install target that patches the Spur MCP loader ent
 status: wip
 template: feature-impl
 created_at: 2026-11-27T07:35:47.781Z
-updated_at: "2026-11-27T22:36:42.869Z"
+updated_at: "2026-11-27T23:04:46.656Z"
 feature_id: B811
 
 estimate_hours: 4
@@ -124,24 +124,31 @@ R6, first clause — proven: a throwaway HOME was patched by the real action, th
 
 R6, second clause — **blocked by a pre-existing checkout defect, not by this diff.** `bun run spur-check` passes `lint`/`typecheck`/`test-pre-check` and fails in `test` with 11–35 failures whose names have nothing to do with this task (`cli > createProgram…`, `hook command module`, Pi-extension timeouts). The concrete cause is reproducible and unrelated: `Cannot find package 'is-plain-obj' from .../@gobing-ai/ts-runtime/node_modules/execa/lib/methods/create.js` — a partial link inside `apps/cli`'s copy of a published `@gobing-ai/ts-runtime`. `bun install --frozen-lockfile`, `bun install --force` at the root and inside `apps/cli`, and removing the nested directory for a relink all left it broken. Recorded as blocked rather than reported green or fixed by wiping a node_modules another session may be using.
 
+Follow-up for the native dsh profile format. The installed dsh 0.2.2-rc.1 accepts the loader under an `insert` operation. The previous flat patch could satisfy Spur's static probe while the dsh profile dropped it.
+
+- Superskill's patch planner now emits native inserts, migrates older owned flat entries, and preserves the ID, position and foreign siblings of an existing native loader.
+- Spur's readiness probe prefers native inserts and still reads older flat declarations.
+- In an isolated configuration directory the source CLI dry-run wrote no patch, the actual install composed in dsh without a warning, and reinstall preserved the SHA-256. The production readiness probe reported `configured` with `stdio` against the same patch.
+- Receipts are under `.spur/run/verifyall-1464-1472/followup/` in `1470-composed.yaml`, `1470-native.sha` and `1470-readiness.json`.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | @gobing-ai/superskill-core `packages/core/src/targets.ts` line 28 keeps dsh install-only. The source CLI ran with target dsh. |
-| R2 | PARTIAL | @gobing-ai/superskill-core `packages/core/src/operations/dsh-mcp-patch.ts` lines 107 and 220 produce the requested flat loader and write through the transaction writer. The installed dsh app-boot `lib/index.js` line 537 rejects flat patches without an insert operation. The isolated source CLI patch is absent from the composed headless profile. |
-| R3 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 157 exercises stable reinstall and the foreign entries. The source CLI reinstall also preserved the SHA-256. |
+| R2 | MET | @gobing-ai/superskill-core `packages/core/src/operations/dsh-mcp-patch.ts` lines 98 and 175 emit one native insert with a stdio loader. The actual Superskill CLI installed the patch and dsh 0.2.2-rc.1 composed it without a warning. |
+| R3 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 150 covers byte-stable reinstall, migration of an owned flat entry, and preservation of a native group’s ID and foreign sibling. Source CLI reinstall preserved the patch SHA-256. |
 | R4 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 103 proves preview diff and no write, and line 133 proves malformed input is left untouched without leaking its contents. |
 | R5 | MET | @gobing-ai/superskill-core `packages/core/src/operations/dsh-mcp-patch.ts` lines 122–142 validate names and construct env references. The isolated patch held all four references, and neither preview nor error printed prior values. |
-| R6 | PARTIAL | The fresh isolated Superskill full gate failed with 2732 passes and 17 Pi/hook subprocess failures. The 12 dsh patch cases, source CLI install, and Spur readiness probe passed. The real probe returned configured with stdio, the readiness enum used before observed calls. |
+| R6 | PARTIAL | The production Spur readiness probe reported configured with stdio from the same native patch that dsh composed. The full Superskill gate reached failures in two Pi hook subprocess cases, so it has no passing receipt. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The dsh target writes the Spur MCP loader entry | UNMET | test | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 63 and line 103 passed, the existing Spur probe returned configured, but the installed dsh profile rejected the flat entry. The same loader under an insert composed successfully. The full gate remains red. |
+| AC1 — The dsh target writes the Spur MCP loader entry | PARTIAL | command | The source Superskill install and dry-run, actual dsh profile composition, and production readiness probe passed against the same isolated HOME_DIR. The full Superskill gate reached failures in two Pi hook subprocess cases, so it has no passing receipt. |
 | AC2 — Reinstall is idempotent and preserves foreign entries | MET | test | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 157 passed. The CLI repeated the same hash on an isolated HOME_DIR. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 

@@ -50,7 +50,7 @@ Each existing per-agent table gains a `deepseek` row (the runner's canonical id)
 | `packages/app/src/services/process-identity.ts` | `dsh` executable name only if `ps comm` shows `dsh` rather than `node` — observed 2026-11-26 on dsh 0.2.2-rc.1: `comm=node`, so no entry (it would claim every Node agent's process) |
 | `packages/app/src/services/run-session-observer.ts` | `deepseek: 'deepseek'`; the importer source already covers `~/.dsh/sessions` |
 | `packages/app/src/services/failure-classification.ts` | a provider pattern only for an observed dsh stderr signature |
-| `packages/app/src/services/agent-mcp-readiness.ts` | dsh MCP via the profile patch `cordis.patch.yml`: one `@deepseek-ai/dsh-mcp-client` loader entry per server, matched on `config.serverName: spur` (`dsh-mcp-client` README, minimal configuration; verified against 0.2.2-rc.1 — the earlier `mcp-manager config.servers` shape was wrong), verdict only; writing it is B811 |
+| `packages/app/src/services/agent-mcp-readiness.ts` | Reads `@deepseek-ai/dsh-mcp-client` loaders from `insert` operations in the headless profile’s `cordis.patch.yml` and matches `config.serverName: spur`. Older flat declarations remain readable. Superskill’s B811 install target writes the native patch format accepted by dsh 0.2.2-rc.1. |
 | `apps/web/src/modules/integrations/helpers.ts` | `deepseek` in `MCP_CLIENT_AGENTS`: binary, YAML profile-patch config format, readiness |
 
 ## 4. Skills
