@@ -279,3 +279,18 @@ Root bunfig `coverageThreshold = {lines: 0.9, functions: 0.9}` is a PER-FILE gat
 - [2026-10-13] **Never background a load generator with `kill $(jobs -p)` inside the same subshell.** A `( while :; do :; done ) &` fleet started inside `bash -c '...'` is not killed by the inner `jobs -p` teardown, so 22 spinners survived the experiment and silently polluted every later "idle" measurement (load 55 while I read timings as idle, which produced one false "product defect" conclusion that evaporated at real idle). Kill by pattern (`ps -eo pid,command | grep '<marker>' | awk '{print $1}'`) and verify with `uptime` before trusting any timing.
 
 - [2026-10-21] **Never hand-symlink or drop files into `~/.agents/scripts/lib`.** That path was a superskill-owned shared lib leaf (staged per install); a symlink there pointing at an installed package's `plugins/sp/lib` turned `superskill install sp` into a hard `EISDIR` abort (`ERR_FS_CP_DIR_TO_NON_DIR`), and a write-through copy would have mutated `node_modules`. Superskill now stages the plugin's `lib/` inside its own root (`.agents/scripts/sp/lib/`) and only warns about a legacy leaf. Keep the plugin's `../../lib/…` hook imports as written — install retargets the depth; editing them to `../lib/…` breaks the native plugin tree. Staged-tree residue also only existed because overlay copy never deleted dropped files. **Resolved 2026-10-21:** the legacy `~/.agents/scripts/lib/` leaf (28 files, 4.3 MB, last written 2026-10-20) was removed after confirming zero live consumers — no code, config, hook, workflow, or installed platform file referenced it; only retired pre-1213 bundles (`inline-run`, `quality-gate`, `history-anatomy`, `run-summary-core`, `spur-bin`, …) remained. The current staged roots (`~/.agents/scripts/{sp,cc,kk}`) match their `.superskill-stamp.json` exactly, `superskill script verify sp --global` passes, and both tested hooks resolve through `scripts/sp/lib`. **Confidence HIGH** (2026-10-21, superskill 0.3.41): installer source `src/commands/install.ts:2036-2094` stages `<plugin>/lib/` and only warns about the shared leaf; `src/commands/hook-run.ts:88,160-161` searches staged roots as `<plugin>/hooks/` only. Live evidence: `superskill script verify sp --global` PASS, hook smoke exit 0. Note `--dry-run` returns before the legacy-leaf warning, so a silent dry-run is not evidence the leaf is unused.
+
+## 2026-11-27 — pitfalls from batch 1464-1472
+
+- **`spur workflow continue` for a host work item takes the RECEIPT PATH as `--answer-text`**, not a
+  sentence and not `--answer`. Without it the CLI demands a gate answer, and the receipt itself must
+  live at `.spur/run/<runId>/receipts/<state>.json` (`receipts/` is not created for you).
+- **A review→remediate route fails when the gate wrote no `.findings` file.** `remediate`'s
+  `file.read.into-var` on `.spur/run/<wbs>-test-gate.findings` hard-fails the run when the gate was
+  green (the file is 0-byte or absent) — a non-PASS review on a green gate lands `failed` at
+  `remediate`, not in a repair.
+- **`env-var-hygiene` fires on comments and on artifact text.** A file that WRITES
+  `!!js process.env.<NAME>` for another tool must be added to that repo's rule `exclude` with a
+  reason; rewording is only possible when the literal is not the deliverable.
+- **Biome's `a11y/noSvgWithoutTitle` counts a JSX comment before `<title>` as an empty title.** Put
+  the rationale above the `case`, not inside the `<svg>`.
