@@ -4,7 +4,7 @@ name: Show deepseek in the history Board source rows, filters and agent icon
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:48.791Z
-updated_at: "2026-11-27T22:09:47.054Z"
+updated_at: "2026-11-27T22:30:25.947Z"
 feature_id: E11
 
 dependencies: ["1471"]
@@ -106,13 +106,13 @@ Gate: `spur task gate 1472 light` → PASS (7 changed files, 8 checks); `apps/we
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/history-board-service.ts:144-152` adds the frozen descriptor (`deepseek` / `DeepSeek dsh` / `#65a30d` / `~/.dsh/sessions/` / `session.v{3,4}.jsonl[.zstd]`), and `packages/app/src/testing/history-board-mock.ts:132-141` mirrors it. Proven at `packages/app/tests/services/history-board-service.test.ts:443` (the agent row and the root path) and `packages/app/tests/testing/history-board-mock.test.ts:136-142` (mock parity, 10 agents incl. deepseek). |
-| R2 | MET | `apps/web/src/modules/history/HistoryFilters.tsx:28-39` adds `deepseek` to `AGENT_ICON_IDS`; `apps/web/src/modules/history/AgentIcon.tsx:71-78` adds the dsh monogram case with a `<title>` and leaves `default: return null` untouched. Proven at `apps/web/tests/modules/history/agent-icon-deepseek.test.tsx:18` (the Agents filter opens, offers "DeepSeek dsh", and its `svg title` list contains `DeepSeek dsh icon`), `:45` (monogram renders with an accessible name) and `:55` (unknown id renders nothing). |
-| R3 | MET | `packages/app/tests/services/history-board-service.test.ts:24` seeds `deepseek` rows into the corpus and `:443-452` asserts the dsh agent's `sessionCount` is non-zero while the descriptor is the frozen one — i.e. filtering to dsh keeps dsh sessions and the count is derived from `source = 'deepseek'` rows. Web-level narrowing additionally covered by `apps/web/tests/modules/history/agent-icon-deepseek.test.tsx:18` (the option exists in the source filter that drives the query). |
+| R1 | MET | `packages/app/tests/services/history-board-service.test.ts:450` and `packages/app/tests/testing/history-board-mock.test.ts:136` check the frozen descriptor and mock parity. |
+| R2 | MET | `apps/web/tests/modules/history/agent-icon-deepseek.test.tsx:18` covers the option, title and unknown-source fallback. |
+| R3 | MET | `packages/app/tests/services/history-board-service.test.ts:423` asserts only dsh rows from a mixed corpus before and after materialization. The live browser went from 106 sessions with a synthetic Codex sentinel to 105 under the dsh filter, with dsh icons on all 20 visible rows. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The history Board shows dsh as a source (req: R1; R2; R3) | MET | test | `packages/app/tests/services/history-board-service.test.ts:443` (frozen descriptor + dsh session count) and `packages/app/tests/testing/history-board-mock.test.ts:136` (mock parity); `apps/web/tests/modules/history/agent-icon-deepseek.test.tsx:18,45,55` (filter option, monogram, fallback). Browser screenshot NOT taken — see Review residual risk. |
+| AC1 — The history Board shows dsh as a source | MET | test | Focused app and web tests passed. The browser screenshot used the real task 1471 import in isolated SQLite. Screenshot: `.spur/run/verifyall-1464-1472/1472-history-filter.png`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

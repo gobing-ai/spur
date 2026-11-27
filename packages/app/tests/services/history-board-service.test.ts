@@ -420,6 +420,24 @@ describe('LiveHistoryBoardService', () => {
         expect(sessions.pageSize).toBe(10);
     });
 
+    test('getSessions narrows a mixed corpus to dsh on both read paths', async () => {
+        const db = await setupTestDb();
+        await seedCorpus(db, 12, 2);
+        const svc = new LiveHistoryBoardService({ db });
+        const page = { page: 1, pageSize: 20 };
+        expect((await svc.getSessions(page)).total).toBe(12);
+
+        const filtered = { ...page, filter: { sources: ['deepseek'] } };
+        const fallback = await svc.getSessions(filtered);
+        expect(fallback.total).toBe(1);
+        expect(fallback.items.map((session) => session.source)).toEqual(['deepseek']);
+
+        await refreshHistoryRollups(db);
+        const materialized = await svc.getSessions(filtered);
+        expect(materialized.total).toBe(1);
+        expect(materialized.items.map((session) => session.source)).toEqual(['deepseek']);
+    });
+
     test('getInsights returns loops, heavy sessions, slow steps, and model comparison', async () => {
         const db = await setupTestDb();
         await seedCorpus(db, 10, 6);
