@@ -4,7 +4,7 @@ name: Expose the TypeSafe served model as optional answer metadata in ts-ai-deci
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:45.741Z
-updated_at: "2026-11-27T18:46:05.264Z"
+updated_at: "2026-11-27T22:28:32.483Z"
 feature_id: P12
 
 estimate_hours: 4
@@ -122,21 +122,21 @@ probe: not-applicable (no public CLI/HTTP surface changed — library seam only)
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `../ts-libs/packages/ai-runner/src/decision/types.ts:104-110` adds `DecisionAnswersMeta`; `:125-129` adds the OPTIONAL `DecisionDriver.askWithMeta?`; `ask` is byte-identical in signature and body. `../ts-libs/packages/ai-runner/src/decision/decision-maker.ts:37-42` adds the same seam to `DecisionMaker` as optional, and `../ts-libs/packages/ai-runner/tests/decision/ask-with-meta.test.ts:51` proves `ask` still returns the plain Answer record. |
-| R2 | MET | `../ts-libs/packages/ai-runner/src/decision/decision-maker.ts:259-273` prefers `driver.askWithMeta` and falls back to `driver.ask` with no model, both through one `validateAnswers` call; `servedModel` is omitted (never `undefined`-valued). `../ts-libs/packages/ai-runner/tests/decision/ask-with-meta.test.ts:36` (no-seam driver, `Object.keys(meta)` = `['answers']`), `:44` (seam contributes), `:58` (same rejection class and message on both paths). |
-| R3 | MET | `../ts-libs/packages/ai-decision/src/typesafe-driver.ts:88-133` folds both entries onto one `askOnce`; `servedModel` comes from `SystemOneResult.model` and is omitted when the backend echoes nothing; the R8 comment now scopes `model` to `askWithMeta` and keeps `usage` unsurfaced. `../ts-libs/packages/ai-decision/tests/served-model.test.ts:107` asserts `servedModel: 'm-x'` from the wire and that `ask` surfaces no model. |
-| R4 | MET | `../ts-libs/packages/ai-decision/src/hub.ts:111-117` adds `DecisionResultBase.servedModel?`; `:521-530` calls `maker.askWithMeta` when it is a function and falls back to `maker.ask`, then runs the existing `validateAnswers` on either path; `:573` spreads `servedModel` only into the accepted `source: 'model'` base. `../ts-libs/packages/ai-decision/tests/served-model.test.ts:128` (accepted carries `m-x`), `:135` (low-confidence fallback carries none), `:143` (invalid answers through the seam become the hub's `error` fallback, so validation really ran). |
-| R5 | MET | `../ts-libs/packages/ai-decision/tests/served-model.test.ts:160` asserts `createFmDriver({}).askWithMeta` and `createAgentDriver({}).askWithMeta` are `undefined`; `:165` drives fm-local, laya-local and llm-agent makers through the hub and gets no `servedModel` key. |
-| R6 | MET | `cd ../ts-libs && bun run spur-check` → `3302 pass, 0 fail` (lint + typecheck + test-pre-check + full suite + test-post-check). No version bump, no publish. |
+| R1 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/decision/ask-with-meta.test.ts` line 51 proves ask retains its original shape while the new metadata method is additive. |
+| R2 | MET | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/decision/ask-with-meta.test.ts` line 36 exercises a driver without metadata, line 44 exercises one with metadata and line 58 validates either path. |
+| R3 | MET | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` line 107 proves the type-safe driver returns the actual model through the metadata method. |
+| R4 | MET | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` lines 128, 135 and 143 cover accepted metadata, no fallback metadata, and shared validation. |
+| R5 | MET | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` line 175 covers fm-local, laya-local and llm-agent with absent metadata. |
+| R6 | PARTIAL | Fresh ts-libs spur-check completed 3303 passing tests with two 5-second feature verification adapter timeouts. The focused decision and runner suites passed. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — the decision library exposes the served model without breaking existing callers (req: R1; R2; R3; R4; R6) | MET | test | `../ts-libs/packages/ai-runner/tests/decision/ask-with-meta.test.ts:36` (no-seam driver unchanged, no `servedModel`) and `../ts-libs/packages/ai-decision/tests/served-model.test.ts:107` / `:128` / `:135` / `:143` (stubbed `systemOne` model `m-x` → `servedModel` on an accepted hub result, validated answers through the seam, none on either fallback); gate `bun run spur-check` 3302 pass / 0 fail. |
-| AC2 — non-typesafe makers leave the served model empty (req: R5) | MET | test | `../ts-libs/packages/ai-decision/tests/served-model.test.ts:160` and `:165` — fm-local and llm-agent drivers expose no seam and all three makers' hub results carry no `servedModel`. |
+| AC1 — the decision library exposes the served model without breaking existing callers | PARTIAL | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/decision/ask-with-meta.test.ts` line 36 and @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` lines 107–143 passed. Fresh ts-libs spur-check completed 3303 passing tests with two 5-second feature verification adapter timeouts. The focused decision and runner suites passed. |
+| AC2 — non-typesafe makers leave the served model empty | MET | test | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` line 175 passed. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
