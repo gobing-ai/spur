@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Profile every heavy test file and commit a heavy lane manifest with a drift guard
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-27T07:07:41.707Z
-updated_at: "2026-11-27T07:20:25.909Z"
+updated_at: "2026-11-27T17:04:56.251Z"
 feature_id: H162
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1459"]
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1461. Profile every heavy test file and commit a heavy lane manifest with a drift guard
@@ -28,16 +30,16 @@ Feature H162 (under H16; design `docs/design/heavy-suite-lanes.md` §3.1, §3.3�
 
 ### Requirements
 
-- [ ] R1. `bun scripts/spur-dev.ts test-lanes --profile-heavy` runs each `.heavy.test.` file alone under `bunfig.heavy.toml` (through `run-tests`, so env isolation matches the gate), then the unchanged `bun run test:heavy` once, then one timed production `astro build`, and writes `.spur/run/heavy-profile.json`: per file `{ path, wallMs, pass, fail, skip, exitCode, buildsBoard }`, plus `{ baselineWallMs, baselineExitCode, boardBuildMs, cores, sandboxed, startedAt }`. `sandboxed: true` when Chromium fails to launch; such a receipt is not the baseline.
-- [ ] R2. `config/test-lanes.json` gains a `heavy` array: every `.heavy.test.` file, repo-relative and sorted, `{ path, lane: "concurrent" | "serial", shares: string[], reason }` with `shares` ⊆ `browser, board-build, cli-spawn, sqlite, gate-lock, timing-sensitive, operator-env`. Rules: any `timing-sensitive` file is serial; `fleet-e2e-batch-perf` and `quality-gate-lock` are serial; doubt → serial.
-- [ ] R3. The repo-wide drift test fails, naming the file, when a `.heavy.test.` file is missing from `heavy` or `heavy` names a missing file, or a row has an unknown `lane`/`shares` value.
+- [x] R1. `bun scripts/spur-dev.ts test-lanes --profile-heavy` runs each `.heavy.test.` file alone under `bunfig.heavy.toml` (through `run-tests`, so env isolation matches the gate), then the unchanged `bun run test:heavy` once, then one timed production `astro build`, and writes `.spur/run/heavy-profile.json`: per file `{ path, wallMs, pass, fail, skip, exitCode, buildsBoard }`, plus `{ baselineWallMs, baselineExitCode, boardBuildMs, cores, sandboxed, startedAt }`. `sandboxed: true` when Chromium fails to launch; such a receipt is not the baseline.
+- [x] R2. `config/test-lanes.json` gains a `heavy` array: every `.heavy.test.` file, repo-relative and sorted, `{ path, lane: "concurrent" | "serial", shares: string[], reason }` with `shares` ⊆ `browser, board-build, cli-spawn, sqlite, gate-lock, timing-sensitive, operator-env`. Rules: any `timing-sensitive` file is serial; `fleet-e2e-batch-perf` and `quality-gate-lock` are serial; doubt → serial.
+- [x] R3. The repo-wide drift test fails, naming the file, when a `.heavy.test.` file is missing from `heavy` or `heavy` names a missing file, or a row has an unknown `lane`/`shares` value.
 
 Out of scope: running lanes (1463); the Board seed (1462); changing any heavy test; per-test (sub-file) timing.
 
 ### Acceptance Criteria
 
-- [ ] R1 — A per-file heavy profile and end-to-end baseline are recorded as a receipt
-- [ ] R2 — Every heavy file is classified concurrent-safe or serial in a committed manifest guarded against drift
+- [x] R1 — A per-file heavy profile and end-to-end baseline are recorded as a receipt
+- [x] R2 — Every heavy file is classified concurrent-safe or serial in a committed manifest guarded against drift
 
 ### Q&A
 
@@ -81,15 +83,46 @@ Out of scope: running lanes (1463); the Board seed (1462); changing any heavy te
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change | Why |
+| --- | --- | --- |
+| `packages/app/src/rules/test-lanes.ts:38-78` | `HEAVY_SHARES` tuple, `HeavyLane`/`HeavyShare`/`HeavyLaneEntry` types, `FORCED_SERIAL` patterns; `readLaneManifest` validates `heavy` row shape (:170-186). | One manifest SSOT: the heavy classification is hand-judged data, so the reader checks shape and the diff checks meaning. |
+| `packages/app/src/rules/test-lanes.ts:194-247` | `diffHeavyLanes(files, manifest)`: missing row, stale row, unknown lane/share, `timing-sensitive` marked concurrent, and the two files forced serial. | R2/R3 — the drift guard must name the file, so value legality is reported by path instead of throwing on an array index. |
+| `packages/app/src/index.ts:189-203` | Export the heavy types + `diffHeavyLanes` + `HEAVY_SHARES`. | The repository generator and the repo-wide guard consume the same decision. |
+| `packages/app/tests/rules/test-lanes.test.ts:238-320` | 8 heavy failure modes (missing, stale, unknown lane, unknown share, timing-sensitive concurrent, forced-serial pair, legal set, absent section) plus reader shape validation. | R2/R3 pinned before implementation; module stays above the per-file gate. |
+| `scripts/commands/test-lanes.ts:96-104,150-175` | `--profile-heavy`: each `.heavy.test.` file alone under `bunfig.heavy.toml` through `run-tests`, then one unchanged `bun run test:heavy`, then one timed production `astro build`; writes `.spur/run/heavy-profile.json` + per-file logs. `checkManifest` now also reports heavy drift. | R1 receipt pair for 1463; the profile goes through the launcher so env isolation matches the gate. |
+| `config/test-lanes.json:871-1130` | `heavy` array: all 20 `.heavy.test.` files, sorted, `{path, lane, shares, reason}` — 13 concurrent, 7 serial. | R2 membership; each `reason` cites the `path:line` that justified the lane. |
+| `repo-wide-tests/test-lanes-manifest.test.ts:22-45` | The drift guard's `--check` now covers the heavy section too (same invocation, no new test). | R3 without a second guard surface. |
+| `.spur/run/heavy-profile.json`, `.spur/run/heavy-profile/*` | Profile receipt: `sandboxed: false`, `baselineWallMs: 278395` (exit 0), `boardBuildMs: 9316`, per-file `{wallMs, pass, fail, skip, exitCode, buildsBoard}`. | The before-half of H162's receipt pair; 1463 compares against `baselineWallMs`. |
+
+**Profile (this host, 10 cores):** all 20 heavy files pass alone (87 assertions, 1 skip, 0 fail); per-file walls sum to 286 s — the 278 s baseline plus 20 launcher starts. Six files build the Board, one production `astro build` takes 9.3 s, so ~56 s of the baseline is board builds that 1462's run-scoped seed removes. The three slowest files (`quality-gate-lock` 57 s, `idea-followup-ledger-e2e` 43 s, `board-runtime-browser` 28 s) are serial by classification, which bounds what 1463 can win from concurrency.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/test-lanes.ts:150-175` (`--profile-heavy`) runs each `.heavy.test.` file alone through `run-tests --config=bunfig.heavy.toml` (:186-199), then `bun run test:heavy` (:246-256), then one production build (:258-270); receipt `.spur/run/heavy-profile.json` carries `{sandboxed:false, baselineWallMs:278395, baselineExitCode:0, boardBuildMs:9316, cores:10, startedAt}` and per-file `{path, wallMs, pass, fail, skip, exitCode, buildsBoard}` (:280-292). |
+| R2 | MET | `config/test-lanes.json` `heavy`: 20 rows sorted by path, `{path, lane, shares, reason}`, shares drawn from `HEAVY_SHARES` (`packages/app/src/rules/test-lanes.ts:38-48`); 13 concurrent / 7 serial; every `timing-sensitive` row is serial, and the two forced-serial files are serial (`:60-64`). |
+| R3 | MET | `diffHeavyLanes` (`packages/app/src/rules/test-lanes.ts:194-247`) + `checkManifest` (`scripts/commands/test-lanes.ts:150-156`); drift proof: deleting `rule-busy` from `heavy` printed `drift missing apps/cli/tests/commands/rule-busy.heavy.test.ts`, flipping it to concurrent printed `drift invalid … a timing-sensitive file must run in the serial phase`, then restored green. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 | MET | command | `bun scripts/spur-dev.ts test-lanes --profile-heavy` → `.spur/run/heavy-profile.json` (20 files, 87 assertions pass, 1 skip, 0 fail, `sandboxed:false`, exit 0). |
+| R2 | MET | test | `packages/app/tests/rules/test-lanes.test.ts:238-320` (8 heavy cases) + `repo-wide-tests/test-lanes-manifest.test.ts:22-45`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -98,3 +131,8 @@ Out of scope: running lanes (1463); the Board seed (1462); changing any heavy te
 - `scripts/commands/fleet-e2e-batch-perf.heavy.test.ts:16-19`; `plugins/sp/tests/quality-gate-lock.heavy.test.ts:94`.
 
 ### History
+
+- 2026-11-27T17:04:25.649Z todo → wip (system)
+- 2026-11-27T17:04:53.942Z wip → testing (system)
+- 2026-11-27T17:04:56.246Z testing → done (system)
+

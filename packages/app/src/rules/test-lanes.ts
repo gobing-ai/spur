@@ -55,8 +55,43 @@ export interface LaneManifest {
     [key: string]: unknown;
 }
 
-/** Drift kinds: an unlisted spawning file, or a listed file that no longer spawns. */
-export type LaneDriftKind = 'missing' | 'stale';
+/** Drift kinds: an unlisted file, a listed file the tree no longer has, or an illegal row value. */
+export type LaneDriftKind = 'missing' | 'stale' | 'invalid';
+
+/** Shared-resource a heavy test contends for; `shares` records why a lane was chosen. */
+export const HEAVY_SHARES = [
+    'browser',
+    'board-build',
+    'cli-spawn',
+    'sqlite',
+    'gate-lock',
+    'timing-sensitive',
+    'operator-env',
+] as const;
+
+/** One declared shared resource. */
+export type HeavyShare = (typeof HEAVY_SHARES)[number];
+
+/** Heavy lane a file runs in: concurrent-safe, or isolated in the serial phase. */
+export type HeavyLane = 'concurrent' | 'serial';
+
+/** One `heavy` manifest row: hand-classified, never derived from a token scan. */
+export interface HeavyLaneEntry {
+    /** Repo-relative POSIX path of the `.heavy.test.` file. */
+    path: string;
+    /** Phase the file runs in. */
+    lane: HeavyLane;
+    /** Declared shared resources; the classification's whole audit trail. */
+    shares: HeavyShare[];
+    /** Why this lane: an anchor (`path:line`) plus the judgement. */
+    reason: string;
+}
+
+/** Heavy files whose isolation is not optional, whatever their `shares` say. */
+const FORCED_SERIAL = [
+    /^scripts\/commands\/fleet-e2e-batch-perf\.heavy\.test\.ts$/,
+    /^plugins\/sp\/tests\/quality-gate-lock\.heavy\.test\.ts$/,
+];
 
 /** One manifest disagreement between the generator's classification and the committed file. */
 export interface LaneDrift {
@@ -150,6 +185,20 @@ export function readLaneManifest(json: string): LaneManifest {
         }
         return durationMs === undefined ? { path, reason } : { path, reason, durationMs };
     });
+    const heavy = record.heavy;
+    if (heavy !== undefined) {
+        if (!Array.isArray(heavy)) throw new Error('test-lanes manifest `heavy` section must be an array');
+        for (const [index, row] of heavy.entries()) {
+            if (typeof row !== 'object' || row === null) throw new Error(`heavy[${index}] is not an object`);
+            const { path, lane, shares, reason } = row as Record<string, unknown>;
+            if (typeof path !== 'string' || path === '') throw new Error(`heavy[${index}].path must be a string`);
+            if (typeof lane !== 'string') throw new Error(`heavy[${index}].lane must be a string`);
+            if (!Array.isArray(shares) || shares.some((share) => typeof share !== 'string')) {
+                throw new Error(`heavy[${index}].shares must be an array of strings`);
+            }
+            if (typeof reason !== 'string') throw new Error(`heavy[${index}].reason must be a string`);
+        }
+    }
     return { ...record, version: 1, root: { subprocess: entries } } as LaneManifest;
 }
 
@@ -179,6 +228,58 @@ export function diffLaneManifest(expected: LaneEntry[], committed: LaneManifest)
             kind: 'stale',
             detail: 'listed in config/test-lanes.json but no longer classifies as subprocess-spawning',
         });
+    }
+    return drift.sort((a, b) => comparePaths(a.path, b.path));
+}
+
+/**
+ * Compares the tree's heavy test files against the manifest's hand-classified `heavy` section.
+ *
+ * Value legality is checked here rather than in the reader so a bad row is reported by path — the
+ * drift guard's failure message has to name the file, not an array index.
+ *
+ * @param files - Repo-relative paths of every `.heavy.test.` file in the tree.
+ * @param manifest - Manifest read from disk.
+ * @returns Every disagreement, sorted by path; empty when the section is legal and complete.
+ */
+export function diffHeavyLanes(files: string[], manifest: LaneManifest): LaneDrift[] {
+    const declared = Array.isArray(manifest.heavy) ? (manifest.heavy as HeavyLaneEntry[]) : [];
+    const present = new Set(files);
+    const declaredPaths = new Set(declared.map((row) => row.path));
+    const drift: LaneDrift[] = [];
+    for (const path of [...present].sort(comparePaths)) {
+        if (declaredPaths.has(path)) continue;
+        drift.push({ path, kind: 'missing', detail: 'heavy test file missing from the manifest `heavy` section' });
+    }
+    for (const row of declared) {
+        if (!present.has(row.path)) {
+            drift.push({
+                path: row.path,
+                kind: 'stale',
+                detail: 'listed in the manifest `heavy` section but not found in the tree',
+            });
+            continue;
+        }
+        if (row.lane !== 'concurrent' && row.lane !== 'serial') {
+            drift.push({ path: row.path, kind: 'invalid', detail: `unknown heavy lane '${String(row.lane)}'` });
+            continue;
+        }
+        const unknown = row.shares.filter((share) => !HEAVY_SHARES.includes(share));
+        if (unknown.length > 0) {
+            drift.push({ path: row.path, kind: 'invalid', detail: `unknown share(s): ${unknown.join(', ')}` });
+            continue;
+        }
+        if (row.lane === 'concurrent' && row.shares.includes('timing-sensitive')) {
+            drift.push({
+                path: row.path,
+                kind: 'invalid',
+                detail: 'a timing-sensitive file must run in the serial phase',
+            });
+            continue;
+        }
+        if (row.lane !== 'serial' && FORCED_SERIAL.some((pattern) => pattern.test(row.path))) {
+            drift.push({ path: row.path, kind: 'invalid', detail: 'this file must run in the serial phase' });
+        }
     }
     return drift.sort((a, b) => comparePaths(a.path, b.path));
 }

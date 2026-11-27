@@ -723,5 +723,127 @@
                 "durationMs": 224
             }
         ]
-    }
+    },
+    "heavy": [
+        {
+            "path": "apps/cli/tests/commands/rule-busy.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["sqlite", "cli-spawn", "timing-sensitive"],
+            "reason": "Spawns a child that holds the db (apps/cli/tests/commands/rule-busy.heavy.test.ts:38,43) and asserts an elapsed floor (…:74 toBeGreaterThanOrEqual(2000)); a shared worker count moves the measurement."
+        },
+        {
+            "path": "apps/cli/tests/commands/self/exec-parallel.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["cli-spawn", "timing-sensitive"],
+            "reason": "The test IS a wall-clock proof: two spawned runners polled against a 15 s deadline (apps/cli/tests/commands/self/exec-parallel.heavy.test.ts:50,63-64); concurrent suites distort the parallelism it proves."
+        },
+        {
+            "path": "apps/cli/tests/commands/serve-gateway.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["cli-spawn", "timing-sensitive"],
+            "reason": "Process-level gateway proof that picks a free-port band and waits on readiness (apps/cli/tests/commands/serve-gateway.heavy.test.ts:9,27-29,61); a concurrent lane can hand a second process the same free port, and the readiness wait is time-bound — doubt resolves to serial."
+        },
+        {
+            "path": "apps/cli/tests/release-ops.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["cli-spawn"],
+            "reason": "Only spawns git and the CLI inside its own temp repo (apps/cli/tests/release-ops.heavy.test.ts:18,55,63); no shared port, db or timing assertion."
+        },
+        {
+            "path": "apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["operator-env", "cli-spawn"],
+            "reason": "Drives the real `dsh` binary and the operator's home (apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts:3,10-11,111); operator credentials are a shared external dependency, never a concurrent resource."
+        },
+        {
+            "path": "apps/cli/tests/workflow/grok-bot-notify-recipe.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["cli-spawn"],
+            "reason": "Spawns the recipe CLI once in a temp project (apps/cli/tests/workflow/grok-bot-notify-recipe.heavy.test.ts:74) and asserts ordering, not duration (…:130 toBeGreaterThanOrEqual(0)); no shared resource beyond its own temp dir."
+        },
+        {
+            "path": "apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["cli-spawn"],
+            "reason": "Repeated CLI children around an idea-pipeline ledger in its own scratch project (assertions at apps/cli/tests/workflow/idea-followup-ledger-e2e.heavy.test.ts:165,193,247); each child owns its DB, and no duration is asserted."
+        },
+        {
+            "path": "apps/web/tests/a2a-sequence.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "board-build"],
+            "reason": "Production-shaped board build plus CDP at a real viewport (apps/web/tests/a2a-sequence.heavy.test.ts:23,144,191); CDP and the fixture server use port 0 and a per-launch user-data-dir."
+        },
+        {
+            "path": "apps/web/tests/board-base-path.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "board-build"],
+            "reason": "Builds and serves the board, then writes into its own build dir (apps/web/tests/board-base-path.heavy.test.ts:21,24,41-43) — the per-caller copy keeps the shared seed immutable; port 0."
+        },
+        {
+            "path": "apps/web/tests/branch-topology-graph.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["cli-spawn"],
+            "reason": "Spawns the CLI to render the graph and asserts layout geometry, not duration (apps/web/tests/branch-topology-graph.heavy.test.ts:103,193,354); no port, db or timing floor."
+        },
+        {
+            "path": "apps/web/tests/modules/board-frames-browser.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser"],
+            "reason": "Browser-only frame assertions against the served board (apps/web/tests/modules/board-frames-browser.heavy.test.ts:11,14,59); CDP uses port 0 and its own profile dir."
+        },
+        {
+            "path": "apps/web/tests/modules/board-maturity-browser.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "board-build"],
+            "reason": "One production build served for browser maturity assertions (apps/web/tests/modules/board-maturity-browser.heavy.test.ts:19,25,96-97); port 0, per-launch profile."
+        },
+        {
+            "path": "apps/web/tests/modules/board-runtime-browser.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "board-build"],
+            "reason": "Adapter-injected build driven in a browser (apps/web/tests/modules/board-runtime-browser.heavy.test.ts:20,23,66,70); the `testAdapterDir` build is per-call, so it never touches the shared seed."
+        },
+        {
+            "path": "apps/web/tests/modules/composed-board-browser.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "board-build"],
+            "reason": "Composed-module board build driven through the document import map (apps/web/tests/modules/composed-board-browser.heavy.test.ts:24,27,61-64); the only time reads are poll deadlines, and the fixture server uses port 0."
+        },
+        {
+            "path": "apps/web/tests/modules/dev-server.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["cli-spawn"],
+            "reason": "Astro dev server bound to port 0 (apps/web/tests/modules/dev-server.heavy.test.ts:6-7) with readiness polling (…:21-23); the port is ephemeral and no duration is asserted."
+        },
+        {
+            "path": "apps/web/tests/modules/integrations-browser.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "board-build"],
+            "reason": "Production-shaped board build plus CDP for the integrations surface (apps/web/tests/modules/integrations-browser.heavy.test.ts:6,10,13,20); port 0, per-launch profile."
+        },
+        {
+            "path": "apps/web/tests/modules/module-kit-template-browser.heavy.test.ts",
+            "lane": "concurrent",
+            "shares": ["browser", "cli-spawn"],
+            "reason": "Builds the module-kit template into its own dir, then drives it in a browser (apps/web/tests/modules/module-kit-template-browser.heavy.test.ts:24,37,60,204); snapshots land under `.spur/run/module-kit-proof/`, port 0."
+        },
+        {
+            "path": "packages/domain/tests/db-contention.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["sqlite", "timing-sensitive", "cli-spawn"],
+            "reason": "Its subject is SQLite contention: children hold the same db url and the test measures elapsed time (packages/domain/tests/db-contention.heavy.test.ts:37,47,52,77); a busy host erases the signal."
+        },
+        {
+            "path": "plugins/sp/tests/quality-gate-lock.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["gate-lock", "timing-sensitive"],
+            "reason": "Proves the host-wide gate lock serializes overlapping children (plugins/sp/tests/quality-gate-lock.heavy.test.ts:19,89,94) with ten timing reads; forced serial by classification rule as well as by shares."
+        },
+        {
+            "path": "scripts/commands/fleet-e2e-batch-perf.heavy.test.ts",
+            "lane": "serial",
+            "shares": ["timing-sensitive"],
+            "reason": "Asserts a serial-vs-parallel ratio (scripts/commands/fleet-e2e-batch-perf.heavy.test.ts:16,23); any concurrent load changes the denominator. Forced serial by classification rule as well as by shares."
+        }
+    ]
 }

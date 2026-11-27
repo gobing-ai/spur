@@ -188,7 +188,12 @@ export {
 } from './rules/coverage-certification';
 export {
     classifyTestFiles,
+    diffHeavyLanes,
     diffLaneManifest,
+    HEAVY_SHARES,
+    type HeavyLane,
+    type HeavyLaneEntry,
+    type HeavyShare,
     type LaneDrift,
     type LaneDriftKind,
     type LaneEntry,

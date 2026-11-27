@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H162"
 name: "Heavy-suite lane split and per-test profiling"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-27T06:55:01.144Z"
-updated_at: "2026-11-27T07:05:58.433Z"
+updated_at: "2026-11-27T17:04:55.343Z"
 ---
 
 # H162: Heavy-suite lane split and per-test profiling
@@ -101,7 +101,7 @@ Feature: Heavy-suite lane split and per-test profiling
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 1463 | Run test:heavy as a concurrent-safe phase then a serial phase and prove the wall-time drop | todo |
-| 1461 | Profile every heavy test file and commit a heavy lane manifest with a drift guard | todo |
+| 1461 | Profile every heavy test file and commit a heavy lane manifest with a drift guard | testing |
 | 1462 | Build the Board once per heavy run as a run-scoped seed copied per caller | todo |
 <!-- END AUTO-GENERATED -->
 
@@ -110,4 +110,5 @@ Feature: Heavy-suite lane split and per-test profiling
 ## History
 
 - 2026-11-27T07:00:09.784Z moved V → H162 (system)
+- 2026-11-27T17:04:55.343Z backlog → active (system)
 

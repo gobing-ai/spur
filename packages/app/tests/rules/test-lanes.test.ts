@@ -16,7 +16,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
     classifyTestFiles,
+    diffHeavyLanes,
     diffLaneManifest,
+    type HeavyLaneEntry,
     type LaneEntry,
     type LaneManifest,
     type LaneReason,
@@ -182,6 +184,20 @@ describe('readLaneManifest', () => {
         expect(readLaneManifest('{"version":1,"root":{"subprocess":[]}}')).toEqual(manifest([]));
     });
 
+    test('validates heavy rows when the section is present', () => {
+        const valid =
+            '{"version":1,"root":{"subprocess":[]},"heavy":[{"path":"a.heavy.test.ts","lane":"serial","shares":[],"reason":"x"}]}';
+        expect(readLaneManifest(valid).heavy).toHaveLength(1);
+        for (const document of [
+            '{"version":1,"root":{"subprocess":[]},"heavy":[{"lane":"serial","shares":[],"reason":"x"}]}',
+            '{"version":1,"root":{"subprocess":[]},"heavy":[{"path":"a","shares":[],"reason":"x"}]}',
+            '{"version":1,"root":{"subprocess":[]},"heavy":[{"path":"a","lane":"serial","shares":"browser","reason":"x"}]}',
+            '{"version":1,"root":{"subprocess":[]},"heavy":[{"path":"a","lane":"serial","shares":[],"reason":1}]}',
+        ]) {
+            expect(() => readLaneManifest(document)).toThrow();
+        }
+    });
+
     test('preserves unknown top-level keys', () => {
         const parsed = readLaneManifest('{"version":1,"root":{"subprocess":[]},"heavy":[]}');
         expect(parsed.heavy).toEqual([]);
@@ -232,6 +248,87 @@ describe('diffLaneManifest', () => {
     test('is empty when membership matches', () => {
         const entry: LaneEntry = { path: 'apps/cli/tests/a.test.ts', reason: 'direct' };
         expect(diffLaneManifest([entry], manifest([entry]))).toEqual([]);
+    });
+});
+
+const heavyRow = (path: string, overrides: Partial<HeavyLaneEntry> = {}): HeavyLaneEntry => ({
+    path,
+    lane: 'concurrent',
+    shares: ['browser'],
+    reason: 'apps/web/tests/x.heavy.test.ts:1',
+    ...overrides,
+});
+
+const heavyManifest = (rows: HeavyLaneEntry[]): LaneManifest => ({
+    version: 1,
+    root: { subprocess: [] },
+    heavy: rows,
+});
+
+describe('diffHeavyLanes', () => {
+    test('reports a heavy file the manifest does not classify', () => {
+        const drift = diffHeavyLanes(['apps/web/tests/new.heavy.test.ts'], heavyManifest([]));
+        expect(drift).toEqual([
+            {
+                path: 'apps/web/tests/new.heavy.test.ts',
+                kind: 'missing',
+                detail: 'heavy test file missing from the manifest `heavy` section',
+            },
+        ]);
+    });
+
+    test('reports a classified file that no longer exists', () => {
+        const drift = diffHeavyLanes([], heavyManifest([heavyRow('apps/web/tests/gone.heavy.test.ts')]));
+        expect(drift).toEqual([
+            {
+                path: 'apps/web/tests/gone.heavy.test.ts',
+                kind: 'stale',
+                detail: 'listed in the manifest `heavy` section but not found in the tree',
+            },
+        ]);
+    });
+
+    test('reports an unknown lane or share value', () => {
+        const drift = diffHeavyLanes(
+            ['a.heavy.test.ts', 'b.heavy.test.ts'],
+            heavyManifest([
+                heavyRow('a.heavy.test.ts', { lane: 'parallel' as HeavyLaneEntry['lane'] }),
+                heavyRow('b.heavy.test.ts', {
+                    shares: ['telepathy'] as unknown as HeavyLaneEntry['shares'],
+                }),
+            ]),
+        );
+        expect(drift.map((row) => [row.path, row.kind])).toEqual([
+            ['a.heavy.test.ts', 'invalid'],
+            ['b.heavy.test.ts', 'invalid'],
+        ]);
+    });
+
+    test('reports a timing-sensitive file marked concurrent', () => {
+        const drift = diffHeavyLanes(
+            ['a.heavy.test.ts'],
+            heavyManifest([heavyRow('a.heavy.test.ts', { shares: ['timing-sensitive'] })]),
+        );
+        expect(drift).toHaveLength(1);
+        expect(drift[0]?.detail).toContain('timing-sensitive');
+    });
+
+    test('reports the two files that must stay serial', () => {
+        const files = [
+            'plugins/sp/tests/quality-gate-lock.heavy.test.ts',
+            'scripts/commands/fleet-e2e-batch-perf.heavy.test.ts',
+        ];
+        const drift = diffHeavyLanes(files, heavyManifest(files.map((path) => heavyRow(path, { shares: [] }))));
+        expect(drift.map((row) => row.kind)).toEqual(['invalid', 'invalid']);
+    });
+
+    test('is empty when every heavy file is classified legally', () => {
+        const files = ['apps/web/tests/a.heavy.test.ts'];
+        expect(diffHeavyLanes(files, heavyManifest([heavyRow(files[0] as string)]))).toEqual([]);
+    });
+
+    test('ignores a manifest without a heavy section', () => {
+        expect(diffHeavyLanes([], manifest([]))).toEqual([]);
     });
 });
 
