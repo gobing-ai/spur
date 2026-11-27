@@ -4,7 +4,7 @@ name: Compute same-kind action ambiguity from the state total row count in the p
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:45.245Z
-updated_at: "2026-11-27T18:05:02.229Z"
+updated_at: "2026-11-27T22:28:31.209Z"
 feature_id: E721
 
 estimate_hours: 1
@@ -103,13 +103,13 @@ Plan steps 1-4 completed.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/progress-projection.ts:529-530` compares `sameKindRowCount` — `stateActionRows.filter((r) => r.kind === kind).length`, the state total — against `sameKindDefCount`; the unused remainder `candidateRows.length` no longer participates in the predicate. |
-| R2 | MET | `packages/app/tests/workflow/progress-projection.test.ts:367-416` builds 3 declared / 3 recorded same-kind actions and asserts zero `ambiguous-action` diagnostics, no `ambiguous` action status, and `['a1','a2','a3']` mapped; `(cd packages/app && bun test tests/workflow/progress-projection.test.ts)` → 18 pass, 0 fail. |
-| R3 | MET | The pre-existing over-recorded case `packages/app/tests/workflow/progress-projection.test.ts:310-363` is untouched and still passes; total 3 ≠ declared 2 keeps it ambiguous, and the diagnostic now names all three rows (`a1, a2, a3`). |
+| R1 | MET | `packages/app/src/workflow/progress-projection.ts:529` computes the total state row count independent of consumption. |
+| R2 | MET | `packages/app/tests/workflow/progress-projection.test.ts:367` maps all three recorded rows with no ambiguity diagnostic. |
+| R3 | MET | `packages/app/tests/workflow/progress-projection.test.ts:310` retains the over-recorded case. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — A one-to-one same-kind mapping is never reported ambiguous (req: R1; R2; R3) | MET | test | `packages/app/tests/workflow/progress-projection.test.ts:367` — new 3-declared/3-recorded case with no diagnostic and all rows mapped, while `packages/app/tests/workflow/progress-projection.test.ts:310-363` still reports ambiguous; both in one `bun test tests/workflow/progress-projection.test.ts` run (18 pass, 0 fail). |
+| AC1 — A one-to-one same-kind mapping is never reported ambiguous | MET | test | `packages/app/tests/workflow/progress-projection.test.ts:310` and :367 passed in the application suite. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
