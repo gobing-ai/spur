@@ -3,7 +3,7 @@ kind: design
 title: Heavy-suite lanes — shared Board build plus concurrent-safe and serial heavy phases
 status: proposed
 created_at: 2026-11-26
-updated_at: 2026-11-26
+updated_at: 2026-11-27
 related: [feature H162, feature H161, feature H16, task 0988]
 tags: [testing, performance]
 ---
@@ -39,9 +39,13 @@ receipt policy.
 
 ## 3. Solution
 
-1. **Profile.** A profiling mode records per-file wall time, test count, pass/fail/skip, and Board
-   build time for every heavy file plus the end-to-end baseline of the unchanged script, written
-   to `.spur/run/heavy-profile.json`.
+1. **Profile (built).** `bun scripts/spur-dev.ts test-lanes --profile-heavy` (the H161 generator
+   command, no separate entrypoint) records each `.heavy.test.` file alone under
+   `bunfig.heavy.toml` via the `run-tests` launcher — so env isolation matches the gate — then the
+   unchanged `bun run test:heavy` once, then one timed production `astro build`, and writes
+   `.spur/run/heavy-profile.json`: per file `{ path, wallMs, pass, fail, skip, exitCode, buildsBoard }`
+   plus `{ baselineWallMs, baselineExitCode, boardBuildMs, cores, sandboxed, startedAt }`.
+   `sandboxed: true` (Chromium cannot launch) marks the receipt as not a baseline.
 2. **Run-scoped Board seed.** `run-tests.ts` exports `SPUR_TEST_BOARD_SEED_DIR=<registryDir>/board-seed`
    to its children; `registryDir` is the per-launcher-run temp dir already removed in the launcher's
    `finally`, so the seed needs no run id and no cleanup of its own. When the variable is set, the
@@ -51,14 +55,20 @@ receipt policy.
    `testAdapterDir` builds keep building their own. Without the variable (a direct `bun test`)
    behaviour is today's: one build per call. (Refined 2026-11-26 from a `SPUR_TEST_RUN_ID` +
    `$TMPDIR/spur-board-seed-<runId>` design: same freshness, no extra cleanup path.)
-3. **Heavy lanes.** `config/test-lanes.json` gains a `heavy` section naming every `.heavy.test.`
-   file with `lane: concurrent | serial` and the host state it shares. Under
+3. **Heavy lanes (not built).** `config/test-lanes.json` gains a `heavy` array of
+   `{ path, lane, shares, reason }`: `lane` is `concurrent | serial`, `shares` names the host state the
+   file contends for (`browser | board-build | cli-spawn | sqlite | gate-lock | timing-sensitive |
+   operator-env`), and `reason` cites the `path:line` that justified the lane. Any `timing-sensitive`
+   file is serial, `fleet-e2e-batch-perf` and `quality-gate-lock` are serial, `gate-lock` alone is
+   concurrent only for a file that isolates its lock dir, `operator-env` (operator credentials) is
+   serial, and doubt resolves to serial. Under
    `--config=bunfig.heavy.toml`, the launcher runs the concurrent lane with bounded `--parallel`
    (default 4, env `SPUR_TEST_HEAVY_PARALLEL`), then the serial lane at `--parallel=1`, in one
    launcher invocation, so both lanes share one seed. Phases are sequential: a serial file never
    runs alongside another heavy file.
-4. **Drift guard.** A repo-wide test fails when a `.heavy.test.` file is missing from the manifest
-   or the manifest names a missing file.
+4. **Drift guard (built).** A repo-wide test fails, naming the file, when a `.heavy.test.` file is missing
+   from the `heavy` array, the array names a missing file, a row carries an unknown `lane`/`shares`
+   value, or a timing-sensitive row claims `concurrent`.
 
 ## 4. Contract and compatibility
 

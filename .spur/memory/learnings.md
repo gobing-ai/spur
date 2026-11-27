@@ -7950,3 +7950,72 @@ Not checked: no `bun run lint` / typecheck / full test run (markdown-only diff, 
 - The invoking tree can advance while a batch runs (main gained `7082b7d44` mid-batch), so WT-4 is
   a rebase-then-FF, not a plain `--ff-only` merge; re-run the full gate after the rebase.
 
+Wrap done.
+
+**Doc-evolve repairs (drift-audit → §7 repair protocol)**
+
+| Doc | Finding | Repair |
+| --- | --- | --- |
+| `docs/design/laned-root-test-suite.md` | 13,505 tests / 921 files / ~491 s and "137 spawning files" were estimates contradicted by the committed evidence (923 files, 13,523 tests, 519 s, 144 rows) | Measured numbers in place; §3.1/§3.2 rewritten to name the landed surface (`config/test-lanes.json` `root.subprocess[]`, `bun scripts/spur-dev.ts test-lanes [--timings\|--check]`, `repo-wide-tests/test-lanes-manifest.test.ts`); §3.3–3.5 marked *not built*; §5 records the measured `--parallel=4` falsification |
+| `docs/design/heavy-suite-lanes.md` | `--profile-heavy`, the receipt fields and the `heavy[]` row contract were missing; built vs proposed unseparated | §3.1 names the flag + `.spur/run/heavy-profile.json` shape and the `sandboxed` meaning; §3.3 pins `{path, lane, shares, reason}` with the seven-share taxonomy and serial rules; §3.4 covers value drift; §3.3 marked *not built* |
+| `docs/03_ARCHITECTURE.md` | none — no cross-module boundary changed (repo generator + test helper + committed manifest); §27 gate-scope statement still true | no edit |
+| `docs/04_DESIGN.md` | none — both satellite rows already indexed; titles still accurate, so no re-add and no row churn | no edit |
+| `docs/00_ADR.md` | none — test-lane classification fails §6.1 (no lasting boundary/invariant across modules) | no ADR |
+
+**Verification:** `bun scripts/spur-dev.ts test-lanes --check` → "matches the tree (144 file(s))", exit 0; `bun test repo-wide-tests/test-lanes-manifest.test.ts` → 2 pass / 0 fail; `SPUR_TEST_BOARD_SEED_DIR` confirmed at `scripts/commands/run-tests.ts:107` + `apps/web/tests/test-helpers/board-build.ts:37`; `HEAVY_SHARES` matches the documented taxonomy (`packages/app/src/rules/test-lanes.ts:60-68`); relative markdown link resolves; `git status` shows **only** the two `docs/design/` files — no task/feature corpus touched.
+
+**Out-of-scope finding (docs-only mandate):** `scripts/spur-dev.ts:21` `USAGE` omits `--profile-heavy`; the dispatcher help string is stale relative to the landed flag.
+
+Skipped: no full `spur-check` / `spur-check-feature` run (this is a wrapup doc repair, not a code change); risk — the `USAGE` drift above is source, not docs, so it stays open.
+
+# Working learnings — H161/H162 test-lane batch (1459, 1461, 1462)
+
+## 2026-11-27 · 1459 — classify subprocess-heavy root test files into a lane manifest
+
+- **Conventions**
+  - Pure decision logic goes to `packages/app/src/rules/<name>.ts` (coverage-gated by the bunfig 90/90 per-file gate), the CLI-shaped generator stays thin in `scripts/commands/` — same split as `coverage-certification.ts`. A repository source generator needs no public `spur` noun (ADR-130 / `harness-surface-governance.md` §2).
+  - Committed manifests preserve top-level keys they do not own (`version`/`root` kept, everything else verbatim) so a later section can be added without touching the generator again.
+  - `--check` is the established drift-guard shape: exit 1, name every drifting path, write nothing.
+- **Errors fixed**
+  - `env-var-hygiene` was already red on `main` at `packages/app/src/agent/host-probe.ts:311-317` (a doc comment containing a literal environment-access token, introduced by `fa0a395a8`), which reds `test-pre-check` for every task's gate. Fixed in-task by rewording the comment — pre-check rules scan comments, not just code. When a base-tree blocker reds all gates, fix it in the task that hits it and disclose it in the Solution table.
+- **Patterns**
+  - Write the failure modes as tests first (`packages/app/tests/rules/test-lanes.test.ts`, 19 cases: aliased import, imported-but-non-spawning name, second-level indirection as a documented miss, unterminated source, escaped quotes, malformed manifest, both drift directions) — the module landed at 95% lines / 98% functions behind them.
+  - Prove a drift guard by falsification: delete one manifest row, watch `--check` exit 1 naming that path and the repo-wide test fail with the same line, restore, re-run green.
+- **Gotchas**
+  - Bun 1.4.3 has no per-file timing reporter other than `--reporter=junit --reporter-outfile`. Per-file durations come from one profiling run aggregated by `testcase@file`, not from `--timings`.
+  - Token-scanning test files for spawn calls misses helper indirection: `runCli` (`apps/cli/tests/helpers.ts:78`), `captureCliSurface`, `runSide` spawn on the caller's behalf, while 124 files import `helpers.ts` mostly for non-spawning exports — so resolve one level *by imported name*, not by "imports the helper file".
+  - Measured baseline (`.spur/run/test-lanes-baseline.json`): 923 root test files, 144 subprocess-lane rows (132 direct / 12 helper), 13,523 tests, 519 s at `--parallel=2`; the 144 files hold 82.7% of recorded test time across 12.7% of the files. One child at `--parallel=4` returns 496 s but reproduces the c8d5ca0f2 contention as one 20 s timeout (`runLightGate`, temp git repo) — a ~23 s gain is not worth an intermittent timeout. This falsified the "just widen the child" hypothesis.
+  - Subprocess/browser suites must be measured on an unsandboxed host; a sandboxed run misreports.
+
+## 2026-11-27 · 1461 — profile every heavy test file and commit a heavy lane manifest
+
+- **Conventions**
+  - Extend the existing command with a flag (`test-lanes --profile-heavy`) instead of adding a second `scripts/commands` entrypoint; one manifest SSOT, one drift-guard surface (extend the existing repo-wide test rather than adding a sibling).
+  - Hand-judged classification carries a `reason` citing the `path:line` that justified it; the reader validates row shape, the diff validates meaning, and illegal values are reported *by path* instead of throwing on an array index so the failure names the file.
+- **Errors fixed**
+  - A new flag on the `scripts/spur-dev.ts` dispatcher broke the exhaustive arg parser; commit `1ff1c9672` defaulted the flag. After adding a flag, check the dispatcher's `USAGE` string too — it still lists `test-lanes [--timings <junit.xml>] [--check]` without `--profile-heavy`.
+- **Patterns**
+  - Classification rules that held: `timing-sensitive` ⇒ serial; `fleet-e2e-batch-perf` and `quality-gate-lock` forced serial; `gate-lock` alone is concurrent only for a file isolating its lock dir (`SPUR_GATE_LOCK_DIR`); `operator-env` (needs operator credentials, e.g. `dsh-executor-e2e`) ⇒ serial; `browser`/`board-build`/`cli-spawn`/`sqlite` alone stay concurrent because CDP uses `--remote-debugging-port=0` with a per-launch user-data-dir and fixture servers bind port 0. Doubt resolves to serial.
+  - Read pass/fail/skip from Bun's dots-reporter summary lines per child (`N pass`, `Ran N tests across M files`) rather than instrumenting tests.
+- **Gotchas**
+  - A receipt is evidence only when labelled: `sandboxed: true` (Chromium cannot launch) means it is not a baseline. Persist the receipt, classify statically, and record the baseline as pending instead of quoting a wrong number.
+  - Profile: 20 heavy files, per-file walls sum to 286 s against a 278 s baseline (~8 s of launcher starts), one production `astro build` is 9.3 s and six files build the Board (~56 s of the baseline). The three slowest files (`quality-gate-lock` 57 s, `idea-followup-ledger-e2e` 43 s, `board-runtime-browser` 28 s) are serial, which bounds what concurrency can win.
+
+## 2026-11-27 · 1462 — build the Board once per heavy run as a run-scoped seed
+
+- **Conventions**
+  - Reuse an existing lifecycle instead of inventing one: the launcher's per-run `registryDir` (`scripts/commands/run-tests.ts:96`, removed in `finally` at `:297-298`) is the seed's home, so a separate run id, `$TMPDIR` path and cleanup hook are all unnecessary.
+  - Publish an immutable artifact with staging dir + `renameSync` under the existing lock, and do the cheap recursive copy *after* releasing the lock; callers keep owning their cleanup (`removeBoardBuild` untouched).
+- **Errors fixed**
+  - Seeding `testAdapterDir` builds would inject the proof adapter into every later caller and break `runtime-distribution.test.ts`; the seed path is therefore restricted to production-shaped builds only.
+- **Patterns**
+  - Mutating tests make shared builds unsafe: `board-base-path.heavy.test.ts:90` writes into its build dir, so callers get copies, never the seed path.
+  - When the interesting logic is *when* a build happens, add a seam (`setBoardBuildForTest` + `buildImpl` indirection over `astroBuildInto`) so the four seed rules are testable without paying a 9 s real build each; keep the real-build proof as a separate unsandboxed run.
+  - Prove "no proof was dropped" by comparing pass/skip totals against the prior profile: 6 board heavy files went 84.6 s summed → 50.6 s in one launcher call with the same 34 pass / 1 skip / 0 fail.
+
+## Cross-task (2026-11-27)
+
+- Evidence split: committed computed data goes in `config/<name>.json` (reviewable, drift-guarded); run measurements go in gitignored `.spur/run/*.json` and are cited from the task's Testing section.
+- Every derived manifest ships with a repo-wide guard that runs in `test-repo-wide` (hence `spur-check-feature`, never the per-task pipeline, per ADR-119) and names the offending file.
+- Doc sync for a "checker + committed config" change is T3 to the owning `docs/design/<slug>.md` satellite only: numbers measured by the task replace estimates in place, built vs not-built steps are labelled explicitly, and `updated_at` moves with the edit. No ADR (no lasting cross-module boundary), no `03`/`04` edit (mechanism and index rows unchanged), and `config/test-lanes.json` is owned by its test-suite satellite, not duplicated into `configuration-contracts.md`.
+- Recurring shape for performance work here: measure the naive alternative first, keep the receipt, and park the bigger design (1460) on the measured falsification rather than shipping it.

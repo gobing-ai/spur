@@ -3,7 +3,7 @@ kind: design
 title: Laned root test suite — subprocess lane plus full-parallel in-process lane
 status: proposed
 created_at: 2026-11-26
-updated_at: 2026-11-26
+updated_at: 2026-11-27
 related: [feature H161, feature H16, task 1203, commit c8d5ca0f2]
 tags: [testing, coverage, performance]
 ---
@@ -12,8 +12,9 @@ tags: [testing, coverage, performance]
 
 ## 1. Issue and scope
 
-The root `bun run test` suite (13,505 tests / 921 files) takes ~491s at `--parallel=2` and is the
-largest share of every `spur-check`, `spur-check-feature` and `spur feature verify` pass (~13 min).
+The root `bun run test` suite (13,523 tests / 923 files) takes 519 s at `--parallel=2`
+(`.spur/run/test-lanes-baseline.json`) and is the largest share of every `spur-check`,
+`spur-check-feature` and `spur feature verify` pass (~13 min).
 The cap to two workers (commit c8d5ca0f2) came from subprocess-spawning tests timing out under
 CPU-count fan-out. Feature H161 (under H16) splits the suite into two lanes inside the existing launcher. Out of
 scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
@@ -27,22 +28,36 @@ scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
 - `bunfig.toml` sets per-file `coverageThreshold = { lines = 0.9, functions = 0.9 }`. Bun evaluates it
   inside one process over that process's coverage, so a file exercised by tests in two processes would
   read low in each.
-- 137 non-heavy test files spawn subprocesses (`Bun.spawn`, `spawnSync`, `execSync`, `$\`…\``).
+- 144 of those 923 files spawn subprocesses, directly or through one imported spawning helper
+  (`Bun.spawn`, `spawnSync`, `execSync`, `$\`…\``). They hold 1,112 s of the 1,346 s of recorded test
+  time (82.7%) across 12.7% of the files, which is why the split targets them rather than the width of
+  one child.
 
 ## 3. Solution
 
-1. **Classifier.** A committed manifest `config/test-lanes.json` lists the subprocess-lane files.
-   A generator scans test files for spawn usage and folds in recorded per-file durations; a
-   repo-wide test fails when a spawning file is missing from the manifest (drift guard).
-2. **Two children, one launcher.** `run-tests.ts` runs the subprocess lane at
+1. **Classifier (built).** A committed manifest `config/test-lanes.json` lists the subprocess-lane
+   files as `root.subprocess[] = { path, reason, durationMs }`, where `reason` is `direct` or
+   `helper:<tests-path>#<exportedName>` and entries are repo-relative and sorted.
+   `bun scripts/spur-dev.ts test-lanes [--timings <junit.xml>] [--check]` regenerates it from a static
+   scan of every root test file — a direct spawn token, or an import by name of an exported non-test
+   helper under `tests/` whose body spawns (one level deep) — and merges per-file `durationMs` from a
+   JUnit profiling run; `--check` exits 1 naming each drifting path without writing. Classifier logic
+   is coverage-gated in `packages/app/src/rules/test-lanes.ts`; the generator is a thin ADR-130
+   repository source generator.
+2. **Drift guard (built).** `repo-wide-tests/test-lanes-manifest.test.ts` runs inside `test-repo-wide`
+   (hence `spur-check-feature`) and fails, naming the path, when a spawning file is missing from the
+   manifest or a listed file no longer exists or no longer spawns. Top-level manifest keys other than
+   `version`/`root` are preserved verbatim on regeneration, so the heavy section
+   ([heavy-suite-lanes](heavy-suite-lanes.md)) survives it.
+3. **Two children, one launcher (not built).** `run-tests.ts` runs the subprocess lane at
    `--parallel=2` (today's proven bound) and the in-process lane at `--parallel=<availableParallelism>`.
    The two lanes run concurrently. Each child gets its own coverage directory; Bun's in-child
    `coverageThreshold` is disabled through the config copy the launcher already writes.
-3. **Merge and gate.** The launcher merges both LCOV files per `SF:` record (union of `DA`/`FN`
+4. **Merge and gate (not built).** The launcher merges both LCOV files per `SF:` record (union of `DA`/`FN`
    hits, recomputed `LF/LH/FNF/FNH`), evaluates the bunfig thresholds per file on the merged result
    (respecting `coveragePathIgnorePatterns`), writes `<coverageDir>/lcov.info`, and fails nonzero on
    any breach, naming file and metric.
-4. **Certification.** Unchanged contract: certification runs only when both lanes exit 0, the threshold
+5. **Certification (not built).** Unchanged contract: certification runs only when both lanes exit 0, the threshold
    gate passes, and the tree is unchanged; it certifies the merged file.
 
 ## 4. Contract and compatibility
@@ -57,8 +72,10 @@ scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
 
 ## 5. Tradeoffs and open questions
 
-- Alternative measured first: raise the single child to `--parallel=4`. Cheaper, but reintroduces the
-  contention c8d5ca0f2 fixed; the laned design wins only if its receipt beats it.
+- Alternative measured first: raise the single child to `--parallel=4` — 496 s against 519 s, and it
+  reproduces the c8d5ca0f2 contention as one 20 s timeout (`runLightGate`, temporary git repo). A ~23 s
+  gain is not worth an intermittent timeout, so the laned design must beat both; lane scheduling is
+  parked until it does.
 - Running both lanes concurrently shares cores; if the subprocess lane still times out, run lanes
   sequentially (in-process first) — still expected well under 250s.
 - LCOV merge sits on the certification path; it must be covered by fixture tests comparing merged
