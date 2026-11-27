@@ -4,7 +4,7 @@ name: Enforce a governance consent row for every builder verb in the CLI surface
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:44.690Z
-updated_at: "2026-11-27T18:01:02.339Z"
+updated_at: "2026-11-27T22:30:20.290Z"
 feature_id: A95
 
 estimate_hours: 3
@@ -104,13 +104,13 @@ Plan steps 1-6 all completed; step 2's verb list was re-captured live (`builder 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/design/harness-surface-governance.md:236-264` adds the `### Frozen builder verb set` table (19 rows, `\| Verb \| Consent entry \|`), replacing the stale "fourteen verbs" sentence at `docs/design/harness-surface-governance.md:231-234` with a pointer that names the A94 block; the prose amendments above stay as history. |
-| R2 | MET | `plugins/sp/tests/cli-surface-parity.test.ts:526-533` reads the table through the existing `firstTableUnderHeading` seam, and `plugins/sp/tests/cli-surface-parity.test.ts:535-541` asserts set equality both ways against `liveCapture(['builder']).commands` via the existing `expectParity` helper, whose failure payload names every missing/extra verb. No new helper was added. |
-| R3 | MET | Both directions were observed failing on a deliberately broken table and revert clean: deleting the `check-deps` row produced `onCliNotDocumented: ["check-deps"]`; adding a bogus `pr-merge` row produced `documentedNotOnCli: ["pr-merge"]`. Test at `plugins/sp/tests/cli-surface-parity.test.ts:535`. |
+| R1 | MET | The frozen Verb and Consent entry table and historical prose are at `docs/design/harness-surface-governance.md:236`. |
+| R2 | MET | `plugins/sp/tests/cli-surface-parity.test.ts:523` parses the table with firstTableUnderHeading, and :535 compares live Commander registration both ways. |
+| R3 | MET | `plugins/sp/tests/cli-surface-parity.test.ts:535` checks both missing and extra verbs in the same assertion. Fresh isolated mutations both failed and named the offending verb: missing check-deps and extra pr-merge. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The builder verb set matches the governance consent record (req: R1; R2; R3) | MET | test | `plugins/sp/tests/cli-surface-parity.test.ts:535` — `(cd plugins/sp && bun test tests/cli-surface-parity.test.ts)` → 24 pass, 0 fail, 122 expect() calls; the two task-1464 cases compare `captureCliSurface(['builder'])` verbs against the `### Frozen builder verb set` rows both ways. |
+| AC1 — The builder verb set matches the governance consent record | MET | test | The two task-specific live CLI parity tests passed at `plugins/sp/tests/cli-surface-parity.test.ts:535` and :543. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
