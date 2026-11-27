@@ -18,7 +18,8 @@
  *
  *   L2 test runner / coverage
  *   run-tests <bun test args>                  run the suite with the repo's hermetic env; owns coverage certification
- *   test-lanes [--timings <junit.xml>] [--check]  regenerate/verify config/test-lanes.json (task 1459)
+ *   test-lanes [--timings <junit.xml>] [--check] [--profile-heavy]  regenerate/verify config/test-lanes.json;
+ *                                              --profile-heavy writes .spur/run/heavy-profile.json (1459, 1461)
  *
  *   L3 repo contract checks
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
