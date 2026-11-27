@@ -18,7 +18,7 @@ monorepo.
 
 This noun is **frozen at exactly fourteen verbs** (`bump-ver`, `drop-tags`, `publish` from the 2026-10-15
 script-absorption entries; `show-branches` and the four flat PR verbs `pr-status`, `pr-check`,
-`pr-open`, `pr-review` from the 2026-10-16 feature-L1 entries; `build-cli`, `build-server`,
+`pr-open`, `pr-review` from the 2026-10-16 feature-A951 entries; `build-cli`, `build-server`,
 `build-binaries`, `bundle-config`, `bundle-web`, `verify-pack` from the A93 2026-11-16 entry; plus, since A94 1410, `bundle-plugins`,
 `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql`; and since A94 1411, `check-deps`,
 which absorbed `link-check` and `dependency-drift-check`) by operator consent

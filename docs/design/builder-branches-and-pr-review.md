@@ -7,7 +7,7 @@ updated_at: 2026-10-16
 related:
   - harness-surface-governance.md
   - cli-contracts.md
-  - feature L1
+  - feature A951
 tags: [cli, builder, git, pr-review]
 ---
 
@@ -38,7 +38,7 @@ consent amendments and CLI facade docs. Out of scope: branch deletion or pruning
 
 - `builder` is frozen at `bump-ver`, `drop-tags`, `publish`, `pr`
   ([harness-surface-governance §3](harness-surface-governance.md)). Each new verb needs its own
-  consent-gate amendment. The operator's feature-L1 asks are that consent and must be recorded
+  consent-gate amendment. The operator's feature-A951 asks are that consent and must be recorded
   there: "add one more CLI `spur builder show-branches`" and the follow-up choice of four flat
   `pr-<verb>` verbs over a `pr` sub-noun (both 2026-10-16).
 - The eight `pr` ops are called only by the Codex review workflow (and its generated copy),

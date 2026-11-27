@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "L1"
+id: "A951"
 name: "PR review and branch topology for daily use"
 status: verifying
 priority: P2
 tags: []
 created_at: "2026-10-16T18:12:23.631Z"
-updated_at: "2026-11-22T17:30:54.537Z"
+updated_at: "2026-11-27T07:31:32.256Z"
 ---
 
-# L1: PR review and branch topology for daily use
+# A951: PR review and branch topology for daily use
 
 ## Goal
 
@@ -188,4 +188,5 @@ Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all -
 - 2026-10-16T18:23:10.575Z moved Q → L1 (system)
 - 2026-10-16T21:21:15.189Z backlog → active (system)
 - 2026-10-17T00:40:56.315Z active → verifying (system)
+- 2026-11-27T07:31:32.256Z moved L1 → A951 (system)
 

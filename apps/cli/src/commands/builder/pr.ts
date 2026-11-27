@@ -1,5 +1,5 @@
 /**
- * `spur builder pr-<verb>` — the four flat PR-review verbs (task 1219, feature L1). The hidden
+ * `spur builder pr-<verb>` — the four flat PR-review verbs (task 1219, feature A951). The hidden
  * `pr [argv...]` alias was removed in task 1290.
  *
  * Thin transport over `@gobing-ai/spur-app/pr-review` (ADR-021): Commander owns the flags and the

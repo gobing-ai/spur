@@ -4,8 +4,8 @@ name: Flatten the daemon lifecycle onto spur self verbs
 status: done
 template: feature-impl
 created_at: 2026-11-17T18:15:22.636Z
-updated_at: "2026-11-17T18:15:32.011Z"
-feature_id: R
+updated_at: "2026-11-27T07:31:34.361Z"
+feature_id: K45
 priority: P1
 tags:
   - cli
@@ -78,4 +78,5 @@ Split the existing daemon command module into a resolver (`resolveDaemonDeps`), 
 - 2026-11-17T18:15:30.776Z todo → wip (system)
 - 2026-11-17T18:15:31.341Z wip → testing (system)
 - 2026-11-17T18:15:31.912Z testing → done (system)
+- 2026-11-27T07:31:34.361Z feature_id R → K45 (system)
 

@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "S"
+id: "P12"
 name: "Record the TypeSafe model that served each decision"
 status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-22T07:44:51.004Z"
-updated_at: "2026-11-22T07:45:05.340Z"
+updated_at: "2026-11-27T07:51:08.746Z"
 ---
 
-# S: Record the TypeSafe model that served each decision
+# P12: Record the TypeSafe model that served each decision
 
 ## Goal
 
@@ -25,15 +25,25 @@ Every `decision_logs` row for the hosted `typesafe` maker records the model Type
 ```gherkin
 Feature: Record the TypeSafe model that served each decision
 
+  @core
   Scenario: R1 — the served model is logged per decision
     Given the `typesafe` maker answers a decision
     When the decision is logged
     Then its `decision_logs` row carries the model name TypeSafe reported serving
+    And the Board decision detail drawer and the `decision_logs` row contract (`decisionLogRowSchema`) expose it
 
+  @core
   Scenario: R2 — non-typesafe makers leave the served model empty
     Given a maker that reports no served model
     When the decision is logged
     Then the served-model column is null and nothing else changes
+
+  @core
+  Scenario: R3 — the decision library exposes the served model without breaking existing callers
+    Given `@gobing-ai/ts-ai-decision` with the typesafe driver
+    When a decision resolves through a maker that reports a model
+    Then the result exposes that model as optional answer metadata
+    And callers that ignore the metadata compile and behave unchanged
 ```
 
 ## Tasks
@@ -45,3 +55,6 @@ _No linked tasks._
 ## Notes
 
 ## History
+
+- 2026-11-27T07:31:35.352Z moved S → P12 (system)
+

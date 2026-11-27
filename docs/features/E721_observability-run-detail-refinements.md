@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "O"
+id: "E721"
 name: "Observability run-detail refinements"
 status: backlog
 priority: P2
 tags: []
 created_at: "2026-10-05T01:58:58.049Z"
-updated_at: "2026-10-21T18:44:39.400Z"
+updated_at: "2026-11-27T07:33:52.122Z"
 ---
 
-# O: Observability run-detail refinements
+# E721: Observability run-detail refinements
 
 ## Goal
 
@@ -21,7 +21,13 @@ Filed from task 1085 (feature E72) by `residual-scan settle`; the operator dispo
 
 **In scope**
 
-- Retry-row visibility: a visited state's same-kind rows beyond the first match must surface as attempts or a diagnostic naming them (`packages/app/src/workflow/progress-projection.ts:494, :588-605`).
+- Retry-row visibility: a visited state's same-kind rows beyond the first match surface as attempts
+  or a diagnostic naming them. Delivered by task 1272 (commit 31134da87): the ambiguous diagnostic
+  names every row id (`packages/app/src/workflow/progress-projection.ts:523-530`).
+- False ambiguity found in the 2026-11-26 triage: with three or more declared actions of one kind
+  and exactly that many rows, every action after the first sees the remaining candidates (N−1 ≠ N)
+  and is marked `ambiguous` although the mapping is one-to-one. The ambiguity test must use the
+  state's total same-kind row count, not the not-yet-used remainder.
 
 **Out of scope**
 
@@ -39,6 +45,14 @@ Feature: Observability run-detail refinements
     Given a run whose state was visited and whose action rows include repeats of the same kind
     When its progress is projected
     Then each recorded row appears as an attempt or is named by a diagnostic
+
+  @core
+  Scenario: R2 — A one-to-one same-kind mapping is never reported ambiguous
+    Given a state declaring three or more actions of one kind
+    And exactly one recorded row per declared action
+    When its progress is projected
+    Then each declared action maps to its own row in order
+    And no action carries the ambiguous diagnostic
 ```
 
 ## Tasks
@@ -54,3 +68,6 @@ _No linked tasks._
 E72 task 1085 implements the single-action retry grouping and has regression coverage. The source audit found that ambiguous same-kind action definitions still consume rows without naming their durable IDs, so the entire R1 contract is not yet met; task 1272 owns that confirmed residual and retry-status correctness. Preserve this feature’s backlog state until its actual acceptance is verified. The earlier document-only inference that all behavior was already delivered is superseded by this executable source finding.
 
 ## History
+
+- 2026-11-27T07:31:33.305Z moved O → E721 (system)
+

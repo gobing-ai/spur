@@ -4,11 +4,12 @@ name: Bound test watchdog shutdown and preserve workflow cancellation errors
 status: done
 template: issue
 created_at: 2026-10-21T18:42:36.356Z
-updated_at: "2026-10-21T19:41:05.648Z"
+updated_at: "2026-11-27T07:35:43.816Z"
 priority: P2
 
 done_forced: "false"
 done_reason: unforced close; PASS artifact at .spur/memory/evidence/1272-verdict.json
+feature_id: E721
 ---
 
 ## 1272. Bound test watchdog shutdown and preserve workflow cancellation errors

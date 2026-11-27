@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "R"
+id: "K45"
 name: "Self noun hosts the daemon lifecycle as flat verbs"
 status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-17T18:15:03.222Z"
-updated_at: "2026-11-22T17:30:43.752Z"
+updated_at: "2026-11-27T07:33:51.383Z"
 ---
 
-# R: Self noun hosts the daemon lifecycle as flat verbs
+# K45: Self noun hosts the daemon lifecycle as flat verbs
 
 ## Goal
 
@@ -27,13 +27,13 @@ positional action, so an operator reaches the daemon through verbs that are disc
   artifact this CLI owns, so it is the default (and explicit `--daemon`) target.
 - `spur self status` — reports the LaunchAgent (`installed`, `loaded`, `pid`, `lastExit`, `health`)
   beside the readiness aggregate, in text and `--json`.
-- `spur self daemon <install|uninstall|status>` — hidden, deprecated alias that names its
-  replacement on use.
 - Docs and parity fixtures: README, `docs/help{,2}`, the `spur-cli-matrix`, the `spur self`
   reference, ADR-151's shipped-surface line.
 
 **Out of scope**
 
+- The `spur self daemon <action>` alias: shipped by 1369 as deprecated, removed by task 1387
+  (feature A36); R4 now asserts the removal.
 - Removing the CLI binary or machine config (`spur self uninstall` never touches either; that stays
   a package-manager action).
 - Any change to gateway routing, the plist contents, or the launchctl argv.
@@ -69,12 +69,13 @@ Feature: Self noun hosts the daemon lifecycle as flat verbs
     And --json carries a daemon block distinguishing the gateway from a project serve on the same port
 
   @core
-  Scenario: R4 — The old `spur self daemon` spelling still works and names its replacement
+  Scenario: R4 — The retired `spur self daemon` spelling is rejected
     # covers: I4
+    # Amended 2026-11-26: the deprecated alias was removed by task 1387 (feature A36).
     Given an operator script that calls spur self daemon status
     When the command runs
-    Then it prints a deprecation line naming spur self status
-    And it reports the same LaunchAgent facts as spur self status
+    Then it exits nonzero as an unknown command
+    And spur self status remains the one spelling for the LaunchAgent facts
 ```
 
 ## Tasks
@@ -96,3 +97,6 @@ Observed by the saved read-only feature-sync dry-run: `L4.feature-receipt-failed
 Follow-up: inspect the feature’s receipt findings, run `/sp-dev-verify --all --feature R --agent inline --auto --force --focus all --fix all`, then `spur feature sync R`. No feature completion PASS or status override is asserted by this Notes entry.
 
 ## History
+
+- 2026-11-27T07:31:34.361Z moved R → K45 (system)
+

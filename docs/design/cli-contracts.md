@@ -53,7 +53,7 @@ spur <noun> [<verb>] [positionals] [--flags]
 - Every multi-verb noun follows `spur <noun> <verb> …`. The verb is the second positional token.
 - **`builder`** is the noun hosting the release plumbing — `spur builder bump-ver|drop-tags`
   (task 0617, ADR-051), later joined by `publish`, `show-branches` and the four flat PR verbs
-  `pr-status`, `pr-check`, `pr-open`, `pr-review` (the 2026-10-15/16 amendments, feature L1). The
+  `pr-status`, `pr-check`, `pr-open`, `pr-review` (the 2026-10-15/16 amendments, feature A951). The
   former `pr <op>` pass-through was removed (task 1290). Frozen at those eight
   verbs (see `docs/design/harness-surface-governance.md` §3).
 - **`self`** is the noun hosting the self-management verbs — `spur self exec|init|maintain|migrate|serve|status`.
@@ -214,7 +214,7 @@ The repo-local forwarder `scripts/commands/release.ts` and its `spur-dev` dispat
 retired in task 1173 — `bun run bump-ver` / `bun run drop-tags` route here directly. The noun is
 **frozen at exactly these verbs plus `pr`** (the PR-review spine ops), **`publish`** (CI npm publish;
 `bump-ver --check` is the read-only pre-publish drift guard) and **`show-branches`** (the read-only
-branch topology report) — the 2026-10-15 script-absorption and 2026-10-16 feature-L1 amendments —
+branch topology report) — the 2026-10-15 script-absorption and 2026-10-16 feature-A951 amendments —
 no further spur-dev verb may be promoted onto it, and any
 future spur-dev → public-noun promotion needs its own consent-gate entry
 (`docs/design/harness-surface-governance.md` §3).
@@ -308,7 +308,7 @@ anything else.
 
 #### `spur builder show-branches [--format <markdown|json|text>] [--base <ref>] [--local|--remote] [--pr] [--limit <n>] [--max-commits <n>] [--hide-contained] [--theme <name>]`
 
-**Read-only branch topology report (task 1218, feature L1).** The fifth `builder` verb and the only
+**Read-only branch topology report (task 1218, feature A951).** The fifth `builder` verb and the only
 read-only one: it enumerates refs through the shared `CommandRunner` seam and writes no ref, config
 entry, index entry or worktree. Everything it reports lands in `packages/app`
 (`src/services/branch-topology/`); `apps/cli/src/commands/builder/show-branches.ts` owns only the
@@ -368,7 +368,7 @@ live in `@gobing-ai/spur-contracts` and are re-exported by the web manifest.
 
 #### `spur builder pr-status [--since <iso>] [--head <sha>]` · `spur builder pr-check [--base <branch>] [--scan-only]` · `spur builder pr-open [--base <branch>]` · `spur builder pr-review [--force] [--focus <text>] [--no-wait] [--timeout <s>] [--interval <s>]`
 
-**Four flat PR verbs replacing the `pr <op>` pass-through (task 1219, feature L1).** Each registers
+**Four flat PR verbs replacing the `pr <op>` pass-through (task 1219, feature A951).** Each registers
 only its own flags plus `--json` and `--status-file` (Commander validates them — an unknown flag
 exits 1 naming it, never silently ignored), composes the absorbed `plugins/sp/scripts/pr-reviewing.ts`
 operations inside `runPrVerb` (`packages/app/src/services/pr-review/index.ts`), and runs its git/gh

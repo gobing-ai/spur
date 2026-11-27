@@ -4,8 +4,8 @@ name: Add spur builder show-branches branch topology report
 status: done
 template: feature-impl
 created_at: 2026-10-16T18:16:16.605Z
-updated_at: "2026-10-17T01:09:29.734Z"
-feature_id: L1
+updated_at: "2026-11-27T07:31:32.256Z"
+feature_id: A951
 priority: P2
 tags:
   - cli
@@ -317,4 +317,5 @@ collector's order becomes sort-then-collect, so the existing route-map tests nee
 - 2026-10-16T20:34:34.537Z todo → wip (system)
 - 2026-10-16T22:20:18.277Z wip → testing (system)
 - 2026-10-16T22:20:32.616Z testing → done (system)
+- 2026-11-27T07:31:32.256Z feature_id L1 → A951 (system)
 

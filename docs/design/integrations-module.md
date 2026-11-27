@@ -229,7 +229,7 @@ participants come from inbox rows, so nothing new is persisted:
 - inbound A2A callers are the `a2a` sender of the `a2a:` request-key family;
 - outbound peers are the recipient address of a local member's request.
 
-The remote side's own dialog is not visible locally, so it is a separate feature (T).
+The remote side's own dialog is not visible locally, so it is a separate feature (A822).
 
 **Read (additive).** `inbox.timeline` sits beside `inbox.list`, which is unchanged. It is a
 project-scoped, side-effect-free read with these inputs:

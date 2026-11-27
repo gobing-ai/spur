@@ -194,7 +194,7 @@ not a repo script), and for the read-only `--check` flag on `bump-ver` (the reti
 `check-marketplace-version` pre-publish guard). `builder` is now frozen at `bump-ver`, `drop-tags`,
 `publish`, `pr`.
 
-**Amendment (2026-10-16, feature L1).** The operator's feature-L1 ask ("add one more CLI
+**Amendment (2026-10-16, feature A951).** The operator's feature-A951 ask ("add one more CLI
 `spur builder show-branches`") is the consent-gate entry for a fifth `builder` verb, read-only
 branch topology (audience: the operator's daily branch triage and the `/sp:dev-pr-review status`
 mode; surface: a new public verb — base-relative per-branch fork point, commits ahead/behind, the
@@ -207,7 +207,7 @@ a config entry, the index or a worktree). Rejected shapes recorded at the gate: 
 noun, a full-history gitGraph, and a `--prune` flag. `builder` is now frozen at `bump-ver`,
 `drop-tags`, `publish`, `show-branches`, `pr`.
 
-**Amendment (2026-10-16, feature L1 — flat `pr-<verb>` verbs).** The operator's feature-L1 choice
+**Amendment (2026-10-16, feature A951 — flat `pr-<verb>` verbs).** The operator's feature-A951 choice
 of four flat verbs over a `pr` sub-noun (task 1219) is the consent-gate entry for replacing the
 `pr <op>` pass-through with `spur builder pr-status`, `pr-check`, `pr-open` and `pr-review`
 (audience: the operator's daily PR loop, the `sp:pr-reviewing` skill and the `/sp:dev-pr-review`

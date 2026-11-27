@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-11-25T23:51:52.607Z"
-updated_at: "2026-11-26T01:48:32.996Z"
+updated_at: "2026-11-27T07:34:05.231Z"
 ---
 
 # A821: A2A cooperation sequence view: filtered agent dialog with tooltip detail
@@ -29,7 +29,7 @@ Make agent cooperation visible at a glance in Integrations › A2A: the tab lead
 - Owner doc updates: `docs/design/integrations-module.md`, DESIGN.md (tooltip component), inbox contract satellite.
 
 **Out of scope**
-- Stitching the remote peer's internal dialog into the sequence (follow-up T).
+- Stitching the remote peer's internal dialog into the sequence (follow-up A822).
 - Composing, replying or marking read from the sequence view (Projects › Inbox stays the action surface).
 - New persistence or schema changes to `inbox_messages`.
 - Changes to A2A transport, auth, or Agent Card generation.

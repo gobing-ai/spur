@@ -4,8 +4,8 @@ name: Redesign /sp:dev-pr-review as a local-first status, review and fix command
 status: done
 template: feature-impl
 created_at: 2026-10-16T18:16:16.610Z
-updated_at: "2026-10-17T01:09:30.794Z"
-feature_id: L1
+updated_at: "2026-11-27T07:31:32.256Z"
+feature_id: A951
 priority: P2
 tags:
   - plugin
@@ -235,4 +235,5 @@ Verdict is PASS — hand off to verify. The operator's remaining action is `supe
 - 2026-10-17T00:01:50.845Z todo → wip (system)
 - 2026-10-17T00:32:59.727Z wip → testing (system)
 - 2026-10-17T00:33:03.245Z testing → done (system)
+- 2026-11-27T07:31:32.256Z feature_id L1 → A951 (system)
 

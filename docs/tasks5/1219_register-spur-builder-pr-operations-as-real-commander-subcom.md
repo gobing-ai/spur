@@ -4,8 +4,8 @@ name: Register spur builder pr operations as real Commander subcommands
 status: done
 template: feature-impl
 created_at: 2026-10-16T18:16:16.609Z
-updated_at: "2026-10-17T01:09:30.272Z"
-feature_id: L1
+updated_at: "2026-11-27T07:31:32.256Z"
+feature_id: A951
 priority: P2
 tags:
   - cli
@@ -299,4 +299,5 @@ Verification/ship: R1–R5 and AC1–AC3 are all MET and the round-1 blockers ar
 - 2026-10-16T22:45:04.113Z todo → wip (system)
 - 2026-10-16T23:51:56.025Z wip → testing (system)
 - 2026-10-16T23:52:50.837Z testing → done (system)
+- 2026-11-27T07:31:32.256Z feature_id L1 → A951 (system)
 

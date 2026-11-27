@@ -1,5 +1,5 @@
 /**
- * `spur builder show-branches` — read-only branch topology report (task 1218, feature L1).
+ * `spur builder show-branches` — read-only branch topology report (task 1218, feature A951).
  * Thin transport over `@gobing-ai/spur-app/branch-topology`: Commander owns the flags, number and
  * format validation and exit codes (0 ok · 1 usage · 2 git failure); the service owns every git/gh
  * call, so this file holds no git logic (ADR-021).
