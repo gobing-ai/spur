@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-26T19:33:43.381Z"
-updated_at: "2026-11-26T22:06:15.057Z"
+updated_at: "2026-11-27T07:33:54.999Z"
 ---
 
 # E11: dsh history import source
@@ -23,14 +23,20 @@ dsh sessions appear in Spur's history plane with the same refresh, coverage and 
 ## Acceptance Criteria
 
 ```gherkin
-# Keep the Feature: line (feature check L3.ac-bdd-error without it). Each Scenario: title is the
-# identity key tasks reference verbatim ("- [ ] AC1 — <title>"); number R1, R2, …; never rename after tasks link.
 Feature: dsh history import source
 
-  Scenario: Basic acceptance
-    Given a precondition
-    When an action
-    Then an expected outcome
+  @core
+  Scenario: R1 — dsh sessions import and refresh like other agents
+    Given dsh sessions under ~/.dsh/sessions
+    When the operator refreshes history with the deepseek source enabled
+    Then the sessions land in the history plane under source deepseek
+    And the source is reported with a full-fidelity status backed by a real-session import receipt
+
+  @core
+  Scenario: R2 — The history Board shows dsh as a source
+    Given imported deepseek sessions
+    When the operator opens the history Board
+    Then deepseek appears in the source rows, the filter list and with its own agent icon
 ```
 
 ## Tasks

@@ -1,34 +1,55 @@
 ---
 schema_version: 1
 id: "B811"
-name: "Superskill dsh install target (hooks + MCP profile patch)"
+name: Superskill dsh install target (MCP profile patch)
 status: backlog
 priority: P2
 tags: []
 created_at: "2026-11-26T19:33:43.033Z"
-updated_at: "2026-11-26T21:03:52.262Z"
+updated_at: "2026-11-27T07:33:55.334Z"
 ---
 
 # B811: Superskill dsh install target (hooks + MCP profile patch)
 
 ## Goal
 
+`superskill install sp --targets dsh` wires Spur's MCP server into dsh, so a dsh session gets the
+Spur MCP tools the same way the other supported agents do and Spur's dsh MCP readiness verdict
+turns green without hand-editing the profile.
+
 ## Scope
 
 - In:
+  - A `dsh` install target in the superskill repo (`packages/core/src/targets.ts`, `mapper.ts`,
+    `operations/post-install.ts`) that merges one `@deepseek-ai/dsh-mcp-client` loader entry with
+    `config.serverName: spur` into the dsh profile patch `cordis.patch.yml`, idempotently and
+    without touching other entries (`docs/design/dsh-agent-integration.md`).
+  - Skills keep flowing through `~/.agents/skills`; the target only adds the MCP patch.
+  - Spur-side proof: `packages/app/src/services/agent-mcp-readiness.ts` reports dsh MCP ready after
+    the install.
 - Out:
+  - Hooks. dsh plugins are in-process Cordis packages with no declarative hook manifest, so there
+    is no surface to write; dropped in the 2026-11-26 triage rather than faked.
+  - Publishing the superskill release (needs operator authorization).
+  - Copying or reading `~/.dsh` credentials.
 
 ## Acceptance Criteria
 
 ```gherkin
-# Keep the Feature: line (feature check L3.ac-bdd-error without it). Each Scenario: title is the
-# identity key tasks reference verbatim ("- [ ] AC1 — <title>"); number R1, R2, …; never rename after tasks link.
-Feature: Superskill dsh install target (hooks + MCP profile patch)
+Feature: Superskill dsh install target (MCP profile patch)
 
-  Scenario: Basic acceptance
-    Given a precondition
-    When an action
-    Then an expected outcome
+  @core
+  Scenario: R1 — The dsh target writes the Spur MCP loader entry
+    Given a dsh profile without a Spur MCP entry
+    When superskill installs the sp plugin for the dsh target
+    Then cordis.patch.yml carries one dsh-mcp-client loader entry with serverName spur
+    And Spur's dsh MCP readiness verdict reports ready
+
+  @core
+  Scenario: R2 — Reinstall is idempotent and preserves foreign entries
+    Given a profile patch that already holds the Spur entry and other loader entries
+    When the dsh target installs again
+    Then the file still holds exactly one Spur entry and every other entry unchanged
 ```
 
 ## Tasks
