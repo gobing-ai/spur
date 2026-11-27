@@ -34,8 +34,17 @@ export default function IntegrationsModule({ seams }: { seams?: IntegrationsSeam
     const data = useIntegrations(seams);
     const [activeId, setActiveId] = useState<string>(INTEGRATIONS_TABS[0]?.id ?? 'summary');
     // The A2A sequence's client seam, memoized: `api.inbox` is a proxy rebuilt per property access, so
-    // an inline read would hand its effects a new identity every render and refetch in a loop.
-    const sequenceClient = useMemo<SequenceClient | undefined>(() => seams?.api?.inbox, [seams?.api]);
+    // an inline read would hand its effects a new identity every render and refetch in a loop. The
+    // remote dialog lives on another noun, so the seam is built field by field (1469 R3).
+    const sequenceClient = useMemo<SequenceClient | undefined>(() => {
+        const client = seams?.api;
+        if (client === undefined) return undefined;
+        return {
+            timeline: client.inbox.timeline,
+            requests: client.inbox.requests,
+            remoteDialog: client.integrations.remoteDialog,
+        };
+    }, [seams?.api]);
 
     const surfacesOn = data.status !== null && !allSurfacesOff(data.status);
     const chip = data.loading

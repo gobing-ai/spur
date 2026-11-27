@@ -1,4 +1,4 @@
-import type { IntegrationsStatus } from '@gobing-ai/spur-contracts';
+import type { IntegrationsRemoteDialog, IntegrationsStatus } from '@gobing-ai/spur-contracts';
 import { CheckCircle2, Clock, LoaderCircle, XCircle } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { withBase } from '../../components/base-path';
@@ -35,14 +35,27 @@ import {
  * never acts on it — Projects › Inbox owns composing, replying and marking read.
  */
 
-/** The two `inbox` procedures the sequence reads. */
-export type SequenceClient = Pick<ApiClient['inbox'], 'timeline' | 'requests'>;
+/**
+ * The procedures the sequence reads: two `inbox` reads plus the remote dialog (1469 R3).
+ *
+ * An explicit interface, not a `Pick` over `api.inbox`: `integrations.remoteDialog` lives on another
+ * noun, and spreading the oRPC proxy would hand the effects a new identity every render.
+ */
+export interface SequenceClient {
+    timeline: ApiClient['inbox']['timeline'];
+    requests: ApiClient['inbox']['requests'];
+    remoteDialog: ApiClient['integrations']['remoteDialog'];
+}
 
 /**
  * The production client, bound ONCE. `api.inbox` is a proxy rebuilt per property access, so reading
  * it inline would hand the data effects a new identity every render — an unbounded refetch loop.
  */
-const SEQUENCE_CLIENT: SequenceClient = api.inbox;
+const SEQUENCE_CLIENT: SequenceClient = {
+    timeline: api.inbox.timeline,
+    requests: api.inbox.requests,
+    remoteDialog: api.integrations.remoteDialog,
+};
 
 /** The public Agent Card, fetched only when a lifeline tooltip first opens (1440 R1). */
 type CardState =
@@ -62,6 +75,9 @@ interface SequenceReceipt {
 
 /** An arrow's receipt, read on first open and then cached (1440 R2). */
 type ReceiptState = { status: 'loading' } | { status: 'ready'; row: SequenceReceipt } | { status: 'error' };
+
+/** The remote dialog read's state for one outbound receipt (1469 R1/R2): loading, or the 1468 union. */
+type RemoteDialogState = { status: 'loading' } | { status: 'done'; result: IntegrationsRemoteDialog };
 
 /** One delivery status's icon and tone; the text is always rendered beside it. */
 const STATUS_META: Record<
@@ -500,11 +516,17 @@ function LifelineHeader({
 function ArrowDetail({
     row,
     receipt,
+    remote,
     onOpen,
+    onOpenRemote,
+    onRetryRemote,
 }: {
     row: InboxRow;
     receipt: ReceiptState | undefined;
+    remote: RemoteDialogState | undefined;
     onOpen: () => void;
+    onOpenRemote: () => void;
+    onRetryRemote: () => void;
 }) {
     const opened = useRef(false);
     useEffect(() => {
@@ -573,6 +595,105 @@ function ArrowDetail({
                         .map(([label, value]) => `${label} ${value}`)
                         .join(' · ') || 'no remote refs'}
                 </p>
+            )}
+            <RemoteDialog
+                remoteContextId={refs?.remoteContextId ?? null}
+                state={remote}
+                onOpen={onOpenRemote}
+                onRetry={onRetryRemote}
+            />
+        </div>
+    );
+}
+
+/** The frozen copy for a peer this gateway cannot read (1469 R2). */
+const REMOTE_OUTSIDE_COPY = 'Remote peer outside this gateway — dialog not available';
+
+/**
+ * The stitched remote dialog for one outbound receipt (1469 R1/R2/R4).
+ *
+ * A disclosure, never an automatic read: it mounts on every tooltip open, so it fetches only when the
+ * operator opens it, and the parent caches the answer. A `remote` answer lists the peer's messages
+ * oldest first; the two markers explain why there is no transcript, and only the retryable one offers
+ * a Retry. Nothing here can break the local sequence — every branch is text beside the arrow.
+ */
+function RemoteDialog({
+    remoteContextId,
+    state,
+    onOpen,
+    onRetry,
+}: {
+    remoteContextId: string | null;
+    state: RemoteDialogState | undefined;
+    onOpen: () => void;
+    onRetry: () => void;
+}) {
+    const [open, setOpen] = useState(false);
+    // No remote context id means this receipt never left for a peer that could answer.
+    if (remoteContextId === null || remoteContextId === '') return null;
+    return (
+        <div className="flex flex-col gap-1" data-testid="a2a-remote-section">
+            <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="self-start"
+                aria-expanded={open}
+                data-testid="a2a-remote-toggle"
+                onClick={(event) => {
+                    event.stopPropagation();
+                    const next = !open;
+                    setOpen(next);
+                    if (next) onOpen();
+                }}
+            >
+                {open ? 'Hide remote dialog' : 'Remote dialog'}
+            </Button>
+            {!open ? null : state === undefined || state.status === 'loading' ? (
+                <p className="text-base-content/60">reading the remote dialog…</p>
+            ) : state.result.status === 'remote' ? (
+                <ol className="flex flex-col gap-1" data-testid="a2a-remote-dialog">
+                    {[...state.result.messages]
+                        .sort((left, right) => left.createdAt - right.createdAt)
+                        .map((message) => (
+                            <li
+                                key={message.id}
+                                className="flex flex-col gap-0.5"
+                                data-testid={`a2a-remote-message-${message.id}`}
+                            >
+                                <p className="text-base-content/70">
+                                    {message.fromId} → {message.toId} · <StatusMark status={message.status} /> ·{' '}
+                                    {stamp(message.createdAt)}
+                                </p>
+                                <p className="whitespace-pre-wrap break-words">
+                                    {message.body === '' ? '(empty body)' : message.body}
+                                </p>
+                            </li>
+                        ))}
+                </ol>
+            ) : state.result.status === 'outside-gateway' ? (
+                <p className="text-base-content/60" data-testid="a2a-remote-marker">
+                    {REMOTE_OUTSIDE_COPY}
+                </p>
+            ) : (
+                <div className="flex flex-col gap-1">
+                    <p className="text-error" data-testid="a2a-remote-marker">
+                        {state.result.reason}
+                    </p>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className="self-start"
+                        data-testid="a2a-remote-retry"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onRetry();
+                        }}
+                    >
+                        Retry
+                    </Button>
+                </div>
             )}
         </div>
     );
@@ -654,6 +775,7 @@ export function A2aSequence({
     // the operator has already seen is wasted work.
     const cards = useRef(new Map<string, CardState>());
     const receipts = useRef(new Map<string, ReceiptState>());
+    const remoteDialogs = useRef(new Map<string, RemoteDialogState>());
     const [, bump] = useState(0);
     const rerender = useCallback(() => bump((value) => value + 1), []);
     const readCard =
@@ -701,6 +823,37 @@ export function A2aSequence({
                 },
                 () => {
                     receipts.current.set(messageId, { status: 'error' });
+                    rerender();
+                },
+            );
+        },
+        [client, rerender],
+    );
+
+    /**
+     * Read one receipt's remote dialog (1469 R1): only when the disclosure opens, cached per message,
+     * so an unopened arrow costs nothing and reopening is free. `force` is the Retry path.
+     */
+    const loadRemoteDialog = useCallback(
+        (messageId: string, member: string, remoteContextId: string, force = false) => {
+            if (!force && remoteDialogs.current.has(messageId)) return;
+            if (remoteDialogs.current.get(messageId)?.status === 'loading') return;
+            remoteDialogs.current.set(messageId, { status: 'loading' });
+            rerender();
+            void client.remoteDialog({ member, remoteContextId }).then(
+                (result) => {
+                    remoteDialogs.current.set(messageId, { status: 'done', result });
+                    rerender();
+                },
+                (failure: unknown) => {
+                    // A transport failure is the third marker state, never a broken sequence.
+                    remoteDialogs.current.set(messageId, {
+                        status: 'done',
+                        result: {
+                            status: 'unavailable',
+                            reason: failure instanceof Error ? failure.message : String(failure),
+                        },
+                    });
                     rerender();
                 },
             );
@@ -760,7 +913,40 @@ export function A2aSequence({
             minWidth={420}
             footer={({ pinned }) => (pinned ? 'Select to copy' : 'Click to pin')}
         >
-            <ArrowDetail row={row} receipt={receipts.current.get(row.id)} onOpen={() => loadReceipt(row.id)} />
+            <ArrowDetail
+                row={row}
+                receipt={receipts.current.get(row.id)}
+                remote={remoteDialogs.current.get(row.id)}
+                onOpen={() => loadReceipt(row.id)}
+                onOpenRemote={() => {
+                    const refs = receipts.current.get(row.id);
+                    // A receipt belongs to the peer at either end of the arrow: the outbound member is
+                    // the address we called (toId), and a reply is addressed back from it (fromId).
+                    const member = [row.toId, row.fromId]
+                        .map((address) =>
+                            status.a2a.members.find(
+                                (entry) => entry.direction === 'outbound' && entry.member === address,
+                            ),
+                        )
+                        .find((entry) => entry !== undefined);
+                    const remoteContextId = refs?.status === 'ready' ? (refs.row.remoteContextId ?? '') : '';
+                    if (member === undefined || member.direction !== 'outbound' || remoteContextId === '') return;
+                    loadRemoteDialog(row.id, member.member, remoteContextId);
+                }}
+                onRetryRemote={() => {
+                    const refs = receipts.current.get(row.id);
+                    const member = [row.toId, row.fromId]
+                        .map((address) =>
+                            status.a2a.members.find(
+                                (entry) => entry.direction === 'outbound' && entry.member === address,
+                            ),
+                        )
+                        .find((entry) => entry !== undefined);
+                    const remoteContextId = refs?.status === 'ready' ? (refs.row.remoteContextId ?? '') : '';
+                    if (member === undefined || member.direction !== 'outbound' || remoteContextId === '') return;
+                    loadRemoteDialog(row.id, member.member, remoteContextId, true);
+                }}
+            />
         </PinnableTooltip>
     );
 

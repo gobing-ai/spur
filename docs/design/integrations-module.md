@@ -229,7 +229,25 @@ participants come from inbox rows, so nothing new is persisted:
 - inbound A2A callers are the `a2a` sender of the `a2a:` request-key family;
 - outbound peers are the recipient address of a local member's request.
 
-The remote side's own dialog is not visible locally, so it is a separate feature (A822).
+The remote side's own dialog is **stitched into the arrow that called it** (A822, task 1469). An
+outbound receipt whose coordination run persisted a `remoteContextId` gains a "Remote dialog"
+disclosure inside its arrow tooltip — a button (`aria-expanded`), never an automatic read: opening
+the tooltip fetches nothing, opening the disclosure calls `integrations.remoteDialog` once and caches
+the answer per message, and reopening reads the cache. The disclosure is absent when the receipt has
+no remote context id, because then there is no remote thread to ask for.
+
+The disclosure renders exactly the three states the read returns (`docs/04_DESIGN.md` owns the
+procedure):
+
+| Read result | Render |
+| --- | --- |
+| `remote` | The peer's messages oldest first (sender, time, status mark, body), under `a2a-remote-dialog`. |
+| `outside-gateway` | The frozen marker "Remote peer outside this gateway — dialog not available", under `a2a-remote-marker`, with no Retry — the peer is not behind this gateway, so retrying cannot help. |
+| `unavailable` | The read's reason under `a2a-remote-marker` plus an inline Retry that issues one more call. |
+
+A failed remote read never touches the local sequence: the grid, the lifelines and the local arrow
+detail keep rendering, and the remote panel stays inside the tooltip. Remote messages are *not*
+merged into the main grid as lifelines — the grid stays a truthful picture of local cooperation.
 
 **Read (additive).** `inbox.timeline` sits beside `inbox.list`, which is unchanged. It is a
 project-scoped, side-effect-free read with these inputs:

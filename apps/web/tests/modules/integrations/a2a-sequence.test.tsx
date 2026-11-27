@@ -8,7 +8,7 @@
  * default view back from the sequence.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import type { IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
+import type { IntegrationsRemoteDialog, IntegrationsStatus, IntegrationsUsage } from '@gobing-ai/spur-contracts';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { SequenceClient } from '../../../src/modules/integrations/A2aSequence';
 import { A2aTab } from '../../../src/modules/integrations/A2aTab';
@@ -123,6 +123,26 @@ const STATUS: IntegrationsStatus = {
     gateway: { served: false },
 };
 
+/**
+ * 1469: the same project with a project-addressed outbound peer at `proj-coder` — the address the
+ * outbound arrow's receipt belongs to, which is what a remote-dialog read resolves.
+ */
+const PROJECT_STATUS: IntegrationsStatus = {
+    ...STATUS,
+    a2a: {
+        ...STATUS.a2a,
+        members: [
+            {
+                member: 'proj-coder',
+                direction: 'outbound',
+                kind: 'project',
+                target: 'peer/coder',
+                auth: { envName: 'PEER_A2A_TOKEN', tokenPresent: false },
+            },
+        ],
+    },
+};
+
 /** The Agent Card the card route answers: the projection this server emits (§F4). */
 const CARD = {
     name: 'proj-coder',
@@ -139,6 +159,8 @@ let timelineAnswer: () => Promise<{ messages: InboxRow[]; nextCursor: string | n
 let requestAnswer: (input: { messageId?: string }) => Promise<unknown[]>;
 let cardReads: string[];
 let cardAnswer: (url: string) => Promise<Response>;
+let remoteCalls: Array<{ member: string; remoteContextId: string }>;
+let remoteAnswer: (input: { member: string; remoteContextId: string }) => Promise<IntegrationsRemoteDialog>;
 
 /** A recording client: the seam is the whole transport, so the assertions read its inputs. */
 function makeClient(): SequenceClient {
@@ -151,6 +173,10 @@ function makeClient(): SequenceClient {
             requestCalls.push(input);
             return requestAnswer(input);
         }) as unknown as SequenceClient['requests'],
+        remoteDialog: (async (input: { member: string; remoteContextId: string }) => {
+            remoteCalls.push(input);
+            return remoteAnswer(input);
+        }) as unknown as SequenceClient['remoteDialog'],
     };
 }
 
@@ -225,9 +251,11 @@ beforeEach(() => {
     timelineCalls = [];
     requestCalls = [];
     cardReads = [];
+    remoteCalls = [];
     timelineAnswer = async () => ({ messages: ROWS, nextCursor: null });
     requestAnswer = async () => [];
     cardAnswer = async () => Response.json(CARD);
+    remoteAnswer = async () => ({ status: 'remote', messages: [] });
 });
 
 describe('1454 — the sequence leads the A2A tab (R1)', () => {
@@ -681,5 +709,177 @@ describe('1454 — empty and degraded states (R8)', () => {
         expect(claimed.querySelector('svg')).toBeTruthy();
         // The stacked list and the grid share the mark, so the text is never the only signal there either.
         expect(view.getByTestId('integrations-a2a-sequence-grid').textContent).toContain('delivered');
+    });
+});
+
+// ─── 1469: the stitched remote dialog under an outbound arrow ─────────────────────────────────
+
+/** One remote inbox message in the shape the 1468 union carries. */
+function remoteMessage(id: string, createdAt: number, body = `remote ${id}`) {
+    return {
+        id,
+        fromId: 'proj-peer',
+        toId: 'operator',
+        body,
+        kind: 'chat' as const,
+        status: 'delivered' as const,
+        attempts: 1,
+        error: null,
+        claimedAt: null,
+        deliveredAt: createdAt,
+        readAt: null,
+        inReplyTo: null,
+        threadId: 'ctx-1',
+        requestKey: null,
+        taskId: null,
+        parentRunId: null,
+        createdAt,
+    };
+}
+
+/** A receipt that persisted a remote context id — the precondition for the disclosure to exist. */
+function receiptWithContext() {
+    requestAnswer = async (input) => [
+        {
+            messageId: input.messageId,
+            requestKey: 'a2a:proj-coder:m1',
+            status: 'delivered',
+            attempts: 1,
+            error: null,
+            runId: UUID_RUN,
+            runStatus: 'exited',
+            taskId: null,
+            outcome: 'completed',
+            reason: null,
+            hold: null,
+            remoteTaskId: 'remote-t1',
+            remoteContextId: 'ctx-1',
+            remoteBranch: null,
+        },
+    ];
+}
+
+/** Open the arrow tooltip for `m1` and return its detail element. */
+async function openArrow(view: ReturnType<typeof renderTab>): Promise<HTMLElement> {
+    await waitFor(() => view.getByTestId('integrations-a2a-arrow-trigger-m1'));
+    await act(async () => {
+        fireEvent.focusIn(view.getByTestId('integrations-a2a-arrow-trigger-m1'));
+    });
+    await waitFor(() => expect(view.getByTestId('integrations-a2a-arrow-detail-m1')).toBeTruthy());
+    return view.getByTestId('integrations-a2a-arrow-detail-m1');
+}
+
+describe('1469 — the stitched remote dialog (R1/R3/R4)', () => {
+    test('nothing is read until the disclosure opens, then exactly once, oldest first', async () => {
+        receiptWithContext();
+        remoteAnswer = async () => ({
+            status: 'remote',
+            messages: [remoteMessage('r2', 2_000), remoteMessage('r1', 1_000)],
+        });
+        const view = renderTab({ status: PROJECT_STATUS });
+        const detail = await openArrow(view);
+        // R1: opening the tooltip is not opening the disclosure.
+        expect(remoteCalls).toEqual([]);
+        expect(detail.querySelector('[data-testid="a2a-remote-dialog"]')).toBeNull();
+
+        const toggle = view.getByTestId('a2a-remote-toggle');
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        await act(async () => {
+            fireEvent.click(toggle);
+        });
+        await waitFor(() => expect(view.getByTestId('a2a-remote-dialog')).toBeTruthy());
+        expect(remoteCalls).toEqual([{ member: 'proj-coder', remoteContextId: 'ctx-1' }]);
+        const listed = [...view.getByTestId('a2a-remote-dialog').querySelectorAll('li')].map(
+            (item) => item.getAttribute('data-testid') ?? '',
+        );
+        expect(listed).toEqual(['a2a-remote-message-r1', 'a2a-remote-message-r2']);
+        expect(view.getByTestId('a2a-remote-dialog').textContent).toContain('remote r1');
+
+        // Reopening reads the cached answer, never a second request.
+        await act(async () => {
+            fireEvent.click(view.getByTestId('a2a-remote-toggle'));
+        });
+        await act(async () => {
+            fireEvent.click(view.getByTestId('a2a-remote-toggle'));
+        });
+        expect(remoteCalls).toHaveLength(1);
+    });
+
+    test('the disclosure is a keyboard-reachable button that reports its state', async () => {
+        receiptWithContext();
+        remoteAnswer = async () => ({ status: 'remote', messages: [remoteMessage('r1', 1_000)] });
+        const view = renderTab({ status: PROJECT_STATUS });
+        await openArrow(view);
+        const toggle = view.getByTestId('a2a-remote-toggle');
+        expect(toggle.tagName).toBe('BUTTON');
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        await act(async () => {
+            fireEvent.click(toggle);
+        });
+        await waitFor(() => expect(toggle.getAttribute('aria-expanded')).toBe('true'));
+        // The label names the action, so a screen reader announces what opening does.
+        expect(toggle.textContent).toContain('Hide remote dialog');
+    });
+});
+
+describe('1469 — the two markers (R2)', () => {
+    test('outside-gateway renders the frozen copy and offers no Retry', async () => {
+        receiptWithContext();
+        remoteAnswer = async () => ({ status: 'outside-gateway' });
+        const view = renderTab({ status: PROJECT_STATUS });
+        await openArrow(view);
+        await act(async () => {
+            fireEvent.click(view.getByTestId('a2a-remote-toggle'));
+        });
+        await waitFor(() => expect(view.getByTestId('a2a-remote-marker')).toBeTruthy());
+        expect(view.getByTestId('a2a-remote-marker').textContent).toBe(
+            'Remote peer outside this gateway — dialog not available',
+        );
+        expect(view.queryByTestId('a2a-remote-retry')).toBeNull();
+        // No retry loop was started by rendering the marker.
+        expect(remoteCalls).toHaveLength(1);
+    });
+
+    test('unavailable renders the reason, and Retry issues one more call', async () => {
+        receiptWithContext();
+        remoteAnswer = async () => ({ status: 'unavailable', reason: 'remote thread read timed out after 2000 ms' });
+        const view = renderTab({ status: PROJECT_STATUS });
+        await openArrow(view);
+        await act(async () => {
+            fireEvent.click(view.getByTestId('a2a-remote-toggle'));
+        });
+        await waitFor(() => expect(view.getByTestId('a2a-remote-marker')).toBeTruthy());
+        expect(view.getByTestId('a2a-remote-marker').textContent).toContain('timed out after 2000 ms');
+        await act(async () => {
+            fireEvent.click(view.getByTestId('a2a-remote-retry'));
+        });
+        await waitFor(() => expect(remoteCalls).toHaveLength(2));
+        // The local sequence is untouched by a failed remote read.
+        expect(view.getByTestId('integrations-a2a-sequence-grid')).toBeTruthy();
+    });
+
+    test('a receipt with no remote context id renders no disclosure at all', async () => {
+        requestAnswer = async (input) => [
+            {
+                messageId: input.messageId,
+                requestKey: 'a2a:proj-coder:m1',
+                status: 'delivered',
+                attempts: 1,
+                error: null,
+                runId: UUID_RUN,
+                runStatus: 'exited',
+                taskId: null,
+                outcome: 'completed',
+                reason: null,
+                hold: null,
+                remoteTaskId: null,
+                remoteContextId: null,
+                remoteBranch: null,
+            },
+        ];
+        const view = renderTab({ status: PROJECT_STATUS });
+        await openArrow(view);
+        expect(view.queryByTestId('a2a-remote-toggle')).toBeNull();
+        expect(remoteCalls).toEqual([]);
     });
 });
