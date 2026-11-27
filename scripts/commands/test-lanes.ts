@@ -161,7 +161,7 @@ export function renderManifest(entries: LaneEntry[], committed: LaneManifest | u
 
 /** Parses argv, or returns `undefined` for an unknown/malformed argument. */
 function parseArgs(argv: string[]): LaneOptions | undefined {
-    const options: LaneOptions = { timings: undefined, check: false };
+    const options: LaneOptions = { timings: undefined, check: false, profileHeavy: false };
     for (let index = 0; index < argv.length; index++) {
         const arg = argv[index] ?? '';
         if (arg === '--check') {
