@@ -1,7 +1,7 @@
 {
     "schemaVersion": 2,
-    "generatedAt": "2026-11-20T22:31:13Z",
-    "sourceCommit": "f5999470b1861740908e52d468985dec295b0d87",
+    "generatedAt": "2026-11-27T22:46:00Z",
+    "sourceCommit": "6827fc88f63163a28b5ed00757924c18a9795924",
     "consentStatus": {
         "state": "granted",
         "at": "2026-11-19",
@@ -303,6 +303,17 @@
             "downstreamReason": "Retained: pins repository release aliases, a repository-only contract",
             "noRuntimeCaller": true,
             "subject": "apps/cli/src/release-ops.ts"
+        },
+        {
+            "path": "scripts/commands/run-tests.test.ts",
+            "responsibility": "Companion tests for the hermetic test launcher's lane planning and child-termination seams",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: pins the heavy and test-repo-wide shapes plus child termination for this repo's suite policy",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/run-tests.ts"
         },
         {
             "path": "scripts/commands/run-tests.ts",
