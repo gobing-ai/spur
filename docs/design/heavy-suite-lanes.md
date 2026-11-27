@@ -42,12 +42,15 @@ receipt policy.
 1. **Profile.** A profiling mode records per-file wall time, test count, pass/fail/skip, and Board
    build time for every heavy file plus the end-to-end baseline of the unchanged script, written
    to `.spur/run/heavy-profile.json`.
-2. **Run-scoped Board seed.** `run-tests.ts` exports a fresh `SPUR_TEST_RUN_ID` to its children.
-   When it is set, the first production-shaped `buildBoardToTemp()` (under `BUILD_LOCK`) builds a
-   seed into `$TMPDIR/spur-board-seed-<runId>/`; later callers in the same run copy the seed into
-   their own `mkdtemp` dir. The caller still owns its copy and `removeBoardBuild` is unchanged.
-   `testAdapterDir` builds keep building their own. The launcher removes the seed when it exits.
-   Without `SPUR_TEST_RUN_ID` (a direct `bun test`) behaviour is today's: one build per call.
+2. **Run-scoped Board seed.** `run-tests.ts` exports `SPUR_TEST_BOARD_SEED_DIR=<registryDir>/board-seed`
+   to its children; `registryDir` is the per-launcher-run temp dir already removed in the launcher's
+   `finally`, so the seed needs no run id and no cleanup of its own. When the variable is set, the
+   first production-shaped `buildBoardToTemp()` builds the seed under `BUILD_LOCK` (into a staging
+   dir renamed into place, so a partial seed is never visible); every caller then copies the seed
+   into its own `mkdtemp` dir. The caller still owns its copy and `removeBoardBuild` is unchanged.
+   `testAdapterDir` builds keep building their own. Without the variable (a direct `bun test`)
+   behaviour is today's: one build per call. (Refined 2026-11-26 from a `SPUR_TEST_RUN_ID` +
+   `$TMPDIR/spur-board-seed-<runId>` design: same freshness, no extra cleanup path.)
 3. **Heavy lanes.** `config/test-lanes.json` gains a `heavy` section naming every `.heavy.test.`
    file with `lane: concurrent | serial` and the host state it shares. Under
    `--config=bunfig.heavy.toml`, the launcher runs the concurrent lane with bounded `--parallel`

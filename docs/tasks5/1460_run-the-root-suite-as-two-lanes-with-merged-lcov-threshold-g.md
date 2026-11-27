@@ -4,7 +4,7 @@ name: Run the root suite as two lanes with merged-LCOV threshold gate and prove 
 status: todo
 template: feature-impl
 created_at: 2026-11-27T06:56:54.808Z
-updated_at: "2026-11-27T07:00:47.287Z"
+updated_at: "2026-11-27T07:16:29.798Z"
 feature_id: H161
 priority: P1
 tags:
@@ -13,20 +13,29 @@ tags:
   - coverage
 
 dependencies: ["1459"]
+estimate_hours: 8
 ---
 
 ## 1460. Run the root suite as two lanes with merged-LCOV threshold gate and prove the wall-time drop
 
 ### Background
 
-Feature H161 (under H16; design docs/design/laned-root-test-suite.md §3.2-3.4, §4). Uses the manifest from the classifier task. scripts/commands/run-tests.ts runs one bun child; it must run the subprocess lane at the package.json --parallel bound and the in-process lane at availableParallelism, merge LCOV, apply bunfig per-file thresholds on the merged result, and keep task-1203 certification. Covers R1, R3, R4, R5 (after), R6.
+Feature H161 (under H16; design `docs/design/laned-root-test-suite.md` §3.2–3.4, §4). Uses the manifest from task 1459. `scripts/commands/run-tests.ts:287` runs one Bun child; it must run the subprocess lane at the forwarded `--parallel` bound and the in-process lane at `availableParallelism()`, merge LCOV, apply the bunfig per-file thresholds (`bunfig.toml:15`) to the merged result, and keep the task-1203 certification contract (`run-tests.ts:257-296`). Covers R1, R3, R4, R5 (after), R6.
+
+**Refine corrections (2026-11-26)**
+- "union of DA/FN hits" → Bun 1.4.3 LCOV carries only `TN/SF/FNF/FNH/DA/LF/LH` records, no `FN`/`FNDA` (checked against a `.coverage` LCOV: 105 SF, 0 FN lines) → lines merge exactly by summing `DA` per line; functions merge as `FNH = max(laneFNH)` over a shared `FNF`, a sound lower bound (never passes a file a single-child run would fail; may report a false breach when two lanes cover disjoint functions of one file). Plan step 2 measures this.
+- "single call site in package.json" → three scripts forward the root path set: `test` (`package.json:85`, `--parallel=2`), `test:coverage` (`:89`) and `test:full` (`:95`), the last two without `--parallel` → subprocess-lane width = forwarded `--parallel` value, default 2.
+- "honoring coveragePathIgnorePatterns" in the launcher → Bun already omits ignored paths from LCOV (0 `scripts/`, `.tsx` or `tests/` SF records in the sample) → each lane's config copy keeps `coveragePathIgnorePatterns`; the launcher does not re-implement it.
+- Certification reads `<start.coverageDir>/lcov.info` (`packages/app/src/rules/coverage-certification.ts:238`) → the merged report is written exactly there; lane reports live under the launcher's temp `registryDir`.
 
 ### Requirements
 
-- [ ] R1. When forwarded args are the root path set, the launcher spawns two concurrent bun children (subprocess lane from config/test-lanes.json at the --parallel value; in-process lane at availableParallelism, override SPUR_TEST_INPROC_PARALLEL), each under the existing heartbeat/watchdog with its own coverage dir; other invocations behave as today.
-- [ ] R2. Bun in-child coverageThreshold is disabled via the launcher config copy; the launcher merges both LCOV files per SF record and fails nonzero naming file and metric when a file is under the bunfig line/function threshold, honoring coveragePathIgnorePatterns.
-- [ ] R3. --publish-coverage certifies the merged lcov.info only when both lanes exit 0, the merged gate passes, and the tree is unchanged.
-- [ ] R4. After receipt: laned main-suite wall time <=250s, and three consecutive laned runs exit 0 with no timeout-shaped failure; stored as task evidence beside the baseline.
+- [ ] R1. When the forwarded positional args equal the root path set (`./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts`, order-insensitive) and `config/test-lanes.json` lists ≥1 subprocess file, the launcher spawns two concurrent Bun children, each under the existing heartbeat/watchdog with its own coverage dir: subprocess lane = the manifest files at the forwarded `--parallel` (default 2); in-process lane = the root path set with those files added to `pathIgnorePatterns`, at `--parallel=<os.availableParallelism()>` (override `SPUR_TEST_INPROC_PARALLEL`, positive integer, else error). Every other invocation (targeted paths, `--config=bunfig.heavy.toml`, empty manifest) runs today's single child unchanged.
+- [ ] R2. Both lane config copies drop `coverageThreshold`; after both children exit, the launcher merges the lane LCOV files per `SF` record and fails nonzero listing every `file metric actual<required` breach of the bunfig line/function threshold. A missing lane LCOV after a 0 exit is a failure, not an empty report.
+- [ ] R3. `--publish-coverage` certifies the merged `<coverageDir>/lcov.info` only when both lanes exit 0, the merged gate passes and the tree is unchanged (existing `certifyCanonicalRun`, unmodified).
+- [ ] R4. After receipt: laned `bun run test` wall time ≤250 s, and three consecutive laned runs exit 0 with no timeout-shaped failure; per-lane wall times in `.spur/run/test-lanes-timing.json`, the 3-run receipt beside the 1459 baseline, cited in Testing.
+
+Out of scope: manifest generation (1459); heavy-suite lanes (H162 / 1463); changing coverage thresholds or certification semantics; per-file `--timings` scheduling; N-way sharding.
 
 ### Acceptance Criteria
 
@@ -42,16 +51,43 @@ Feature H161 (under H16; design docs/design/laned-root-test-suite.md §3.2-3.4, 
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-11-27T07:16:06.321Z
+
+- Function-coverage merge: `FNH = max` across lanes (closed 2026-11-26; Bun LCOV has no per-function records). A measured false breach escalates through the implement escalation hop rather than weakening the gate.
+- Lane width without `--parallel`: default 2 for the subprocess lane (closed; matches the proven bound).
+- Concurrent output: inherited stdio plus a per-lane summary line (closed; no output multiplexer).
+- Lane failure policy: run both to completion, first nonzero exit wins (closed).
+
 ### Design
 
-Chosen: two concurrent children in the existing launcher, merge+gate in the launcher. Rejected: N-way file sharding (same merge cost, no contention control); raising --parallel only (reintroduces c8d5ca0f2 timeouts — kept only if the baseline receipt beats laning). Invariants: single call site in package.json; exit code is nonzero if any lane or the gate fails; certification contract unchanged. Fallback if the subprocess lane times out under concurrency: run lanes sequentially, in-process first. Key signatures: mergeLcov(a: string, b: string): string; evaluateThresholds(lcov: string, cfg): Breach[].
+**Chosen:** two concurrent children inside the existing launcher; merge + gate in a coverage-gated app module. **Rejected:** N-way sharding (same merge cost, no contention control); raising `--parallel` only (reintroduces c8d5ca0f2 timeouts; kept only if the 1459 baseline at `--parallel=4` beats laning — report that comparison in the receipt).
+
+**Frozen names**
+- `packages/app/src/rules/coverage-lanes.ts`, exported through `@gobing-ai/spur-app`:
+  - `mergeLcov(reports: string[]): string` — per `SF`: `DA` hits summed per line; `LF` = distinct DA lines, `LH` = lines with hits > 0; `FNF` = max across lanes (equal in practice), `FNH = max(laneFNH)`; files present in one lane copied as-is; output sorted by `SF`, each record ends `end_of_record`, `TN:` kept empty. Throws on an incomplete record.
+  - `evaluateCoverageThresholds(lcov: string, threshold: { lines: number; functions: number }): CoverageBreach[]`; `interface CoverageBreach { file: string; metric: 'lines' | 'functions'; actual: number; required: number }`. `LF = 0` or `FNF = 0` → that metric passes (matches Bun's per-file gate).
+- `scripts/commands/run-tests.ts`: `ROOT_PATH_SET` constant; `runSuiteChild` reused per lane unchanged (watchdog applies per lane); lanes started with `Promise.all`; lane dirs `<registryDir>/lane-subprocess`, `<registryDir>/lane-inproc`; merged report written to the existing `coverageDir`.
+- Env `SPUR_TEST_INPROC_PARALLEL` read via `getEnvVar` (`@gobing-ai/spur-config`, already imported at `run-tests.ts:39`).
+- Receipt `.spur/run/test-lanes-timing.json`: `{ lanes: [{ name, files, parallel, wallMs, exitCode }], mergedBreaches, startedAt }`.
+
+**Exit precedence:** first nonzero lane exit code wins; else 1 on breaches; else certification result (as today). On a lane failure the other lane still runs to completion (no early kill), so the full failure set is reported.
+
+**Output:** both children keep `stdio: inherit`; dots interleave, Bun prints each child's failure summary at its end. The launcher prints one `run-tests: lane <name> exit=<n> wall=<mm:ss>` line per lane to stderr.
+
+**Fallback:** if the subprocess lane still times out under concurrency in the 3-run proof, run lanes sequentially (in-process first) behind the same code path. Record the choice in Solution; R4 still applies.
+
+**Anti-patterns:** do not re-implement `coveragePathIgnorePatterns`; do not touch `certifyCanonicalRun`; do not lower thresholds or add ignore patterns to make the merged gate pass; do not parse dots output; do not add `--bail` to one lane.
+
+**Dependencies:** assumes 1459's `readLaneManifest` and `root.subprocess[].path`; leaves the launcher lane loop reusable for 1463 (heavy phases call the same `runSuiteChild`, coverage off, no merge).
 
 ### Plan
 
-1. Write LCOV merge/threshold failure modes and fixture cases first (overlapping SF, FN-only records, ignored paths, empty lane).
-2. Implement merge + gate; compare against a single-process run threshold result.
-3. Wire lanes into run-tests.ts.
-4. Run 3 consecutive full suites; record after receipt.
+1. Write failure modes first in `packages/app/tests/rules/coverage-lanes.test.ts`: overlapping SF with disjoint DA hits, file in one lane only, FNF/FNH max rule, LF=0 / FNF=0, incomplete record throws, breach list names file + metric, empty lane string (R2).
+2. Implement `coverage-lanes.ts` until green. Equivalence check: on the current tree run one single child with coverage and evaluate its LCOV with `evaluateCoverageThresholds`; result must equal Bun's own gate outcome. Then run the two lanes, merge and compare the breach set; any extra (false) function breach is recorded and escalated, not suppressed (R2).
+3. Wire lanes into `run-tests.ts` (`ROOT_PATH_SET`, manifest read, two config copies without `coverageThreshold`, `Promise.all`, merge, gate, existing certification) (R1, R3).
+4. Prove non-lane paths are unchanged: `bun run test-repo-wide` and a targeted `(cd apps/cli && bun test tests/output-envelope.test.ts)` still run one child (R1).
+5. Run `bun run test` three times consecutively (outside the agent sandbox if subprocess tests are refused); write the 3-run receipt and `.spur/run/test-lanes-timing.json` next to `.spur/run/test-lanes-baseline.json` (R4).
+6. `bun run spur-check`.
 
 ### Solution
 
@@ -67,7 +103,10 @@ Chosen: two concurrent children in the existing launcher, merge+gate in the laun
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+- Feature H161; design `docs/design/laned-root-test-suite.md` §3.2–3.4, §4; upstream 1459; downstream 1463 (H162).
+- `scripts/commands/run-tests.ts:182` (`runSuiteChild`), `:257-296` (canonical window), `:284-287` (config copy).
+- `packages/app/src/rules/coverage-certification.ts:178`, `:215`, `:238`.
+- `package.json:85,89,95`; `bunfig.toml:8-35`.
 
 ### History
 
