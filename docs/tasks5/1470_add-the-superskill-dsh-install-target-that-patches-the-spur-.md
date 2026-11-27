@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add the superskill dsh install target that patches the Spur MCP loader entry
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-11-27T07:35:47.781Z
-updated_at: "2026-11-27T16:57:05.297Z"
+updated_at: "2026-11-27T21:39:44.519Z"
 feature_id: B811
 
 estimate_hours: 4
@@ -103,7 +103,26 @@ Out of scope: dsh hooks; other dsh profiles; the dsh skills install (§4 of the 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Scope note: the deliverable lives in the sibling superskill repo (`../superskill`, base `9e0b392`, superskill 0.3.47). No bump or publish ran — that waits for the operator's authorization.
+
+| File | Change |
+| --- | --- |
+| `../superskill/packages/core/src/targets.ts:28` | `INSTALL_TARGETS` gains `'dsh'`, with the ADR-036 rationale beside it: install-only, excluded from `TARGETS`, rulesync, and the default/`all` expansion (R1). |
+| `../superskill/packages/core/src/operations/dsh-mcp-patch.ts:39-58` | `DSH_MCP_LOADER`, `dshPatchPath(home)` and `DshMcpServer`; the path is `~/.dsh/profiles/headless/cordis.patch.yml`, the profile Spur dispatches and probes (R2). |
+| `../superskill/packages/core/src/operations/dsh-mcp-patch.ts:70-105` | `dshServersFromMcpJson`: every `mcpServers` entry becomes one loader declaration (command → stdio, url → streamable-http), and an entry with neither is refused loudly instead of dropped (R2). |
+| `../superskill/packages/core/src/operations/dsh-mcp-patch.ts:107-142` | `loaderEntry` builds `{ name: '@deepseek-ai/dsh-mcp-client', config: { serverName, transport, command, args, env } }`; each `envVars` name becomes an `!!js process.env.<NAME>` scalar, never a value (R2/R5). |
+| `../superskill/packages/core/src/operations/dsh-mcp-patch.ts:144-190` | `planDshMcpPatch`: `parseDocument` (comments/formatting survive), root must be a sequence, ownership keyed by `(name, config.serverName)`, owned items replaced in place, identical items left untouched so a reinstall is byte-stable, and `changed` reported (R3/R4). |
+| `../superskill/packages/core/src/operations/dsh-mcp-patch.ts:192-232` | `createDshMcpPatchAction` (`id: 'dsh-mcp-patch'`): `preview` names the file, the servers and the line delta and writes nothing; `apply` creates the profile directory when absent and writes through the injected `TransactionalWrite` (R2/R4). |
+| `../superskill/apps/cli/src/commands/install.ts:29-33,679-684,1042-1068,1561` | The `dsh` target is partitioned out of the execution targets like `grok-bot`, reads the plugin's staged `mcp.json`, runs preview/apply on the action, echoes its messages, and counts in the install summary. A plugin with no `mcp.json` fails with an actionable message. |
+| `../superskill/packages/core/src/index.ts:25` | Barrel export for the new operations module. |
+| `../superskill/packages/core/tests/operations/dsh-mcp-patch.test.ts:1-234` | Eleven cases across the task's failure modes: absent file + directory created with the verbatim server and four `!!js process.env.*` references; no `env:` block when a server declares none; dry-run writes nothing (and the writer throws if it tries); unparseable YAML refused with the file untouched; a non-array root refused; second install byte-identical and writes nothing; foreign loader and another `serverName` keep content and order; a stale owned item replaced in place; two servers keyed independently. |
+| `../superskill/.spur/rules/boundary/env-var-hygiene.yaml:29-34` | Rule-scope amendment: the module and its test are excluded from `env-var-hygiene` because they EMIT and assert the text `!!js process.env.<NAME>` as the patch artifact — no env read. |
+
+Verified: `bun run --filter @gobing-ai/superskill-core typecheck` and `--filter @gobing-ai/superskill typecheck` clean; `bun run test-pre-check` passes with the amendment; `(cd packages/core && bun test tests/operations/dsh-mcp-patch.test.ts)` → 11 pass, 0 fail.
+
+R6, first clause — proven: a throwaway HOME was patched by the real action, then `probeAgentMcpReadiness` reported `{ agent: 'deepseek', state: 'configured', transport: 'stdio', detail: 'stdio entry \`spur\` in …/cordis.patch.yml' }` — Spur reads the written entry as a well-formed stdio server (not `misconfigured`, not `not-configured`).
+
+R6, second clause — **blocked by a pre-existing checkout defect, not by this diff.** `bun run spur-check` passes `lint`/`typecheck`/`test-pre-check` and fails in `test` with 11–35 failures whose names have nothing to do with this task (`cli > createProgram…`, `hook command module`, Pi-extension timeouts). The concrete cause is reproducible and unrelated: `Cannot find package 'is-plain-obj' from .../@gobing-ai/ts-runtime/node_modules/execa/lib/methods/create.js` — a partial link inside `apps/cli`'s copy of a published `@gobing-ai/ts-runtime`. `bun install --frozen-lockfile`, `bun install --force` at the root and inside `apps/cli`, and removing the nested directory for a relink all left it broken. Recorded as blocked rather than reported green or fixed by wiping a node_modules another session may be using.
 
 ### Testing
 
@@ -111,7 +130,19 @@ Out of scope: dsh hooks; other dsh profiles; the dsh skills install (§4 of the 
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+P1 (blocker): the superskill gate's `test` lane is red in this checkout for a reason outside the diff — `Cannot find package 'is-plain-obj'` inside `apps/cli`'s nested `@gobing-ai/ts-runtime/node_modules/execa`. It survives `bun install --frozen-lockfile`, root `--force`, `apps/cli --force` and a nested-dir relink, and it fails CLI/hook structure tests that never load the dsh code. R6's gate clause is therefore recorded PARTIAL rather than green.
+
+P2 (major): none in the deliverable itself.
+
+P3 (minor): none open.
+
+P4 (advisory): the module and its test are excluded from `env-var-hygiene` because they emit and assert the literal `!!js process.env.<NAME>`. That is the artifact dsh needs, not an env read — but it is a rule-scope amendment, so it belongs in the review record rather than the diff alone.
+
+P4 (advisory): an `mcpServers` entry declared by `url` is published as `transport: streamable-http` with `url` and no command. The task froze the stdio shape; the HTTP branch exists so a URL-declared server is not silently dropped, and it is exercised by the module's own declaration path but not by a dedicated test case.
+
+Residual risk: the patch assumes dsh's headless loader evaluates `!!js` tags in `cordis.patch.yml` (the dsh-mcp-client README's own pattern). Nothing in this repo can prove that end to end — a dsh `--json` run listing an `mcp__spur__*` tool would, and that proof was not run (no dsh binary in this environment's PATH check). The write itself is proven; the loader's evaluation of the tag is a documented assumption from the README, flagged in the task's own refine notes.
+
+Disposition: PARTIAL — R1–R5 met with eleven green cases, R6's probe clause proven (`configured`), R6's gate clause blocked by a pre-existing broken dependency link, which the review cannot fix without re-linking a node_modules another session may be using.
 
 ### References
 
@@ -124,4 +155,5 @@ Out of scope: dsh hooks; other dsh profiles; the dsh skills install (§4 of the 
 ### History
 
 - 2026-11-27T07:54:34.723Z backlog → todo (system)
+- 2026-11-27T21:39:12.055Z todo → wip (system)
 
