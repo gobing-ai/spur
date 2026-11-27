@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B81"
 name: "DeepSeek Harness (dsh) as a wrapped coding agent"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-11-26T19:33:42.587Z"
-updated_at: "2026-11-26T22:05:55.120Z"
+updated_at: "2026-11-27T00:13:45.878Z"
 ---
 
 # B81: DeepSeek Harness (dsh) as a wrapped coding agent
@@ -146,7 +146,7 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
 | --- | ---- | ------ |
 | 1457 | Spur wiring for the dsh executor: config, services, Board row and doctor version check | todo |
 | 1458 | dsh E2E proof: skill discovery and a real task run record | todo |
-| 1456 | dsh agent shim in ts-ai-runner with a pinned NDJSON contract | todo |
+| 1456 | dsh agent shim in ts-ai-runner with a pinned NDJSON contract | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -154,4 +154,5 @@ Feature: DeepSeek Harness (dsh) as a wrapped coding agent
 ## History
 
 - 2026-11-26T21:03:52.262Z moved U → B81 (system)
+- 2026-11-27T00:13:45.878Z backlog → active (system)
 

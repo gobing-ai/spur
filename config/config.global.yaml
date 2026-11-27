@@ -77,7 +77,8 @@ agent:
             stages: [plan, refine, brainstorm]
 
     # Canonical coding-agent ids (ts-ai-runner DISPLAY_ORDER, 0.4.8+): claude,
-    # codex, gemini, pi, omp, opencode, antigravity-cli, openclaw, hermes, grok
+    # codex, gemini, pi, omp, opencode, antigravity-cli, openclaw, hermes, grok,
+    # deepseek (binary `dsh`; the runner's canonical id, not the CLI name).
     # Grok auth: non-empty XAI_API_KEY and/or ~/.grok/auth.json (no CLI
     # auth-status verb).
 
@@ -141,6 +142,14 @@ agent:
           agent: codex
           model: gpt-5.6
           tier: capable-3
+        # dsh (DeepSeek Harness): disabled and tier-less until the E2E proof (task 1458)
+        # passes, so nothing routes to it. Enabling it also needs an
+        # `executionCapabilities` attestation — the dispatch preflight fails closed
+        # on an unattested executor.
+        - name: deepseek
+          agent: deepseek
+          model: deepseek-chat
+          disabled: true
 
 # Workflow layers (ADR-113): the project layer is always `<cwd>/.spur/workflows`
 # and the shared layer is the installed package's own `config/workflows`, so no

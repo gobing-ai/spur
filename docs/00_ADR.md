@@ -3051,7 +3051,7 @@ re-import pressure this entry already records).
 
 ## ADR-153: dsh Is Wrapped as a Coding Agent; Spur Never Hosts dsh (Cordis) Plugins
 
-- **Status:** Proposed 2026-11-26 · **Date:** 2026-11-26 · **Feature:** B81
+- **Status:** Accepted 2026-11-27 (proposed 2026-11-26) · **Date:** 2026-11-26 · **Feature:** B81
 - **Decision:** Spur integrates DeepSeek Harness by dispatching to `dsh --profile headless --json`
   through the `deepseek` shim (binary `dsh`) that `@gobing-ai/ts-ai-runner` already ships, upgraded to
   the 0.2.x headless contract, like the other wrapped agents. dsh plugins reach
@@ -3069,3 +3069,10 @@ re-import pressure this entry already records).
   doctor capability-staleness report. Hooks and MCP installation into dsh
   profiles belong to Superskill (feature B811); Spur history-plane coverage of the importer's existing `deepseek` source is feature E11.
 - **Detail:** [dsh agent integration](design/dsh-agent-integration.md).
+- **Acceptance (task 1458):** the two-leg E2E passed on a real host against dsh 0.2.2-rc.1 — `dsh
+  --profile headless --json` loaded the `sp-brainstorm` skill through the `skill` tool, and a bounded
+  prompt ran through the `deepseek` executor with a Spur run record naming it (receipt:
+  `.spur/run/e2e/dsh-executor-receipt.json`, test
+  `apps/cli/tests/workflow/dsh-executor-e2e.heavy.test.ts`). The shipped `deepseek` executor entry
+  stays **disabled** with no `tier`: the wrap is proven, but joining a default rung is an operator
+  cost/quality opt-in for their own dsh profile, so nothing routes to dsh by default.

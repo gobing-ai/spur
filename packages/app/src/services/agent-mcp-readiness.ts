@@ -58,6 +58,24 @@ const underscoredServers = (document: unknown): unknown => read(document, ['mcp_
 const opencodeEntry = (document: unknown): unknown => read(document, ['mcp', 'spur']);
 /** `mcp.servers.spur` (OpenClaw). */
 const openclawEntry = (document: unknown): unknown => read(document, ['mcp', 'servers', 'spur']);
+/**
+ * The `spur` MCP server in a dsh profile patch (task 1457). `cordis.patch.yml` is a top-level
+ * YAML array of loader entries; an MCP server is one `@deepseek-ai/dsh-mcp-client` entry whose
+ * `config.serverName` names the server (`dsh-mcp-client` README, minimal configuration).
+ */
+const dshPatchEntry = (document: unknown): unknown => {
+    if (!Array.isArray(document)) return undefined;
+    for (const entry of document) {
+        if (entry === null || typeof entry !== 'object') continue;
+        const node = entry as Record<string, unknown>;
+        if (node.name !== '@deepseek-ai/dsh-mcp-client') continue;
+        const config = node.config;
+        if (config === null || typeof config !== 'object') continue;
+        if ((config as Record<string, unknown>).serverName !== 'spur') continue;
+        return config;
+    }
+    return undefined;
+};
 
 /** The agents this probe covers, in the Board's display order. */
 export const READINESS_AGENTS: readonly AgentSpec[] = [
@@ -146,6 +164,19 @@ export const READINESS_AGENTS: readonly AgentSpec[] = [
         paths: ['~/.openclaw/openclaw.json', '~/.openclaw/config.json'],
         entry: openclawEntry,
         actors: ['openclaw'],
+        legacyRevision: false,
+        needsEnvVars: false,
+    },
+    {
+        // dsh configures MCP in its profile patch layer, not in a project file. The patch is read
+        // only: writing it belongs to Superskill's dsh install target (feature B811).
+        id: 'deepseek',
+        label: 'dsh',
+        binary: 'dsh',
+        format: 'yaml',
+        paths: ['~/.dsh/profiles/headless/cordis.patch.yml'],
+        entry: dshPatchEntry,
+        actors: ['deepseek'],
         legacyRevision: false,
         needsEnvVars: false,
     },

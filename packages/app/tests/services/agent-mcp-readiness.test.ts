@@ -199,3 +199,54 @@ describe('1449 — the probe is read-only and never carries a token', () => {
         expect(gemini?.configPath).toBeNull();
     });
 });
+
+describe('dsh MCP readiness (task 1457 R9)', () => {
+    const patch = (serverName: string): string =>
+        [
+            '- id: spur',
+            "  name: '@deepseek-ai/dsh-mcp-client'",
+            '  config:',
+            `    serverName: ${serverName}`,
+            '    transport: streamable-http',
+            `    url: http://localhost:${GATEWAY_PORT}/mcp`,
+            '',
+        ].join('\n');
+
+    test('a spur mcp-client entry in the profile patch reads as configured', async () => {
+        const { cwd, home } = workspace();
+        const path = join(home, '.dsh', 'profiles', 'headless', 'cordis.patch.yml');
+        write(path, patch('spur'));
+
+        const result = await probeAgentMcpReadiness(deps(cwd, home));
+        const dsh = result.agents.find((entry) => entry.agent === 'deepseek');
+        expect(dsh?.state).toBe('configured');
+        expect(dsh?.transport).toBe('http');
+        expect(dsh?.configPath).toBe(path);
+        expect(dsh?.label).toBe('dsh');
+    });
+
+    test('an empty patch array is not-configured, and another server name does not count', async () => {
+        const { cwd, home } = workspace();
+        const path = join(home, '.dsh', 'profiles', 'headless', 'cordis.patch.yml');
+        write(path, '[]\n');
+        expect(
+            (await probeAgentMcpReadiness(deps(cwd, home))).agents.find((entry) => entry.agent === 'deepseek')?.state,
+        ).toBe('not-configured');
+
+        write(path, patch('github'));
+        const other = (await probeAgentMcpReadiness(deps(cwd, home))).agents.find(
+            (entry) => entry.agent === 'deepseek',
+        );
+        expect(other?.state).toBe('not-configured');
+        expect(other?.detail).toContain('no `spur` entry');
+    });
+
+    test('a missing dsh binary reads as not-installed even with a configured patch', async () => {
+        const { cwd, home } = workspace();
+        write(join(home, '.dsh', 'profiles', 'headless', 'cordis.patch.yml'), patch('spur'));
+        const result = await probeAgentMcpReadiness(
+            deps(cwd, home, { resolveBinary: async (binary) => (binary === 'dsh' ? null : `/${binary}`) }),
+        );
+        expect(result.agents.find((entry) => entry.agent === 'deepseek')?.state).toBe('not-installed');
+    });
+});

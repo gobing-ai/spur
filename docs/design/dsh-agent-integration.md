@@ -1,7 +1,7 @@
 ---
 kind: design
 title: "dsh (DeepSeek Harness) as a wrapped coding agent"
-status: proposed
+status: accepted
 created_at: 2026-11-26
 updated_at: 2026-11-26
 related: [B81, B811, E11]
@@ -23,9 +23,9 @@ profile, including its plugins, applies to every Spur-dispatched run because dsh
 
 ## 2. Runner shim (`@gobing-ai/ts-ai-runner`, `src/agents/shims.ts`)
 
-ts-ai-runner 0.8.4 already ships `dshShim` under canonical id `deepseek` (`shims.ts:424`), and it is already
-listed in `AGENT_SHIMS`, `TIER1_PRIORITY` and `DISPLAY_ORDER`. It targets dsh 0.1.5-rc.1, so task 1456 upgrades it
-and its capability row in the released facade. Spur adds no local workaround (AGENTS.md, reusable engines).
+ts-ai-runner 0.8.5 ships `dshShim` under canonical id `deepseek` (`shims.ts:426`), upgraded from the stale
+0.1.5-rc.1 argv to the 0.2.x headless contract by task 1456; the capability row is verified against
+`0.2.2-rc.1`. Spur adds no local workaround (AGENTS.md, reusable engines).
 Shims are pure argv builders (`ShimCommand = {command, args}`), so the runner parses no dsh output.
 
 | Concern | Contract |
@@ -47,10 +47,10 @@ Each existing per-agent table gains a `deepseek` row (the runner's canonical id)
 | Surface | Change |
 | --- | --- |
 | `config/config.global.yaml`, `config/config.example.yaml` | disabled `deepseek` executor entry, not in a default tier until R11 passes |
-| `packages/app/src/services/process-identity.ts` | `dsh` executable name only if `ps comm` shows `dsh` rather than `node` |
+| `packages/app/src/services/process-identity.ts` | `dsh` executable name only if `ps comm` shows `dsh` rather than `node` — observed 2026-11-26 on dsh 0.2.2-rc.1: `comm=node`, so no entry (it would claim every Node agent's process) |
 | `packages/app/src/services/run-session-observer.ts` | `deepseek: 'deepseek'`; the importer source already covers `~/.dsh/sessions` |
 | `packages/app/src/services/failure-classification.ts` | a provider pattern only for an observed dsh stderr signature |
-| `packages/app/src/services/agent-mcp-readiness.ts` | dsh MCP via profile patch (`mcp-manager` `config.servers`), verdict only; writing it is B811 |
+| `packages/app/src/services/agent-mcp-readiness.ts` | dsh MCP via the profile patch `cordis.patch.yml`: one `@deepseek-ai/dsh-mcp-client` loader entry per server, matched on `config.serverName: spur` (`dsh-mcp-client` README, minimal configuration; verified against 0.2.2-rc.1 — the earlier `mcp-manager config.servers` shape was wrong), verdict only; writing it is B811 |
 | `apps/web/src/modules/integrations/helpers.ts` | `deepseek` in `MCP_CLIENT_AGENTS`: binary, YAML profile-patch config format, readiness |
 
 ## 4. Skills

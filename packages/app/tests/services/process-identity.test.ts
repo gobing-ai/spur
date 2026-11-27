@@ -106,3 +106,15 @@ describe('findAgentAncestor (1279 R2)', () => {
         expect(reads).toBe(AGENT_ANCESTOR_MAX_HOPS);
     });
 });
+
+describe('agent executable names (task 1457 R8)', () => {
+    test('dsh is absent: its launcher reports comm=node, which would match every Node agent', async () => {
+        // Observed 2026-11-26 against dsh 0.2.2-rc.1: a live
+        // `dsh --profile headless ...` process reads `comm=node`
+        // (`node /Users/<user>/.bun/bin/dsh ...`), so an entry here would claim other
+        // Node-based agents' processes. Re-check before adding one.
+        const { AGENT_EXECUTABLE_NAMES } = await import('../../src/index');
+        expect(AGENT_EXECUTABLE_NAMES).not.toContain('dsh');
+        expect(AGENT_EXECUTABLE_NAMES).not.toContain('deepseek');
+    });
+});

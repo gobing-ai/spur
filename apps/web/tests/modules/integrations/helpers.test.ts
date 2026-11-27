@@ -537,3 +537,39 @@ describe('1454 — filter codec (R2)', () => {
         expect(merged[1]?.status).toBe('delivered');
     });
 });
+
+describe('dsh as an MCP client (task 1457 R9)', () => {
+    const live = {
+        mcp: {
+            enabled: true,
+            url: 'http://localhost:3070/spur-new/mcp',
+            path: '/mcp',
+            auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true },
+        },
+        gateway: {
+            served: true as const,
+            namespace: '/spur-new',
+            rootMcpUrl: 'http://localhost:3070/mcp',
+            counters: null,
+            mcp: { enabled: true, auth: { envName: 'SPUR_MCP_TOKEN', tokenPresent: true } },
+        },
+    } as unknown as IntegrationsStatus;
+
+    test('renders a dsh profile-patch entry, not a `mcp_servers` block', () => {
+        const http = renderClientConfig(live, 'deepseek', 'http');
+        expect(http.format).toBe('yaml');
+        expect(http.label).toBe('dsh');
+        expect(http.configPath).toContain('cordis.patch.yml');
+        expect(http.snippet).toContain("  name: '@deepseek-ai/dsh-mcp-client'");
+        expect(http.snippet).toContain('    serverName: spur');
+        expect(http.snippet).toContain('    transport: streamable-http');
+        expect(http.snippet).toContain('http://localhost:3070/spur-new/mcp');
+        // The omp-shaped YAML block would be silently ignored by dsh.
+        expect(http.snippet).not.toContain('mcp_servers:');
+
+        const stdio = renderClientConfig(live, 'deepseek', 'gateway-stdio').snippet;
+        expect(stdio).toContain('    transport: stdio');
+        expect(stdio).toContain('    command: spur');
+        expect(stdio).toContain('      - --gateway');
+    });
+});

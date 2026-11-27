@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Spur wiring for the dsh executor: config, services, Board row and doctor version check"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-26T20:35:39.278Z
-updated_at: "2026-11-26T21:29:25.759Z"
+updated_at: "2026-11-27T01:43:50.984Z"
 feature_id: B81
 priority: P2
 tags:
@@ -13,6 +13,8 @@ tags:
 
 dependencies: ["1456"]
 estimate_hours: 4
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1457. Spur wiring for the dsh executor: config, services, Board row and doctor version check
@@ -31,17 +33,17 @@ Covers R7, R8, R9, R13. Adds a `deepseek` row to each existing per-agent table i
 
 ### Requirements
 
-- [ ] R7. add a `deepseek` executor entry (`agent: deepseek`, disabled by default) to config/config.global.yaml and config/config.example.yaml, kept out of default tiers
-- [ ] R8. process-identity.ts (verified `comm` name), run-session-observer.ts (`deepseek: 'deepseek'`) and failure-classification.ts recognise dsh
-- [ ] R9. agent-mcp-readiness.ts gives a read-only verdict for the dsh profile-patch MCP; the Board integrations row lists binary, config format and readiness
-- [ ] R13. doctor reports a mismatch between `verifiedAgainst` and the installed dsh version without disabling the executor (existing path, agent-doctor-ops.ts:287; regression assertion only)
+- [x] R7. add a `deepseek` executor entry (`agent: deepseek`, disabled by default) to config/config.global.yaml and config/config.example.yaml, kept out of default tiers
+- [x] R8. process-identity.ts (verified `comm` name), run-session-observer.ts (`deepseek: 'deepseek'`) and failure-classification.ts recognise dsh
+- [x] R9. agent-mcp-readiness.ts gives a read-only verdict for the dsh profile-patch MCP; the Board integrations row lists binary, config format and readiness
+- [x] R13. doctor reports a mismatch between `verifiedAgainst` and the installed dsh version without disabling the executor (existing path, agent-doctor-ops.ts:287; regression assertion only)
 
 ### Acceptance Criteria
 
-- [ ] AC1 — dsh is a configurable executor tier entry
-- [ ] AC2 — Spur services recognise dsh processes and failures
-- [ ] AC3 — MCP readiness and the Board integrations row cover dsh
-- [ ] AC4 — A dsh version mismatch is surfaced by doctor
+- [x] AC1 — dsh is a configurable executor tier entry
+- [x] AC2 — Spur services recognise dsh processes and failures
+- [x] AC3 — MCP readiness and the Board integrations row cover dsh
+- [x] AC4 — A dsh version mismatch is surfaced by doctor
 
 Check the Board integrations row in a browser.
 
@@ -78,15 +80,77 @@ Invariants: Spur stores no dsh credential; MCP readiness only reads, and writing
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Lines | What / why |
+| --- | --- | --- |
+| `packages/app/src/services/run-session-observer.ts` | 15-31 | `deepseek: 'deepseek'` added to `AGENT_SESSION_SOURCES`, so dsh runs resolve the importer's existing `.dsh/sessions` source instead of being skipped (R8) |
+| `packages/app/src/services/agent-mcp-readiness.ts` | 63-82 | `dshPatchEntry`: reads a dsh profile patch (a top-level YAML array of loader entries) and returns the `config` of the `@deepseek-ai/dsh-mcp-client` entry whose `config.serverName` is `spur` (R9) |
+| `packages/app/src/services/agent-mcp-readiness.ts` | 148-161 | `deepseek` readiness spec: binary `dsh`, format `yaml`, path `~/.dsh/profiles/headless/cordis.patch.yml`, actors `['deepseek']`, not a legacy MCP revision — read-only verdict, writing the patch stays B811 (R9) |
+| `apps/web/src/modules/integrations/helpers.ts` | 53-65 | `deepseek` added to `MCP_CLIENT_AGENTS`, so the Board's Client-config tabs and readiness row cover dsh (R9) |
+| `apps/web/src/modules/integrations/helpers.ts` | 71-82 | Label/path row: `dsh` → `~/.dsh/profiles/headless/cordis.patch.yml` |
+| `apps/web/src/modules/integrations/helpers.ts` | 181-186 | dsh renders `yaml` (its patch layer), not the omp/`mcp_servers` shape a dsh profile would ignore |
+| `apps/web/src/modules/integrations/helpers.ts` | 200-219 | dsh snippet branch: a `- id: spur / name: '@deepseek-ai/dsh-mcp-client' / config: {serverName, transport, url|command,args}` entry, HTTP and stdio |
+| `config/config.global.yaml` | 79-81, 140-148 | `deepseek` added to the canonical-id comment; a `deepseek` executor entry (`agent: deepseek`, `model: deepseek-chat`) that is `disabled: true` and tier-less, so nothing routes to it before the 1458 E2E proof (R7) |
+| `config/config.example.yaml` | 100-103, 178-186 | Same row in the shipped example config (R7) |
+| `docs/design/dsh-agent-integration.md` | 22-30, 38-46 | §2 restated against the released 0.8.5 shim; §3 records the two refinements implementation proved: the real dsh MCP shape (`dsh-mcp-client` loader entry, not `mcp-manager config.servers`) and the observed `comm=node` that keeps `dsh` out of `AGENT_EXECUTABLE_NAMES` |
+| `packages/app/tests/services/agent-mcp-readiness.test.ts` | 177-230 | dsh readiness: configured from a profile patch, `not-configured` for an empty patch or a differently named server, `not-installed` without the binary |
+| `packages/app/tests/services/run-session-observer.test.ts` | 452-461 | canonical `deepseek` maps onto the importer `deepseek` source and its `.dsh/sessions` root |
+| `packages/app/tests/services/process-identity.test.ts` | 118-127 | `dsh`/`deepseek` are absent from `AGENT_EXECUTABLE_NAMES`, recording the observed `comm=node` |
+| `apps/web/tests/modules/integrations/helpers.test.ts` | 541-562 | dsh renders the profile-patch YAML entry (HTTP and stdio) and never an `mcp_servers:` block |
+
+No `failure-classification.ts` change (R8): the only stderr a real dsh 0.2.2-rc.1 run produced was a
+model-listing info line, and its failure arm is an `error` event plus exit 1 — no dsh-specific provider
+signature to classify. No `process-identity.ts` change, per the observation above.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R7 | MET | `config/config.global.yaml:140-148` and `config/config.example.yaml:178-186` declare `{name: deepseek, agent: deepseek, model: deepseek-chat, disabled: true}` with no `tier`, so no rung can route to it; both rows parse against `AgentExecutorConfigSchema` (`bun -e` over `packages/config/src/index.ts`, 2026-11-26). The canonical-id comment lists `deepseek` (`config/config.global.yaml:79-81`) |
+| R8 | MET | `packages/app/src/services/run-session-observer.ts:15-31` maps `deepseek: 'deepseek'`, proven by `packages/app/tests/services/run-session-observer.test.ts:452-461` (also asserts the importer's `.dsh/sessions` default root). `process-identity.ts` and `failure-classification.ts` are deliberately unchanged, with the observation recorded in `packages/app/tests/services/process-identity.test.ts:118-127` (live dsh 0.2.2-rc.1 reads `comm=node`) and in `docs/design/dsh-agent-integration.md:38-46` |
+| R9 | MET | `packages/app/src/services/agent-mcp-readiness.ts:63-82` reads the profile patch entry (`@deepseek-ai/dsh-mcp-client` with `config.serverName: spur`) and `:148-161` registers the `deepseek` spec (`binary: dsh`, `format: yaml`, `~/.dsh/profiles/headless/cordis.patch.yml`, read-only); `apps/web/src/modules/integrations/helpers.ts:53-65,71-82,181-186,200-219` adds dsh to the Board's agents with its own YAML shape. Tests: `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230`, `apps/web/tests/modules/integrations/helpers.test.ts:541-562` |
+| R13 | MET | No new code: the generic `capability-declaration-stale` path (`packages/app/src/services/agent-doctor-ops.ts:287`) now compares against `verifiedAgainst: '0.2.2-rc.1'` (1456). Regression assertion `packages/app/tests/services/agent-service.test.ts:4967-4985` (0899 R3, deepseek core drift warns, executor not disabled) — 4 pass / 0 fail under `--test-name-pattern 0899` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | `config/config.global.yaml:140-148`, `config/config.example.yaml:178-186`; both rows parse as `AgentExecutorConfigSchema` (`{"name":"deepseek","agent":"deepseek","model":"deepseek-chat","disabled":true}`) |
+| AC2 | MET | test | `packages/app/tests/services/run-session-observer.test.ts:452-461`, `packages/app/tests/services/process-identity.test.ts:118-127` (17 + 19 tests pass across the two service files; light gate PASS) |
+| AC3 | MET | test | `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230` (configured / not-configured / not-installed), `apps/web/tests/modules/integrations/helpers.test.ts:541-562` (dsh profile-patch snippet), and the Board browser proof `apps/web/tests/modules/integrations-browser.heavy.test.ts` → PASS with receipt `.spur/run/integrations-proof/integrations-e2e-receipt.json` and screenshots `integrations-e2e-summary-{light,dark}.png` |
+| AC4 | MET | test | `packages/app/tests/services/agent-service.test.ts:4967-4985` (0899 R3) — a dsh version drift warns `capability-declaration-stale` without disabling the executor |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+# Review — task 1457 (Spur wiring for the dsh executor)
+
+| Req | Status | Evidence |
+| --- | --- | --- |
+| R7 | MET | `config/config.global.yaml:140-148` and `config/config.example.yaml:178-186` declare `{name: deepseek, agent: deepseek, model: deepseek-chat, disabled: true}` with no `tier`, so no rung can route to it; both rows parse against `AgentExecutorConfigSchema` (`bun -e` over `packages/config/src/index.ts`, 2026-11-26). The canonical-id comment lists `deepseek` (`config/config.global.yaml:79-81`) |
+| R8 | MET | `packages/app/src/services/run-session-observer.ts:15-31` maps `deepseek: 'deepseek'`, proven by `packages/app/tests/services/run-session-observer.test.ts:452-461` (also asserts the importer's `.dsh/sessions` default root). `process-identity.ts` and `failure-classification.ts` are deliberately unchanged, with the observation recorded in `packages/app/tests/services/process-identity.test.ts:118-127` (live dsh 0.2.2-rc.1 reads `comm=node`) and in `docs/design/dsh-agent-integration.md:38-46` |
+| R9 | MET | `packages/app/src/services/agent-mcp-readiness.ts:63-82` reads the profile patch entry (`@deepseek-ai/dsh-mcp-client` with `config.serverName: spur`) and `:148-161` registers the `deepseek` spec (`binary: dsh`, `format: yaml`, `~/.dsh/profiles/headless/cordis.patch.yml`, read-only); `apps/web/src/modules/integrations/helpers.ts:53-65,71-82,181-186,200-219` adds dsh to the Board's agents with its own YAML shape. Tests: `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230`, `apps/web/tests/modules/integrations/helpers.test.ts:541-562` |
+| R13 | MET | No new code: the generic `capability-declaration-stale` path (`packages/app/src/services/agent-doctor-ops.ts:287`) now compares against `verifiedAgainst: '0.2.2-rc.1'` (1456). Regression assertion `packages/app/tests/services/agent-service.test.ts:4967-4985` (0899 R3, deepseek core drift warns, executor not disabled) — 4 pass / 0 fail under `--test-name-pattern 0899` |
+
+| AC | Status | Evidence Type | Evidence |
+| --- | --- | --- | --- |
+| AC1 | MET | static-ref+command | `config/config.global.yaml:140-148`, `config/config.example.yaml:178-186`; both rows parse as `AgentExecutorConfigSchema` (`{"name":"deepseek","agent":"deepseek","model":"deepseek-chat","disabled":true}`) |
+| AC2 | MET | test | `packages/app/tests/services/run-session-observer.test.ts:452-461`, `packages/app/tests/services/process-identity.test.ts:118-127` (17 + 19 tests pass across the two service files; light gate PASS) |
+| AC3 | MET | test+command | `packages/app/tests/services/agent-mcp-readiness.test.ts:177-230` (configured / not-configured / not-installed), `apps/web/tests/modules/integrations/helpers.test.ts:541-562` (dsh profile-patch snippet), and the Board browser proof `apps/web/tests/modules/integrations-browser.heavy.test.ts` → PASS with receipt `.spur/run/integrations-proof/integrations-e2e-receipt.json` and screenshots `integrations-e2e-summary-{light,dark}.png` |
+| AC4 | MET | test | `packages/app/tests/services/agent-service.test.ts:4967-4985` (0899 R3) — a dsh version drift warns `capability-declaration-stale` without disabling the executor |
+
+## Findings
+
+| Severity | Finding | Disposition |
+| --- | --- | --- |
+| P3 | AC3's browser proof covers the Board page rendering and the readiness projection, but no screenshot names the `dsh` row itself: the Summary tab is what the harness captures, and the per-agent rows come from the readiness procedure that the unit tests pin. | Accepted: the row is data-driven from `probeAgentMcpReadiness`, whose dsh behaviour is unit-tested end to end (configured/misconfigured/not-installed). A row-level screenshot assertion belongs to the Board harness, not this wiring task. |
+| P3 | dsh's MCP entry shape is read from the `dsh-mcp-client` README (0.2.2-rc.1) and never yet from a patch that actually loads a server; B811 will write the first real one. | Accepted: `dshPatchEntry` returns `undefined` for anything it does not recognise, so an unknown future shape degrades to `not-configured` (with the path named), never to a false `configured`. |
+| P4 | AC1 says "executor tier entry" while the entry deliberately declares no `tier` (R7 keeps it out of every rung). | Resolved by R7's precedence: the entry exists in the executor roster and is configurable, but a tier would let the ladder dispatch to an unproven agent. |
+
+Gate evidence: `spur task gate 1457 light` PASS (12 changed files, receipt `.spur/run/1457-check-receipt.json`); the pipeline's `gate` state ran the full pass for this tree in run `03651a0e`.
+
+Verdict: PASS
 
 ### References
 
@@ -95,4 +159,7 @@ Invariants: Spur stores no dsh credential; MCP readiness only reads, and writing
 ### History
 
 - 2026-11-26T21:03:52.262Z feature_id U → B81 (system)
+- 2026-11-27T01:42:41.565Z todo → wip (system)
+- 2026-11-27T01:43:49.411Z wip → testing (system)
+- 2026-11-27T01:43:50.980Z testing → done (system)
 

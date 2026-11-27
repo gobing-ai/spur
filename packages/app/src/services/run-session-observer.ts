@@ -22,6 +22,9 @@ export const AGENT_SESSION_SOURCES: Partial<Record<AgentName, LlmJsonlSource>> =
     opencode: 'opencode',
     openclaw: 'openclaw',
     'antigravity-cli': 'agy',
+    // dsh stores its transcripts under `$DSH_HOME/sessions`; the importer's `deepseek`
+    // source owns the `.dsh/sessions` root (task 1457 R8).
+    deepseek: 'deepseek',
 };
 
 /** Shared per-process overlap state: concurrent same-root runs must not both claim a session. */

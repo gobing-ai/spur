@@ -447,3 +447,13 @@ describe('RunSessionObserver (feature E6 / task 0557)', () => {
         }
     });
 });
+
+describe('dsh session observation (task 1457 R8)', () => {
+    test('the canonical deepseek agent maps onto the importer deepseek source', async () => {
+        const { AGENT_SESSION_SOURCES } = await import('../../src/index');
+        expect(AGENT_SESSION_SOURCES.deepseek).toBe('deepseek');
+        // The root itself stays the importer's authority; the observer only names the source.
+        const { SOURCE_DEFINITIONS } = await import('@gobing-ai/ts-llm-jsonl-importer');
+        expect(SOURCE_DEFINITIONS.deepseek?.defaultRoots).toContain('.dsh/sessions');
+    });
+});

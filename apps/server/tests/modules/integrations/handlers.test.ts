@@ -668,6 +668,7 @@ describe('1449 — per-agent MCP readiness (R4)', () => {
                 'opencode',
                 'grok',
                 'openclaw',
+                'deepseek',
             ]);
             const states = ['active', 'configured', 'misconfigured', 'not-configured', 'not-installed'];
             for (const entry of body.agents) {

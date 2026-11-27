@@ -59,6 +59,7 @@ export const MCP_CLIENT_AGENTS = [
     'opencode',
     'grok',
     'openclaw',
+    'deepseek',
     'generic',
 ] as const;
 /** One agent with a verified native MCP config format (1449 R3). */
@@ -77,6 +78,7 @@ const CLIENT_AGENT_LABELS: Record<McpClientAgent, { label: string; path: string 
     opencode: { label: 'OpenCode', path: 'opencode.json' },
     grok: { label: 'Grok CLI', path: '.grok/config.toml' },
     openclaw: { label: 'OpenClaw', path: '~/.openclaw/openclaw.json' },
+    deepseek: { label: 'dsh', path: '~/.dsh/profiles/headless/cordis.patch.yml' },
     generic: { label: 'Generic HTTP', path: 'any MCP 2026-07-28 client' },
 };
 
@@ -180,7 +182,7 @@ export function renderClientConfig(
     const isHttp = transport === 'http';
     const legacy = LEGACY_REVISION_AGENTS.includes(agent);
     const format: McpClientConfigView['format'] =
-        agent === 'codex' || agent === 'grok' ? 'toml' : agent === 'omp' ? 'yaml' : 'json';
+        agent === 'codex' || agent === 'grok' ? 'toml' : agent === 'omp' || agent === 'deepseek' ? 'yaml' : 'json';
     const args = command.slice(1);
     const jsonArgs = `[${args.map((part) => JSON.stringify(part)).join(', ')}]`;
     const snippet = ((): string => {
@@ -195,6 +197,24 @@ export function renderClientConfig(
                 lines.push(`args = [${args.map((part) => tomlString(part)).join(', ')}]`);
                 if (agent === 'codex')
                     lines.push(`env_vars = [${codexEnvVars(status, transport).map(tomlString).join(', ')}]`);
+            }
+            return lines.join('\n');
+        }
+        if (format === 'yaml' && agent === 'deepseek') {
+            // A dsh profile patch is a top-level array of loader entries; each MCP server is one
+            // `@deepseek-ai/dsh-mcp-client` entry whose `config.serverName` names it.
+            const lines = ['- id: spur', "  name: '@deepseek-ai/dsh-mcp-client'", '  config:', '    serverName: spur'];
+            if (isHttp) {
+                lines.push('    transport: streamable-http', `    url: ${url}`);
+                if (header !== null)
+                    lines.push('    headers:', `      Authorization: ${tomlString(header.Authorization)}`);
+            } else {
+                lines.push(
+                    '    transport: stdio',
+                    `    command: ${command[0] ?? 'spur'}`,
+                    '    args:',
+                    ...args.map((part) => `      - ${part}`),
+                );
             }
             return lines.join('\n');
         }
