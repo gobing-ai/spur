@@ -31,12 +31,24 @@
  * artifact: rerun `bun run test:full` (see packages/app/src/rules/coverage-certification.ts). Each child writes
  * isolated LCOV; only a canonical publisher can replace the shared artifact. Certifying adds
  * no second suite execution — the digests come from the run this process already drove.
+ *
+ * Heavy lanes (task 1463): the exact `test:heavy` shape (`--config=bunfig.heavy.toml test … .heavy.test.`)
+ * runs as two sequential children — the manifest's concurrent files at `--parallel=min(4, cores)`
+ * (`SPUR_TEST_HEAVY_PARALLEL` overrides), then its serial files at `--parallel=1` — sharing one
+ * registry and so one Board seed. `config/test-lanes.json` `heavy` must match the tree first.
  */
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism, loadavg, tmpdir } from 'node:os';
-import { delimiter, dirname, join, resolve, sep } from 'node:path';
-import { certifyCanonicalRun, startCanonicalRun } from '@gobing-ai/spur-app';
+import { basename, delimiter, dirname, join, resolve, sep } from 'node:path';
+import {
+    certifyCanonicalRun,
+    diffHeavyLanes,
+    type HeavyLaneEntry,
+    readLaneManifest,
+    startCanonicalRun,
+} from '@gobing-ai/spur-app';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
+import { heavyFiles, LANE_MANIFEST_PATH } from './test-lanes';
 import { windowsTestSuiteTermination } from './test-suite-termination';
 
 // Internal launcher flag (task 1203): consumed BEFORE forwarding; never reaches Bun.
@@ -258,6 +270,77 @@ async function runSuiteChild(argv: string[]): Promise<number> {
     }
 }
 
+/** Heavy-gate shape the launcher lanes (task 1463 R1): this config plus the bare heavy filter. */
+const HEAVY_CONFIG_BASENAME = 'bunfig.heavy.toml';
+const HEAVY_FILTER = '.heavy.test.';
+
+/** One sequential heavy phase: its files run as explicit paths under a fixed worker count. */
+interface HeavyPhase {
+    name: 'concurrent' | 'serial';
+    parallel: number;
+    files: string[];
+}
+
+/**
+ * Splits the heavy gate into a concurrent phase and a serial phase, or returns `undefined` for any
+ * other run. Laning keys on the exact `test:heavy` positionals (`test` + the filter): a separated flag
+ * value (`--timeout 20000`) reads as a positional, so such a run stays one unlaned child. Every
+ * refusal happens here, before a child is spawned — a manifest that names a missing file or misses a
+ * present one would otherwise let the gate pass while a proof never ran.
+ */
+function planHeavyPhases(configPath: string, suiteArgs: string[]): HeavyPhase[] | undefined {
+    const positionals = suiteArgs.filter((arg) => !arg.startsWith('-'));
+    if (basename(configPath) !== HEAVY_CONFIG_BASENAME || positionals.join(' ') !== `test ${HEAVY_FILTER}`) {
+        return undefined;
+    }
+    const rawParallel = getEnvVar('SPUR_TEST_HEAVY_PARALLEL') ?? '';
+    if (rawParallel !== '' && !/^[1-9]\d*$/.test(rawParallel)) {
+        throw new Error(`run-tests: SPUR_TEST_HEAVY_PARALLEL must be a positive integer, got '${rawParallel}'`);
+    }
+    const parallel = rawParallel === '' ? Math.min(4, cores) : Number(rawParallel);
+    const manifestPath = resolve(LANE_MANIFEST_PATH);
+    if (!existsSync(manifestPath)) throw new Error(`run-tests: heavy lane manifest not found: ${manifestPath}`);
+    const manifest = readLaneManifest(readFileSync(manifestPath, 'utf8'));
+    const drift = diffHeavyLanes(heavyFiles(process.cwd()), manifest);
+    if (drift.length > 0) {
+        const rows = drift.map((row) => `  ${row.kind} ${row.path} — ${row.detail}`).join('\n');
+        throw new Error(`run-tests: ${LANE_MANIFEST_PATH} \`heavy\` disagrees with the tree:\n${rows}`);
+    }
+    const heavy = Array.isArray(manifest.heavy) ? (manifest.heavy as HeavyLaneEntry[]) : [];
+    const lane = (name: HeavyPhase['name']) => heavy.filter((row) => row.lane === name).map((row) => `./${row.path}`);
+    return [
+        { name: 'concurrent', parallel, files: lane('concurrent') },
+        { name: 'serial', parallel: 1, files: lane('serial') },
+    ];
+}
+
+/**
+ * Runs the phases in order under one `registryDir` (so one Board seed). The serial phase runs even
+ * when the concurrent phase fails — a later proof's result is still evidence — and the exit code is
+ * the first nonzero phase code. An empty phase spawns nothing.
+ */
+async function runHeavyPhases(isolatedConfig: string, suiteArgs: string[], phases: HeavyPhase[]): Promise<number> {
+    const flags = suiteArgs.filter((arg) => arg.startsWith('-'));
+    let firstFailure = 0;
+    for (const phase of phases) {
+        if (phase.files.length === 0) continue;
+        const startedAt = Date.now();
+        const code = await runSuiteChild([
+            'bun',
+            `--config=${isolatedConfig}`,
+            'test',
+            ...flags,
+            `--parallel=${phase.parallel}`,
+            ...phase.files,
+        ]);
+        process.stderr.write(
+            `run-tests: phase ${phase.name} files=${phase.files.length} exit=${code} wall=${clock(Date.now() - startedAt)}\n`,
+        );
+        if (firstFailure === 0) firstFailure = code;
+    }
+    return firstFailure;
+}
+
 // Canonical coverage window (task 1203 R1): invalidate prior certification and capture
 // the tested-tree fingerprint BEFORE launching, so the window is closed while the suite
 // runs and any mid-run source change is caught at publish time.
@@ -279,6 +362,7 @@ try {
         else if (!arg.startsWith('--coverage-dir=')) suiteArgs.push(arg);
     }
     if (explicitConfig && !existsSync(configPath)) throw new Error(`run-tests: config file not found: ${configPath}`);
+    const heavyPhases = planHeavyPhases(configPath, suiteArgs);
     const config = (existsSync(configPath) ? Bun.TOML.parse(readFileSync(configPath, 'utf8')) : {}) as TestConfig;
     config.test ??= {};
     config.test.coverageDir = coverageDir;
@@ -288,7 +372,10 @@ try {
     // Bun's configured coverageDir overrides its CLI flag; copy the config without changing its gates.
     const isolatedConfig = join(registryDir, 'bunfig.toml');
     writeFileSync(isolatedConfig, Bun.TOML.stringify(config));
-    exitCode = await runSuiteChild(['bun', `--config=${isolatedConfig}`, ...suiteArgs]);
+    exitCode =
+        heavyPhases === undefined
+            ? await runSuiteChild(['bun', `--config=${isolatedConfig}`, ...suiteArgs])
+            : await runHeavyPhases(isolatedConfig, suiteArgs, heavyPhases);
 
     if (canonicalStart !== undefined && exitCode === 0) {
         const certified = await certifyCanonicalRun(process.cwd(), canonicalStart);

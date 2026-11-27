@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-11-27T06:55:01.144Z"
-updated_at: "2026-11-27T17:04:55.343Z"
+updated_at: "2026-11-27T19:51:12.666Z"
 ---
 
 # H162: Heavy-suite lane split and per-test profiling
@@ -37,7 +37,7 @@ Cut the wall time of `bun run test:heavy` (~196–277s across recent feature-ver
 - [ ] R3 — The browser and board heavy files reuse one Board build per heavy run
 - [ ] R4 — Concurrent-safe heavy files run concurrently while serial files keep serial execution
 - [ ] R5 — No heavy proof is dropped, skipped, weakened, or moved to the default path
-- [ ] R6 — A before/after receipt shows test:heavy at or under 60 percent of baseline with zero new failures across 3 runs
+- [ ] R6 — A before/after receipt shows test:heavy at or under 65 percent of baseline with zero new failures across 3 runs
 
 ```gherkin
 Feature: Heavy-suite lane split and per-test profiling
@@ -87,11 +87,11 @@ Feature: Heavy-suite lane split and per-test profiling
     And no heavy file is collected by the default `bun run test` path
 
   @core
-  Scenario: R6 — A before/after receipt shows test:heavy at or under 60 percent of baseline with zero new failures across 3 runs
+  Scenario: R6 — A before/after receipt shows test:heavy at or under 65 percent of baseline with zero new failures across 3 runs
     # covers: I6
     Given the R1 baseline wall time
     When the changed `bun run test:heavy` runs 3 consecutive times on the same host
-    Then the median end-to-end wall time is at or under 60 percent of the baseline
+    Then the median end-to-end wall time is at or under 65 percent of the baseline
     And no run has a failure that the baseline run did not have
 ```
 

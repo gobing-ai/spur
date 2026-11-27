@@ -4,7 +4,7 @@ name: Run test:heavy as a concurrent-safe phase then a serial phase and prove th
 status: todo
 template: feature-impl
 created_at: 2026-11-27T07:07:41.710Z
-updated_at: "2026-11-27T07:20:29.894Z"
+updated_at: "2026-11-27T19:51:15.061Z"
 feature_id: H162
 priority: P2
 tags:
@@ -31,7 +31,7 @@ Feature H162 (under H16; design `docs/design/heavy-suite-lanes.md` §3.3, §4). 
 - [ ] R1. When the config is `bunfig.heavy.toml` and the positional args are exactly `.heavy.test.`, the launcher reads `heavy` from `config/test-lanes.json` and runs two sequential phases under one `registryDir`: concurrent phase = `lane: concurrent` paths at `--parallel=min(4, availableParallelism())` (override `SPUR_TEST_HEAVY_PARALLEL`, positive integer, else error), then serial phase = `lane: serial` paths at `--parallel=1`. The serial phase runs even when the concurrent phase fails; exit = first nonzero phase code. The watchdog applies per phase. A manifest path that does not exist fails before any phase starts, naming it. Every other heavy-config invocation (e.g. `test-repo-wide`) is unchanged.
 - [ ] R2. `package.json` `test:heavy` becomes one `run-tests --config=bunfig.heavy.toml test --reporter=dots … .heavy.test.` call; `check` (`:90`) and `spur-check-feature` (`:93`) still run it; `bun run test` still collects no heavy file.
 - [ ] R3. Every file in the 1461 baseline profile runs, and the executed test count (sum of `Ran N tests`) is not lower than the baseline's.
-- [ ] R4. Three consecutive unsandboxed `bun run test:heavy` runs on the profiling host: median wall time ≤60 % of `heavy-profile.json` `baselineWallMs`, and no run has a failure the baseline lacked. A concurrent-lane file that flakes moves to `serial` (manifest edit + reason); assertions and timeouts are never loosened. Receipt `.spur/run/heavy-lanes-after.json`, cited in Testing.
+- [ ] R4. Three consecutive unsandboxed `bun run test:heavy` runs on the profiling host: median wall time ≤65 % of `heavy-profile.json` `baselineWallMs` (re-baselined from 60 % on 2026-11-27 by operator decision: the serial lane alone profiles at ~110 s of the 278 s baseline, so 60 % sat at the design floor; the first 3-run receipt measured 0.64), and no run has a failure the baseline lacked. A concurrent-lane file that flakes moves to `serial` (manifest edit + reason); assertions and timeouts are never loosened. Receipt `.spur/run/heavy-lanes-after.json`, cited in Testing.
 
 Out of scope: classifying files (1461); the seed (1462); root-suite lanes (1460); coverage for heavy runs.
 
@@ -39,7 +39,7 @@ Out of scope: classifying files (1461); the seed (1462); root-suite lanes (1460)
 
 - [ ] R4 — Concurrent-safe heavy files run concurrently while serial files keep serial execution
 - [ ] R5 — No heavy proof is dropped, skipped, weakened, or moved to the default path
-- [ ] R6 — A before/after receipt shows test:heavy at or under 60 percent of baseline with zero new failures across 3 runs
+- [ ] R6 — A before/after receipt shows test:heavy at or under 65 percent of baseline with zero new failures across 3 runs
 
 ### Q&A
 

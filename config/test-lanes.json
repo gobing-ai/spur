@@ -721,6 +721,10 @@
                 "path": "scripts/commands/release-alias.test.ts",
                 "reason": "direct",
                 "durationMs": 224
+            },
+            {
+                "path": "scripts/commands/run-tests.test.ts",
+                "reason": "direct"
             }
         ]
     },

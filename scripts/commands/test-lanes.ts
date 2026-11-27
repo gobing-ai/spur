@@ -211,8 +211,8 @@ function readCommitted(manifestPath: string): LaneManifest | undefined {
     }
 }
 
-/** Every `.heavy.test.` file in the tree, repo-relative and sorted. */
-function heavyFiles(repoRoot: string): string[] {
+/** Every `.heavy.test.` file in the tree, repo-relative and sorted; `run-tests` lanes from it (1463). */
+export function heavyFiles(repoRoot: string): string[] {
     const glob = new Bun.Glob(HEAVY_FILE_PATTERN);
     const found: string[] = [];
     for (const rootPath of ROOT_PATH_SET) {

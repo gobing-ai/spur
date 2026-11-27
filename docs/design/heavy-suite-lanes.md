@@ -14,7 +14,7 @@ tags: [testing, performance]
 
 `bun run test:heavy` (`package.json:86`) takes ~196–277s per feature-verification pass. It runs two
 serial `run-tests` invocations under `bunfig.heavy.toml` (coverage off): 19 `.heavy.test.` files in
-one child, then `integrations-browser.heavy.test.ts` alone. Feature H162 (under H16) cuts that wall
+one child, then `integrations-browser.heavy.test.ts` alone (before task 1463; now one laned call). Feature H162 (under H16) cuts that wall
 time without dropping, weakening, or relocating any heavy proof. Out of scope: the root suite lanes
 (H161), the dsh executor E2E's sandbox/credential prerequisites, and the feature-verification
 receipt policy.
@@ -55,7 +55,7 @@ receipt policy.
    `testAdapterDir` builds keep building their own. Without the variable (a direct `bun test`)
    behaviour is today's: one build per call. (Refined 2026-11-26 from a `SPUR_TEST_RUN_ID` +
    `$TMPDIR/spur-board-seed-<runId>` design: same freshness, no extra cleanup path.)
-3. **Heavy lanes (not built).** `config/test-lanes.json` gains a `heavy` array of
+3. **Heavy lanes (built, task 1463).** `config/test-lanes.json` gains a `heavy` array of
    `{ path, lane, shares, reason }`: `lane` is `concurrent | serial`, `shares` names the host state the
    file contends for (`browser | board-build | cli-spawn | sqlite | gate-lock | timing-sensitive |
    operator-env`), and `reason` cites the `path:line` that justified the lane. Any `timing-sensitive`
@@ -65,7 +65,7 @@ receipt policy.
    `--config=bunfig.heavy.toml`, the launcher runs the concurrent lane with bounded `--parallel`
    (default 4, env `SPUR_TEST_HEAVY_PARALLEL`), then the serial lane at `--parallel=1`, in one
    launcher invocation, so both lanes share one seed. Phases are sequential: a serial file never
-   runs alongside another heavy file.
+   runs alongside another heavy file. Laning keys on the exact `test:heavy` positionals (`test .heavy.test.`); before any spawn the launcher refuses a malformed `SPUR_TEST_HEAVY_PARALLEL` and any `heavy` drift against the tree, so an unclassified or vanished file can never pass silently. Each phase prints `run-tests: phase <name> files=<n> exit=<code> wall=<m:ss>`.
 4. **Drift guard (built).** A repo-wide test fails, naming the file, when a `.heavy.test.` file is missing
    from the `heavy` array, the array names a missing file, a row carries an unknown `lane`/`shares`
    value, or a timing-sensitive row claims `concurrent`.
