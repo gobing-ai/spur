@@ -1585,14 +1585,13 @@ export interface PerfWarm {
     driver: string | null;
     /** `AGENT_SESSION_CAPABILITY.<agent>.verifiedAgainst` — what the driver was verified against. */
     verifiedVersion: string | null;
-    /** Pi's host PATH install and pinned repository dependency are distinct qualification inputs. */
+    /** Pi's host PATH install, recorded apart from the selected executable (the repo pins no Pi). */
     provenance?: PiProvenance;
     reason?: string;
 }
 
 interface PiProvenance {
     host: WarmProbe['binary'];
-    repository: WarmProbe['binary'];
 }
 
 /** What {@link warmRow} needs: the registered driver plus the probed binary identity. */
@@ -1619,10 +1618,7 @@ export function warmRow(agent: string, probe: WarmProbe): PerfWarm {
         ...(probe.provenance === undefined
             ? {}
             : {
-                  provenance: {
-                      host: receiptBinary(probe.provenance.host),
-                      repository: receiptBinary(probe.provenance.repository),
-                  },
+                  provenance: { host: receiptBinary(probe.provenance.host) },
               }),
     };
     if (probe.driver === null) {
@@ -1704,7 +1700,7 @@ export function probeWarm(agent: string, timeoutMs = 5_000): WarmProbe {
     }
     if (agent !== 'pi') return { driver, binary, verifiedVersion };
     // `bun run` prepends the repository bin directory. Remove only that directory to identify
-    // the separate host installation; never substitute it for the executable actually selected.
+    // the host installation; never substitute it for the executable actually selected.
     const repositoryBin = resolve(REPO_ROOT, 'node_modules/.bin');
     const hostPath = (getEnvVar('PATH') ?? '')
         .split(':')
@@ -1717,7 +1713,6 @@ export function probeWarm(agent: string, timeoutMs = 5_000): WarmProbe {
         verifiedVersion,
         provenance: {
             host: hostPi === null ? null : probeVersion({ command: hostPi, args: ['--version'] }, timeoutMs),
-            repository: probeVersion({ command: join(repositoryBin, 'pi'), args: ['--version'] }, timeoutMs),
         },
     };
 }

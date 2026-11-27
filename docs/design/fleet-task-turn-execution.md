@@ -110,9 +110,10 @@ Official sources verified 2026-10-21:
 Each installed binary still needs a version/mode-specific qualification; documentation is not a
 local runtime proof. No new SDK dependency is assumed.
 
-Pi's released RPC driver qualifies the repository dependency 0.87.1. The performance receipt
-records the selected executable plus separate host PATH and repository Pi paths/versions; a
-different host version remains unqualified. The real-agent lane uses the requested agent in its
+Pi's released RPC driver qualifies the version in its runner record (`verifiedAgainst`); the
+repository pins no Pi, so runs use the host install. The performance receipt records the selected
+executable plus the separate host PATH Pi path/version; a different host version remains
+unqualified. The real-agent lane uses the requested agent in its
 scratch fleet; the deterministic lane keeps the common stub. Warm rows record qualification,
 without claiming model latency. Prompt acceptance and `agent_end` do not certify completion:
 the registered driver waits for `agent_settled`, then Spur validates the declared artifacts.

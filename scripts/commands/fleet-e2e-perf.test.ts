@@ -247,7 +247,7 @@ describe('1273 R4: the real-agent lane is opt-in and --agents narrows the column
 });
 
 describe('1277 AC1: Pi executable provenance and actual perf executor', () => {
-    test('host and repository Pi identities survive a refusal of the selected executable', () => {
+    test('the host Pi identity survives a refusal of the selected executable', () => {
         const directory = mkdtempSync(join(tmpdir(), 'spur-pi-probe-'));
         const hostPi = join(directory, 'pi');
         const command = spyOn(getAgentShim('pi'), 'getVersionCommand');
@@ -262,10 +262,7 @@ describe('1277 AC1: Pi executable provenance and actual perf executor', () => {
             expect(row.qualified).toBe(false);
             expect(row.binary).toEqual({ path: hostPi, version: '1.4.0' });
             expect(row.verifiedVersion).toBe('0.87.1');
-            expect(row.provenance).toEqual({
-                host: { path: hostPi, version: '1.4.0' },
-                repository: { path: 'node_modules/.bin/pi', version: '0.87.1' },
-            });
+            expect(row.provenance).toEqual({ host: { path: hostPi, version: '1.4.0' } });
         } finally {
             command.mockRestore();
             which.mockRestore();

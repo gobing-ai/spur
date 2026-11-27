@@ -4,7 +4,7 @@ name: Pi RPC warm task-turn adapter
 status: done
 template: feature-impl
 created_at: 2026-10-22T07:00:34.914Z
-updated_at: "2026-10-25T03:39:12.761Z"
+updated_at: "2026-11-27T05:10:16.141Z"
 feature_id: G74
 priority: P2
 tags:
@@ -34,7 +34,7 @@ Rubric: E6 D1 L2 C1 R1 = 11 → own task.
 
 ### Requirements
 
-- [x] R1. Record exact Pi executable provenance (PATH binary vs repository dependency versions) in `verifiedAgainst` and the receipt.
+- [x] R1. Record exact Pi executable provenance (the selected executable and the host PATH binary, with versions) in the receipt, qualified against `verifiedAgainst`. *(Amended 2026-11-26: the repository no longer pins a Pi devDependency, so the separate repository identity is dropped; runs use the host install.)*
 - [x] R2. Two related keyed tasks execute serially in one process with correlated terminal outcomes and validated artifacts.
 - [x] R3. Command acceptance responses are distinguished from completed agent activity; fragmented and interleaved records parse deterministically.
 - [x] R4. Unqualified versions keep session/one-shot fallback with a named reason.
@@ -43,9 +43,9 @@ Rubric: E6 D1 L2 C1 R1 = 11 → own task.
 
 ```gherkin
 Scenario: AC1 — Pi provenance is exact (req: R1)
-  Given the PATH pi and the repository dependency
+  Given the host PATH pi
   When qualification runs
-  Then both paths and versions are recorded and only the qualified one is used by the driver
+  Then the selected and host paths and versions are recorded and only a qualified version is used by the driver
 
 Scenario: AC2 — Two keyed tasks complete in one warm Pi process (req: R2)
   Given the Pi driver replaying two recorded turns through a real child
