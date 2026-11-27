@@ -405,6 +405,15 @@ gate is **active**, evaluate feature AC satisfaction via the existing CLI.
    `docs/.spur/run` or other nested `.spur` trees). Ephemeral scratch may use `/tmp` or
    `/private/tmp`. Requirement / AC row `id`s in the verdict MUST match feature scenario titles
    (or `AC-N` aliases) so satisfaction can mark MET.
+   **Writes first, one verification pass last.** The strict check reuses a feature-verification
+   receipt only while its digest matches. Task/feature corpus (`docs/tasks*`, `docs/features*`)
+   is cheap: a feature-spec edit stales the receipt, but `spur feature verify` reuses the PASS
+   recorded over the identical tree in seconds. Every other tracked or untracked file (design
+   docs, config, source) and `.spur/context/learnings.md` changes that tree and forces a full
+   ~13 min rerun. Land every such write (fix-pass edits, residual closures, doc rows, learnings
+   appends) before the first `spur feature verify <id>`; after it, write only task/feature
+   corpus. A full rerun after `L4.feature-receipt-stale` means a write slipped past this line:
+   batch any remaining writes, then rerun the pass once.
 2. Run (0568 R6 monorepo-safe: SPUR_BIN env > local CLI > PATH):
 
    ```bash
