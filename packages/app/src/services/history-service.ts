@@ -455,13 +455,16 @@ const SOURCES: readonly LlmJsonlSource[] = [
     'omp',
     'grok',
     'agy',
+    // dsh (feature E11 R1): the importer ships the source, so this is the enrolment that makes
+    // `spur history import` read ~/.dsh/sessions at all.
+    'deepseek',
 ];
 
 /**
  * Sources with full-fidelity import support (feature E1 § In). The coverage report
  * (task 0550 R3) enumerates these as refreshed and the unsupported set as skipped.
  */
-const FULL_FIDELITY_SOURCES: readonly string[] = ['claude', 'codex', 'pi', 'omp', 'agy', 'grok'];
+const FULL_FIDELITY_SOURCES: readonly string[] = ['claude', 'codex', 'pi', 'omp', 'agy', 'grok', 'deepseek'];
 
 /**
  * Sources deferred from full-fidelity import — operator ruling 2026-08-06 (feature E1

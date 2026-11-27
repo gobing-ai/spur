@@ -70,7 +70,7 @@ export const SHARED_OPTIONS = {
     sourceLink: ['--source <source>', 'Link source identifier (e.g. next-auto)'] as const,
     sourceHistory: [
         '--source <source>',
-        'pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|all',
+        'pi|claude|codex|gemini|opencode|antigravity|openclaw|omp|grok|agy|deepseek|all',
     ] as const,
     statusDoneFailed: ['--status <status>', 'Filter by status: done, failed'] as const,
     statusWorkflowRun: ['--status <status>', 'Filter by status: done, failed, running, paused, interrupted'] as const,

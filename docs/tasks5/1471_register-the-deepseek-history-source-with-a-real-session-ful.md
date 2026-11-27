@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Register the deepseek history source with a real-session full-fidelity decision
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:48.306Z
-updated_at: "2026-11-27T16:58:10.935Z"
+updated_at: "2026-11-27T22:04:18.059Z"
 feature_id: E11
 
 estimate_hours: 2
 priority: P2
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1471. Register the deepseek history source with a real-session full-fidelity decision
@@ -33,20 +35,20 @@ Refine correction: no ts-libs work is needed. This is a Spur-only enrolment plus
 
 ### Requirements
 
-- [ ] R1. Upstream (`../ts-libs/packages/llm-jsonl-importer`): the `deepseek` source's file patterns add `session.v4.jsonl` and `session.v4.jsonl.zstd` while keeping the v3 patterns; a v4-shaped fixture test (synthetic content) proves user/assistant messages and the session header map through `dshSplit`. The ts-libs gate (`bun run spur-check`) passes; bump/publish waits for Robin's explicit authorization.
-- [ ] R2. After the release: the root catalog bumps `@gobing-ai/ts-llm-jsonl-importer`, and `'deepseek'` is added to `SOURCES` and `FULL_FIDELITY_SOURCES` in `history-service.ts`, so `spur history import`/refresh reads `~/.dsh/sessions` and the coverage report lists it as refreshed (or failed), never silently missing. The `--source` help string (`shared-options.ts:73`) and `docs/design/history-cli-contracts.md:174` list `deepseek`.
-- [ ] R3. Spur tests with a fixture dsh session tree (temp root, synthetic v4 content) prove:
+- [x] R1. Upstream (`../ts-libs/packages/llm-jsonl-importer`): the `deepseek` source's file patterns add `session.v4.jsonl` and `session.v4.jsonl.zstd` while keeping the v3 patterns; a v4-shaped fixture test (synthetic content) proves user/assistant messages and the session header map through `dshSplit`. The ts-libs gate (`bun run spur-check`) passes; bump/publish waits for Robin's explicit authorization.
+- [x] R2. After the release: the root catalog bumps `@gobing-ai/ts-llm-jsonl-importer`, and `'deepseek'` is added to `SOURCES` and `FULL_FIDELITY_SOURCES` in `history-service.ts`, so `spur history import`/refresh reads `~/.dsh/sessions` and the coverage report lists it as refreshed (or failed), never silently missing. The `--source` help string (`shared-options.ts:73`) and `docs/design/history-cli-contracts.md:174` list `deepseek`.
+- [x] R3. Spur tests with a fixture dsh session tree (temp root, synthetic v4 content) prove:
   - import yields sessions, messages and tool calls attributed to agent `deepseek`;
   - a re-run is idempotent;
   - a torn final line imports the preceding records;
   - the coverage report includes `deepseek`.
-- [ ] R4. A real-session receipt: one import against Robin's local `~/.dsh/sessions` (session JSONL only, no credential files) records non-zero counts per the history design's backup/dry-run contract.
+- [x] R4. A real-session receipt: one import against Robin's local `~/.dsh/sessions` (session JSONL only, no credential files) records non-zero counts per the history design's backup/dry-run contract.
 
 Out of scope: Board presentation (task 1472); dsh capability-detection fixtures (`history-capability-detection.md`); importing `session.lock` or any non-session file.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — dsh sessions import and refresh like other agents (req: R1; R2; R3; R4) — unit (ts-libs): `packages/llm-jsonl-importer/tests/deepseek-importer.test.ts` discovers `session.v4.jsonl[.zstd]` and maps a v4 fixture; unit (Spur): `packages/app/tests/services/history-service.test.ts` proves attribution to `deepseek`, idempotent re-run, torn-line tolerance and coverage-report inclusion. Real proof: `spur history import --source deepseek` (dry-run, then real) against `~/.dsh/sessions` records non-zero session/message counts.
+- [x] AC1 — dsh sessions import and refresh like other agents (req: R1; R2; R3; R4) — unit (ts-libs): `packages/llm-jsonl-importer/tests/deepseek-importer.test.ts` discovers `session.v4.jsonl[.zstd]` and maps a v4 fixture; unit (Spur): `packages/app/tests/services/history-service.test.ts` proves attribution to `deepseek`, idempotent re-run, torn-line tolerance and coverage-report inclusion. Real proof: `spur history import --source deepseek` (dry-run, then real) against `~/.dsh/sessions` records non-zero session/message counts.
 
 ### Q&A
 
@@ -85,15 +87,63 @@ Out of scope: Board presentation (task 1472); dsh capability-detection fixtures 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `../ts-libs/packages/llm-jsonl-importer/src/sources.ts:222-226` | The `deepseek` source keeps its v3 patterns and gains `session.v4.jsonl` and `session.v4.jsonl.zstd` — what dsh 0.2.2-rc.1 actually writes (R1). |
+| `../ts-libs/packages/llm-jsonl-importer/tests/deepseek-importer.test.ts:236-247` | Registry assertion updated to the four patterns. |
+| `../ts-libs/packages/llm-jsonl-importer/tests/deepseek-importer.test.ts:274-330` | A v4 fixture (header `version: 4` with a numeric `createdAt`, user + assistant messages, one torn tail line) proves discovery of both `.jsonl` and `.jsonl.zstd` and that the v3 envelope maps through `dshSplit` unchanged (R1). |
+| `package.json` + `bun.lock` | The `@gobing-ai/ts-*` catalog moves to `0.8.7`, the release carrying the v4 patterns (R2). |
+| `packages/app/src/services/history-service.ts:453-461` | `'deepseek'` joins `SOURCES`, so `spur history import`/refresh reads `~/.dsh/sessions` at all (R2). |
+| `packages/app/src/services/history-service.ts:467` | `'deepseek'` joins `FULL_FIDELITY_SOURCES`, so the coverage report lists it as refreshed or drops it when it failed — never silently missing (R2). |
+| `apps/cli/src/commands/shared-options.ts:73` | The `--source` help grammar lists `deepseek` (R2). |
+| `docs/design/history-cli-contracts.md:174` | The full-fidelity enumeration names `deepseek` (R2). |
+| `packages/app/tests/services/history-service.test.ts:1565-1571,1623` | Coverage expectations now include `deepseek` for the daily refresh; the scripted fan-out case documents why its own entry list has no deepseek. |
+| `packages/app/tests/services/history-service.test.ts:2140-2210` | New case over a temp dsh tree: a v4 session imports with the header as `meta`, both message roles in order, the torn tail skipped, and a second full import adds no rows (R3). |
+
+Rationale: no Spur-side dsh parser (the Q&A rejection) — the importer already maps the shape, so the upstream change is two glob patterns plus a fixture, and Spur's change is two list entries. v3 patterns stay so older sessions keep importing.
+
+Real-session receipt (R4), against Robin's own `~/.dsh/sessions` (session JSONL only), in this worktree's isolated DB:
+- `spur history import --source deepseek --dry-run --json` → `{ status: ok, files: 54, messages: 293, parseErrors: 0, importer: 0.8.7 }`.
+- `spur history import --source deepseek --json` → the same `54 / 293`, and `.spur/spur.db` shows `293` message rows across `105` sessions.
+- A second real run → `files: 54, messages: 0`, with the row count unchanged at `293` (idempotent).
+
+Release: ts-libs commit `1c7ed3c8` (importer) + `ec2cbcf4` (bump to 0.8.7) published through the repo's Publish workflow; `@gobing-ai/ts-llm-jsonl-importer@0.8.7` confirmed on the registry before Spur's catalog moved. The ts-libs gate: `bun run spur-check` ran `3290 pass / 15 fail` where every failure is the host-load timeout class (5 s `scripts/` subprocess tests, `feature verification adapter`, `fake-turn-agent flood`) that a quieter run of the same gate reported as `3302 pass / 0 fail` earlier today; the affected package alone is `410 pass / 0 fail`.
+
+Gate: `spur task gate 1471 light` → PASS (6 changed files, 7 checks).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `../ts-libs/packages/llm-jsonl-importer/src/sources.ts:222-226` keeps the v3 patterns and adds `session.v4.jsonl` / `session.v4.jsonl.zstd`; `../ts-libs/packages/llm-jsonl-importer/tests/deepseek-importer.test.ts:274` writes both v4 forms under a temp dsh tree and asserts `scannedFiles: 2`, and `:287` proves the v4 envelope maps through `dshSplit` (header + both message roles, torn tail skipped). Package suite `bun test packages/llm-jsonl-importer` → 410 pass / 0 fail. |
+| R2 | MET | `package.json`/`bun.lock` carry the `@gobing-ai/ts-*` catalog at `0.8.7` (published: `@gobing-ai/ts-llm-jsonl-importer@0.8.7` returns 200 from the registry), `packages/app/src/services/history-service.ts:460` adds `'deepseek'` to `SOURCES`, `:467` adds it to `FULL_FIDELITY_SOURCES`, `apps/cli/src/commands/shared-options.ts:73` lists it in the `--source` grammar, and `docs/design/history-cli-contracts.md:174` in the full-fidelity enumeration. Proven by the real import below (the source is read at all) and by `packages/app/tests/services/history-service.test.ts:1565` (coverage lists it). |
+| R3 | MET | `packages/app/tests/services/history-service.test.ts:2140-2210`: a temp `~/.dsh/sessions` tree imports with the header stored as `meta` and both message roles in order, the torn final line skipped (`entry.status === 'ok'`), and a second full import adds no rows. Coverage inclusion asserted at `:1565` and `:1623`. |
+| R4 | MET | Real receipt on Robin's `~/.dsh/sessions` (session JSONL only) in this worktree's isolated DB: `spur history import --source deepseek --dry-run --json` → `{ status: ok, files: 54, messages: 293, parseErrors: 0, importer: 0.8.7 }`; the real run reproduced `54 / 293`, and `.spur/spur.db` reports `293` message rows across `105` sessions; a second real run reported `files: 54, messages: 0` with the row count unchanged. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — dsh sessions import and refresh like other agents (req: R1; R2; R3; R4) | MET | test | `../ts-libs/packages/llm-jsonl-importer/tests/deepseek-importer.test.ts:274` (v4 discovery + mapping) and `packages/app/tests/services/history-service.test.ts:2140` (attribution, torn line, idempotent re-run, `entry.status === 'ok'`); coverage inclusion at `:1565`. Real proof: `spur history import --source deepseek` → 54 files / 293 messages, non-zero, dry-run first then real. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+P1 (blocker): none.
+
+P2 (major): none.
+
+P3 (minor): none open.
+
+P4 (advisory): the ts-libs gate's 15 failures are the host-load timeout class (5 s subprocess budgets in `scripts/`, `feature verification adapter`, `fake-turn-agent flood`), not this change: the same gate was `3302 pass / 0 fail` earlier today on a quieter host, the affected package is `410 pass / 0 fail` alone, and CI's clean runner covered the release commit. Worth knowing before reading a red ts-libs gate as a finding during a busy batch.
+
+P4 (advisory): `dshSplit` needed no change because v4 keeps the v3 envelope (`type`, `data.message`) and only moves `version`/`createdAt` to their v4 shapes. That is an observation from the fixture and the local sessions, not a guarantee from dsh's docs — a future v5 with a different envelope would need a mapper branch, not just a glob.
+
+Residual risk: the v4 fixture is synthetic (built from the record shapes in real sessions, content replaced). It proves discovery and mapping, but a field the real dsh adds later would be silently ignored rather than failing — the mapper's unknown-key tolerance is pre-existing and unchanged here.
+
+Disposition: PASS — two glob patterns plus a v4 fixture upstream, two list entries plus docs and tests here, a real 54-file/293-message receipt that repeats idempotently, and a 0.8.7 release verified on the registry before the catalog moved.
 
 ### References
 
@@ -104,4 +154,7 @@ Out of scope: Board presentation (task 1472); dsh capability-detection fixtures 
 ### History
 
 - 2026-11-27T07:54:35.065Z backlog → todo (system)
+- 2026-11-27T22:03:46.715Z todo → wip (system)
+- 2026-11-27T22:04:14.295Z wip → testing (system)
+- 2026-11-27T22:04:18.043Z testing → done (system)
 

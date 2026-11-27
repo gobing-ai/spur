@@ -1555,7 +1555,15 @@ describe('HistoryService', () => {
                 const result = await svc.daily({ cwd, root: emptyRoot(), sourceTimeout: 500 });
                 // Refreshed = the six full-fidelity sources that did not fail. Under an empty
                 // root every source is `empty` (not failed), so all six qualify.
-                expect(result.coverage.refreshed.sort()).toEqual(['agy', 'claude', 'codex', 'grok', 'omp', 'pi']);
+                expect(result.coverage.refreshed.sort()).toEqual([
+                    'agy',
+                    'claude',
+                    'codex',
+                    'deepseek',
+                    'grok',
+                    'omp',
+                    'pi',
+                ]);
                 // Skipped = the five unsupported sources (operator ruling 2026-08-06).
                 expect(result.coverage.skipped.sort()).toEqual([
                     'antigravity',
@@ -1612,7 +1620,8 @@ describe('HistoryService', () => {
             const svc = new HistoryService(ctx);
             try {
                 const result = await svc.daily({ cwd, root: emptyRoot(), sourceTimeout: 500 });
-                // claude failed → dropped; the other five full-fidelity sources refreshed.
+                // claude failed → dropped; the other five full-fidelity sources in this scripted
+                // fan-out refreshed (deepseek is absent from the scripted entries, so not listed).
                 expect(result.coverage.refreshed.sort()).toEqual(['agy', 'codex', 'grok', 'omp', 'pi']);
                 // Skipped is a static ruling — still the five unsupported sources.
                 expect(result.coverage.skipped.sort()).toEqual([
@@ -2096,6 +2105,78 @@ describe('HistoryService.readHistoryHealth (task 1178 R3)', () => {
             expect(await readHistoryHealth({ date: '2026-09-01', dbPath: join(dir, 'missing.db') })).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// ─── feature E11 / task 1471: dsh (deepseek) is enrolled ──────────────────────────────────────
+describe('deepseek enrolment (1471, feature E11 R1)', () => {
+    /** A dsh sessions tree under an injected home: one v4 session, user + assistant + a torn tail. */
+    function dshHome(): string {
+        const home = mkdtempSync(join(tmpdir(), 'spur-dsh-home-'));
+        const dir = join(home, '.dsh', 'sessions', '--tmp--proj--', 'session-11111111-2222-4333-8444-555555555555');
+        mkdirSync(dir, { recursive: true });
+        const lines = [
+            JSON.stringify({
+                type: 'session',
+                version: 4,
+                id: '11111111-2222-4333-8444-555555555555',
+                createdAt: 1795501024185,
+                cwd: '/tmp/proj',
+                isSeeded: false,
+            }),
+            JSON.stringify({
+                type: 'user/message',
+                seq: 1,
+                time: 1795501024200,
+                data: { message: { role: 'user', id: 'm-1', content: [{ type: 'text', text: 'from dsh' }] } },
+            }),
+            JSON.stringify({
+                type: 'assistant/message',
+                seq: 2,
+                time: 1795501024300,
+                data: {
+                    message: {
+                        role: 'assistant',
+                        id: 'm-2',
+                        content: [{ type: 'text', text: 'dsh answers' }],
+                        source: { provider: 'deepseek', model: 'deepseek-v4' },
+                        usage: { input_tokens: 7, output_tokens: 3 },
+                    },
+                },
+            }),
+            '{"type":"user/message","seq":3,"time":1795501024',
+        ];
+        writeFileSync(join(dir, 'session.v4.jsonl'), `${lines.join('\n')}\n`);
+        return home;
+    }
+
+    test('imports a dsh session tree, attributed to deepseek, tolerating a torn tail', async () => {
+        const home = dshHome();
+        const ctx = makeCtx();
+        const svc = new HistoryService(ctx);
+        try {
+            const first = await svc.importAll({ sources: ['deepseek'], root: home, mode: 'full' });
+            const entry = first.entries.find((e) => e.source === 'deepseek');
+            expect(entry?.status).toBe('ok');
+            expect(first.exitCode).toBe(0);
+            const db = await ctx.getDb();
+            const messages = await db.queryAll<{ role: string; content_text: string; session_id: string }>(
+                "SELECT role, content_text, session_id FROM history_message WHERE session_id = '11111111-2222-4333-8444-555555555555' ORDER BY seq",
+            );
+            // The session header is bookkeeping (`meta`); the two message records follow it.
+            expect(messages.map((row) => row.role)).toEqual(['meta', 'user', 'assistant']);
+            expect(messages[1]?.content_text).toBe('from dsh');
+            // The torn final line is skipped, not fatal: the preceding records still imported.
+            expect(entry?.status).toBe('ok');
+
+            // Idempotent: a second full import of the same tree adds no rows.
+            const before = await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_message');
+            await svc.importAll({ sources: ['deepseek'], root: home, mode: 'full' });
+            const after = await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_message');
+            expect(after?.n).toBe(before?.n ?? -1);
+        } finally {
+            rmSync(home, { recursive: true, force: true });
         }
     });
 });

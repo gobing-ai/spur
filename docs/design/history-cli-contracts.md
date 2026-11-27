@@ -171,7 +171,7 @@ per-source history roots (test seam; default is each source's platform dir). `--
 structured `DailyResult` (`{ fanOut, artifact, pruned, coverage }`). Exit code follows the fan-out import
 outcome (0/1/2), so `history.daily.failed` and the exit agree. `coverage` (task 0550, R3/R4) is the honest
 coverage report `{ refreshed, skipped, window }`: `refreshed` names the full-fidelity sources this refresh
-imported (claude, codex, pi, omp, agy, grok), `skipped` names the unsupported sources deferred by the
+imported (claude, codex, pi, omp, agy, grok, deepseek — dsh joined in task 1471, feature E11), `skipped` names the unsupported sources deferred by the
 2026-08-06 operator ruling (gemini, opencode, antigravity-ide, openclaw, hermes), and `window` carries the
 MIN/MAX message `ts` the analyze covered (`{ since, until }`) so a reader can tell current data from stale
 without inspecting the database. A failed full-fidelity source drops out of `refreshed` (surfaced via
