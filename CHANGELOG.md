@@ -8,6 +8,46 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.49] - 2026-11-26
+
+### Added
+- a Board module declared `type: react` may name one project-relative built ESM bundle whose Web-Fetch handler serves `/api/modules/<id>/*` in the project's own server process, behind the host guard and CSRF; escapes, missing targets and out-of-root symlinks fail closed and a rebuilt bundle reloads by `mtimeMs` (63d226ecf)
+  <!-- src: apps/server/src/modules/board/index.ts:121 · confidence: HIGH -->
+- MCP readiness and the Integrations client-config renderer both cover `dsh`, reading and writing the profile-patch format at `~/.dsh/profiles/headless/cordis.patch.yml` (db93ebf2c)
+  <!-- src: apps/web/src/modules/integrations/helpers.ts:203 · confidence: HIGH -->
+
+### Fixed
+- `restart` and `restart-daemon` resolve the current project with `.` instead of a hardcoded checkout name, so both work in a renamed clone (27f9dd9b1)
+  <!-- src: package.json:111 · confidence: HIGH -->
+- the `no-env-files` rule skips `vendors/`, so a vendor clone's `.env.*.example` files no longer fail every gate (0769d3d9e)
+  <!-- src: config/rules/structure/protected-files.yaml:75 · confidence: HIGH -->
+- a failed integrations e2e keeps its scratch tree and logs and names the log path in the failure line, instead of deleting the only evidence (3a2cd35de)
+  <!-- src: scripts/commands/integrations-e2e.ts:604 · confidence: HIGH -->
+- the integrations e2e pins the A82 proof member to its stub executor and skips the operator's global config, so a real `pi` on PATH cannot win the drain (51baa0d5b, 9f93adc65)
+  <!-- src: scripts/commands/integrations-e2e.ts:222 · confidence: HIGH -->
+- the fleet perf receipt records only the host Pi provenance and drops the repository identity, since the repo pins no Pi (7082b7d44)
+  <!-- src: scripts/commands/fleet-e2e.ts:1621 · confidence: HIGH -->
+
+### Changed
+- the commit-msg hook rewrites `Merge remote-tracking branch '…'` messages too, stripping `refs/remotes/` so a pull lands as `chore: merge <branch> into <branch>` (150eebb80)
+  <!-- src: .lefthook.yml:28 · confidence: HIGH -->
+- the `@gobing-ai/ts-*` catalog moves to 0.8.5, and `test:heavy` ignores `vendors/` + `drizzle/` and runs the browser suite in its own pass (83b667c4a)
+  <!-- src: package.json:86 · confidence: HIGH -->
+- the unused `@earendil-works/pi-coding-agent` dev pin is dropped (5cbe6f804)
+  <!-- src: package.json · confidence: MEDIUM -->
+
+### Other
+- the dsh features were re-id to B81/B811/E11 and ready-refine tasks 1456–1458 (9ef8522bf)
+- the B81 evidence anchors were refreshed from the feature-lifecycle run (2b31e0222)
+- the B81 wrap-up learnings and feature close-out writes were recorded (18bb02ae1)
+- DeepSeek Harness was planned as a wrapped coding agent (d98df99d8)
+- ADR and shipped config templates state the dsh executor's default (bae75d7e4)
+- the design record states a dispatched dsh run never commits from a worktree (3f847af93)
+- the A84 module backend API handlers were planned as an A8 child (118d9b41b)
+- task 1455's record was closed out and A84 marked verifying (bc33645f1, d87ae6522)
+- the A84 module API evidence was re-recorded from re-run checks (beff4e306)
+- `origin/main` was merged with the restart-script fix (e56285daa)
+
 ## [0.4.48] - 2026-11-25
 
 ### Added
