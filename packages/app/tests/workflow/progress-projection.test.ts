@@ -364,6 +364,57 @@ describe('projectWorkflowProgress', () => {
         db.close();
     });
 
+    test('maps a one-to-one same-kind state without an ambiguity diagnostic (E721 R2)', async () => {
+        const db = await setupDb();
+        const now = Date.now();
+        const matchedWf: WorkflowDef = {
+            kind: 'state-machine',
+            name: 'matched-wf',
+            initialState: 's1',
+            terminalStates: ['done'],
+            states: [
+                {
+                    id: 's1',
+                    onEnter: [
+                        { kind: 'shell', options: { command: 'echo 1' } },
+                        { kind: 'shell', options: { command: 'echo 2' } },
+                        { kind: 'shell', options: { command: 'echo 3' } },
+                    ],
+                },
+                { id: 'done' },
+            ],
+            transitions: [{ from: 's1', to: 'done' }],
+        };
+
+        const digest = computeDefinitionDigest(matchedWf);
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r1', 'matched-wf', 'running', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: digest }),
+            now,
+            now,
+        );
+
+        // 3 declared, 3 recorded: the later actions' unused-row counts drop below the declared
+        // count, which the pre-fix predicate read as ambiguity.
+        for (const id of ['a1', 'a2', 'a3']) {
+            await db.run(
+                "INSERT INTO action_runs (id, run_id, node, kind, status, ok, duration_ms, started_at, completed_at, created_at) VALUES (?, 'r1', 's1', 'shell', 'success', 1, 10, '2026-08-19T00:00:01Z', '2026-08-19T00:00:02Z', ?)",
+                id,
+                now + Number(id.slice(1)),
+            );
+        }
+
+        const projection = await projectWorkflowProgress('r1', { db, workflowDef: matchedWf });
+
+        expect(projection.diagnostics.filter((d) => d.code === 'ambiguous-action')).toEqual([]);
+        const s1 = projection.states.find((s) => s.state === 's1');
+        const actions = s1?.actions ?? [];
+        expect(actions.some((a) => a.status === 'ambiguous')).toBe(false);
+        const mappedRows = actions.flatMap((action) => action.attempts.map((attempt) => attempt.actionRunId)).sort();
+        expect(mappedRows).toEqual(['a1', 'a2', 'a3']);
+        db.close();
+    });
+
     test('covers pending, failed, cancelled statuses and candidatePath resolution', async () => {
         const db = await setupDb();
         const now = Date.now();

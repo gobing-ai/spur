@@ -522,10 +522,18 @@ export async function projectWorkflowProgress(
             } else {
                 // If there are multiple definition actions with the same kind in this state
                 const sameKindDefCount = defActionList.filter((a) => a.action.kind === kind).length;
-                if (sameKindDefCount > 1 && candidateRows.length > 1 && candidateRows.length !== sameKindDefCount) {
+                // Compare against the state's TOTAL same-kind row count, never the unused
+                // remainder: once an earlier same-kind action consumes its row the remainder
+                // drops below the declared count, which read a correct N-declared/N-recorded
+                // state as ambiguous from the second action on (E721 R2).
+                const sameKindRowCount = stateActionRows.filter((r) => r.kind === kind).length;
+                if (sameKindDefCount > 1 && sameKindRowCount > 1 && sameKindRowCount !== sameKindDefCount) {
                     diagnostics.push({
                         code: 'ambiguous-action',
-                        message: `Ambiguous mapping for action ${actionKey} (kind ${kind}) in state ${stateId}; action rows: ${candidateRows.map((row) => row.id).join(', ')}`,
+                        message: `Ambiguous mapping for action ${actionKey} (kind ${kind}) in state ${stateId}; action rows: ${stateActionRows
+                            .filter((row) => row.kind === kind)
+                            .map((row) => row.id)
+                            .join(', ')}`,
                     });
                     actionStatus = 'ambiguous';
                 } else {
