@@ -36,7 +36,11 @@ const IDEA_ACTION_BUDGET = 36;
 // mismatch names the drifted paths. Named in the commit; raising the ratchet here is the record.
 // 42 at the slim-harness refactor (2026-11-13): answer lint, anchor repair, confidence, verdict
 // replay and the semantic-risk decide left the pipeline; the ratchet drops with the definition.
-const TASK_ACTION_BUDGET = 42;
+// 43 at 1473: the review lane gains one shell action that seeds the gate findings from the review
+// answer's `path:line` anchors, so a PARTIAL review off a first-pass-green gate reaches the repair
+// hop with anchors instead of an empty file. Named in the commit; raising the ratchet here IS the
+// change record.
+const TASK_ACTION_BUDGET = 43;
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 
