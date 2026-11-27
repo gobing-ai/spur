@@ -7911,3 +7911,42 @@ Not checked: no `bun run lint` / typecheck / full test run (markdown-only diff, 
   made "no token needed" indistinguishable from "token set" on the wire, and the Board could not
   decide whether to print an `Authorization` header.
 
+## 2026-11-27 — 1456 (dsh shim)
+
+- A "already shipped in the released facade" task is not fake work: `requireDiffAllowCleanCheck`
+  (task 0976) admits a zero-diff implement when `task check` passes, and the honest deliverable
+  becomes a `## Solution` evidence map into the release commit instead of a duplicated edit. Check
+  the sibling repo's log before assuming a ts-libs change is still owed.
+- ts-libs work that a Spur task tracks can land months earlier under the ts-libs task id; confirm
+  ancestry (`git merge-base --is-ancestor <commit> <release-bump>`) before touching the facade.
+
+## 2026-11-27 — 1457 (Spur wiring)
+
+- `ps -o comm=` on a live `dsh --profile headless` process reads `node` (bun-installed JS launcher),
+  so an executable-name entry in `AGENT_EXECUTABLE_NAMES` would claim every other Node agent's
+  process. Prove the comm before adding an agent to the process-identity table.
+- The dsh MCP shape is a `cordis.patch.yml` **array** of loader entries
+  (`name: '@deepseek-ai/dsh-mcp-client'`, `config.serverName`) — not `mcp_servers:` and not a
+  `mcp-manager config.servers` map. A probe matching the wrong shape reports `not-configured` for a
+  configured agent.
+- Adding one readiness agent breaks any test that pins the exact agent list
+  (`apps/server/tests/modules/integrations/handlers.test.ts`), not just the new table.
+- A shipped executor entry that must not route is `disabled: true` **and** tier-less: a tier alone
+  lets the ladder dispatch to an unproven agent.
+
+## 2026-11-27 — 1458 (dsh E2E)
+
+- The suite preload sets `SPUR_SKIP_PROJECT_CONFIG` / `SPUR_SKIP_GLOBAL_CONFIG`; a heavy test that
+  needs its own temp-project `.spur/config.yaml` must delete those two vars for the child, or the
+  config silently vanishes and `--agent <executor>` degrades to the bare binary rung
+  (`resolved.executor` missing — the symptom, not the cause).
+- dsh's `--json` stream carries `tool_call {tool, callId, input}` / `tool_result {callId, status:
+  "completed"}` / `final {reason: {kind}}`; asserting those is deterministic, asserting prose is not.
+- `env-var-hygiene` fails a test on the literal `process.env` **even inside a comment** — say "the
+  raw environment" instead.
+- A batch that runs `--worktree` must call `spur workflow persist-out --from <worktree> --task-file …`
+  before `git worktree remove`: hand-copying verdicts keeps the task evidence but loses every
+  UUID-keyed run record and execution summary with the deleted tree DB.
+- The invoking tree can advance while a batch runs (main gained `7082b7d44` mid-batch), so WT-4 is
+  a rebase-then-FF, not a plain `--ff-only` merge; re-run the full gate after the rebase.
+
