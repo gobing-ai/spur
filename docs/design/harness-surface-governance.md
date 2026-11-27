@@ -228,7 +228,40 @@ recorded at the gate: eight `pr <op>` Commander subcommands (adds a command laye
 registered but **hidden** for one release; task 1290 removed it. `builder` was frozen at `bump-ver`,
 `drop-tags`, `publish`, `show-branches`, `pr-status`, `pr-check`, `pr-open`, `pr-review`; A93
 (2026-11-16, row below) extended the set with `build-cli`, `build-server`, `build-binaries`,
-`bundle-config`, `bundle-web` and `verify-pack`, so the current frozen list is those fourteen verbs.
+`bundle-config`, `bundle-web` and `verify-pack`; A94 (2026-11-20, §2 block) then moved
+`bundle-plugins`, `bundle-laya-worker`, `emit-board-types`, `emit-migration-sql` and `check-deps`
+behind the same noun, so the registered set is the table below — the prose above is history, the
+table is the key set.
+
+### Frozen builder verb set
+
+One row per verb **registered** under `spur builder`, with the entry that consented to it. This
+is the machine-readable half of the record: `plugins/sp/tests/cli-surface-parity.test.ts` asserts
+set equality in both directions against the live commander registration, so a verb that lands
+without a row here — or a row naming a verb that no longer exists — fails the suite. Adding a
+builder verb means adding its row in the same change.
+
+| Verb | Consent entry |
+| --- | --- |
+| `build-cli` | A93 (2026-11-16, §4 row) |
+| `bundle-config` | A93 (2026-11-16, §4 row) |
+| `bundle-web` | A93 (2026-11-16, §4 row) |
+| `bundle-plugins` | A94 (2026-11-20, §2 block) |
+| `bundle-laya-worker` | A94 (2026-11-20, §2 block) |
+| `emit-board-types` | A94 (2026-11-20, §2 block) |
+| `emit-migration-sql` | A94 (2026-11-20, §2 block) |
+| `verify-pack` | A93 (2026-11-16, §4 row) |
+| `build-server` | A93 (2026-11-16, §4 row) |
+| `build-binaries` | A93 (2026-11-16, §4 row) |
+| `check-deps` | A94 (2026-11-20, §2 block) |
+| `bump-ver` | 0617 (§3 row); `--check` added by PR-9 (2026-10-15) |
+| `drop-tags` | 0617 (§3 row) |
+| `publish` | PR-9 (2026-10-15, §3 amendment) |
+| `show-branches` | A951 (2026-10-16, §3 amendment) |
+| `pr-status` | A951 flat `pr-<verb>` amendment (2026-10-16); replaced PR-7's `pr <op>` |
+| `pr-check` | A951 flat `pr-<verb>` amendment (2026-10-16); replaced PR-7's `pr <op>` |
+| `pr-open` | A951 flat `pr-<verb>` amendment (2026-10-16); replaced PR-7's `pr <op>` |
+| `pr-review` | A951 flat `pr-<verb>` amendment (2026-10-16); replaced PR-7's `pr <op>` |
 
 ## 4. Subsequent consent applications
 

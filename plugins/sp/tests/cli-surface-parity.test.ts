@@ -509,6 +509,48 @@ describe('cli-surface-parity — R8: ADR-054 ownership boundary', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// Governance consent record (task 1464, feature A95 R1/R2/R3).
+// ---------------------------------------------------------------------------
+
+const GOVERNANCE_DOC = join(REPO_ROOT, 'docs', 'design', 'harness-surface-governance.md');
+
+/**
+ * The machine-readable half of the §3 consent record: one `| Verb | Consent entry |` row per
+ * registered `builder` verb. Prose amendments cannot be parsed reliably, so the table is the key
+ * set and the prose above it stays history.
+ */
+const BUILDER_CONSENT_HEADING = '### Frozen builder verb set';
+
+/** `{verb, entry}` rows of the consent table, in document order. */
+function builderConsentRows(): { verb: string; entry: string }[] {
+    const markdown = readFileSync(GOVERNANCE_DOC, 'utf8');
+    return firstTableUnderHeading(markdown, BUILDER_CONSENT_HEADING).map((cells) => ({
+        verb: (cells[0] ?? '').replace(/`/g, '').trim(),
+        entry: (cells[1] ?? '').trim(),
+    }));
+}
+
+describe('task 1464 (feature A95) — builder verbs match the governance consent record', () => {
+    test('registered `builder` verbs equal the consent table, both ways', () => {
+        const consented = builderConsentRows().map((row) => row.verb);
+        const live = liveCapture(['builder']).commands.filter((verb) => verb !== helpNoun);
+        // A verb registered without a row (on-CLI-not-documented) and a row naming no registered
+        // verb (documented-not-on-CLI) are both violations of the consent gate.
+        expectParity(consented, live, 'governance consent rows vs live `builder` verbs');
+    });
+
+    test('every consent row names the entry that granted it', () => {
+        const missing = builderConsentRows()
+            .filter((row) => row.entry.length === 0)
+            .map((row) => row.verb);
+        expect({ label: 'consent-row-without-entry', missing }).toEqual({
+            label: 'consent-row-without-entry',
+            missing: [],
+        });
+    });
+});
+
 describe('task 0909 (feature I32) — CLI-only route reads the corrected inline help', () => {
     test('live `agent run --help` advertises host-session inline with the role/tier fallback warning', () => {
         const argv = [

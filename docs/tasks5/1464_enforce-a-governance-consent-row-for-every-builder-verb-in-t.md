@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Enforce a governance consent row for every builder verb in the CLI surface parity test
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:44.690Z
-updated_at: "2026-11-27T16:54:12.447Z"
+updated_at: "2026-11-27T18:01:02.339Z"
 feature_id: A95
 
 estimate_hours: 3
 priority: P2
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1464. Enforce a governance consent row for every builder verb in the CLI surface parity test
@@ -33,15 +35,15 @@ Refine correction: prose amendments cannot be parsed reliably. The record needs 
 
 ### Requirements
 
-- [ ] R1. `docs/design/harness-surface-governance.md` §3 gains one `| Verb | Consent entry |` table listing every registered builder verb, with the entry that consented to it (task WBS, ADR or feature id). It replaces the stale "fourteen verbs" sentence; the prose history stays.
-- [ ] R2. `plugins/sp/tests/cli-surface-parity.test.ts` asserts, both ways, that the registered `spur builder` subcommands equal that table's `Verb` keys. It reuses `firstTableUnderHeading`, and its failure names each missing or extra verb.
-- [ ] R3. The test fails when a verb is registered without a consent row, and when a row names an unregistered verb.
+- [x] R1. `docs/design/harness-surface-governance.md` §3 gains one `| Verb | Consent entry |` table listing every registered builder verb, with the entry that consented to it (task WBS, ADR or feature id). It replaces the stale "fourteen verbs" sentence; the prose history stays.
+- [x] R2. `plugins/sp/tests/cli-surface-parity.test.ts` asserts, both ways, that the registered `spur builder` subcommands equal that table's `Verb` keys. It reuses `firstTableUnderHeading`, and its failure names each missing or extra verb.
+- [x] R3. The test fails when a verb is registered without a consent row, and when a row names an unregistered verb.
 
 Out of scope: adding, renaming or removing any builder verb; consent rows for other nouns.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The builder verb set matches the governance consent record (req: R1; R2; R3) — unit: `plugins/sp/tests/cli-surface-parity.test.ts` asserts set equality both ways between `captureCliSurface` builder verbs and the `### Frozen builder verb set` table, with failure messages naming each missing/extra verb.
+- [x] AC1 — The builder verb set matches the governance consent record (req: R1; R2; R3) — unit: `plugins/sp/tests/cli-surface-parity.test.ts` asserts set equality both ways between `captureCliSurface` builder verbs and the `### Frozen builder verb set` table, with failure messages naming each missing/extra verb.
 
 ### Q&A
 
@@ -79,15 +81,51 @@ Out of scope: adding, renaming or removing any builder verb; consent rows for ot
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `docs/design/harness-surface-governance.md:236-264` | New `### Frozen builder verb set` table: one `\| Verb \| Consent entry \|` row per registered `builder` verb (19 rows), each citing the entry that granted it — A93 (§4 row), A94 (§2 block), 0617/PR-7/PR-9/A951 (§3 amendments). This is the machine-readable key set the parity test reads; the prose amendments above it stay as history (R1). |
+| `docs/design/harness-surface-governance.md:231-234` | Replaced the stale "so the current frozen list is those fourteen verbs" sentence with a pointer to the table, naming the A94 block that made it stale (R1). |
+| `plugins/sp/tests/cli-surface-parity.test.ts:513-551` | `builderConsentRows()` reads the table through the existing `firstTableUnderHeading` seam; two cases assert set equality both ways against `liveCapture(['builder']).commands` (minus the Commander-generated `help`) and that every row names an entry (R2, R3, AC1). |
+
+Rationale: the consent record was prose-only, so a newly registered builder verb could ship with no consent and nothing noticed. The table makes the record parseable with seams the file already owns (`firstTableUnderHeading`, `liveCapture`, `expectParity`) — no new helper, no snapshot, no generated table (auto-generation from the registry would make the assertion a tautology).
+
+Proof both ways (run, then reverted): deleting the `check-deps` row failed with `onCliNotDocumented: ["check-deps"]`; adding a bogus `pr-merge` row failed with `documentedNotOnCli: ["pr-merge"]`. Full file green: `(cd plugins/sp && bun test tests/cli-surface-parity.test.ts)` → 24 pass, 0 fail.
+
+probe: not-applicable (no public surface changed)
+precheck: `bun run test-pre-check` → All 52 rules passed; `spur task gate 1464 light` → light scope 2 files, format-lint + rules:pre + related tests.
+
+Plan steps 1-6 all completed; step 2's verb list was re-captured live (`builder --help`, 19 verbs) rather than transcribed from the task text.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/design/harness-surface-governance.md:236-264` adds the `### Frozen builder verb set` table (19 rows, `\| Verb \| Consent entry \|`), replacing the stale "fourteen verbs" sentence at `docs/design/harness-surface-governance.md:231-234` with a pointer that names the A94 block; the prose amendments above stay as history. |
+| R2 | MET | `plugins/sp/tests/cli-surface-parity.test.ts:526-533` reads the table through the existing `firstTableUnderHeading` seam, and `plugins/sp/tests/cli-surface-parity.test.ts:535-541` asserts set equality both ways against `liveCapture(['builder']).commands` via the existing `expectParity` helper, whose failure payload names every missing/extra verb. No new helper was added. |
+| R3 | MET | Both directions were observed failing on a deliberately broken table and revert clean: deleting the `check-deps` row produced `onCliNotDocumented: ["check-deps"]`; adding a bogus `pr-merge` row produced `documentedNotOnCli: ["pr-merge"]`. Test at `plugins/sp/tests/cli-surface-parity.test.ts:535`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The builder verb set matches the governance consent record (req: R1; R2; R3) | MET | test | `plugins/sp/tests/cli-surface-parity.test.ts:535` — `(cd plugins/sp && bun test tests/cli-surface-parity.test.ts)` → 24 pass, 0 fail, 122 expect() calls; the two task-1464 cases compare `captureCliSurface(['builder'])` verbs against the `### Frozen builder verb set` rows both ways. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+P1 (blocker): none.
+
+P2 (major): none.
+
+P3 (minor): none open.
+
+P4 (advisory): `builderConsentRows` compares through `diffSets`' Sets, so a **duplicated** row for one verb would collapse and pass unnoticed. Not a consent-gate hole (a duplicate row still consents exactly that verb, and the live side can never contain a duplicate), so it stays advisory; the next touch to this table should add a one-line duplicate check.
+
+Residual risk: the consent entries are prose cells — the test enforces that every row has *an* entry and that the verb key set equals the registered set, not that the cited entry actually granted that verb. That is the same trust boundary the prose record always had; the machine-checkable half (which verbs are consented) is now enforced, the citation's accuracy stays a review-time check.
+
+Disposition: PASS — diff is three files (governance doc table + stale-sentence pointer, one parity-test block, task sections), no public verb/flag/noun changed, no drive-by edits, gate receipt green on this tree.
 
 ### References
 
@@ -99,4 +137,7 @@ Out of scope: adding, renaming or removing any builder verb; consent rows for ot
 ### History
 
 - 2026-11-27T07:54:32.644Z backlog → todo (system)
+- 2026-11-27T17:58:21.186Z todo → wip (system)
+- 2026-11-27T18:00:48.578Z wip → testing (system)
+- 2026-11-27T18:01:02.330Z testing → done (system)
 
