@@ -25,6 +25,13 @@ prepare-commit-msg:
             into="$(git rev-parse --abbrev-ref HEAD)"
             printf 'chore: merge %s into %s\n' "$merged" "$into" > "$msg_file"
             ;;
+          "Merge remote-tracking branch '"*)
+            # `git merge origin/main` / a pull spells the ref `refs/remotes/<remote>/<branch>`;
+            # strip that prefix so the message names the branch, not git's internal ref.
+            merged="$(printf '%s' "$first" | sed -E "s/^Merge remote-tracking branch '([^']+)'.*/\1/; s#^refs/remotes/##")"
+            into="$(git rev-parse --abbrev-ref HEAD)"
+            printf 'chore: merge %s into %s\n' "$merged" "$into" > "$msg_file"
+            ;;
         esac
 
 pre-commit:
