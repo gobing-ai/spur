@@ -4,7 +4,7 @@ name: Log and show the served model on decision_logs rows
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:46.245Z
-updated_at: "2026-11-27T19:25:25.000Z"
+updated_at: "2026-11-27T22:28:33.972Z"
 feature_id: P12
 
 dependencies: ["1466"]
@@ -132,16 +132,16 @@ probe: golden path above — `spur decision run` end-to-end against the real bac
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `drizzle/0057_spur_cli_decision_logs_served_model.sql:1-3` adds the nullable column; `packages/domain/src/migrations.ts:260-270` is the `DECISION_LOGS_SERVED_MODEL_SCHEMA_SQL` mirror and `packages/domain/src/migrations.ts:1666-1671` registers it with `addColumnIfMissing: { table: 'decision_logs', column: 'served_model' }`. `packages/domain/tests/dao/migrations.test.ts` asserts the constant/entry pairing, one column after migration, a pre-0057 row reading NULL, and a re-applied migration count of 0. |
-| R2 | MET | `packages/domain/src/dao/decision-log-dao.ts:40-43` (row), `:137-141` (`SUMMARY_COLUMNS`), `:197,224` (insert list + binds); `packages/app/src/decision/decision-log.ts:101-103` (record) and `:173-175` (builder); `packages/app/src/decision/decision-events.ts:95-97,284` (end fields + forwarding); `packages/app/src/decision/decision-service.ts:643` (hub result → end). Round-trip proven at `packages/domain/tests/dao/decision-log-dao.test.ts` and `packages/app/tests/decision/decision-log.test.ts`. |
-| R3 | MET | `packages/contracts/src/observability.ts:339-340` (`servedModel: z.string().nullable()`, inherited by the detail schema), `packages/app/src/decision/decision-log-query.ts:52-53,144` (entry + `toSummaryEntry`), `apps/web/src/modules/observability/DecisionDetailDrawer.tsx:138-139` (field only when non-null). Proven at `packages/app/tests/decision/decision-log-query.test.ts` and `apps/web/tests/components/decision-detail-drawer.test.tsx`. |
-| R4 | MET | `packages/app/src/decision/decision-log.ts:175` writes the value only when `record.outcome === 'accepted'`; `packages/app/tests/decision/decision-log.test.ts` covers accepted / no-model / fallback / rejected. Live proof: `spur decision run gate-evidence …` → `reason: low-confidence` left `gate-evidence\|fallback\|default\|` (NULL) in `decision_logs`, while `maker-liveness` → `accepted\|model\|jev-1.14.0`. |
-| R5 | MET | `package.json` workspaces.catalog: all fourteen `@gobing-ai/ts-*` entries at `0.8.6` (published from ts-libs release commit `83c95f47` + `280467e7`), `bun.lock` refreshed; `bun install --ignore-scripts` in this tree resolves `@gobing-ai/ts-ai-runner` 0.8.6 and `@gobing-ai/ts-ai-decision` 0.8.6. |
+| R1 | MET | `drizzle/0057_spur_cli_decision_logs_served_model.sql:1` adds the nullable column. The migration test at `packages/domain/tests/dao/migrations.test.ts:298` checks the upgrade and an old row. |
+| R2 | MET | DAO round-trip at `packages/domain/tests/dao/decision-log-dao.test.ts:65` and accepted row construction at `packages/app/tests/decision/decision-log.test.ts:71` passed. |
+| R3 | MET | Query output at `packages/app/tests/decision/decision-log-query.test.ts:82` and conditional rendering in `apps/web/tests/components/decision-detail-drawer.test.tsx:52` passed. |
+| R4 | MET | `packages/app/tests/decision/decision-log.test.ts:74` asserts NULL for model-free, fallback and rejected cases. |
+| R5 | MET | `package.json:36` and bun.lock resolve both decision packages to the published lockstep family (now 0.8.7, after the original 0.8.6 update). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — the served model is logged per decision (req: R1; R2; R3; R5) | MET | test | DAO round-trip `packages/domain/tests/dao/decision-log-dao.test.ts`; builder/query mapping `packages/app/tests/decision/decision-log.test.ts` and `packages/app/tests/decision/decision-log-query.test.ts`; drawer render `apps/web/tests/components/decision-detail-drawer.test.tsx`; real proof `spur decision run maker-liveness --maker typesafe` → `served_model = jev-1.14.0` read back with `sqlite3 .spur/spur.db`. |
-| AC2 — non-typesafe makers leave the served model empty (req: R4) | MET | test | `packages/app/tests/decision/decision-log.test.ts` proves fallback/rejected/no-model rows store NULL; `packages/domain/tests/dao/migrations.test.ts` proves a pre-0057 row reads NULL; live fallback row observed NULL. |
+| AC1 — the served model is logged per decision | MET | test | The DAO, builder, query and drawer tests passed. A fresh source CLI TypeSafe maker-liveness run wrote an accepted model row, served_model=jev-1.14.0, to isolated SQLite. |
+| AC2 — non-typesafe makers leave the served model empty | MET | test | `packages/app/tests/decision/decision-log.test.ts:74` and `packages/domain/tests/dao/migrations.test.ts:298` passed. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
