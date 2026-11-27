@@ -231,6 +231,37 @@ describe('runHostProbe', () => {
         expect(outcome.lines.join('\n')).toContain('unknown agents: wizard (known: codex, claude, pi)');
     });
 
+    test('probes an installed host binary for the wake channel its help text proves', async () => {
+        // The installed-binary branch must not depend on what this machine has: a developer's PATH
+        // carries real hosts, while CI had exactly one (`pi`, from the @earendil-works/pi-coding-agent
+        // devDependency) until it was dropped — host-probe.ts then fell to 88% lines and failed the
+        // per-file gate with `0 fail`. Fixture hosts behind the `which` seam make it deterministic.
+        const dir = mkdtempSync(join(tmpdir(), 'spur-host-installed-'));
+        for (const agent of HOST_PROBE_AGENTS) {
+            writeFileSync(
+                join(dir, agent),
+                `#!/bin/sh\ncase "$1" in\n  --version) echo "${agent} 1.0.0" ;;\n  *) echo "  --hooks  run configured hooks" ;;\nesac\n`,
+                { mode: 0o755 },
+            );
+        }
+        const root = mkdtempSync(join(tmpdir(), 'spur-host-probe-'));
+        try {
+            const outcome = await runHostProbe({ cwd: root, out: 'report.json', which: (agent) => join(dir, agent) });
+            expect(outcome.ok).toBe(true);
+            const interactive = outcome.report?.hosts.filter((row) => row.mode === 'interactive') ?? [];
+            expect(interactive).toHaveLength(HOST_PROBE_AGENTS.length);
+            for (const row of interactive) {
+                expect(row.binary).not.toBe('absent');
+                expect(row.wake).toBe('hook');
+                expect(row.evidence?.command).toBe(`${row.agent} --help`);
+            }
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+            rmSync(dir, { recursive: true, force: true });
+        }
+        // Two bounded probes per fixture host; the shared budget keeps this well inside the default.
+    }, 30_000);
+
     test('probes every agent and writes the report without launching a host', async () => {
         const root = mkdtempSync(join(tmpdir(), 'spur-host-probe-'));
         try {

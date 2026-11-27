@@ -264,8 +264,8 @@ interface HostBinaryProbe {
 }
 
 /** Probe one installed binary: path, version line, and the help text the wake class comes from. */
-async function probeHostBinary(agent: string): Promise<HostBinaryProbe> {
-    const path = Bun.which(agent);
+async function probeHostBinary(agent: string, which: (agent: string) => string | null): Promise<HostBinaryProbe> {
+    const path = which(agent);
     if (path === null) return { binary: null, helpText: '', helpCommand: `${agent} --help` };
     const [version, help] = await Promise.all([runHostBinary(path, ['--version']), runHostBinary(path, ['--help'])]);
     const versionLine = version.output.split('\n')[0]?.trim() ?? '';
@@ -307,6 +307,15 @@ export interface HostProbeOptions {
     agents?: readonly string[];
     /** Report destination relative to `cwd` (default `docs/reports/fleet-host-capabilities.json`). */
     out?: string;
+    /**
+     * Binary resolution seam (default {@link Bun.which}).
+     *
+     * WHY: Bun caches the probe's PATH at process start, so a test cannot point `Bun.which` at
+     * fixture hosts by reassigning `process.env.PATH`. Without this seam the installed-binary
+     * branch is covered only on machines that happen to have codex/claude/pi, and the per-file
+     * coverage gate flips red as soon as the last one leaves CI's PATH.
+     */
+    which?: (agent: string) => string | null;
 }
 
 /**
@@ -317,6 +326,7 @@ export interface HostProbeOptions {
  */
 export async function runHostProbe(options: HostProbeOptions): Promise<HostProbeOutcome> {
     const { cwd } = options;
+    const which = options.which ?? ((agent: string) => Bun.which(agent));
     const reportPath = hostProbeReportPath(cwd, options.out);
     const requested = [...(options.agents ?? HOST_PROBE_AGENTS)];
     const unknown = requested.filter((agent) => !(HOST_PROBE_AGENTS as readonly string[]).includes(agent));
@@ -331,7 +341,7 @@ export async function runHostProbe(options: HostProbeOptions): Promise<HostProbe
     }
     const rows: HostCapabilityRow[] = [];
     for (const agent of HOST_PROBE_AGENTS) {
-        const probe = await probeHostBinary(agent);
+        const probe = await probeHostBinary(agent, which);
         for (const mode of HOST_PROBE_MODES) {
             rows.push(
                 buildHostRow({
