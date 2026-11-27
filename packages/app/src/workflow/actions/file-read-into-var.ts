@@ -21,6 +21,11 @@ const KIND = 'file.read.into-var';
  *   read content before projecting into the var. The raw content is still returned
  *   in `data.content` for inspection. Disable when the file's trailing newline is
  *   semantically meaningful.
+ * - `missing` (`'error' | 'empty'`, default `'error'`): what an absent file means. `'error'`
+ *   fails the action (today's behaviour, the default — a missing artifact usually IS the bug).
+ *   `'empty'` succeeds with `''` projected into the var and `missing: true` in `data`, for an
+ *   artifact a lane may legitimately lack (the review lane's gate findings, task 1473). Any
+ *   other value is a config error.
  *
  * Why this action exists: the engine's `resolveTemplates` substitutes only
  * `${vars.X}` and `${env.X}` in note/prompt/guard strings — it does not run a shell
@@ -51,12 +56,26 @@ export class FileReadIntoVarActionRunner implements ActionRunner {
             };
         }
         const trim = options.trim === undefined ? true : options.trim !== false;
+        const missing = options.missing === undefined ? 'error' : options.missing;
+        if (missing !== 'error' && missing !== 'empty') {
+            return {
+                ok: false,
+                error: `file.read.into-var: missing must be 'error' or 'empty', got "${String(missing)}"`,
+            };
+        }
 
         const resolved = isAbsolutePath(rawPath)
             ? normalizeSeparators(rawPath)
             : joinPath(context.workdir ?? '.', rawPath);
         const stat = await this.fileSystem.stat(resolved);
         if (stat === null) {
+            if (missing === 'empty') {
+                return {
+                    ok: true,
+                    data: { content: '', raw: '', var: varName, path: resolved, size: 0, missing: true },
+                    setVars: { [varName]: '' },
+                };
+            }
             return { ok: false, error: `file.read.into-var: file not found: ${resolved}` };
         }
 

@@ -886,13 +886,17 @@ export function runDeferredGate(env: QualityGateEnv, options: QualityGateOptions
     const statusFile = join(runDir, `${env.wbs}-test-gate.status`);
     const findingsFile = join(runDir, `${env.wbs}-test-gate.findings`);
     writeFileSync(abs(statusFile), `${status}\n`);
-    // The findings artifact is part of every mode's contract (the CLI help names it): a FAIL routes
-    // `gate → remediate`, whose fix hop reads this file. Omitting it in the deferred path made that
-    // hop fail on a missing file instead of on the finding it was meant to repair.
+    // The findings artifact is part of every mode's contract: a FAIL routes `gate → remediate`,
+    // whose fix hop reads this file, and so does a PARTIAL review off a first-pass-green gate
+    // (1473) — the review lane has no gate anchors to offer, so a pass writes the (often empty)
+    // extraction rather than leaving the read to fail on a missing file.
+    const gateLog = existsSync(abs(light.logFile)) ? readFileSync(abs(light.logFile), 'utf8') : '';
     if (status === 'FAIL') {
-        const gateLog = existsSync(abs(light.logFile)) ? readFileSync(abs(light.logFile), 'utf8') : '';
         const findings = extractFindings(gateLog);
         writeFileSync(abs(findingsFile), findings.trim().length > 0 ? findings : tailLines(gateLog, 40));
+    } else {
+        // Never a log tail on a green run: an empty anchor set must read as empty.
+        writeFileSync(abs(findingsFile), extractFindings(gateLog));
     }
     const note =
         status === 'DEFERRED'

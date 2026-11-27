@@ -19,7 +19,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as parseYaml } from 'yaml';
+import { FINDINGS_PATTERN } from '../../src/services/quality-gate';
+import { FileReadIntoVarActionRunner } from '../../src/workflow/actions/file-read-into-var';
 
 interface Action {
     kind: string;
@@ -355,6 +358,51 @@ describe('task-pipeline evidence chain — the gate state owns the quality gate 
             writeFileSync(log, 'gate output\n');
             expect(runSh(project, dir, vars).code).toBe(0);
             expect(readFileSync(log, 'utf8')).toBe('gate output\n');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('behavioral: a first-pass-green gate seeds remediate findings from the review answer (1473 R3)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'tp-review-lane-findings-'));
+        try {
+            const run = join(dir, '.spur', 'run');
+            mkdirSync(run, { recursive: true });
+            const vars = { wbs: '1473', __runId: 'run-green' };
+            const seed = cmdOf('remediate', 'test-gate.findings');
+            const findings = join(run, '1473-test-gate.findings');
+            writeFileSync(join(run, '1473-test-gate.log'), 'green gate output\n');
+            writeFileSync(
+                join(run, 'run-green-review-answer.txt'),
+                'Verdict: PARTIAL\n\n| P1 | `src/a.ts:12` drops the option |\n',
+            );
+            writeFileSync(join(run, 'run-green-gate.status'), 'PASS\n');
+            // The review lane reaches remediate with a green gate: no findings artifact exists.
+            expect(existsSync(findings)).toBe(false);
+            expect(runSh(seed, dir, vars).code).toBe(0);
+            expect(readFileSync(findings, 'utf8')).toContain('src/a.ts:12');
+
+            // The read the YAML declares succeeds on the seeded file…
+            const read = actionOf('remediate', 'file.read.into-var', 'gateFindings');
+            const readPath = String(read?.options?.path ?? '').replace(VAR('wbs'), vars.wbs);
+            const readVars = { wbs: vars.wbs, runId: 'run-green', stateOrNodeId: 'remediate', workdir: dir };
+            const seeded = await new FileReadIntoVarActionRunner(createNodeFileSystem()).execute(
+                { path: readPath, var: 'gateFindings', missing: read?.options?.missing },
+                { ...readVars, vars: {}, env: {} },
+            );
+            expect(seeded.ok).toBe(true);
+            expect(seeded.setVars?.gateFindings).toContain('src/a.ts:12');
+
+            // …and the gate-red lane's own findings survive the same actions byte-identically.
+            const gateFindings = 'src/b.ts:99 ';
+            writeFileSync(findings, gateFindings);
+            writeFileSync(join(run, 'run-green-gate.status'), 'FAIL\n');
+            expect(runSh(seed, dir, vars).code).toBe(0);
+            expect(readFileSync(findings, 'utf8')).toBe(gateFindings);
+
+            // The YAML's anchor ERE mirrors the gate's own extractor — one pattern, two readers.
+            const ere = /grep -oE '([^']+)'/.exec(seed)?.[1];
+            expect(ere).toBe(FINDINGS_PATTERN.source);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

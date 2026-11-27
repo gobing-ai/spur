@@ -403,6 +403,12 @@ describe('runDeferredGate (1111 R1/R2)', () => {
             // The whole point of the token: a light result must never certify the full gate.
             expect(readFileSync(statusPath, 'utf8').trim()).toBe('DEFERRED');
             expect(readFileSync(statusPath, 'utf8')).not.toContain('PASS');
+            // 1473 R1: the deferred tier owes the findings artifact on EVERY outcome — a PARTIAL
+            // review routes into `remediate`, whose read cannot distinguish "no anchors" from
+            // "the writer skipped the pass path". Empty, never the tail of a green log.
+            const findingsPath = join(dir, '.spur', 'run', '1111t-test-gate.findings');
+            expect(existsSync(findingsPath)).toBe(true);
+            expect(readFileSync(findingsPath, 'utf8')).toBe('');
 
             // Red light tier -> FAIL, and the deferral note states the integrated gate is owed.
             writeFileSync(

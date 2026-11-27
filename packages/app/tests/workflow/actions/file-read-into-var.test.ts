@@ -59,6 +59,39 @@ describe('FileReadIntoVarActionRunner', () => {
         expect(result.setVars).toBeUndefined();
     });
 
+    // 1473 R2: an artifact a lane may legitimately lack (the review lane's gate findings) reads as
+    // empty on the lane that has none, without hiding a genuinely missing artifact elsewhere.
+    test("missing: 'empty' succeeds on an absent file and projects ''", async () => {
+        const fs = { stat: async () => null } as unknown as FileSystem;
+        const runner = new FileReadIntoVarActionRunner(fs);
+        const result = await runner.execute(
+            { path: 'gone.findings', var: 'gateFindings', missing: 'empty' },
+            makeCtx(),
+        );
+        expect(result.ok).toBe(true);
+        expect(result.setVars).toEqual({ gateFindings: '' });
+        expect(result.data).toMatchObject({ content: '', raw: '', var: 'gateFindings', size: 0, missing: true });
+    });
+
+    test("missing: 'error' (explicit) and the default both still fail on an absent file", async () => {
+        const fs = { stat: async () => null } as unknown as FileSystem;
+        const runner = new FileReadIntoVarActionRunner(fs);
+        for (const options of [{}, { missing: 'error' }]) {
+            const result = await runner.execute({ path: 'gone.findings', var: 'x', ...options }, makeCtx());
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('file not found');
+        }
+    });
+
+    test('an unknown missing value is a config error naming the option', async () => {
+        const fs = { stat: async () => null } as unknown as FileSystem;
+        const runner = new FileReadIntoVarActionRunner(fs);
+        const result = await runner.execute({ path: 'f.txt', var: 'x', missing: 'bogus' }, makeCtx());
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain("missing must be 'error' or 'empty'");
+        expect(result.error).toContain('bogus');
+    });
+
     test('rejects missing path option', async () => {
         const fs = { stat: async () => null } as unknown as FileSystem;
         const runner = new FileReadIntoVarActionRunner(fs);

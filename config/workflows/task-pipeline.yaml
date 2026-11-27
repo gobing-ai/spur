@@ -577,6 +577,16 @@ states:
             options:
                 command: >-
                     [ "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = PASS ] && [ -f ".spur/run/$__runId-review-answer.txt" ] && echo '--- review verdict (remediation input, review lane) ---' >> ".spur/run/$wbs-test-gate.log" && cat ".spur/run/$__runId-review-answer.txt" >> ".spur/run/$wbs-test-gate.log"; exit 0
+          # Review-lane anchors (1473 R3): a first-pass-green gate leaves no gate findings to read,
+          # so the fixer would get an empty anchor list. Seed the findings file from the review
+          # answer's `path:line` anchors on that lane only — overwriting unconditionally, because a
+          # green full-tier log can leave non-empty noise anchors behind. The ERE and the cap mirror
+          # FINDINGS_PATTERN / MAX_FINDINGS in quality-gate.ts (one pattern, two readers:
+          # packages/app/tests/workflow/task-pipeline-proof-chain.test.ts asserts the parity).
+          - kind: shell
+            options:
+                command: >-
+                    [ "$(cat ".spur/run/$__runId-gate.status" 2>/dev/null)" = PASS ] && [ -f ".spur/run/$__runId-review-answer.txt" ] && { grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' ".spur/run/$__runId-review-answer.txt" | sort -u | head -n 20 | tr '\n' ' ' > ".spur/run/$wbs-test-gate.findings"; }; exit 0
           # R3 (0482): project the extracted gate anchors into a var so the dispatch input
           # can NAME the failing file:line, not merely point at a log. A vars template cannot
           # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
@@ -584,6 +594,8 @@ states:
             options:
                 path: .spur/run/${vars.wbs}-test-gate.findings
                 var: gateFindings
+                # A lane can legitimately have no anchors at all (1473 R2).
+                missing: empty
           - kind: agent.run
             options:
                 agent: ${vars.agent}
