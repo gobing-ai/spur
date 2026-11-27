@@ -4,7 +4,7 @@ name: Add the superskill dsh install target that patches the Spur MCP loader ent
 status: wip
 template: feature-impl
 created_at: 2026-11-27T07:35:47.781Z
-updated_at: "2026-11-27T21:39:44.519Z"
+updated_at: "2026-11-27T22:28:39.225Z"
 feature_id: B811
 
 estimate_hours: 4
@@ -37,11 +37,11 @@ Cross-repo precedent (task 1456): do the work and run the gates in `../superskil
 
 ### Requirements
 
-- [ ] R1. `dsh` joins `INSTALL_TARGETS` as an install-only target (ADR-036 pattern). It does not join `TARGETS`, rulesync, or the default/`all` expansion.
-- [ ] R2. `superskill install <plugin> --targets dsh` translates every `mcpServers` entry of the plugin `mcp.json` into one loader item `{ name: '@deepseek-ai/dsh-mcp-client', config: { serverName: <key>, transport: 'stdio', command, args, env: { <NAME>: !!js process.env.<NAME> } } }`, one `env` entry per `envVars` name. Items are written to `~/.dsh/profiles/headless/cordis.patch.yml` through `TransactionalWrite`, and the file and directory are created when absent.
-- [ ] R3. Reinstall is idempotent. Items are keyed by `name` + `config.serverName`: owned items are replaced in place, and foreign items (other loaders, other server names) keep their content and order. A second identical install produces byte-identical output.
-- [ ] R4. `--dry-run` prints the planned patch diff and writes nothing. An unparseable existing patch fails with an actionable message and leaves the file untouched.
-- [ ] R5. No secret values are written: `env` entries are `!!js process.env.<NAME>` references only. Nothing under `~/.dsh` other than that patch file is read or written.
+- [x] R1. `dsh` joins `INSTALL_TARGETS` as an install-only target (ADR-036 pattern). It does not join `TARGETS`, rulesync, or the default/`all` expansion.
+- [x] R2. `superskill install <plugin> --targets dsh` translates every `mcpServers` entry of the plugin `mcp.json` into one loader item `{ name: '@deepseek-ai/dsh-mcp-client', config: { serverName: <key>, transport: 'stdio', command, args, env: { <NAME>: !!js process.env.<NAME> } } }`, one `env` entry per `envVars` name. Items are written to `~/.dsh/profiles/headless/cordis.patch.yml` through `TransactionalWrite`, and the file and directory are created when absent.
+- [x] R3. Reinstall is idempotent. Items are keyed by `name` + `config.serverName`: owned items are replaced in place, and foreign items (other loaders, other server names) keep their content and order. A second identical install produces byte-identical output.
+- [x] R4. `--dry-run` prints the planned patch diff and writes nothing. An unparseable existing patch fails with an actionable message and leaves the file untouched.
+- [x] R5. No secret values are written: `env` entries are `!!js process.env.<NAME>` references only. Nothing under `~/.dsh` other than that patch file is read or written.
 - [ ] R6. Spur's readiness probe reports the written entry as ready. The superskill gate (`bun run spur-check`) passes. Bump/publish waits for Robin's authorization.
 
 Out of scope: dsh hooks; other dsh profiles; the dsh skills install (§4 of the design); changing Spur's probe.
@@ -49,7 +49,7 @@ Out of scope: dsh hooks; other dsh profiles; the dsh skills install (§4 of the 
 ### Acceptance Criteria
 
 - [ ] AC1 — The dsh target writes the Spur MCP loader entry (req: R1; R2; R4; R5; R6) — unit (superskill, temp HOME): absent patch → created with one `@deepseek-ai/dsh-mcp-client` item carrying `transport: stdio`, `command: spur`, `args: [mcp, --gateway]` and four `!!js process.env.<NAME>` env references and no literal values; `--dry-run` writes nothing; unparseable YAML errors and leaves the file untouched. Real proof: Spur's readiness probe reports dsh "ready" against that HOME.
-- [ ] AC2 — Reinstall is idempotent and preserves foreign entries (req: R3) — unit (superskill, temp HOME): a second install is byte-identical; a foreign loader and a foreign `serverName` keep content and order; a stale owned item is replaced in place.
+- [x] AC2 — Reinstall is idempotent and preserves foreign entries (req: R3) — unit (superskill, temp HOME): a second install is byte-identical; a foreign loader and a foreign `serverName` keep content and order; a stale owned item is replaced in place.
 
 ### Q&A
 
@@ -126,7 +126,24 @@ R6, second clause — **blocked by a pre-existing checkout defect, not by this d
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/superskill-core `packages/core/src/targets.ts` line 28 keeps dsh install-only. The source CLI ran with target dsh. |
+| R2 | MET | @gobing-ai/superskill-core `packages/core/src/operations/dsh-mcp-patch.ts` lines 107 and 220 produce the stdio loader then write through the transaction writer. The source CLI created the patch in the isolated home. |
+| R3 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 157 exercises stable reinstall and the foreign entries. The source CLI reinstall also preserved the SHA-256. |
+| R4 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 103 proves preview diff and no write, and line 133 proves malformed input is left untouched without leaking its contents. |
+| R5 | MET | @gobing-ai/superskill-core `packages/core/src/operations/dsh-mcp-patch.ts` lines 122–142 validate names and construct env references. The isolated patch held all four references, and neither preview nor error printed prior values. |
+| R6 | PARTIAL | The fresh isolated Superskill full gate failed with 2734 passes and 15 Pi/hook subprocess failures. The 12 dsh patch cases, source CLI install, and Spur readiness probe passed. The real probe returned configured with stdio, the readiness enum used before observed calls. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — The dsh target writes the Spur MCP loader entry | PARTIAL | test | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 63 and line 103 passed, the source CLI probe returned configured, and the full gate remains red. |
+| AC2 — Reinstall is idempotent and preserves foreign entries | MET | test | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 157 passed. The CLI repeated the same hash on an isolated HOME_DIR. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
