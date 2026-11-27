@@ -4,10 +4,11 @@ name: Compute same-kind action ambiguity from the state total row count in the p
 status: todo
 template: feature-impl
 created_at: 2026-11-27T07:35:45.245Z
-updated_at: "2026-11-27T07:54:33.006Z"
+updated_at: "2026-11-27T16:54:26.806Z"
 feature_id: E721
 
 estimate_hours: 1
+priority: P1
 ---
 
 ## 1465. Compute same-kind action ambiguity from the state total row count in the progress projection
@@ -28,6 +29,12 @@ Once the first same-kind action consumes a row, the remaining unused count drops
 
 Existing coverage: `packages/app/tests/workflow/progress-projection.test.ts:310-363` proves 3 rows for 2 declared is ambiguous. No test covers the equal-count case.
 
+**Refine corrections (2026-11-27)**
+
+- Code location "~:505-530" → verified: `candidateRows` at `progress-projection.ts:507`, `sameKindDefCount` and the ambiguity predicate at `:524-525` → premise and bug confirmed.
+- Q&A "the under-recorded case already falls outside the `> 1` / `!==` guard" → false for ≥2 recorded rows: with 2 recorded / 3 declared, both counts exceed 1 and differ, so it is flagged ambiguous today and stays ambiguous after the fix; only 1 recorded row falls outside the guard and maps → behaviour unchanged either way; Q&A corrected below.
+- AC row used the non-canonical `R2 —` form → rewritten as `AC1 — … (req: …)` with its test layer.
+
 ### Requirements
 
 - [ ] R1. The ambiguity check compares the **total** same-kind row count for the state (`stateActionRows.filter(r => r.kind === kind).length`) with `sameKindDefCount`, not the unused remainder.
@@ -38,7 +45,7 @@ Out of scope: matching by action id or ordinal; the E721 R1 visibility diagnosti
 
 ### Acceptance Criteria
 
-- [ ] R2 — A one-to-one same-kind mapping is never reported ambiguous
+- [ ] AC1 — A one-to-one same-kind mapping is never reported ambiguous (req: R1; R2; R3) — unit: `packages/app/tests/workflow/progress-projection.test.ts` adds a 3-declared/3-recorded same-kind case with no ambiguity diagnostic and every row mapped, while the existing 3-recorded/2-declared case (`:310-363`) still reports ambiguous.
 
 ### Q&A
 
@@ -50,6 +57,10 @@ Out of scope: matching by action id or ordinal; the E721 R1 visibility diagnosti
 
 - **Q: Hoist the total count out of the per-action loop?** A: Yes. Compute it once per `(state, kind)`; the value does not change while rows are consumed.
 - **Q: Does the under-recorded case (fewer rows than declared) change?** A: No. It already falls outside the `> 1` / `!==` guard as an unmatched action, and the fix keeps that.
+
+#### Q&A entry — 2026-11-27 (refine, depth=ready)
+
+- **Q: Correction — what happens to the under-recorded case?** A: Unchanged by the fix. With ≥2 recorded rows but fewer than declared it is ambiguous before and after (supersedes the earlier "falls outside the guard" answer); with exactly 1 recorded row it maps. No new test needed for it.
 
 ### Design
 

@@ -4,11 +4,12 @@ name: Log and show the served model on decision_logs rows
 status: todo
 template: feature-impl
 created_at: 2026-11-27T07:35:46.245Z
-updated_at: "2026-11-27T07:54:33.668Z"
+updated_at: "2026-11-27T16:55:25.849Z"
 feature_id: P12
 
 dependencies: ["1466"]
 estimate_hours: 3
+priority: P2
 ---
 
 ## 1467. Log and show the served model on decision_logs rows
@@ -27,11 +28,20 @@ Refine correction: `spur decision show <id>` describes a catalog decision, not a
 
 Depends on task 1466 and its published ts-libs release.
 
+**Refine corrections (2026-11-27)**
+
+- "a mirrored statement in `migrations.ts`" → the mirror shape is a `*_SCHEMA_SQL` constant (precedent `migrations.ts:257`) plus a migrations-array entry with `addColumnIfMissing: { table: 'decision_logs', column: 'served_model' }` (precedent `:1652-1656`); the `decision_logs` DDL spans `:262-306` → R1 names the exact shape. `emit-migration-sql` covers only 0037, so 0057 is hand-mirrored.
+- R2 "DAO insert/select" missed the explicit summary projection → `decision-log-dao.ts:114` `SUMMARY_COLUMNS` must list `served_model`; `DecisionLogSummaryRow` (`:77`) is an `Omit` of `DecisionLogRow` and inherits it → added to R2.
+- R3 missed the row→contract mapper → `toSummaryEntry` (`packages/app/src/decision/decision-log-query.ts:117`) must set `servedModel`; the detail schema extends `decisionLogRowSchema` (`observability.ts:353`) and inherits the field; the drawer field list is at `DecisionDetailDrawer.tsx:114` → added to R3.
+- Verified: `buildDecisionLogRow` callers at `decision-events.ts:178,261`; latest migration `0056_spur_cli_coordination_runs_a2a_remote_context.sql`; `run-transfer.ts` copies only target-present columns, so no change; catalog has both ts-ai packages at 0.8.5; `spur decision run <id>` exists.
+- Plan step 4 real proof needs a TypeSafe credential and network → stated as an environment precondition; without it the proof is recorded as blocked, not substituted with a stub.
+- AC rows used the non-canonical `R<n> —` form → rewritten as `AC<n> — … (req: …)` with test layers.
+
 ### Requirements
 
-- [ ] R1. Migration `drizzle/0057_spur_cli_decision_logs_served_model.sql` plus a mirrored statement in `migrations.ts` add `decision_logs.served_model TEXT` (nullable).
-- [ ] R2. `DecisionLogRow`, the DAO insert/select, `DecisionLogRecord` and `buildDecisionLogRow` carry `served_model` / `servedModel` from `DecisionResult.servedModel`.
-- [ ] R3. `decisionLogRowSchema` gains `servedModel: z.string().nullable()`, and the drawer shows "Served model" only when the value is non-null.
+- [ ] R1. Migration `drizzle/0057_spur_cli_decision_logs_served_model.sql` (`ALTER TABLE decision_logs ADD COLUMN served_model TEXT`) plus its `migrations.ts` mirror — a `*_SCHEMA_SQL` constant and an array entry with `addColumnIfMissing: { table: 'decision_logs', column: 'served_model' }` — add the nullable column.
+- [ ] R2. `DecisionLogRow`, the DAO insert, the `SUMMARY_COLUMNS` projection (`decision-log-dao.ts:114`), `DecisionLogRecord` and `buildDecisionLogRow` carry `served_model` / `servedModel` from `DecisionResult.servedModel`.
+- [ ] R3. `decisionLogRowSchema` gains `servedModel: z.string().nullable()`, `toSummaryEntry` (`decision-log-query.ts:117`) maps it, and the drawer shows "Served model" only when the value is non-null.
 - [ ] R4. Rows from non-typesafe makers, fallbacks and rejected decisions store `NULL`.
 - [ ] R5. The root catalog bumps `@gobing-ai/ts-ai-runner` and `@gobing-ai/ts-ai-decision` to the release from task 1466.
 
@@ -39,8 +49,8 @@ Out of scope: a CLI log-row viewer; backfilling old rows.
 
 ### Acceptance Criteria
 
-- [ ] R1 — the served model is logged per decision
-- [ ] R2 — non-typesafe makers leave the served model empty
+- [ ] AC1 — the served model is logged per decision (req: R1; R2; R3; R5) — unit: in-memory DAO test in `packages/domain/tests` round-trips `served_model` through insert and the summary select; builder/query tests in `packages/app/tests/decision` map an accepted typesafe result to `servedModel`; web test in `apps/web/tests` renders "Served model" in `DecisionDetailDrawer` only when non-null. Real proof: one `spur decision run <id>` with the typesafe maker records a non-null `served_model`.
+- [ ] AC2 — non-typesafe makers leave the served model empty (req: R4) — unit: `packages/app/tests/decision` builder tests prove fm-local/agent, fallback and rejected rows store `NULL`, and a pre-0057 row reads `NULL` after migration.
 
 ### Q&A
 
@@ -54,6 +64,11 @@ Out of scope: a CLI log-row viewer; backfilling old rows.
 - **Q: Backfill historic rows?** A: No. The served model was never recorded, so `NULL` is truthful.
 - **Q: List-page column?** A: No. The drawer only, which keeps the list row narrow.
 
+#### Q&A entry — 2026-11-27 (refine, depth=ready)
+
+- **Q: Does `run-transfer.ts` need the new column?** A: No. It copies only columns present in the target table.
+- **Q: What if the TypeSafe credential is unavailable for the real proof?** A: Record it as blocked with the reason; do not substitute a stub run as the real receipt.
+
 ### Design
 
 - **Chosen:** one nullable column threaded through DAO → builder → contract → drawer.
@@ -66,12 +81,13 @@ Out of scope: a CLI log-row viewer; backfilling old rows.
 ### Plan
 
 1. Failure modes first:
-   - (a) a DAO in-memory test where an inserted row with `served_model` round-trips, and a row without it reads `NULL`;
-   - (b) a builder test where an accepted typesafe result maps to `servedModel`, and fallback/rejected rows map to null;
-   - (c) a contract/drawer test where the field renders only when non-null.
-2. Write the migration, the `migrations.ts` mirror, DAO, builder, contract and drawer.
-3. Bump the catalog versions and run `bun install`.
-4. Real proof: run one real `spur decision run <id>` with the typesafe maker. Query `decision_logs.served_model` through the source CLI/Board and record it.
+   - (a) a DAO in-memory test where an inserted row with `served_model` round-trips through insert and the `SUMMARY_COLUMNS` select, and a row without it reads `NULL`;
+   - (b) a builder/query test where an accepted typesafe result maps to `servedModel` through `buildDecisionLogRow` and `toSummaryEntry`, and fallback/rejected/non-typesafe rows map to null;
+   - (c) a migration test where a DB created before 0057 gains the column via `addColumnIfMissing` and old rows read `NULL`;
+   - (d) a drawer test where the field renders only when non-null.
+2. Write the migration, the `migrations.ts` mirror (constant + `addColumnIfMissing` entry), DAO (`SUMMARY_COLUMNS`), builder, `toSummaryEntry`, contract and drawer (`DecisionDetailDrawer.tsx:114`).
+3. After task 1466's release is authorized and published, bump the catalog versions and run `bun install`.
+4. Real proof (precondition: a TypeSafe credential in the operator's environment and network access; never read or print the key): run one `spur decision run <id>` with the typesafe maker, then confirm `decision_logs.served_model` through the source CLI/Board and record it. If the precondition is missing, record the proof as blocked.
 5. Run `bun run spur-check`.
 
 ### Solution
