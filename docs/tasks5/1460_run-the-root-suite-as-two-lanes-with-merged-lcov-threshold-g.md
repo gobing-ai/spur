@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Run the root suite as two lanes with merged-LCOV threshold gate and prove the wall-time drop
-status: blocked
+status: cancelled
 template: feature-impl
 created_at: 2026-11-27T06:56:54.808Z
-updated_at: "2026-11-27T16:48:53.202Z"
+updated_at: "2026-11-27T19:06:31.261Z"
 feature_id: H161
 priority: P1
 tags:
@@ -113,6 +113,8 @@ Out of scope: manifest generation (1459); heavy-suite lanes (H162 / 1463); chang
 
 **Follow-up (not this task):** the real lever is per-test child cost in the 144 spawn-heavy files (`spur` CLI startup ~100–300 ms × 3,959 tests), not scheduling. Recorded for H161's re-scope.
 
+Cancelled 2026-11-27 (operator decision: re-scope H161 to R2). Premise falsified by the measurements in Solution; the per-test spawn-cost lever is tracked in task 1475.
+
 ### Testing
 
 <!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
@@ -132,4 +134,5 @@ Out of scope: manifest generation (1459); heavy-suite lanes (H162 / 1463); chang
 
 - 2026-11-27T07:00:09.288Z feature_id U → H161 (system)
 - 2026-11-27T16:48:53.202Z todo → blocked (system)
+- 2026-11-27T19:06:15.757Z blocked → cancelled (system)
 

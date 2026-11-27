@@ -6,41 +6,33 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-11-27T06:55:00.770Z"
-updated_at: "2026-11-27T08:48:40.362Z"
+updated_at: "2026-11-27T19:05:54.785Z"
 ---
 
 # H161: Laned root test suite: subprocess-heavy lane plus full-parallel in-process lane
 
 ## Goal
 
-Cut the wall time of the root `bun run test` suite — the ~491s core of every `spur-check`, `spur-check-feature` and `spur feature verify` pass — to at most 250s by running subprocess-spawning test files in a bounded low-parallelism lane and in-process files at CPU-count parallelism, without weakening the per-file coverage thresholds or the canonical `--publish-coverage` certification, and with no new timeouts.
+Give the root `bun run test` suite a committed, evidence-derived classification of its subprocess-spawning test files, guarded against drift, so any later scheduling or per-test-cost work starts from a reproducible lane manifest instead of a guess.
+
+Re-scoped 2026-11-27 (operator decision): the original ≤250 s laning target was falsified by measurement in task 1460 — see Notes.
 
 ## Scope
 
 **In scope**
-- Lane partition of the root suite inside `scripts/commands/run-tests.ts` (one launcher entry; `package.json` `test` script stays the single call site).
-- Timing-derived classification of subprocess-heavy files, reproducible and guarded against drift.
-- Merging both lanes' LCOV and evaluating `bunfig.toml` per-file thresholds on the merged result; canonical certification (task 1203) unchanged in contract.
-- A before/after wall-time receipt and a 3-consecutive-run zero-new-timeout proof.
+- Timing- and spawn-usage-derived classification of subprocess-heavy root test files in `config/test-lanes.json`, reproducible from recorded timing data (`bun scripts/spur-dev.ts test-lanes`).
+- A repo-wide drift guard that fails naming any spawning file missing from, or stale in, the manifest.
 
 **Out of scope**
-- `test:heavy` / browser heavy lanes (filed as follow-up feature H162).
+- Running the root suite as two lanes, merged-LCOV threshold gating and the ≤250 s wall-time target (falsified by 1460; cancelled).
+- Reducing per-test child-process cost in the subprocess lane (filed as a separate follow-up task).
+- `test:heavy` / browser heavy lanes (feature H162).
 - Changing the feature-verification receipt digest or reuse policy.
-- Rewriting individual tests to avoid subprocesses.
 
 ## Acceptance Criteria
 
 ```gherkin
 Feature: Laned root test suite
-
-  @core
-  Scenario: R1 — The launcher runs the root suite as a subprocess lane and an in-process lane
-    # covers: I1, I6
-    Given the root `test` script invokes scripts/commands/run-tests.ts once
-    When the suite runs
-    Then subprocess-heavy test files run in a lane bounded to low parallelism
-    And all other test files run in a lane at CPU-count parallelism
-    And spur-check, spur-check-feature and feature verify need no call-site change
 
   @core
   Scenario: R2 — The subprocess lane membership is derived from evidence and guarded against drift
@@ -49,36 +41,6 @@ Feature: Laned root test suite
     When a test file that spawns subprocesses is not in the subprocess lane
     Then a repo check fails naming the file
     And the classification can be regenerated from recorded timing data
-
-  @core
-  Scenario: R3 — Coverage thresholds are evaluated on the merged result of both lanes
-    # covers: I3
-    Given both lanes write isolated LCOV
-    When the launcher merges them
-    Then the per-file 0.9 line and function thresholds from bunfig.toml are applied to the merged LCOV
-    And a file below threshold fails the run exactly as the single-process run did
-
-  @core
-  Scenario: R4 — Canonical coverage certification still publishes only on a fully green unchanged-tree run
-    # covers: I3
-    Given the --publish-coverage flag
-    When either lane fails or the tree changes during the run
-    Then no certification is written
-    And a green run certifies the merged .coverage/lcov.info
-
-  @core
-  Scenario: R5 — A wall-time receipt shows the main suite at or under 250 seconds
-    # covers: I4
-    Given a before receipt for the --parallel=2 baseline on the same host
-    When the laned suite runs
-    Then an after receipt records the main-suite wall time at or under 250 seconds
-
-  @core
-  Scenario: R6 — Three consecutive laned runs complete with no new timeouts
-    # covers: I5
-    Given the laned suite
-    When it runs three times in a row on the same host
-    Then every run exits zero with no timeout-shaped failure
 ```
 
 ## Tasks
@@ -91,6 +53,8 @@ Feature: Laned root test suite
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+**Re-scope (2026-11-27, operator decision).** Scenarios R1, R3, R4, R5 and R6 were removed; R2 keeps its identity key. Task 1460 measured the two-lane split on a 10-core host: baseline single child `--parallel=2` 519 s; lanes together 501 s (24 timeouts) or 356 s (24 timeouts); subprocess lane alone at width 4 286 s. The 144 subprocess files carry ~96% of wall time and are latency-bound on spawned children, so ≤250 s is unattainable at any lane width without the forbidden timeout increases. 1460 is cancelled; the real lever — per-test spawn cost in the subprocess lane — is a separate follow-up task.
 
 ## History
 

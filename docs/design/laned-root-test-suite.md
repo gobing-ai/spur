@@ -49,15 +49,15 @@ scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
    manifest or a listed file no longer exists or no longer spawns. Top-level manifest keys other than
    `version`/`root` are preserved verbatim on regeneration, so the heavy section
    ([heavy-suite-lanes](heavy-suite-lanes.md)) survives it.
-3. **Two children, one launcher (not built).** `run-tests.ts` runs the subprocess lane at
+3. **Two children, one launcher (rejected — measured by 1460, cancelled).** `run-tests.ts` runs the subprocess lane at
    `--parallel=2` (today's proven bound) and the in-process lane at `--parallel=<availableParallelism>`.
    The two lanes run concurrently. Each child gets its own coverage directory; Bun's in-child
    `coverageThreshold` is disabled through the config copy the launcher already writes.
-4. **Merge and gate (not built).** The launcher merges both LCOV files per `SF:` record (union of `DA`/`FN`
+4. **Merge and gate (rejected with 3).** The launcher merges both LCOV files per `SF:` record (union of `DA`/`FN`
    hits, recomputed `LF/LH/FNF/FNH`), evaluates the bunfig thresholds per file on the merged result
    (respecting `coveragePathIgnorePatterns`), writes `<coverageDir>/lcov.info`, and fails nonzero on
    any breach, naming file and metric.
-5. **Certification (not built).** Unchanged contract: certification runs only when both lanes exit 0, the threshold
+5. **Certification (rejected with 3).** Unchanged contract: certification runs only when both lanes exit 0, the threshold
    gate passes, and the tree is unchanged; it certifies the merged file.
 
 ## 4. Contract and compatibility
@@ -80,3 +80,8 @@ scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
   sequentially (in-process first) — still expected well under 250s.
 - LCOV merge sits on the certification path; it must be covered by fixture tests comparing merged
   thresholds with a single-process baseline.
+- **Outcome (2026-11-27, operator decision).** Task 1460 built items 3–5, measured them on a 10-core host
+  and reverted them: lanes together ran 501 s or 356 s with 24 timeouts, and the subprocess lane alone at
+  width 4 took 286 s against a 519 s baseline. The 144 subprocess files are latency-bound on spawned
+  children, so ≤250 s is unreachable by scheduling. H161 is re-scoped to R2 (classifier + drift guard,
+  items 1–2); per-test spawn cost is the follow-up (task 1475).
