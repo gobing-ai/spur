@@ -128,7 +128,6 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.5.15",
-        "@earendil-works/pi-coding-agent": "0.87.1",
         "@gobing-ai/spur": "workspace:*",
         "@gobing-ai/superskill": "catalog:",
         "@logtape/logtape": "2.1.1",
