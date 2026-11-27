@@ -4,7 +4,7 @@ name: Fix the review-lane remediate hop on a first-pass-green gate
 status: done
 template: issue
 created_at: 2026-11-27T18:18:55.414Z
-updated_at: "2026-11-27T22:13:47.608Z"
+updated_at: "2026-11-27T22:30:46.685Z"
 
 ac_altitude: task-local
 ac_numbering: task-local
@@ -62,6 +62,15 @@ Two defects combine, plus one content gap:
 - "`docs/04_DESIGN` owns the action table and must name the new option" → no doc documents
   `file.read.into-var` options (grep of `docs/04_DESIGN.md`, `docs/design/`); the action TSDoc
   (`file-read-into-var.ts:7-32`) is its contract → document the option there only.
+
+**Second independent observation (2026-11-27, batch 1464-1472).** The same dead end reproduced on a
+different task: task 1470, pipeline run `7c9e7c8a` — gate `DEFERRED` (light tier PASS), review verdict
+PARTIAL, `review → remediate` fired, and remediate's `file.read.into-var` failed on the absent
+`.spur/run/1470-test-gate.findings`, so the run ended `failed` at `remediate` instead of repairing.
+Recorded in `spur-new/.spur/run/worktree-runall-1464-1472-aedfe887-batch-report.md:18` (the run
+artifacts themselves lived in that batch's worktree DB, which was removed after the merge — same
+caveat as the D9 observation above). Two batches, two repos, same path — this is a defect, not a
+one-off.
 
 ### Requirements
 
