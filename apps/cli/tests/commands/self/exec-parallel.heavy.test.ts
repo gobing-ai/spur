@@ -33,6 +33,9 @@ const commands =
               ? ['sh -c "sleep 30"', 'sh -c "sleep 30"']
               : ['definitely-not-a-command', 'sh -c "sleep 30"'];
 const supervisor = superviseParallel({ commands, cwd: process.cwd(), graceMs: 200, onChildEvent: record });
+// superviseParallel installs its signal handlers and spawns every child synchronously; past this
+// line a signal reaches the supervisor, not bun's default handler.
+record({ label: 'ready', code: 0 });
 const code = await supervisor.exited;
 record({ label: 'runner', code });
 process.exit(code);
@@ -56,8 +59,14 @@ test.each(['clean', 'failure', 'child-signal', 'parent-signal'])(
         });
         try {
             if (mode === 'parent-signal') {
-                // Let both children start, then interrupt the supervisor itself.
-                await Bun.sleep(1_000);
+                // Interrupt the supervisor only once it owns its handlers and both children. A fixed
+                // sleep raced runner startup on a loaded host: SIGINT then hit bun's default handler,
+                // the runner died by signal and exitCode stayed null.
+                const readyBy = Date.now() + 15_000;
+                while (Date.now() < readyBy && !(await Bun.file(events).exists())) await Bun.sleep(20);
+                while (Date.now() < readyBy && !(await Bun.file(events).text()).includes('"ready"')) {
+                    await Bun.sleep(20);
+                }
                 proc.kill('SIGINT');
             }
             const deadline = Date.now() + 15_000;
