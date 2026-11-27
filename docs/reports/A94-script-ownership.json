@@ -6,7 +6,7 @@
         "state": "granted",
         "at": "2026-11-19",
         "by": "Robin",
-        "record": "docs/design/downstream-tooling-absorption.md \u00a75",
+        "record": "docs/design/downstream-tooling-absorption.md §5",
         "amendment": "2026-11-20 surface-shape"
     },
     "waves": ["1410", "1411", "1412", "1413", "1414", "1415"],
@@ -131,7 +131,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: pins Spur\u2019s own CLI flag surface, a repository contract",
+            "downstreamReason": "Retained: pins Spur’s own CLI flag surface, a repository contract",
             "subject": "plugins/sp/commands"
         },
         {
@@ -141,7 +141,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -152,7 +152,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -171,7 +171,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches"
+            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches"
         },
         {
             "path": "scripts/commands/fleet-e2e-matrix.test.ts",
@@ -243,9 +243,18 @@
             "responsibility": "Real-server MCP/A2A integration fixture and optional Board browser proof, writing a repeatable receipt",
             "tests": ["apps/web/tests/modules/integrations-browser.heavy.test.ts"],
             "callers": [
-                { "path": "package.json", "line": 104 },
-                { "path": "scripts/spur-dev.ts", "line": 154 },
-                { "path": "apps/web/tests/modules/integrations-browser.heavy.test.ts", "line": 16 }
+                {
+                    "path": "package.json",
+                    "line": 104
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 154
+                },
+                {
+                    "path": "apps/web/tests/modules/integrations-browser.heavy.test.ts",
+                    "line": 16
+                }
             ],
             "downstream": "retain",
             "disposition": "retained",
@@ -315,13 +324,22 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo\u2019s suite policy"
+            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo’s suite policy"
         },
         {
             "path": "scripts/commands/mcp-agent-interop.ts",
             "responsibility": "Operator-run real-agent MCP transport interoperability fixture with a recording proxy and receipt",
             "tests": ["apps/cli/tests/mcp-agent-interop.test.ts"],
-            "callers": [{ "path": "package.json", "line": 105 }, { "path": "scripts/spur-dev.ts", "line": 159 }],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 105
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 159
+                }
+            ],
             "downstream": "retain",
             "disposition": "retained",
             "downstreamReason": "Retained: installed-agent authentication and protocol scenario fixture for Spur, not reusable downstream runtime behavior"
@@ -414,13 +432,38 @@
             "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
         },
         {
+            "path": "scripts/commands/test-lanes.test.ts",
+            "responsibility": "Companion tests for the test-lane manifest generator seams",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: pins manifest-section preservation for this repo's lane manifest",
+            "noRuntimeCaller": true,
+            "subject": "scripts/commands/test-lanes.ts"
+        },
+        {
+            "path": "scripts/commands/test-lanes.ts",
+            "responsibility": "Generates and checks config/test-lanes.json (root subprocess lane + heavy lane classification, heavy profile receipt)",
+            "tests": ["scripts/commands/test-lanes.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 60
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: repository-specific lane manifest and heavy profile for this suite"
+        },
+        {
             "path": "scripts/commands/test-suite-termination.test.ts",
             "responsibility": "Companion tests for Windows child-suite termination behavior",
             "tests": [],
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite",
+            "downstreamReason": "Retained: child-termination proof for this repo’s suite",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/test-suite-termination.ts"
         },
@@ -436,7 +479,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite"
+            "downstreamReason": "Retained: child-termination proof for this repo’s suite"
         },
         {
             "path": "scripts/commands/validate-commands.ts",
