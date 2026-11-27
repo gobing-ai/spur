@@ -68,6 +68,14 @@ export const AgentIcon: React.FC<{ id: string }> = ({ id }) => {
                     <path d="M4 6h16M9 6v13M15 6v11a2 2 0 0 0 2 2" />
                 </svg>
             );
+        // dsh monogram: the ⟨/⟩ prompt marks in a rounded frame, no brand logo copied.
+        case 'deepseek':
+            return (
+                <svg {...common} fill="currentColor">
+                    <title>DeepSeek dsh icon</title>
+                    <path d="M6.4 3h11.2A3.4 3.4 0 0 1 21 6.4v11.2a3.4 3.4 0 0 1-3.4 3.4H6.4A3.4 3.4 0 0 1 3 17.6V6.4A3.4 3.4 0 0 1 6.4 3zm.9 5.1 3 3.9-3 3.9 1.5 1.2 3.9-5.1-3.9-5.1-1.5 1.2zm9.4 0-3 3.9 3 3.9-1.5 1.2-3.9-5.1 3.9-5.1 1.5 1.2z" />
+                </svg>
+            );
         default:
             return null;
     }

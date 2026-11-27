@@ -21,7 +21,7 @@ async function seedCorpus(
     sessionCount = 50,
     messagesPerSession = 10,
 ): Promise<{ messages: number; toolCalls: number }> {
-    const sources = ['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi'];
+    const sources = ['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi', 'deepseek'];
     const models = ['claude-opus-4.6', 'claude-sonnet-4.6', 'gpt-5.6-sol', 'gemini-3.0-flash'];
     // >15 distinct tools so topTools' displayed top-15 is a strict subset of all tools —
     // pins that share columns normalize over the displayed rows, not all tools.
@@ -430,16 +430,26 @@ describe('LiveHistoryBoardService', () => {
         expect(insights.modelComparison.length).toBeGreaterThan(0);
     });
 
-    test('getSources returns overview and 9 agent heatmaps', async () => {
+    test('getSources returns overview and 10 agent heatmaps, dsh among them', async () => {
         const db = await setupTestDb();
         await seedCorpus(db, 18, 4);
         const svc = new LiveHistoryBoardService({ db });
 
         const sources = await svc.getSources();
-        expect(sources.agents.length).toBe(9);
-        expect(sources.roots.length).toBe(9);
+        expect(sources.agents.length).toBe(10);
+        expect(sources.roots.length).toBe(10);
         expect(sources.overview.totalSessions).toBeGreaterThan(0);
         expect(sources.agents.find((agent) => agent.id === 'agy')?.sessionCount).toBeGreaterThan(0);
+        // 1472 R1/R3: the dsh descriptor is frozen here and its rows are the deepseek ones.
+        const dsh = sources.agents.find((agent) => agent.id === 'deepseek');
+        expect(dsh).toMatchObject({
+            name: 'DeepSeek dsh',
+            color: '#65a30d',
+            filePattern: 'session.v{3,4}.jsonl[.zstd]',
+        });
+        expect(dsh?.sessionCount).toBeGreaterThan(0);
+        // The roots come from the same descriptor, so the dsh path is listed there too.
+        expect(sources.roots.some((root) => root.path === '~/.dsh/sessions/')).toBe(true);
     });
 
     test('getSources folds in messages imported since the last rollup refresh', async () => {

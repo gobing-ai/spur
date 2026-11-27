@@ -25,7 +25,18 @@ export interface HistoryFiltersProps {
     scope?: HistoryFiltersScope;
 }
 
-const AGENT_ICON_IDS = new Set(['claude', 'codex', 'agy', 'omp', 'openclaw', 'hermes', 'grok', 'opencode', 'pi']);
+const AGENT_ICON_IDS = new Set([
+    'claude',
+    'codex',
+    'agy',
+    'omp',
+    'openclaw',
+    'hermes',
+    'grok',
+    'opencode',
+    'pi',
+    'deepseek',
+]);
 
 const toggleId = (ids: readonly string[], id: string): string[] =>
     ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];

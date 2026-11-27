@@ -144,6 +144,15 @@ const AGENT_CATALOG: Array<{
     { id: 'grok', name: 'Grok Build', color: '#f59e0b', path: '~/.grok/sessions/', pattern: 'build-*.jsonl' },
     { id: 'opencode', name: 'OpenCode', color: '#6366f1', path: '~/.opencode/history/', pattern: 'opencode-*.jsonl' },
     { id: 'pi', name: 'Pi', color: '#14b8a6', path: '~/.pi/agent/', pattern: 'session-*.jsonl' },
+    // dsh (feature E11 R2, task 1472): lime-600 is the one unused hue family in this list — no
+    // collision with any source above, no error red, nothing near Claude blue.
+    {
+        id: 'deepseek',
+        name: 'DeepSeek dsh',
+        color: '#65a30d',
+        path: '~/.dsh/sessions/',
+        pattern: 'session.v{3,4}.jsonl[.zstd]',
+    },
 ];
 
 function toArtifactSelector(filter?: HistoryFilter): ArtifactSelector {

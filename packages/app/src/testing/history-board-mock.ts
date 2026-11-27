@@ -129,6 +129,16 @@ const SOURCES_CATALOG = [
         files: 186,
         size: 1.9,
     },
+    {
+        id: 'deepseek',
+        name: 'DeepSeek dsh',
+        color: '#65a30d',
+        w: 5,
+        path: '~/.dsh/sessions/',
+        pattern: 'session.v{3,4}.jsonl[.zstd]',
+        files: 54,
+        size: 12.4,
+    },
 ];
 
 const MODELS_CATALOG = [

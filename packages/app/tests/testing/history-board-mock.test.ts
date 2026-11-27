@@ -132,11 +132,13 @@ describe('MockHistoryBoardService', () => {
         expect(insights.modelComparison.length).toBeGreaterThan(0);
     });
 
-    test('getSources returns overview and 9 agent heatmaps', async () => {
+    test('getSources returns overview and 10 agent heatmaps', async () => {
         const sources = await service.getSources();
         expect(sources.overview.totalFiles).toBeGreaterThan(0);
-        expect(sources.agents.length).toBe(9);
-        expect(sources.roots.length).toBe(9);
+        // 1472 R1: the mock mirrors the live source list, dsh included.
+        expect(sources.agents.length).toBe(10);
+        expect(sources.agents.some((agent) => agent.id === 'deepseek')).toBe(true);
+        expect(sources.roots.length).toBe(10);
         expect(sources.agents[0]?.heatmapDays.length).toBe(180);
     });
 
