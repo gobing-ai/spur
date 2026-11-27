@@ -127,6 +127,13 @@ omit/`--agent inline` selects the host executor. Start the run with `spur workfl
 a named executor, an explicit `vars.agent`/`vars.implementAgent`, or a headless caller selects the
 workflow subprocess path below. Never fall back silently from inline to `agent.default`.
 
+**`<receipt>` is a PATH, not prose.** For a paused host work item the CLI reads the executor's receipt
+file (`readReceipt(fs, workdir, answerText)` in `packages/app/src/services/workflow-resume-ops.ts`), so
+pass the file the stage wrote — conventionally `.spur/run/<run-id>/receipts/<state>.json` with
+`{ runId, state, executor: "host", outcome: "done", … }`. A sentence is read as a missing file and the
+resume is refused; `--answer` answers a `hitl.confirm`/`hitl.select` gate instead, and the `receipts/`
+directory is not created for you.
+
 **Subprocess path: launch async, observe with a single `--follow` call.** A pipeline with `agent.run` stages runs
 for many minutes (each stage can take the full `stepTimeoutMs`, default 10 min). Synchronous
 invocation blocks the caller for the entire duration and risks an orphaned run if the caller is
