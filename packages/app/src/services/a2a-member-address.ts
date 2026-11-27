@@ -15,7 +15,7 @@ const CARD_SUFFIX = '.well-known/agent-card.json';
 export type ProjectCardTarget = { url: string } | { error: string };
 
 /** Why a project cannot be addressed through the LOCAL gateway (1468 R1/R2). */
-export type ProjectGatewayRefusal = 'no-entry' | 'remote-host' | 'ambiguous' | 'no-gateway';
+export type ProjectGatewayRefusal = 'no-entry' | 'remote-host' | 'ambiguous' | 'no-gateway' | 'registry-unavailable';
 
 /**
  * A registered project's base URL on the local gateway, or the refusal that stopped it.
@@ -70,7 +70,12 @@ export async function resolveProjectGatewayBase(input: {
 }): Promise<ProjectGatewayBase> {
     const wanted = input.project.trim();
     const asPrefix = normalizePrefix(wanted);
-    const entries = await input.listProjects();
+    let entries: ProjectEntry[];
+    try {
+        entries = await input.listProjects();
+    } catch {
+        return { error: 'could not read the project registry', reason: 'registry-unavailable' };
+    }
     const matches = entries.filter(
         (entry) => entry.name === wanted || resolveProjectPrefix(entry) === asPrefix || entry.prefix === asPrefix,
     );

@@ -4,7 +4,7 @@ name: Resolve same-gateway A2A targets and read the remote inbox thread for an o
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:46.757Z
-updated_at: "2026-11-27T20:19:15.614Z"
+updated_at: "2026-11-27T22:28:35.736Z"
 feature_id: A822
 
 estimate_hours: 5
@@ -126,16 +126,16 @@ Gate: `spur task gate 1468 light` → PASS (10 changed files, 11 checks); `bun a
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/a2a-member-address.ts:65-127` extracts `resolveProjectGatewayBase` (registry match → local-only refusal → prefix → gateway probe) and `packages/app/src/services/a2a-member-address.ts:38-44` composes the card URL from it, so the dialog base and the card share one prefix rule. `packages/app/src/services/a2a-remote-dialog.ts:38-85` reads `<base>/api/inbox/messages/<remoteContextId>/thread`; proven at `packages/app/tests/services/a2a-remote-dialog.test.ts:96` (path assertion `/tslibs/api/inbox/messages/th-1/thread`). |
-| R2 | MET | `packages/app/src/services/a2a-remote-dialog.ts:14-20` is the union; `:40` returns `outside-gateway` for a non-project kind, `:57-62` maps `no-entry`/`remote-host` to `outside-gateway` and other refusals to `unavailable`, and `:66-83` maps non-2xx, timeout, redirect and invalid body to `unavailable` with a reason. Cases at `packages/app/tests/services/a2a-remote-dialog.test.ts:104` (a2a), `:113` (unregistered), `:121` (dead gateway), `:129` (500), `:137` (redirect), `:148` (malformed), `:155` (2 s timeout). |
-| R3 | MET | `packages/contracts/src/integrations.ts:310-332` defines the input/output schemas and `:365-378` the `GET /integrations/remote-dialog` route; the handler is `implement(contract)`-shaped at `apps/server/src/modules/integrations/handlers.ts:288-310`. Exercised through the served app at `apps/server/tests/modules/integrations/handlers.test.ts:552-660`. No `spur` CLI verb was added (`spur decision`/`integrations` surfaces unchanged). |
-| R4 | MET | `packages/app/src/services/a2a-remote-dialog.ts:66-74` sends only `accept`, sets `redirect: 'error'` and a 2 s `AbortSignal.timeout`, and resolves nothing but `http://localhost:<port><prefix>`. `packages/app/tests/services/a2a-remote-dialog.test.ts:85` asserts `authorization`/`cookie`/`x-api-key`/`x-spur-token` are absent; `:137` proves the redirect target never receives the read. |
+| R1 | MET | `packages/app/src/services/a2a-member-address.ts:65` centralizes gateway resolution. The loopback test in `packages/app/tests/services/a2a-remote-dialog.test.ts:83` asserts the exact thread route and chronological order. |
+| R2 | MET | The marker cases in `packages/app/tests/services/a2a-remote-dialog.test.ts:106` and :125 cover foreign peers, registry failure, unavailable gateway, HTTP error, redirects, malformed body, and timeout. |
+| R3 | MET | `packages/contracts/src/integrations.ts:369` declares the procedure and `apps/server/src/modules/integrations/handlers.ts:293` implements it. Handler contract tests start at `apps/server/tests/modules/integrations/handlers.test.ts:561`. |
+| R4 | MET | `packages/app/tests/services/a2a-remote-dialog.test.ts:97` checks credential omission and :151 checks redirect refusal. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — An outbound call to a same-gateway project shows the remote dialog (req: R1; R3; R4) | MET | test | `packages/app/tests/services/a2a-remote-dialog.test.ts:96` (stub loopback gateway returns the thread oldest first from the gateway inbox route) and `apps/server/tests/modules/integrations/handlers.test.ts:616` (the served app resolves a registered project member through a real registry + stub gateway). Live probe: `GET /api/integrations/remote-dialog?member=a95-caller-peer-coder&remoteContextId=ctx-live-1` on a real `spur self serve` → `{"status":"remote","messages":[msg-root(1000), msg-reply(2000)]}`. |
-| AC2 — A peer outside the gateway is marked, not guessed (req: R2) | MET | test | `packages/app/tests/services/a2a-remote-dialog.test.ts:104` and `:113` — both return `{ status: 'outside-gateway' }` with `gateway.requests` length 0, i.e. no fetch was issued. |
-| AC3 — A failed remote read degrades to the marker (req: R2; R4) | MET | test | `packages/app/tests/services/a2a-remote-dialog.test.ts:121` (gateway down), `:129` (500), `:137` (redirect), `:148` (malformed body), `:155` (timeout budget) — each returns `{ status: 'unavailable', reason }` and none throws. Live: `member=ghost` → `{"status":"unavailable","reason":"no outbound member \"ghost\" on this project"}`. |
+| AC1 — An outbound call to a same-gateway project shows the remote dialog | MET | test | App loopback and handler contract suites passed. Both real peers and the gateway served the synthetic thread rendered by 1469. |
+| AC2 — A peer outside the gateway is marked, not guessed | MET | test | `packages/app/tests/services/a2a-remote-dialog.test.ts:106` passed for both kinds of outside peer with no fetch. |
+| AC3 — A failed remote read degrades to the marker | MET | test | `packages/app/tests/services/a2a-remote-dialog.test.ts:125` passed, including the red-to-green registry rejection regression. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

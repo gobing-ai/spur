@@ -123,6 +123,17 @@ describe('1468 R2/AC2 — a peer outside the gateway is marked, never guessed', 
 });
 
 describe('1468 R2/AC3 — a failed remote read degrades to the marker', () => {
+    test('a registry read failure is unavailable without starting a fetch', async () => {
+        const result = await readRemoteDialog(
+            deps(0, {
+                listProjects: async () => {
+                    throw new Error('registry unavailable');
+                },
+            }),
+        );
+        expect(result).toEqual({ status: 'unavailable', reason: 'could not read the project registry' });
+    });
+
     test('no gateway listening is unavailable with the gateway reason', async () => {
         const result = await readRemoteDialog(deps(deadPort()));
         expect(result.status).toBe('unavailable');
