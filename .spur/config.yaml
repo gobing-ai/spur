@@ -127,6 +127,11 @@ builder:
     # per-task tier runs only the static post rule; its coverage floor is the changed-file
     # check in the gate itself. `bun run test-post-check` (full gate) keeps both.
     rules-post: bun run apps/cli/src/index.ts rule run --preset recommended-post-check --rule every-export-has-tsdoc --fail-on warning --no-logo
+    # The light tier's test hop uses the declared 20 s budget like every package.json test script.
+    # Without the flag bun falls back to its 5000 ms default, and a bunfig `[test] timeout` key does
+    # not exist (oven-sh/bun#7789), so `cd <ws> && bun test` timed out spawn-per-check fixtures that
+    # legitimately take ~5.0-5.2 s and reddened the light tier on an otherwise green tree.
+    test-changed: cd {workspace} && bun test --timeout 20000 --coverage --coverage-reporter=text {paths}
     test-repo-wide: bun run test-repo-wide
     plugin-smoke: bun run plugin-smoke
     corpus-check: bun run corpus-check
