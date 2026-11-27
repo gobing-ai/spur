@@ -4,7 +4,7 @@ name: Render the stitched remote dialog under outbound arrows in the A2A sequenc
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:47.277Z
-updated_at: "2026-11-27T20:25:14.568Z"
+updated_at: "2026-11-27T22:28:37.294Z"
 feature_id: A822
 
 dependencies: ["1468"]
@@ -116,17 +116,17 @@ Proof scope — read this honestly: the component is exercised end-to-end throug
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:608-704` mounts `RemoteDialog` inside `ArrowDetail` (only when the receipt carries a `remoteContextId`), and `apps/web/src/modules/integrations/A2aSequence.tsx:837-873` loads it lazily and caches per message with `force` reserved for Retry. Proven at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:773` — `remoteCalls` is empty after the tooltip opens, exactly one call after the disclosure opens, the list renders `r1` then `r2` despite a newest-first answer, and reopening adds no call. |
-| R2 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:610` holds the frozen copy; `:675-678` renders it under `a2a-remote-marker` with no Retry; `:679-696` renders the `unavailable` reason under the same marker plus `a2a-remote-retry`. Proven at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:826` (exact copy, no retry element, still one call) and `:843` (reason shown, Retry makes exactly two calls, local grid still present). |
-| R3 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:44-60` — explicit `SequenceClient` interface and an explicit `SEQUENCE_CLIENT` object (no `Pick`, no proxy spread); `apps/web/src/modules/IntegrationsModule.tsx:36-47` builds the same three fields from `seams.api`, memoized; the test fake `makeClient` gained `remoteDialog` at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:157-163` rather than being bypassed. |
-| R4 | MET | The disclosure is a real `<Button>` (`apps/web/src/modules/integrations/A2aSequence.tsx:636-652`) with `aria-expanded` and an action label, wrapped in the shared `Button` component so daisyUI classes never leak into a call site (`no-daisyui-class-leak` clean on the changed file). Proven at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:808` (tag is BUTTON, `aria-expanded` flips, label names the action). No chart dependency added — the panel is a list. |
-| R5 | MET | `docs/design/integrations-module.md:221-251` replaces "the remote side's dialog is a separate feature" with the disclosure's mount point, its lazy/cached read, a three-state table and the guarantee that a remote failure leaves the local sequence untouched. |
+| R1 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:611` and :837 implement lazy cache, chronological rendering and bounded excerpts. The test at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:773` passed. |
+| R2 | MET | The named test cases at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:826` cover the outside marker and retryable failure. |
+| R3 | MET | `apps/web/src/modules/integrations/A2aSequence.tsx:39` explicitly lists timeline, requests and remoteDialog with a corresponding test client. |
+| R4 | MET | The keyboard-reachable disclosure and expanded state are checked at `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:810`. No manifest dependency changed. |
+| R5 | MET | `docs/design/integrations-module.md:221` describes the disclosure and its three states. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — An outbound call to a same-gateway project shows the remote dialog (req: R1; R3; R4) | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:773` — no `remoteDialog` call before the disclosure opens, exactly one on open, messages listed oldest first under `a2a-remote-dialog`; `:808` — keyboard-reachable button with `aria-expanded`. Browser screenshot NOT taken (see Review residual risk); the DOM-level run is the executed evidence. |
-| AC2 — A peer outside the gateway is marked, not guessed (req: R2) | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:826` — `a2a-remote-marker` carries exactly "Remote peer outside this gateway — dialog not available", no `a2a-remote-retry` exists, and the call count stays 1. |
-| AC3 — A failed remote read degrades to the marker (req: R2; R5) | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:843` — the reason renders, `a2a-remote-retry` issues a second call, and `integrations-a2a-sequence-grid` still renders after the failure. |
+| AC1 — An outbound call to a same-gateway project shows the remote dialog | MET | test | The web suite passed. The live two-project browser showed request then reply. Screenshot: `.spur/run/verifyall-1464-1472/1469-remote-dialog.png`. |
+| AC2 — A peer outside the gateway is marked, not guessed | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:826` verified marker wording and absence of Retry. |
+| AC3 — A failed remote read degrades to the marker | MET | test | `apps/web/tests/modules/integrations/a2a-sequence.test.tsx:845` verified reason, retry, and preserved local sequence. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

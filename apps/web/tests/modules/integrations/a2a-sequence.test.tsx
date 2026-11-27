@@ -774,7 +774,7 @@ describe('1469 — the stitched remote dialog (R1/R3/R4)', () => {
         receiptWithContext();
         remoteAnswer = async () => ({
             status: 'remote',
-            messages: [remoteMessage('r2', 2_000), remoteMessage('r1', 1_000)],
+            messages: [remoteMessage('r2', 2_000, `${'x'.repeat(280)}hidden tail`), remoteMessage('r1', 1_000)],
         });
         const view = renderTab({ status: PROJECT_STATUS });
         const detail = await openArrow(view);
@@ -794,6 +794,8 @@ describe('1469 — the stitched remote dialog (R1/R3/R4)', () => {
         );
         expect(listed).toEqual(['a2a-remote-message-r1', 'a2a-remote-message-r2']);
         expect(view.getByTestId('a2a-remote-dialog').textContent).toContain('remote r1');
+        expect(view.getByTestId('a2a-remote-message-r2').textContent).toContain(`${'x'.repeat(280)}…`);
+        expect(view.getByTestId('a2a-remote-message-r2').textContent).not.toContain('hidden tail');
 
         // Reopening reads the cached answer, never a second request.
         await act(async () => {

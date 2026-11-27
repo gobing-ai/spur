@@ -608,6 +608,7 @@ function ArrowDetail({
 
 /** The frozen copy for a peer this gateway cannot read (1469 R2). */
 const REMOTE_OUTSIDE_COPY = 'Remote peer outside this gateway — dialog not available';
+const REMOTE_EXCERPT_CHARS = 280;
 
 /**
  * The stitched remote dialog for one outbound receipt (1469 R1/R2/R4).
@@ -666,7 +667,9 @@ function RemoteDialog({
                                     {stamp(message.createdAt)}
                                 </p>
                                 <p className="whitespace-pre-wrap break-words">
-                                    {message.body === '' ? '(empty body)' : message.body}
+                                    {message.body.length > REMOTE_EXCERPT_CHARS
+                                        ? `${message.body.slice(0, REMOTE_EXCERPT_CHARS)}…`
+                                        : message.body || '(empty body)'}
                                 </p>
                             </li>
                         ))}
