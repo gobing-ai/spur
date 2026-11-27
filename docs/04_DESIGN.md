@@ -49,6 +49,8 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | rd3 Migration — System Design | [rd3-migration-design.md](design/rd3-migration-design.md) |
 | Server-Side Adjustment — Design | [server-side-adjustment-design.md](design/server-side-adjustment-design.md) |
 | Server-Side Adjustment — Finalized Feature List | [server-side-adjustment-feature-finalized.md](design/server-side-adjustment-feature-finalized.md) |
+| Laned root test suite — subprocess lane + full-parallel in-process lane, merged-LCOV threshold gate (feature H161) | [laned-root-test-suite.md](design/laned-root-test-suite.md) |
+| Heavy-suite lanes — run-scoped shared Board build + concurrent-safe and serial heavy phases (feature H162) | [heavy-suite-lanes.md](design/heavy-suite-lanes.md) |
 | Workflow run observability | [workflow-observability.md](design/workflow-observability.md) |
 | Workflow composition contract | [workflow-composition-contract.md](design/workflow-composition-contract.md) |
 | Workflow execution foundation — one interpreter, executor-agnostic `agent.run` dispatch, work item + receipt, builtins, decision gates, leases (feature D65) | [workflow-execution-foundation.md](design/workflow-execution-foundation.md) |
