@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H162"
 name: "Heavy-suite lane split and per-test profiling"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-11-27T06:55:01.144Z"
-updated_at: "2026-11-28T03:00:34.770Z"
+updated_at: "2026-11-28T03:45:17.914Z"
 ---
 
 # H162: Heavy-suite lane split and per-test profiling
@@ -105,4 +105,5 @@ Feature: Heavy-suite lane split and per-test profiling
 - 2026-11-27T07:00:09.784Z moved V → H162 (system)
 - 2026-11-27T17:04:55.343Z backlog → active (system)
 - 2026-11-28T03:00:34.770Z active → verifying (system)
+- 2026-11-28T03:45:17.914Z verifying → done (system)
 
