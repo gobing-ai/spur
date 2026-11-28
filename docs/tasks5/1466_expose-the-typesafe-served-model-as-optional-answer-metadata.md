@@ -4,7 +4,7 @@ name: Expose the TypeSafe served model as optional answer metadata in ts-ai-deci
 status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:45.741Z
-updated_at: "2026-11-27T22:28:32.483Z"
+updated_at: "2026-11-27T23:34:28.864Z"
 feature_id: P12
 
 estimate_hours: 4
@@ -122,7 +122,7 @@ probe: not-applicable (no public CLI/HTTP surface changed — library seam only)
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
@@ -131,11 +131,11 @@ probe: not-applicable (no public CLI/HTTP surface changed — library seam only)
 | R3 | MET | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` line 107 proves the type-safe driver returns the actual model through the metadata method. |
 | R4 | MET | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` lines 128, 135 and 143 cover accepted metadata, no fallback metadata, and shared validation. |
 | R5 | MET | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` line 175 covers fm-local, laya-local and llm-agent with absent metadata. |
-| R6 | PARTIAL | Fresh ts-libs spur-check completed 3303 passing tests with two 5-second feature verification adapter timeouts. The focused decision and runner suites passed. |
+| R6 | MET | The current ts-libs source passed the full spur-check, including 3,306 tests, 69 pre-check rules and 7 post-check rules. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — the decision library exposes the served model without breaking existing callers | PARTIAL | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/decision/ask-with-meta.test.ts` line 36 and @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` lines 107–143 passed. Fresh ts-libs spur-check completed 3303 passing tests with two 5-second feature verification adapter timeouts. The focused decision and runner suites passed. |
+| AC1 — the decision library exposes the served model without breaking existing callers | MET | test | @gobing-ai/ts-ai-runner `packages/ai-runner/tests/decision/ask-with-meta.test.ts` line 36 and @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` lines 107–143 passed. The same source passed the full ts-libs spur-check. |
 | AC2 — non-typesafe makers leave the served model empty | MET | test | @gobing-ai/ts-ai-decision `packages/ai-decision/tests/served-model.test.ts` line 175 passed. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
