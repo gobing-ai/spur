@@ -11,7 +11,7 @@ import { renderBuilderBlock } from '../../../src/commands/self/init';
 import { SCAFFOLD_MANIFEST } from '../../../src/config/scaffold-manifest';
 import { main } from '../../../src/index';
 import type { CommandOutput } from '../../../src/output';
-import { createTempProject, createTempProjectStackNeutral, runCli } from '../../helpers';
+import { createTempProject, createTempProjectStackNeutral, runMain } from '../../helpers';
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
@@ -31,7 +31,7 @@ async function isolatedOptions(cwd: string) {
  */
 async function initAndParse(cwd: string, args: string[] = []): Promise<{ text: string; builder: BuilderConfig }> {
     const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-    const result = await runCli(['self', 'init', '--minimal', ...args], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir });
+    const result = await runMain(['self', 'init', '--minimal', ...args], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir });
     expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
     const text = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
@@ -443,7 +443,7 @@ describe('init command', () => {
         // A bun lockfile appears; a plain re-init converges and rewrites nothing.
         await Bun.write(join(cwd, 'bun.lock'), '');
         const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-        expect((await runCli(['self', 'init', '--minimal'], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir })).code).toBe(0);
+        expect((await runMain(['self', 'init', '--minimal'], cwd, { SPUR_GLOBAL_RULES_DIR: globalDir })).code).toBe(0);
         expect(await readFile(configPath, 'utf8')).toBe(first.text);
 
         // --force regenerates it with the fresh detection.
@@ -511,7 +511,7 @@ describe('JavaScript action onboarding (1303)', () => {
 
         // Inspect the generated binding through the existing transport and real config loader.
         const globalDir = options.env.SPUR_GLOBAL_RULES_DIR;
-        const list = await runCli(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, {
+        const list = await runMain(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, {
             SPUR_GLOBAL_RULES_DIR: globalDir,
         });
         expect(list.code).toBe(0);
@@ -521,7 +521,7 @@ describe('JavaScript action onboarding (1303)', () => {
             source: 'config',
             command: `${manager} run build`,
         });
-        const preview = await runCli(['--no-logo', 'self', 'exec', 'build', '--dry-run', '--json'], cwd, {
+        const preview = await runMain(['--no-logo', 'self', 'exec', 'build', '--dry-run', '--json'], cwd, {
             SPUR_GLOBAL_RULES_DIR: globalDir,
         });
         expect(preview.code).toBe(0);
@@ -535,7 +535,7 @@ describe('JavaScript action onboarding (1303)', () => {
         ['conflicting managers', ['package-lock.json', 'pnpm-lock.yaml']],
     ] as const)('keeps rule defaults out of unbound proposals for %s', async (_manager, locks) => {
         const { cwd, options, text } = await scaffold(JSON.stringify({ scripts }), [...locks]);
-        const list = await runCli(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, {
+        const list = await runMain(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, {
             SPUR_GLOBAL_RULES_DIR: options.env.SPUR_GLOBAL_RULES_DIR,
         });
         expect(list.code).toBe(0);
@@ -806,9 +806,9 @@ describe('language and package-root onboarding (1304)', () => {
             CDPATH: alternate,
             SPUR_GLOBAL_RULES_DIR: options.env.SPUR_GLOBAL_RULES_DIR,
         };
-        const preview = await runCli(['--no-logo', 'self', 'exec', 'check', '--dry-run', '--json'], cwd, env);
+        const preview = await runMain(['--no-logo', 'self', 'exec', 'check', '--dry-run', '--json'], cwd, env);
         expect(preview.code).toBe(0);
-        const executed = await runCli(['--no-logo', 'self', 'exec', 'check', '--json'], cwd, env);
+        const executed = await runMain(['--no-logo', 'self', 'exec', 'check', '--json'], cwd, env);
         expect(executed.code).toBe(0);
         expect(existsSync(join(alternate, 'child/tool-ran'))).toBe(false);
         expect(await readFile(join(cwd, 'child/tool-ran'), 'utf8')).toContain('/child:check');
@@ -825,17 +825,17 @@ describe('language and package-root onboarding (1304)', () => {
             SPUR_GLOBAL_RULES_DIR: options.env.SPUR_GLOBAL_RULES_DIR,
         };
         // Action 1 was self init; inspect, preview and accept/run are actions 2–4.
-        const list = await runCli(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, env);
+        const list = await runMain(['--no-logo', 'self', 'exec', '--list', '--json'], cwd, env);
         expect(list.code).toBe(0);
         expect(list.json).toContainEqual({ name: 'check', reserved: true, source: 'config', steps: ['build', 'test'] });
-        const preview = await runCli(['--no-logo', 'self', 'exec', 'check', '--dry-run', '--json'], cwd, env);
+        const preview = await runMain(['--no-logo', 'self', 'exec', 'check', '--dry-run', '--json'], cwd, env);
         expect(preview.code).toBe(0);
         expect(preview.json).toEqual([
             { name: 'build', command: `${prefix}go build ./...` },
             { name: 'test', command: `${prefix}go test ./...` },
         ]);
         expect(existsSync(join(cwd, child, 'tool-ran'))).toBe(false);
-        const executed = await runCli(['--no-logo', 'self', 'exec', 'check', '--json'], cwd, env);
+        const executed = await runMain(['--no-logo', 'self', 'exec', 'check', '--json'], cwd, env);
         expect(executed.code).toBe(0);
         const receipt = await readFile(join(cwd, child, 'tool-ran'), 'utf8');
         expect(receipt).toContain(`${child}:build ./...`);

@@ -13,9 +13,9 @@
  *
  * Usage: bun scripts/spur-dev.ts test-lanes [--timings <junit.xml>] [--check]
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
-import { join, posix, resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { availableParallelism, tmpdir } from 'node:os';
+import { dirname, join, posix, relative, resolve } from 'node:path';
 import {
     classifyTestFiles,
     diffHeavyLanes,
@@ -27,6 +27,7 @@ import {
     type TestSource,
 } from '@gobing-ai/spur-app';
 import { getEnvVars } from '@gobing-ai/spur-config';
+import { emptySpawnCounts, SPAWN_KINDS, type SpawnCounts, tallySpawnLines } from './spawn-cost-preload';
 
 /** Repository root, resolved from this module's location. */
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
@@ -65,13 +66,38 @@ const CHROMIUM_LAUNCH_FAILURE =
 /** Helper candidates: non-test `.ts` anywhere under a `tests/` directory. */
 const HELPER_FILE_PATTERN = '**/tests/**/*.ts';
 
-const USAGE = 'usage: bun scripts/spur-dev.ts test-lanes [--timings <junit.xml>] [--check] [--profile-heavy]';
+const USAGE =
+    'usage: bun scripts/spur-dev.ts test-lanes [--timings <junit.xml>] [--check] [--profile-heavy] [--spawn-cost <out.json>]';
+
+/** Bound for one measured file; the launcher's own watchdog governs the real suite. */
+const SPAWN_COST_FILE_TIMEOUT_MS = 20 * 60_000;
 
 /** Parsed argv. */
 interface LaneOptions {
     timings: string | undefined;
     check: boolean;
     profileHeavy: boolean;
+    spawnCost: string | undefined;
+}
+
+/** One row of the spawn-cost receipt: a file, its cost, and the children it spawned (task 1475 R1). */
+export interface SpawnCostRow {
+    path: string;
+    wallMs: number;
+    testCount: number;
+    failCount: number;
+    skipCount: number;
+    exitCode: number;
+    children: SpawnCounts;
+}
+
+/** The spawn-cost receipt written by `--spawn-cost`. */
+export interface SpawnCostReceipt {
+    generatedAt: string;
+    cores: number;
+    manifest: string;
+    files: SpawnCostRow[];
+    totals: { files: number; wallMs: number; children: SpawnCounts };
 }
 
 /** One row of the heavy profile receipt. */
@@ -99,6 +125,7 @@ export async function runTestLanes(argv: string[]): Promise<number> {
     }
     try {
         if (options.profileHeavy) return profileHeavy(REPO_ROOT);
+        if (options.spawnCost !== undefined) return spawnCost(REPO_ROOT, options.spawnCost);
         const entries = withTimings(buildLaneEntries(REPO_ROOT), readTimings(options.timings));
         const manifestPath = join(REPO_ROOT, LANE_MANIFEST_PATH);
         if (options.check) return checkManifest(entries, manifestPath);
@@ -161,7 +188,7 @@ export function renderManifest(entries: LaneEntry[], committed: LaneManifest | u
 
 /** Parses argv, or returns `undefined` for an unknown/malformed argument. */
 function parseArgs(argv: string[]): LaneOptions | undefined {
-    const options: LaneOptions = { timings: undefined, check: false, profileHeavy: false };
+    const options: LaneOptions = { timings: undefined, check: false, profileHeavy: false, spawnCost: undefined };
     for (let index = 0; index < argv.length; index++) {
         const arg = argv[index] ?? '';
         if (arg === '--check') {
@@ -172,10 +199,11 @@ function parseArgs(argv: string[]): LaneOptions | undefined {
             options.profileHeavy = true;
             continue;
         }
-        if (arg === '--timings') {
+        if (arg === '--timings' || arg === '--spawn-cost') {
             const value = argv[index + 1];
             if (value === undefined || value.startsWith('--')) return undefined;
-            options.timings = value;
+            if (arg === '--timings') options.timings = value;
+            else options.spawnCost = value;
             index++;
             continue;
         }
@@ -223,6 +251,118 @@ export function heavyFiles(repoRoot: string): string[] {
         }
     }
     return found.sort();
+}
+
+/** The workspace whose bunfig a file runs under: two-level dirs own one, everything else runs at the repo root. */
+function workspaceOf(repoRoot: string, relPath: string): string {
+    const parts = relPath.split('/');
+    if (parts[0] === 'apps' || parts[0] === 'packages' || parts[0] === 'plugins') {
+        const candidate = join(repoRoot, parts[0] ?? '', parts[1] ?? '');
+        if (existsSync(join(candidate, 'bunfig.toml'))) return candidate;
+    }
+    return repoRoot;
+}
+
+/**
+ * Sorts rows by wall time and totals the receipt.
+ *
+ * The ordering is the receipt's contract, not a display choice: "top contributors covering ≥50% of
+ * the summed wall time" is only reproducible while the sort is deterministic (wall time, then path).
+ *
+ * @param rows - Measured per-file rows.
+ * @param context - Receipt header facts (generation time, core count).
+ * @returns The receipt to write.
+ */
+export function renderSpawnCostReceipt(
+    rows: SpawnCostRow[],
+    context: { generatedAt: string; cores: number },
+): SpawnCostReceipt {
+    const files = [...rows].sort((left, right) => right.wallMs - left.wallMs || left.path.localeCompare(right.path));
+    const children = emptySpawnCounts();
+    for (const row of files) {
+        for (const kind of SPAWN_KINDS) children[kind] += row.children[kind];
+    }
+    return {
+        generatedAt: context.generatedAt,
+        cores: context.cores,
+        manifest: LANE_MANIFEST_PATH,
+        files,
+        totals: {
+            files: files.length,
+            wallMs: files.reduce((sum, row) => sum + row.wallMs, 0),
+            children,
+        },
+    };
+}
+
+/**
+ * Measures every `root.subprocess` file alone and writes the spawn-cost receipt (task 1475 R1).
+ *
+ * The receipt is the before/after pair the task's AC compares, so the driver pins the three things
+ * that would make two runs incomparable: the manifest's file list, the per-file launch (`bun test`
+ * inside the file's workspace, so the same bunfig preload applies), and the child-counter preload.
+ */
+function spawnCost(repoRoot: string, outPath: string): number {
+    const manifest = readCommitted(join(repoRoot, LANE_MANIFEST_PATH));
+    if (manifest === undefined) {
+        throw new Error(`test-lanes: ${LANE_MANIFEST_PATH} is missing — run without --spawn-cost first`);
+    }
+    const preload = join(repoRoot, 'scripts', 'commands', 'spawn-cost-preload.ts');
+    const receiptPath = resolve(repoRoot, outPath);
+    mkdirSync(dirname(receiptPath), { recursive: true });
+    const scratch = mkdtempSync(join(tmpdir(), 'spur-spawn-cost-'));
+    const rows: SpawnCostRow[] = [];
+    for (const entry of manifest.root.subprocess) {
+        process.stderr.write(`test-lanes: measuring ${entry.path}\n`);
+        const linesPath = join(scratch, `${rows.length}.jsonl`);
+        const workspace = workspaceOf(repoRoot, entry.path);
+        const started = Date.now();
+        const child = Bun.spawnSync(
+            [
+                process.execPath,
+                'test',
+                '--preload',
+                preload,
+                '--reporter=dots',
+                relative(workspace, join(repoRoot, entry.path)),
+            ],
+            {
+                cwd: workspace,
+                stdout: 'pipe',
+                stderr: 'pipe',
+                timeout: SPAWN_COST_FILE_TIMEOUT_MS,
+                env: {
+                    ...getEnvVars(),
+                    SPUR_SPAWN_COST_OUT: linesPath,
+                    SPUR_SPAWN_COST_FILE: entry.path,
+                },
+            },
+        );
+        const wallMs = Date.now() - started;
+        const output = `${child.stdout?.toString() ?? ''}${child.stderr?.toString() ?? ''}`;
+        const counts = summaryCounts(output);
+        const lines = existsSync(linesPath) ? readFileSync(linesPath, 'utf8').split('\n') : [];
+        rows.push({
+            path: entry.path,
+            wallMs,
+            testCount: counts.pass,
+            failCount: counts.fail,
+            skipCount: counts.skip,
+            exitCode: child.exitCode ?? 1,
+            children: tallySpawnLines(lines),
+        });
+    }
+    const receipt = renderSpawnCostReceipt(rows, {
+        generatedAt: new Date().toISOString(),
+        cores: availableParallelism(),
+    });
+    writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+    process.stdout.write(
+        `test-lanes: spawn cost → ${outPath} (${receipt.totals.files} file(s), ${Math.round(
+            receipt.totals.wallMs / 1000,
+        )}s summed)\n`,
+    );
+    return 0;
 }
 
 /**

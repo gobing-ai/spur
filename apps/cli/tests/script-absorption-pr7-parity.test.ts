@@ -7,8 +7,8 @@ import { type Observation, runSide } from './script-absorption-pr7/harness';
 
 /**
  * Script-absorption PR-7 parity: every case frozen from the retired plugin scripts
- * (`fixtures/script-absorption-pr7-golden.json`, captured from origin/main by
- * `script-absorption-pr7/capture.ts`) is replayed through `spur agent dogfood-*` (the `spur builder pr` cases left with the alias, task 1290)
+ * (`fixtures/script-absorption-pr7-golden.json`, captured from origin/main and carrying its `source`
+ * note) is replayed through `spur agent dogfood-*` (the `spur builder pr` cases left with the alias, task 1290)
  * and must produce the same exit code, stdout and — after the rewrites below, which only rename
  * the retired script in its usage text — the same stderr.
  */
@@ -36,9 +36,9 @@ describe('spur agent dogfood golden parity (script-absorption PR-7)', () => {
     });
 
     for (const c of PR7_CASES) {
-        test(c.name, () => {
+        test(c.name, async () => {
             const want = GOLDEN.cases[c.name] as Observation;
-            const got = runSide(c, 'cli', { fixtures: FIXTURES });
+            const got = await runSide(c, { fixtures: FIXTURES });
             const where = `spur ${c.cli.join(' ')}`;
             expect({ where, exitCode: got.exitCode }).toEqual({ where, exitCode: want.exitCode });
             const mode = c.compare ?? 'full';

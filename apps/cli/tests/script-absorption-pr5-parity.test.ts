@@ -142,8 +142,8 @@ describe('script-absorption PR-5 golden parity', () => {
     for (const [group, cases] of Object.entries(ALL_CASES)) {
         describe(group, () => {
             for (const c of cases) {
-                test(c.id, () => {
-                    expect(runCase(c, 'new', ENV)).toEqual(expected(group, c.id));
+                test(c.id, async () => {
+                    expect(await runCase(c, 'new', ENV)).toEqual(expected(group, c.id));
                 }, 120_000);
             }
         });

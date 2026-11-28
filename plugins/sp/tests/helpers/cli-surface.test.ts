@@ -17,6 +17,7 @@ import {
     parseOwnershipMarkers,
     parseSpineRoutes,
     parseTierCExclusions,
+    resetCliSurfaceCapture,
 } from './cli-surface';
 
 const FACADE_SKILL = join(import.meta.dir, '..', '..', 'skills', 'spur-cli', 'SKILL.md');
@@ -127,6 +128,8 @@ describe('cli-surface — captureCliSurface failure branches', () => {
     });
 
     test('fails loudly when the CLI process exits non-zero', () => {
+        // The batch capture is process-wide; drop it so this case takes the spawn branch under the spy.
+        resetCliSurfaceCapture();
         // Unchecked cast: the fake result only needs exitCode/stdout/stderr for this branch.
         const fakeSpawn = (() => ({
             exitCode: 1,

@@ -16,7 +16,9 @@ import { runCli } from '../../helpers';
  *   - it hangs past the aggregate deadline on an unreachable provider
  *
  * Every case drives the real source CLI in a subprocess with an isolated HOME, registry
- * and config root, then snapshots the filesystem before/after.
+ * and config root, then snapshots the filesystem before/after. The subprocess stays (task 1475
+ * R2 keep): global- and project-config discovery is boot-time process state — `os.homedir()` is
+ * read once at start — so an in-process run cannot honour the fixture HOME.
  */
 
 const SECTION_KEYS = [

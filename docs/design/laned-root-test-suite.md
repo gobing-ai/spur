@@ -38,7 +38,8 @@ scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
 1. **Classifier (built).** A committed manifest `config/test-lanes.json` lists the subprocess-lane
    files as `root.subprocess[] = { path, reason, durationMs }`, where `reason` is `direct` or
    `helper:<tests-path>#<exportedName>` and entries are repo-relative and sorted.
-   `bun scripts/spur-dev.ts test-lanes [--timings <junit.xml>] [--check]` regenerates it from a static
+   `bun scripts/spur-dev.ts test-lanes [--timings <junit.xml>] [--check] [--spawn-cost <out.json>]`
+   regenerates it from a static
    scan of every root test file — a direct spawn token, or an import by name of an exported non-test
    helper under `tests/` whose body spawns (one level deep) — and merges per-file `durationMs` from a
    JUnit profiling run; `--check` exits 1 naming each drifting path without writing. Classifier logic
@@ -49,6 +50,12 @@ scope: `test:heavy` (feature H162) and the feature-verification receipt policy.
    manifest or a listed file no longer exists or no longer spawns. Top-level manifest keys other than
    `version`/`root` are preserved verbatim on regeneration, so the heavy section
    ([heavy-suite-lanes](heavy-suite-lanes.md)) survives it.
+2a. **Spawn-cost receipt (built, task 1475).** `--spawn-cost <out.json>` runs every `root.subprocess`
+   file alone in its own workspace under `scripts/commands/spawn-cost-preload.ts` (a child counter that
+   wraps `Bun.spawn`/`Bun.spawnSync`/`Bun.$`, through which Bun's `node:child_process` shim passes) and
+   writes `{ wallMs, testCount, failCount, skipCount, exitCode, children }` per file, sorted by wall
+   time, with per-kind totals. The receipt is the before/after pair a lane-cost change cites; the
+   classification above is untouched by it.
 3. **Two children, one launcher (rejected — measured by 1460, cancelled).** `run-tests.ts` runs the subprocess lane at
    `--parallel=2` (today's proven bound) and the in-process lane at `--parallel=<availableParallelism>`.
    The two lanes run concurrently. Each child gets its own coverage directory; Bun's in-child

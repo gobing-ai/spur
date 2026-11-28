@@ -1,8 +1,8 @@
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
+import { runMain } from '../helpers';
 import { FIXTURE_DIR_TOKEN, type Pr7Case } from './cases';
 
 export interface Observation {
@@ -11,36 +11,29 @@ export interface Observation {
     stderr: string;
 }
 
-const CLI = join(import.meta.dir, '..', '..', 'src', 'index.ts');
-
 function substitute(argv: readonly string[], fixtures: string): string[] {
     return argv.map((a) => a.replaceAll(FIXTURE_DIR_TOKEN, fixtures));
 }
 
-/** Normalize the fixtures dir back to the token so legacy and CLI runs compare. */
+/** Normalize the fixtures dir back to the token so a capture and a live run compare. */
 function normalize(text: string, fixtures: string): string {
     return text.replaceAll(fixtures, FIXTURE_DIR_TOKEN);
 }
 
-/** Run one side of a case in a scratch, non-git cwd with a minimal env. */
-export function runSide(
-    c: Pr7Case,
-    side: 'legacy' | 'cli',
-    opts: { pluginRoot?: string; fixtures: string },
-): Observation {
+/** Run one case's CLI side in a scratch, non-git cwd with a minimal env. */
+export async function runSide(c: Pr7Case, opts: { fixtures: string }): Promise<Observation> {
     const cwd = mkdtempSync(join(tmpdir(), 'spur-pr7-golden-'));
     try {
         const env = { PATH: getEnvVars().PATH ?? '', HOME: cwd, GIT_CEILING_DIRECTORIES: tmpdir() };
-        const [script, ...rest] = c.legacy;
-        const cmd =
-            side === 'legacy'
-                ? ['bun', join(opts.pluginRoot ?? '', script ?? ''), ...substitute(rest, opts.fixtures)]
-                : ['bun', CLI, ...substitute(c.cli, opts.fixtures), '--no-logo'];
-        const res = spawnSync(cmd[0] ?? 'bun', cmd.slice(1), { cwd, env, encoding: 'utf8', timeout: 30_000 });
+        // In process (1475 R2): the case asserts only the CLI's own output and exit code, and each
+        // spawn paid a `bun` boot for a few milliseconds of work. The retired-script side this used to
+        // drive is gone with the scripts; the golden fixture (`fixtures/script-absorption-pr7-golden.json`)
+        // and its `source` note remain the provenance.
+        const ran = await runMain([...substitute(c.cli, opts.fixtures), '--no-logo'], cwd, env, { replaceEnv: true });
         return {
-            exitCode: res.status ?? -1,
-            stdout: normalize(res.stdout ?? '', opts.fixtures),
-            stderr: normalize(res.stderr ?? '', opts.fixtures),
+            exitCode: ran.code ?? -1,
+            stdout: normalize(ran.stdout, opts.fixtures),
+            stderr: normalize(ran.stderr, opts.fixtures),
         };
     } finally {
         rmSync(cwd, { recursive: true, force: true });

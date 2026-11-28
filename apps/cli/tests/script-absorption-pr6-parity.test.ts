@@ -6,8 +6,8 @@ import { type Observation, runSide } from './script-absorption-pr6/harness';
 
 /**
  * Script-absorption PR-6 parity: every case frozen from the retired plugin scripts
- * (`fixtures/script-absorption-pr6-golden.json`, captured by `script-absorption-pr6/capture.ts`
- * from the stack base before deletion) is replayed through `spur history anatomy-<op>|timeline|summary`
+ * (`fixtures/script-absorption-pr6-golden.json`, captured from the stack base before deletion and
+ * carrying its `source` note) is replayed through `spur history anatomy-<op>|timeline|summary`
  * / `spur workflow summary|profile` and must produce the same exit code, stdout and — after the
  * rewrites below, which only rename the retired script in its usage and error prefixes — the
  * same stderr.
@@ -45,9 +45,9 @@ describe('spur history anatomy-<op>|timeline|summary | workflow summary|profile 
     });
 
     for (const c of PR6_CASES) {
-        test(c.name, () => {
+        test(c.name, async () => {
             const want = GOLDEN.cases[c.name] as Observation;
-            const got = runSide(c, 'cli', { fixtures: FIXTURES });
+            const got = await runSide(c, { fixtures: FIXTURES });
             const where = `spur ${c.cli.join(' ')}`;
             expect({ where, exitCode: got.exitCode }).toEqual({ where, exitCode: want.exitCode });
             const mode = c.compare ?? 'full';

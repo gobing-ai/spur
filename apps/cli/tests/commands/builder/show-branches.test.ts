@@ -12,23 +12,26 @@
  * against the same real-git fixtures. A spawned child is invisible to this process's coverage
  * instrumentation, so without it the wiring module's own lines and functions read as untested.
  */
-import { afterEach, describe, expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { afterAll, afterEach, describe, expect, test } from 'bun:test';
+import { chmodSync, cpSync, existsSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Command } from '@commander-js/extra-typings';
 import { getEnvVars } from '@gobing-ai/spur-config';
 import { registerBuilderShowBranchesCommand } from '../../../src/commands/builder/show-branches';
 import type { CliContext } from '../../../src/context';
+import { runMain } from '../../helpers';
 
-const CLI_ENTRY = join(import.meta.dir, '..', '..', '..', 'src', 'index.ts');
-
-/** Hermetic git: the operator's global config must not decide identity, branch names or signing. */
 const GIT_ENV: Record<string, string | undefined> = {
     ...getEnvVars(),
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_SYSTEM: '/dev/null',
+    // Identity through the environment, not `git config --local`: every fixture repo is a clone of the
+    // file's template, and a clone does not inherit the source's local config (task 1475 R2).
+    GIT_AUTHOR_NAME: 'Test',
+    GIT_AUTHOR_EMAIL: 'test@example.com',
+    GIT_COMMITTER_NAME: 'Test',
+    GIT_COMMITTER_EMAIL: 'test@example.com',
 };
 
 /** Every statement the operator-referenced mermaid syntax subset allows, and nothing else (R3). */
@@ -45,6 +48,10 @@ const roots: string[] = [];
 
 afterEach(() => {
     for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+afterAll(() => {
+    if (templateRepo !== undefined) rmSync(templateRepo, { recursive: true, force: true });
 });
 
 function tempDir(prefix: string): string {
@@ -65,14 +72,31 @@ function commit(cwd: string, file: string, message: string): void {
     git(cwd, ['commit', '-q', '-m', message]);
 }
 
+/**
+ * The per-file fixture template: built once, then copied per test (task 1475 R2, git-fixture lever).
+ *
+ * Each case used to pay `init` + two `config` + a commit + a tag. A filesystem copy keeps the object
+ * store intact (commit ids, the tag) and keeps the repo remote-less — a `git clone` would have added an
+ * `origin` and silently changed the default base — while every test still gets its own working tree.
+ */
+let templateRepo: string | undefined;
+
+function template(): string {
+    if (templateRepo === undefined) {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-sb-template-'));
+        git(dir, ['init', '-q', '-b', 'main', '.']);
+        commit(dir, 'a.txt', 'init');
+        git(dir, ['tag', 'v0.1.0']);
+        templateRepo = dir;
+    }
+    return templateRepo;
+}
+
 /** A repo on `main` with one commit and a `v0.1.0` tag; no remote and therefore no origin/HEAD. */
 function mkRepo(): string {
     const repo = tempDir('sb-repo');
-    git(repo, ['init', '-q', '-b', 'main', '.']);
-    git(repo, ['config', '--local', 'user.email', 'test@example.com']);
-    git(repo, ['config', '--local', 'user.name', 'Test']);
-    commit(repo, 'a.txt', 'init');
-    git(repo, ['tag', 'v0.1.0']);
+    rmSync(repo, { recursive: true, force: true });
+    cpSync(template(), repo, { recursive: true });
     return repo;
 }
 
@@ -82,14 +106,14 @@ interface CliRun {
     stderr: string;
 }
 
-/** Runs the real CLI entry in `cwd`. `:memory:` keeps the boot from creating a `.spur/` in the repo. */
-function runCli(cwd: string, args: string[], env: Record<string, string | undefined> = {}): CliRun {
-    const result = spawnSync(process.execPath, [CLI_ENTRY, 'builder', 'show-branches', ...args], {
-        cwd,
-        encoding: 'utf8',
-        env: { ...getEnvVars(), DATABASE_URL: ':memory:', ...env },
-    });
-    return { code: result.status ?? -1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+/**
+ * Runs the CLI entry in process against `cwd` (1475 R2): the suite asserts the report, the exit code
+ * and the `gh`-availability branches, none of which need a separate process. `:memory:` keeps the
+ * boot from creating a `.spur/` in the fixture repo.
+ */
+async function runCli(cwd: string, args: string[], env: Record<string, string | undefined> = {}): Promise<CliRun> {
+    const result = await runMain(['builder', 'show-branches', ...args], cwd, { DATABASE_URL: ':memory:', ...env });
+    return { code: result.code ?? -1, stdout: result.stdout, stderr: result.stderr };
 }
 
 /** The single fenced mermaid block body of a markdown report. */
@@ -127,14 +151,14 @@ function mkTopologyRepo(): string {
     return repo;
 }
 
-describe('spur builder show-branches — topology report', () => {
-    test('reports every branch against the default base and leaves the repository untouched', () => {
+describe('spur builder show-branches — topology report', async () => {
+    test('reports every branch against the default base and leaves the repository untouched', async () => {
         const repo = mkTopologyRepo();
         const refsBefore = git(repo, ['for-each-ref']);
         const worktreesBefore = git(repo, ['worktree', 'list', '--porcelain']);
         const toplevel = git(repo, ['rev-parse', '--show-toplevel']).trim();
 
-        const run = runCli(repo, []);
+        const run = await runCli(repo, []);
         const worktreesAfter = git(repo, ['worktree', 'list', '--porcelain']);
 
         expect(run.code).toBe(0);
@@ -150,13 +174,13 @@ describe('spur builder show-branches — topology report', () => {
         expect(git(repo, ['status', '--porcelain'])).toBe('');
     });
 
-    test('markdown is the default format and carries one gitGraph block inside the allowed syntax', () => {
+    test('markdown is the default format and carries one gitGraph block inside the allowed syntax', async () => {
         const repo = mkTopologyRepo();
-        const explicit = runCli(repo, ['--format', 'markdown']);
+        const explicit = await runCli(repo, ['--format', 'markdown']);
         const base = mermaidBlock(explicit.stdout);
 
         expect(explicit.code).toBe(0);
-        expect(runCli(repo, []).stdout.replace(/Generated [^\n]+/, 'Generated X')).toBe(
+        expect((await runCli(repo, [])).stdout.replace(/Generated [^\n]+/, 'Generated X')).toBe(
             explicit.stdout.replace(/Generated [^\n]+/, 'Generated X'),
         );
         expect(base.split('\n')[0]).toBe('gitGraph');
@@ -169,10 +193,10 @@ describe('spur builder show-branches — topology report', () => {
         }
     });
 
-    test('--json is byte-identical to --format json and exposes the frozen top-level shape', () => {
+    test('--json is byte-identical to --format json and exposes the frozen top-level shape', async () => {
         const repo = mkTopologyRepo();
-        const json = runCli(repo, ['--format', 'json']);
-        const alias = runCli(repo, ['--json']);
+        const json = await runCli(repo, ['--format', 'json']);
+        const alias = await runCli(repo, ['--json']);
 
         expect(json.code).toBe(0);
         // Two runs, so only the generated timestamp may differ.
@@ -194,9 +218,9 @@ describe('spur builder show-branches — topology report', () => {
         expect(parsed.branches[0]?.commits).toHaveLength(3);
     });
 
-    test('--format text prints the aligned table with no mermaid', () => {
+    test('--format text prints the aligned table with no mermaid', async () => {
         const repo = mkTopologyRepo();
-        const text = runCli(repo, ['--format', 'text']);
+        const text = await runCli(repo, ['--format', 'text']);
 
         expect(text.code).toBe(0);
         expect(text.stdout).toContain('base: main');
@@ -206,42 +230,42 @@ describe('spur builder show-branches — topology report', () => {
         expect(text.stdout).toContain('feature/one');
     });
 
-    test('--base overrides the base and an unknown base exits 1', () => {
+    test('--base overrides the base and an unknown base exits 1', async () => {
         const repo = mkTopologyRepo();
         git(repo, ['checkout', '-q', 'main']);
-        const overridden = runCli(repo, ['--base', 'stale', '--format', 'json']);
+        const overridden = await runCli(repo, ['--base', 'stale', '--format', 'json']);
 
         expect(overridden.code).toBe(0);
         expect((JSON.parse(overridden.stdout) as { base: string }).base).toBe('stale');
 
-        const unknown = runCli(repo, ['--base', 'no-such-ref', '--no-logo']);
+        const unknown = await runCli(repo, ['--base', 'no-such-ref', '--no-logo']);
         expect(unknown.code).toBe(1);
         expect(unknown.stderr).toContain("unknown base ref 'no-such-ref'");
         expect(unknown.stdout).toBe('');
     });
 
-    test('a detached HEAD is reported as a row named by its short sha', () => {
+    test('a detached HEAD is reported as a row named by its short sha', async () => {
         const repo = mkTopologyRepo();
         git(repo, ['checkout', '-q', '--detach', 'main']);
         const head = git(repo, ['rev-parse', '--short', 'HEAD']).trim();
 
-        const run = runCli(repo, ['--format', 'json']);
+        const run = await runCli(repo, ['--format', 'json']);
         const rows = (JSON.parse(run.stdout) as { branches: Array<{ name: string; kind: string }> }).branches;
 
         expect(run.code).toBe(0);
         expect(rows.some((row) => row.kind === 'detached' && row.name === head.slice(0, 7))).toBe(true);
     });
 
-    test('a single-branch repository renders the base line only', () => {
+    test('a single-branch repository renders the base line only', async () => {
         const repo = mkRepo();
-        const run = runCli(repo, []);
+        const run = await runCli(repo, []);
 
         expect(run.code).toBe(0);
         expect(mermaidBlock(run.stdout)).not.toContain('branch ');
         expect(run.stdout).toContain('| main | 0 | 0 | yes |');
     });
 
-    test('branch names with slashes, dots and quotes render sanitized', () => {
+    test('branch names with slashes, dots and quotes render sanitized', async () => {
         const repo = mkTopologyRepo();
         git(repo, ['checkout', '-q', '-b', 'fix/quote"name', 'main']);
         commit(repo, 'd.txt', 'feat: quote');
@@ -249,9 +273,9 @@ describe('spur builder show-branches — topology report', () => {
         git(repo, ['branch', '1.x']);
         git(repo, ['branch', 'stale.branch']);
 
-        const run = runCli(repo, ['--format', 'json']);
+        const run = await runCli(repo, ['--format', 'json']);
         const names = (JSON.parse(run.stdout) as { branches: Array<{ name: string }> }).branches.map((row) => row.name);
-        const graph = mermaidBlock(runCli(repo, []).stdout);
+        const graph = mermaidBlock((await runCli(repo, [])).stdout);
 
         expect(names).toContain('fix/quote"name');
         expect(graph).toContain('    branch fix/quote-name');
@@ -265,24 +289,24 @@ describe('spur builder show-branches — topology report', () => {
         }
     });
 
-    test('a revert commit renders REVERSE while the branch tip stays HIGHLIGHT', () => {
+    test('a revert commit renders REVERSE while the branch tip stays HIGHLIGHT', async () => {
         const repo = mkTopologyRepo();
         git(repo, ['checkout', '-q', 'feature/one']);
         git(repo, ['revert', '--no-edit', 'HEAD']);
         commit(repo, 'e.txt', 'feat: after revert');
 
-        const graph = mermaidBlock(runCli(repo, []).stdout);
+        const graph = mermaidBlock((await runCli(repo, [])).stdout);
 
         expect(graph).toContain('type: REVERSE');
         expect(graph).toContain('type: HIGHLIGHT');
     });
 
-    test('more branches than --limit prints the omitted footer and the json count', () => {
+    test('more branches than --limit prints the omitted footer and the json count', async () => {
         const repo = mkTopologyRepo();
         for (const name of ['a', 'b', 'c']) git(repo, ['branch', name]);
 
-        const markdown = runCli(repo, ['--limit', '2']);
-        const json = runCli(repo, ['--limit', '2', '--format', 'json']);
+        const markdown = await runCli(repo, ['--limit', '2']);
+        const json = await runCli(repo, ['--limit', '2', '--format', 'json']);
 
         expect(markdown.code).toBe(0);
         expect(markdown.stdout).toContain('_Omitted: 4 branches beyond --limit._');
@@ -290,25 +314,25 @@ describe('spur builder show-branches — topology report', () => {
         expect((JSON.parse(json.stdout) as { branches: unknown[] }).branches).toHaveLength(2);
     });
 
-    test('--max-commits, --hide-contained and --theme shape the graph', () => {
+    test('--max-commits, --hide-contained and --theme shape the graph', async () => {
         const repo = mkTopologyRepo();
         git(repo, ['checkout', '-q', 'feature/one']);
         for (const name of ['f1', 'f2', 'f3']) commit(repo, `${name}.txt`, `feat: ${name}`);
         git(repo, ['checkout', '-q', 'main']);
 
-        const capped = mermaidBlock(runCli(repo, ['--max-commits', '1']).stdout);
-        const themed = mermaidBlock(runCli(repo, ['--theme', 'neutral']).stdout);
-        const hidden = mermaidBlock(runCli(repo, ['--hide-contained']).stdout);
+        const capped = mermaidBlock((await runCli(repo, ['--max-commits', '1'])).stdout);
+        const themed = mermaidBlock((await runCli(repo, ['--theme', 'neutral'])).stdout);
+        const hidden = mermaidBlock((await runCli(repo, ['--hide-contained'])).stdout);
 
         expect(capped).toContain('commit id:"+4 earlier"');
         expect(themed.split('\n')[0]).toBe("%%{init: { 'theme': 'neutral' } }%%");
         expect(hidden).not.toContain('branch stale');
         expect(hidden).toContain('branch feature/one');
         // --hide-contained narrows the graph only; the table still flags the stale branch.
-        expect(runCli(repo, ['--hide-contained']).stdout).toContain('| stale | 0 | 0 | yes |');
+        expect((await runCli(repo, ['--hide-contained'])).stdout).toContain('| stale | 0 | 0 | yes |');
     });
 
-    test('usage errors exit 1 naming the offending flag', () => {
+    test('usage errors exit 1 naming the offending flag', async () => {
         const repo = mkTopologyRepo();
         const cases: Array<[string[], string]> = [
             [['--format', 'yaml'], "unknown --format 'yaml'"],
@@ -318,30 +342,30 @@ describe('spur builder show-branches — topology report', () => {
             [['--json', '--format', 'text'], '--json conflicts with --format text'],
         ];
         for (const [args, message] of cases) {
-            const run = runCli(repo, args);
+            const run = await runCli(repo, args);
             expect(run.code).toBe(1);
             expect(run.stderr).toContain(message);
         }
     });
 
-    test('a directory that is not a repository exits 2', () => {
+    test('a directory that is not a repository exits 2', async () => {
         const notARepo = tempDir('sb-notrepo');
-        const run = runCli(notARepo, []);
+        const run = await runCli(notARepo, []);
 
         expect(run.code).toBe(2);
         expect(run.stderr).toContain('not a git repository');
     });
 });
 
-describe('spur builder show-branches — pull-request enrichment', () => {
+describe('spur builder show-branches — pull-request enrichment', async () => {
     const PR_LIST =
         '[{"number":581,"headRefName":"feature/one","state":"OPEN","reviewDecision":"APPROVED"},' +
         '{"number":590,"headRefName":"main","state":"OPEN","reviewDecision":null}]';
 
-    test('--pr enriches rows from the gh report', () => {
+    test('--pr enriches rows from the gh report', async () => {
         const repo = mkTopologyRepo();
         const bin = ghShim(`#!/bin/sh\nprintf '%s\\n' '${PR_LIST}'\n`);
-        const run = runCli(repo, ['--pr', '--format', 'json'], { PATH: `${bin}:${getEnvVars().PATH ?? ''}` });
+        const run = await runCli(repo, ['--pr', '--format', 'json'], { PATH: `${bin}:${getEnvVars().PATH ?? ''}` });
         const rows = (JSON.parse(run.stdout) as { branches: Array<{ name: string; pr: unknown }> }).branches;
 
         expect(run.code).toBe(0);
@@ -359,10 +383,10 @@ describe('spur builder show-branches — pull-request enrichment', () => {
         });
     });
 
-    test('gh missing degrades to null PR fields plus one warning, never a failure', () => {
+    test('gh missing degrades to null PR fields plus one warning, never a failure', async () => {
         const repo = mkTopologyRepo();
         const gitBin = (Bun.which('git') ?? '/usr/bin/git') as string;
-        const run = runCli(repo, ['--pr'], { PATH: pathWithoutGh(gitBin) });
+        const run = await runCli(repo, ['--pr'], { PATH: pathWithoutGh(gitBin) });
 
         expect(run.code).toBe(0);
         expect(run.stdout).toContain('warning: --pr: gh pr list failed:');
@@ -370,16 +394,16 @@ describe('spur builder show-branches — pull-request enrichment', () => {
         const day = git(repo, ['log', '-1', '--format=%cs', 'feature/one']).trim();
         expect(run.stdout).toContain(`| feature/one | 2 | 0 | no | ${day} | - | - |`);
 
-        const json = runCli(repo, ['--pr', '--format', 'json'], { PATH: pathWithoutGh(gitBin) });
+        const json = await runCli(repo, ['--pr', '--format', 'json'], { PATH: pathWithoutGh(gitBin) });
         const parsed = JSON.parse(json.stdout) as { warnings: string[]; branches: Array<{ pr: unknown }> };
         expect(parsed.warnings).toHaveLength(1);
         expect(parsed.branches.every((row) => row.pr === null)).toBe(true);
     });
 
-    test('gh unauthenticated degrades with the reason and never a failure', () => {
+    test('gh unauthenticated degrades with the reason and never a failure', async () => {
         const repo = mkTopologyRepo();
         const bin = ghShim('#!/bin/sh\necho "gh: To get started with GitHub CLI, run: gh auth login" >&2\nexit 1\n');
-        const run = runCli(repo, ['--pr', '--format', 'json'], { PATH: `${bin}:${getEnvVars().PATH ?? ''}` });
+        const run = await runCli(repo, ['--pr', '--format', 'json'], { PATH: `${bin}:${getEnvVars().PATH ?? ''}` });
         const parsed = JSON.parse(run.stdout) as { warnings: string[]; branches: Array<{ pr: unknown }> };
 
         expect(run.code).toBe(0);
@@ -389,7 +413,7 @@ describe('spur builder show-branches — pull-request enrichment', () => {
     });
 });
 
-describe('spur builder show-branches — scopes, remotes and worktrees', () => {
+describe('spur builder show-branches — scopes, remotes and worktrees', async () => {
     /** Adds `origin` plus a remote-only branch and points origin/HEAD at origin/main. */
     function withRemote(repo: string): void {
         const origin = tempDir('sb-origin');
@@ -403,10 +427,10 @@ describe('spur builder show-branches — scopes, remotes and worktrees', () => {
         git(repo, ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main']);
     }
 
-    test('the base comes from origin/HEAD and a remote twin folds into one local row', () => {
+    test('the base comes from origin/HEAD and a remote twin folds into one local row', async () => {
         const repo = mkTopologyRepo();
         withRemote(repo);
-        const report = JSON.parse(runCli(repo, ['--format', 'json']).stdout) as {
+        const report = JSON.parse((await runCli(repo, ['--format', 'json'])).stdout) as {
             base: string;
             branches: Array<{ name: string; kind: string }>;
         };
@@ -416,14 +440,14 @@ describe('spur builder show-branches — scopes, remotes and worktrees', () => {
         expect(report.branches.find((row) => row.name === 'origin/only-remote')?.kind).toBe('remote');
     });
 
-    test('--local and --remote select the ref namespace', () => {
+    test('--local and --remote select the ref namespace', async () => {
         const repo = mkTopologyRepo();
         withRemote(repo);
 
-        const local = JSON.parse(runCli(repo, ['--local', '--format', 'json']).stdout) as {
+        const local = JSON.parse((await runCli(repo, ['--local', '--format', 'json'])).stdout) as {
             branches: Array<{ name: string; kind: string }>;
         };
-        const remote = JSON.parse(runCli(repo, ['--remote', '--format', 'json']).stdout) as {
+        const remote = JSON.parse((await runCli(repo, ['--remote', '--format', 'json'])).stdout) as {
             branches: Array<{ name: string; kind: string }>;
         };
 
@@ -436,11 +460,11 @@ describe('spur builder show-branches — scopes, remotes and worktrees', () => {
         ]);
     });
 
-    test('a branch checked out in a linked worktree reports that path, and none reports none', () => {
+    test('a branch checked out in a linked worktree reports that path, and none reports none', async () => {
         const repo = mkTopologyRepo();
         const linked = join(tempDir('sb-linked'), 'tree');
         git(repo, ['worktree', 'add', '-q', linked, 'stale']);
-        const report = JSON.parse(runCli(repo, ['--format', 'json']).stdout) as {
+        const report = JSON.parse((await runCli(repo, ['--format', 'json'])).stdout) as {
             branches: Array<{ name: string; worktree: string | null }>;
         };
 
@@ -494,7 +518,7 @@ async function dispatch(cwd: string, args: string[], env?: Record<string, string
     return { lines, exitCode: exitCode() };
 }
 
-describe('spur builder show-branches — in-process dispatch', () => {
+describe('spur builder show-branches — in-process dispatch', async () => {
     test('default format is markdown: table plus one mermaid block, exit 0', async () => {
         const repo = mkTopologyRepo();
         const report = await dispatch(repo, []);

@@ -27,9 +27,9 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { runMain } from '../../helpers';
 
 export const REPO_ROOT = resolve(import.meta.dir, '..', '..', '..', '..', '..');
-const CLI = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 const SCRIPTS = join(REPO_ROOT, 'plugins', 'sp', 'scripts');
 
 /** One invocation inside a case; `old` is `[script, ...args]` under plugins/sp/scripts, `new` the spur argv. */
@@ -129,11 +129,11 @@ function git(cwd: string, args: string[]): void {
 }
 
 /** Create the project DB through the CLI's own migrations, then insert one `runs` row per id. */
-function seedRuns(cwd: string, ids: string[], baseEnv: Record<string, string | undefined>): void {
+async function seedRuns(cwd: string, ids: string[], baseEnv: Record<string, string | undefined>): Promise<void> {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(baseEnv)) if (v !== undefined) env[k] = v;
-    const r = spawnSync(process.execPath, [CLI, 'self', 'migrate'], { cwd, env, encoding: 'utf8' });
-    if (r.status !== 0) throw new Error(`seed migrate failed: ${r.stderr}`);
+    const migrated = await runMain(['--no-logo', 'self', 'migrate'], cwd, env, { replaceEnv: true });
+    if (migrated.code !== 0) throw new Error(`seed migrate failed: ${migrated.stderr}`);
     const db = new Database(join(cwd, '.spur', 'spur.db'));
     try {
         for (const id of ids) {
@@ -148,7 +148,11 @@ function seedRuns(cwd: string, ids: string[], baseEnv: Record<string, string | u
 }
 
 /** Run one case against the retired script (`old`) or the absorbing spur command (`new`). */
-export function runCase(c: GoldenCase, side: 'old' | 'new', baseEnv: Record<string, string | undefined>): CaseOutcome {
+export async function runCase(
+    c: GoldenCase,
+    side: 'old' | 'new',
+    baseEnv: Record<string, string | undefined>,
+): Promise<CaseOutcome> {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), `pr5-golden-${c.id}-`)));
     try {
         const stub = join(cwd, 'stub-spur');
@@ -164,7 +168,7 @@ export function runCase(c: GoldenCase, side: 'old' | 'new', baseEnv: Record<stri
             git(cwd, ['-c', 'user.email=g@example.com', '-c', 'user.name=g', 'add', '-A']);
             git(cwd, ['-c', 'user.email=g@example.com', '-c', 'user.name=g', 'commit', '-q', '-m', 'init']);
         }
-        if (c.seedRuns !== undefined) seedRuns(cwd, c.seedRuns, baseEnv);
+        if (c.seedRuns !== undefined) await seedRuns(cwd, c.seedRuns, baseEnv);
         const expand = (v: string): string => v.replaceAll('$STUB', stub).replaceAll('$CWD', cwd);
         const steps: StepOutcome[] = [];
         for (const step of c.steps) {
@@ -172,16 +176,27 @@ export function runCase(c: GoldenCase, side: 'old' | 'new', baseEnv: Record<stri
             const env: Record<string, string> = {};
             for (const [k, v] of Object.entries(baseEnv)) if (v !== undefined) env[k] = v;
             for (const [k, v] of Object.entries({ ...c.env, ...step.env })) env[k] = expand(v);
-            const argv =
-                side === 'old'
-                    ? [join(SCRIPTS, step.old[0] ?? ''), ...step.old.slice(1).map(expand)]
-                    : // The workflow call sites pass `--no-logo` (the retired scripts printed no banner).
-                      [CLI, '--no-logo', ...step.new.map(expand)];
-            const r = spawnSync(process.execPath, argv, { cwd, env, encoding: 'utf8', timeout: 60_000 });
+            if (side === 'old') {
+                const r = spawnSync(
+                    process.execPath,
+                    [join(SCRIPTS, step.old[0] ?? ''), ...step.old.slice(1).map(expand)],
+                    { cwd, env, encoding: 'utf8', timeout: 60_000 },
+                );
+                steps.push({
+                    exitCode: r.status ?? -1,
+                    stdout: normalize(r.stdout ?? '', cwd),
+                    stderr: normalize(r.stderr ?? '', cwd),
+                });
+                continue;
+            }
+            // In process (1475 R2): the case asserts only the CLI's own output and exit code, and each
+            // spawn pays a `bun` boot, the ts-db graph and the migrations for a step that does a few
+            // milliseconds of work.
+            const ran = await runMain(['--no-logo', ...step.new.map(expand)], cwd, env, { replaceEnv: true });
             steps.push({
-                exitCode: r.status ?? -1,
-                stdout: normalize(r.stdout ?? '', cwd),
-                stderr: normalize(r.stderr ?? '', cwd),
+                exitCode: ran.code ?? -1,
+                stdout: normalize(ran.stdout, cwd),
+                stderr: normalize(ran.stderr, cwd),
             });
         }
         const files: Record<string, string> = {};

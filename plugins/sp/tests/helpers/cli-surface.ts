@@ -23,6 +23,16 @@ import { join, resolve } from 'node:path';
 const REPO_ROOT = resolve(import.meta.dir, '..', '..', '..', '..');
 const CLI_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
 const CLI_PACKAGE_JSON = join(REPO_ROOT, 'apps', 'cli', 'package.json');
+/** Batch capture child: one CLI boot answers every command path (task 1475 R2). */
+const CAPTURE_ENTRY = join(import.meta.dir, 'cli-surface-capture.ts');
+
+/**
+ * Help texts from the one batch capture, keyed by `commandPath.join(' ')`; `undefined` until used.
+ *
+ * The surface is one program, so 140-odd separate boots of the same entry were pure overhead.
+ * A capture the batch could not answer still falls back to a single spawn below.
+ */
+let batchHelpTexts: Map<string, string> | undefined;
 
 export interface CliSurfaceProvenance {
     /** Absolute path to the source-local CLI entry that was captured. */
@@ -84,6 +94,35 @@ export function parseCommanderHelp(text: string): { commands: string[]; flags: s
 }
 
 /**
+ * Forget the cached batch capture.
+ *
+ * The capture is process-wide because it is one program's surface; the failure-branch tests replace
+ * the capture's spawn and need the next call to take that path again.
+ */
+export function resetCliSurfaceCapture(): void {
+    batchHelpTexts = undefined;
+}
+
+/**
+ * The batch help capture, spawned on first use.
+ *
+ * @returns Help text keyed by `commandPath.join(' ')`.
+ */
+function loadBatchHelpTexts(): Map<string, string> {
+    if (batchHelpTexts !== undefined) return batchHelpTexts;
+    const argv = [process.execPath, 'run', CAPTURE_ENTRY];
+    const result = Bun.spawnSync(argv, { cwd: REPO_ROOT, stdout: 'pipe', stderr: 'pipe' });
+    if (result.exitCode !== 0) {
+        const stderr = (result.stderr ?? '').toString().trim();
+        throw new Error(
+            `captureCliSurface: command failed (exit ${result.exitCode}): ${JSON.stringify(argv)}${stderr ? `\nstderr: ${stderr}` : ''}`,
+        );
+    }
+    batchHelpTexts = new Map(Object.entries(JSON.parse((result.stdout ?? '').toString()) as Record<string, string>));
+    return batchHelpTexts;
+}
+
+/**
  * Capture the live source-local CLI surface for `commandPath`.
  *
  * Runs `[process.execPath, 'run', <repo>/apps/cli/src/index.ts, ...commandPath, '--help']`
@@ -91,6 +130,9 @@ export function parseCommanderHelp(text: string): { commands: string[]; flags: s
  * (`['task', 'update']`) captures. Fails loudly on a non-zero exit or unreadable package
  * metadata, with the invoked argv in the message. The resolved entry path and the
  * `@gobing-ai/spur` version read from `apps/cli/package.json` are attached as provenance.
+ *
+ * The help text itself comes from the batch capture (one boot for every path, task 1475 R2); a
+ * path the batch does not know still spawns its own run, so the frozen contract is unchanged.
  */
 export function captureCliSurface(commandPath: string[] = []): CliSurfaceCapture {
     let packageVersion: string;
@@ -105,16 +147,24 @@ export function captureCliSurface(commandPath: string[] = []): CliSurfaceCapture
         throw new Error(`captureCliSurface: cannot read ${CLI_PACKAGE_JSON}: ${cause}`);
     }
 
-    const argv = [process.execPath, 'run', CLI_ENTRY, ...commandPath, '--help'];
-    const result = Bun.spawnSync(argv, { cwd: REPO_ROOT, stdout: 'pipe', stderr: 'pipe' });
-    if (result.exitCode !== 0) {
-        const stderr = (result.stderr ?? '').toString().trim();
-        throw new Error(
-            `captureCliSurface: command failed (exit ${result.exitCode}): ${JSON.stringify(argv)}${stderr ? `\nstderr: ${stderr}` : ''}`,
-        );
+    const batched = loadBatchHelpTexts().get(commandPath.join(' '));
+    if (batched === undefined) {
+        const argv = [process.execPath, 'run', CLI_ENTRY, ...commandPath, '--help'];
+        const result = Bun.spawnSync(argv, { cwd: REPO_ROOT, stdout: 'pipe', stderr: 'pipe' });
+        if (result.exitCode !== 0) {
+            const stderr = (result.stderr ?? '').toString().trim();
+            throw new Error(
+                `captureCliSurface: command failed (exit ${result.exitCode}): ${JSON.stringify(argv)}${stderr ? `\nstderr: ${stderr}` : ''}`,
+            );
+        }
+        return surfaceOf((result.stdout ?? '').toString(), packageVersion);
     }
+    return surfaceOf(batched, packageVersion);
+}
 
-    const { commands, flags } = parseCommanderHelp((result.stdout ?? '').toString());
+/** Parse one help text into the frozen capture shape. */
+function surfaceOf(helpText: string, packageVersion: string): CliSurfaceCapture {
+    const { commands, flags } = parseCommanderHelp(helpText);
     return {
         commands,
         flags,

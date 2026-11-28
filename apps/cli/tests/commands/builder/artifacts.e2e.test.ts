@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { verifySpurPack } from '@gobing-ai/spur-app/builder';
 import { resolveBundledConfigRoot } from '@gobing-ai/spur-config/bundled-config';
 import { BOARD_FACADE_SPECIFIERS } from '@gobing-ai/spur-contracts';
-import { runCli } from '../../helpers';
+import { runCli, runMain } from '../../helpers';
 
 /**
  * `spur builder bundle-config|bundle-web|verify-pack` (A93 1355 R1-R4).
@@ -39,6 +39,17 @@ async function fixture(): Promise<Fixture> {
     };
 }
 
+/**
+ * Run the source CLI in process (1475 R2).
+ *
+ * The fixture env is the whole environment (a hermetic PATH and nothing else), exactly as the child
+ * had it; only the `bun` boot per verb invocation is gone. Nested `bun` builds the verbs start are
+ * still real children and still the behaviour under test.
+ */
+function runArtifacts(args: string[], cwd: string, env: Record<string, string | undefined>) {
+    return runMain(args, cwd, env, { replaceEnv: true });
+}
+
 /** A minimal checkout with a `config/` tree the bundle verb can stage. */
 async function checkout(root: string): Promise<string> {
     const repo = join(root, 'checkout');
@@ -61,7 +72,7 @@ describe('spur builder bundle-config', () => {
         try {
             const repo = await checkout(fx.root);
             const out = join(fx.root, 'out');
-            const result = await runCli(
+            const result = await runArtifacts(
                 ['builder', 'bundle-config', out, '--source-root', repo, '--json'],
                 fx.cwd,
                 fx.env,
@@ -81,7 +92,7 @@ describe('spur builder bundle-config', () => {
         const fx = await fixture();
         try {
             const repo = await checkout(fx.root);
-            const result = await runCli(
+            const result = await runArtifacts(
                 ['builder', 'bundle-config', repo, '--source-root', repo, '--json'],
                 fx.cwd,
                 fx.env,
@@ -132,7 +143,11 @@ describe('spur builder bundle-web', () => {
         try {
             const repo = await checkout(fx.root);
             await boardDist(repo);
-            const result = await runCli(['builder', 'bundle-web', '--source-root', repo, '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(
+                ['builder', 'bundle-web', '--source-root', repo, '--json'],
+                fx.cwd,
+                fx.env,
+            );
             expect(result.code, result.stderr).toBe(0);
             expect(existsSync(join(repo, 'apps', 'cli', 'web', 'index.html'))).toBe(true);
             expect(existsSync(join(repo, 'apps', 'cli', 'web', 'board-runtime.json'))).toBe(true);
@@ -146,7 +161,11 @@ describe('spur builder bundle-web', () => {
         try {
             const repo = await checkout(fx.root);
             await boardDist(repo, { withManifest: false });
-            const result = await runCli(['builder', 'bundle-web', '--source-root', repo, '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(
+                ['builder', 'bundle-web', '--source-root', repo, '--json'],
+                fx.cwd,
+                fx.env,
+            );
             expect(result.code).toBe(1);
             expect((result.json as { error: { message: string } }).error.message).toContain(
                 'board-runtime.json is missing',
@@ -186,7 +205,7 @@ describe('spur builder verify-pack', () => {
         try {
             // Deliberately a version this checkout's package.json does NOT carry: the archive owns it.
             const tarball = await archive(fx.root, entries('123.456.789'));
-            const result = await runCli(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
             expect(result.code, result.stderr).toBe(0);
             const payload = result.json as { ok: boolean; artifacts: { kind: string }[] };
             expect(payload.ok).toBe(true);
@@ -205,7 +224,7 @@ describe('spur builder verify-pack', () => {
             symlinkSync('/etc/passwd', join(pkg, 'plugins', 'leak'));
             const tarball = join(fx.root, 'pkg.tgz');
             expect(Bun.spawnSync(['tar', '-czf', tarball, '-C', fx.root, 'package']).exitCode).toBe(0);
-            const result = await runCli(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
             expect(result.code).toBe(1);
             const payload = result.json as { error: { message: string } };
             expect(payload.error.message).toContain('refusing link member');
@@ -219,7 +238,7 @@ describe('spur builder verify-pack', () => {
         try {
             const bogus = join(fx.root, 'not-a-tarball.tgz');
             writeFileSync(bogus, 'definitely not an archive');
-            const result = await runCli(['builder', 'verify-pack', bogus, '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(['builder', 'verify-pack', bogus, '--json'], fx.cwd, fx.env);
             expect(result.code).toBe(1);
             const payload = result.json as { error: { message: string } };
             expect(payload.error.message).toContain('cannot inspect archive');
@@ -237,7 +256,7 @@ describe('spur builder verify-pack', () => {
                 ...entries('2.0.0'),
                 'plugins/sp/plugin.json': JSON.stringify({ version: '1.0.0' }),
             });
-            const generic = await runCli(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
+            const generic = await runArtifacts(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
             expect(generic.code, generic.stderr).toBe(0);
             await expect(verifySpurPack(tarball)).rejects.toThrow('plugin.json version 1.0.0 != archive package 2.0.0');
         } finally {
@@ -249,7 +268,7 @@ describe('spur builder verify-pack', () => {
         const fx = await fixture();
         try {
             const tarball = await archive(fx.root, entries('1.0.0'));
-            const missing = await runCli(
+            const missing = await runArtifacts(
                 ['builder', 'verify-pack', tarball, '--require', 'worker/laya_worker.py', '--json'],
                 fx.cwd,
                 fx.env,
@@ -268,7 +287,7 @@ describe('spur builder verify-pack', () => {
         try {
             const tarball = await archive(fx.root, entries('1.0.0'));
             const before = (await readdir(tmpdir())).filter((name) => name.startsWith('spur-verify-')).length;
-            await runCli(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
+            await runArtifacts(['builder', 'verify-pack', tarball, '--json'], fx.cwd, fx.env);
             const after = (await readdir(tmpdir())).filter((name) => name.startsWith('spur-verify-')).length;
             expect(after).toBe(before);
         } finally {
@@ -279,7 +298,7 @@ describe('spur builder verify-pack', () => {
     test('a path outside the invocation cwd is rejected for a missing file', async () => {
         const fx = await fixture();
         try {
-            const result = await runCli(['builder', 'verify-pack', 'missing.tgz', '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(['builder', 'verify-pack', 'missing.tgz', '--json'], fx.cwd, fx.env);
             expect(result.code).toBe(1);
             expect((result.json as { error: { message: string } }).error.message).toContain('cannot inspect archive');
         } finally {
@@ -309,7 +328,11 @@ describe('spur builder bundle-plugins', () => {
             await mkdir(join(repo, '.claude-plugin'), { recursive: true });
             await writeFile(join(repo, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: 'demo' }));
 
-            const result = await runCli(['builder', 'bundle-plugins', '--source-root', repo, '--json'], fx.cwd, fx.env);
+            const result = await runArtifacts(
+                ['builder', 'bundle-plugins', '--source-root', repo, '--json'],
+                fx.cwd,
+                fx.env,
+            );
             expect(result.code, result.stderr).toBe(0);
             const payload = result.json as { ok: boolean; artifacts: { path: string; kind: string }[] };
             expect(payload.ok).toBe(true);
@@ -340,6 +363,9 @@ describe('spur builder bundle-laya-worker', () => {
         const fx = await fixture();
         try {
             const repo = await checkout(fx.root);
+            // Spawned (1475 R2 keep): the verb resolves `@gobing-ai/ts-laya-mlx` with `Bun.resolveSync`
+            // against `resolvePackageRoot`, whose answer is the running process's module graph — an empty
+            // fixture checkout cannot stand in for it, so this case is about the child's resolution.
             const result = await runCli(
                 ['builder', 'bundle-laya-worker', '--source-root', repo, '--json'],
                 fx.cwd,
@@ -366,7 +392,7 @@ describe('spur builder emit-board-types and emit-migration-sql', () => {
         const repo = join(import.meta.dir, '../../../../..');
         const fx = await fixture();
         try {
-            const board = await runCli(
+            const board = await runArtifacts(
                 ['builder', 'emit-board-types', '--source-root', repo, '--json'],
                 fx.cwd,
                 fx.env,
@@ -377,7 +403,7 @@ describe('spur builder emit-board-types and emit-migration-sql', () => {
             expect(boardPayload.artifacts).toHaveLength(2);
             for (const artifact of boardPayload.artifacts) expect(artifact.kind).toEndWith(':unchanged');
 
-            const sql = await runCli(
+            const sql = await runArtifacts(
                 ['builder', 'emit-migration-sql', '--source-root', repo, '--json'],
                 fx.cwd,
                 fx.env,
@@ -396,7 +422,7 @@ describe('spur builder artifact verbs outside a checkout', () => {
         const fx = await fixture();
         try {
             for (const verb of ['bundle-plugins', 'bundle-laya-worker', 'emit-board-types', 'emit-migration-sql']) {
-                const result = await runCli(['builder', verb, '--source-root', fx.cwd, '--json'], fx.cwd, fx.env);
+                const result = await runArtifacts(['builder', verb, '--source-root', fx.cwd, '--json'], fx.cwd, fx.env);
                 expect([verb, result.code]).toEqual([verb, 1]);
                 expect(JSON.stringify(result.json)).toContain('not a Spur source checkout');
             }

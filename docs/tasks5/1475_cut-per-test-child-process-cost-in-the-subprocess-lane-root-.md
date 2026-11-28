@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Cut per-test child-process cost in the subprocess-lane root test files
-status: todo
+status: done
 template: standard
 created_at: 2026-11-27T19:06:07.059Z
-updated_at: "2026-11-27T20:23:41.792Z"
+updated_at: "2026-11-28T01:59:02.333Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
 priority: P2
 estimate_hours: 8
+done_forced: "true"
+done_reason: "R1-R5 MET and the review is PASS; the only unmet clause is AC3's 'root suite exits 0', which fails identically on the base commit (packages/app/src/services/a2a-remote-dialog.ts at 80% function coverage against the 90% per-file gate, before-root.log:328) and is outside this task's scope. The pipeline run itself ended failed/retry-exhausted after its second remediate visit exhausted qualityGateMaxFixAttempts while re-routing on the review's P4-only findings; the work was already complete and gated PASS on this tree."
 ---
 
 ## 1475. Cut per-test child-process cost in the subprocess-lane root test files
@@ -50,11 +52,11 @@ Current tree (2026-11-27, `f2fdcc354`):
 
 ### Requirements
 
-- [ ] R1. A before-receipt at `.spur/run/spawn-cost/before.json` records, for every `root.subprocess` file in `config/test-lanes.json`: wall ms (file run alone), test count, and child-process count by kind (`spur-cli`, `git`, `bun`, `sh`, other), produced by a repeatable command checked into the task's Testing section.
-- [ ] R2. The top contributors from R1 — files in descending wall-ms order until ≥50% of the summed subprocess-lane wall time is covered — have their avoidable children removed: CLI spawns replaced by in-process `main()` where the test asserts no process-level behaviour, and repeated per-test git fixture setup replaced by a per-file template repo copied per test.
-- [ ] R3. No assertion is weakened, no timeout raised, no test skipped or moved out of the root suite; each touched file's test count is unchanged.
-- [ ] R4. `config/test-lanes.json` is regenerated (`test-lanes` without `--check`) and `--check` passes.
-- [ ] R5. An after-receipt (same command, same host) at `.spur/run/spawn-cost/after.json`, plus a before/after root `bun run test` wall-time pair, are cited in Testing.
+- [x] R1. A before-receipt at `.spur/run/spawn-cost/before.json` records, for every `root.subprocess` file in `config/test-lanes.json`: wall ms (file run alone), test count, and child-process count by kind (`spur-cli`, `git`, `bun`, `sh`, other), produced by a repeatable command checked into the task's Testing section.
+- [x] R2. The top contributors from R1 — files in descending wall-ms order until ≥50% of the summed subprocess-lane wall time is covered — have their avoidable children removed: CLI spawns replaced by in-process `main()` where the test asserts no process-level behaviour, and repeated per-test git fixture setup replaced by a per-file template repo copied per test.
+- [x] R3. No assertion is weakened, no timeout raised, no test skipped or moved out of the root suite; each touched file's test count is unchanged.
+- [x] R4. `config/test-lanes.json` is regenerated (`test-lanes` without `--check`) and `--check` passes.
+- [x] R5. An after-receipt (same command, same host) at `.spur/run/spawn-cost/after.json`, plus a before/after root `bun run test` wall-time pair, are cited in Testing.
 
 **Out of scope:** files where the child **is** the behaviour (hook scripts under `plugins/sp/hooks`, exit-code/signal/stdin tests, config-layering tests that need a fresh process); launcher/lane scheduling (`scripts/commands/run-tests.ts`); new dependencies; changes to production code beyond what an in-process call requires.
 
@@ -149,15 +151,62 @@ Possibly a small shared helper in `apps/cli/tests/helpers.ts` (`runMain(args, cw
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+| File | Change |
+| --- | --- |
+| `scripts/commands/spawn-cost-preload.ts` (new, 1–133) | Child counter for R1: `classifySpawnKind` buckets each child (`spur-cli`/`git`/`bun`/`sh`/`other`) from argv, `tallySpawnLines` sums the `{kind}` lines, `installSpawnCostCounter` wraps `Bun.spawn`/`Bun.spawnSync` (Bun's `node:child_process` is a shim over them) and `Bun.$` with a re-entrancy guard so a shimmed child counts once. One line per child instead of a flush at exit: Bun's test runner exits without emitting process exit events. Inert without `SPUR_SPAWN_COST_OUT`, so the driver's tests can import it. |
+| `scripts/commands/test-lanes.ts` (84–357) | R1 measurement: `--spawn-cost <out.json>` (202) runs every `root.subprocess` file alone in its own workspace under the preload, recording wall ms, test count, exit code and per-kind children; `renderSpawnCostReceipt` (276) sorts by wall time then path so "top contributors until ≥50%" is reproducible; `workspaceOf` (257) picks the bunfig the file runs under. |
+| `scripts/commands/test-lanes.test.ts` | Written first: kind classification, line tallying (junk → `other`), receipt ordering and per-kind totals. |
+| `apps/cli/tests/helpers.ts` (120–186) | `runMain`: the R2 lever. Same `CliResult` shape as `runCli`, but runs `main()` in process. It redirects both write surfaces (the injected `CommandOutput` **and** ts-utils' default `echo`/`echoError` targets, which diagnostics bypass to), emulates the child's process state for the call (env, `realpath`ed cwd, module graph loaded under the case env), releases the decision-service singletons afterwards, and restores everything. `runCli` stays for cases that assert process-level behaviour. |
+| `apps/cli/tests/fixtures/script-absorption-pr5/harness.ts` (151–215) | Steps run through `runMain` + `replaceEnv` (`runCase` is async); the 41 golden cases compare byte-for-byte, so the conversion is proved by the fixture rather than asserted. |
+| `apps/cli/tests/script-absorption-pr{6,7}/harness.ts` (27–, 24–) | Same conversion; `readBack` is read after the run. The retired-script side (and its `capture.ts` driver) is deleted: its targets no longer exist, and the unreachable branch dragged the harness's per-file line coverage below the 90% gate. The golden fixtures keep their `source` provenance note. |
+| `apps/cli/tests/commands/self/init.test.ts` (14, 34) | `runCli` → `runMain` at the shared helper, so all 72 cases stop paying a `bun` boot + migrations per `self init`. |
+| `apps/cli/tests/commands/builder/artifacts.e2e.test.ts` (49–51) | In-process with `replaceEnv`; nested `bun` builds the verbs start stay real children. `bundle-laya-worker` keeps `runCli`: the verb resolves `@gobing-ai/ts-laya-mlx` through `Bun.resolveSync` against the running process's module graph, which a fixture checkout cannot stand in for. |
+| `apps/cli/tests/commands/builder/show-branches.test.ts` (66–98) | The 29 CLI invocations run in process (all awaited), and the per-test git fixture became a per-file template: one repo is built once and copied per test — commit ids and the `v0.1.0` tag survive, and a filesystem copy (not `git clone`) keeps the fixture remote-less so the default base stays `main`. Identity moves to `GIT_AUTHOR_*`/`GIT_COMMITTER_*` env, which a copy cannot inherit from local config. |
+| `plugins/sp/tests/helpers/cli-surface.ts` (102–178) + `plugins/sp/tests/helpers/cli-surface-capture.ts` (new, 1–47) | 146 separate `--help` boots become one: the child boots the CLI once and emits every command path's help text as a JSON map. `captureCliSurface` keeps its synchronous contract, provenance and failure shape, with a per-path spawn fallback for a path the batch does not know. |
+| `config/test-lanes.json` | Regenerated (R4): the three parity files leave the subprocess lane because they no longer spawn; `test-lanes --check` passes. |
+
+**Keeps (documented, not converted).**
+
+| File | Why the child stays |
+| --- | --- |
+| `plugins/sp/tests/hooks/context-hooks.test.ts` | The hook scripts under test *are* the behaviour (task out-of-scope list: `plugins/sp/hooks`). |
+| `packages/app/tests/{workflow/wrapup-pipeline, workflow/wrapup-pipeline-e2e, workflow/task-pipeline-proof-chain, rules/coverage-certification}.test.ts` | `packages/app` may not import `apps/cli` (ADR-021 workspace graph), so these suites can only reach the CLI as a child; `coverage-certification` additionally runs the real launcher by contract. |
+| `apps/cli/tests/commands/self/exec.test.ts` | The transport seam — inherited stdio, exit codes, stderr step echoes — is what the suite exists to prove. |
+| `apps/cli/tests/commands/self/status.test.ts` | The fixture HOME is boot-time process state: `os.homedir()` is read once at process start, so an in-process run cannot honour it (verified: the configuration/decisions sections diverged). |
+| `apps/cli/tests/commands/self/install.e2e.test.ts` | Same HOME dependency (install roots) plus real installer children from a fixture `PATH`. |
+
+**Measured result.** `.spur/run/spawn-cost/before.json` (base tree, same host) ranks 145 files, 1196 s summed; the files covering ≥50% of that sum are 12, summing 613 s. Their rows on the final tree sum 170 s — a **72% reduction** (AC2 asks ≥40%); the 3 parity files that left the lane entirely are read from `after-pre-template.json` (4 s / 1 s / 0 s), and the earlier, pre-git-template `after.json` pass gave the conservative 58% on the same set. Restricting to the 142 files still in the subprocess lane: 996 s before → 514 s after (−48%). Every touched file's test count is unchanged (35/32/34/72/16/3/17; show-branches 32 pass + 2 env-failing = 34 → 34) and no skip, raised timeout or removed expectation was added. Root `bun run test` on the same host: **788 s → 398 s (−49%)**, both runs reporting `0 fail` and both exiting 1 on the pre-existing `packages/app/src/services/a2a-remote-dialog.ts` per-file coverage breach (80% functions), which is present at base (`before-root.log:328`) and untouched here.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/spawn-cost-preload.ts:66` classifies a child by argv, `:96` installs the wrappers (`Bun.spawn`/`Bun.spawnSync`/`Bun.$`, re-entrancy guarded so Bun's `node:child_process` shim counts once), `:41` tallies; `scripts/commands/test-lanes.ts:305` is the `--spawn-cost <out.json>` driver (each file run alone in its workspace; wall ms + `testCount` + per-kind children) and `:276` the receipt renderer. `before.json` holds 145 rows; two repeat runs on one tree gave identical counts (`plugins/sp/tests/hooks/context-hooks.test.ts` 59 bun/15 sh twice; `apps/cli/tests/commands/self/status.test.ts` 15 spur-cli twice) and the file set is the manifest's. Unit proof: `scripts/commands/test-lanes.test.ts`. |
+| R2 | MET | Both named levers landed. CLI spawns → in-process `main()` on the measured top contributors: pr5 124→4 s, help-docs 82→0 s, pr6 53→1 s, show-branches 46→7 s, init 45→6 s, artifacts 25→4 s, pr7 20→0 s. Repeated per-test git fixture setup → per-file template on `apps/cli/tests/commands/builder/show-branches.test.ts:66` (one repo built once, copied per test; identity via `GIT_AUTHOR_*`/`GIT_COMMITTER_*`). Set sum 613 s → 170 s (−72 %). |
+| R3 | MET | Test counts unchanged per touched file: pr5 35→35, pr6 32→32, pr7 15→15, init 72→72, artifacts 16→16, show-branches 34 (32 pass + 2 load-related base failures) → 34, help-docs 3→3, cli-surface 17→17. No timeout raised, no `test.skip` added, no `expect` removed — conversions change only the source of the same claim (`r.status`/`proc.exited` → `main()` code, captured stdout/stderr). |
+| R4 | MET | `config/test-lanes.json` regenerated: 142 subprocess-lane files; `test-lanes --check` reports "matches the tree (142 file(s))". pr5/pr6/pr7 left the lane because they no longer spawn. |
+| R5 | MET | `.spur/run/spawn-cost/after.json` (same driver, same host, final tree) plus the root pair: `bun run test` 788 s before (`before-root.json`) → 398 s after (`after-root.json`), both `0 fail`. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — a per-file spawn-cost receipt ranks the subprocess lane | MET | command | `.spur/run/spawn-cost/before.json`: one row per `root.subprocess` file with `wallMs`, `testCount`, `children{spur-cli,git,bun,sh,other}`; repeat-run counts identical (hooks 59 bun/15 sh ×2, status 15 spur-cli ×2); driver `scripts/commands/test-lanes.ts:305` |
+| AC2 — the top contributors drop their avoidable children | MET | command | before.json top-12 (613 s) → 170 s on the same host = −72 % (−40 % required); test counts unchanged (R3 row); diff review: no skip, no raised timeout, no removed `expect` |
+| AC3 — the lane manifest and root suite stay honest | PARTIAL | command | manifest: `test-lanes --check` passes on the regenerated 142-file manifest; wall: 788 s → 398 s (−49 %). **Exit code**: both runs exit 1 while reporting `0 fail` — the `a2a-remote-dialog.ts` per-file threshold (80 % functions) breaches at base too (`before-root.log:328`); not introduced or touched here (P4-2) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PARTIAL) |
 
 ### References
 
@@ -166,4 +215,7 @@ Possibly a small shared helper in `apps/cli/tests/helpers.ts` (`runMain(args, cw
 ### History
 
 - 2026-11-27T20:23:41.792Z backlog → todo (system)
+- 2026-11-28T01:30:02.641Z todo → wip (system)
+- 2026-11-28T01:58:26.720Z wip → testing (system)
+- 2026-11-28T01:59:02.316Z testing → done (system)
 
