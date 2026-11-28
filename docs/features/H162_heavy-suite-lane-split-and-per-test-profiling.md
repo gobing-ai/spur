@@ -32,13 +32,6 @@ Cut the wall time of `bun run test:heavy` (~196–277s across recent feature-ver
 
 ## Acceptance Criteria
 
-- [ ] R1 — A per-file heavy profile and end-to-end baseline are recorded as a receipt
-- [ ] R2 — Every heavy file is classified concurrent-safe or serial in a committed manifest guarded against drift
-- [ ] R3 — The browser and board heavy files reuse one Board build per heavy run
-- [ ] R4 — Concurrent-safe heavy files run concurrently while serial files keep serial execution
-- [ ] R5 — No heavy proof is dropped, skipped, weakened, or moved to the default path
-- [ ] R6 — A before/after receipt shows test:heavy at or under 65 percent of baseline with zero new failures across 3 runs
-
 ```gherkin
 Feature: Heavy-suite lane split and per-test profiling
 
