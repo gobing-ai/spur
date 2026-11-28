@@ -4,7 +4,7 @@ name: Cut per-test child-process cost in the subprocess-lane root test files
 status: done
 template: standard
 created_at: 2026-11-27T19:06:07.059Z
-updated_at: "2026-11-28T02:09:10.482Z"
+updated_at: "2026-11-28T03:09:41.272Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -12,6 +12,7 @@ priority: P2
 estimate_hours: 8
 done_forced: "true"
 done_reason: "R1-R5 MET and the review is PASS; the only unmet clause is AC3's 'root suite exits 0', which fails identically on the base commit (packages/app/src/services/a2a-remote-dialog.ts at 80% function coverage against the 90% per-file gate, before-root.log:328) and is outside this task's scope. The pipeline run itself ended failed/retry-exhausted after its second remediate visit exhausted qualityGateMaxFixAttempts while re-routing on the review's P4-only findings; the work was already complete and gated PASS on this tree."
+feature_id: H161
 ---
 
 ## 1475. Cut per-test child-process cost in the subprocess-lane root test files
