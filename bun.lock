@@ -214,21 +214,21 @@
   },
   "catalog": {
     "@commander-js/extra-typings": "14.0.0",
-    "@gobing-ai/superskill": "0.3.44",
-    "@gobing-ai/ts-ai-decision": "0.8.7",
-    "@gobing-ai/ts-ai-runner": "0.8.7",
-    "@gobing-ai/ts-db": "0.8.7",
-    "@gobing-ai/ts-decision-clef": "0.8.7",
-    "@gobing-ai/ts-decision-fm": "0.8.7",
-    "@gobing-ai/ts-decision-gemini": "0.8.7",
-    "@gobing-ai/ts-decision-openai": "0.8.7",
-    "@gobing-ai/ts-dual-workflow-engine": "0.8.7",
-    "@gobing-ai/ts-infra": "0.8.7",
-    "@gobing-ai/ts-laya-mlx": "0.8.7",
-    "@gobing-ai/ts-llm-jsonl-importer": "0.8.7",
-    "@gobing-ai/ts-rule-engine": "0.8.7",
-    "@gobing-ai/ts-runtime": "0.8.7",
-    "@gobing-ai/ts-utils": "0.8.7",
+    "@gobing-ai/superskill": "0.3.48",
+    "@gobing-ai/ts-ai-decision": "0.8.8",
+    "@gobing-ai/ts-ai-runner": "0.8.8",
+    "@gobing-ai/ts-db": "0.8.8",
+    "@gobing-ai/ts-decision-clef": "0.8.8",
+    "@gobing-ai/ts-decision-fm": "0.8.8",
+    "@gobing-ai/ts-decision-gemini": "0.8.8",
+    "@gobing-ai/ts-decision-openai": "0.8.8",
+    "@gobing-ai/ts-dual-workflow-engine": "0.8.8",
+    "@gobing-ai/ts-infra": "0.8.8",
+    "@gobing-ai/ts-laya-mlx": "0.8.8",
+    "@gobing-ai/ts-llm-jsonl-importer": "0.8.8",
+    "@gobing-ai/ts-rule-engine": "0.8.8",
+    "@gobing-ai/ts-runtime": "0.8.8",
+    "@gobing-ai/ts-utils": "0.8.8",
     "@orpc/client": "1.14.4",
     "@orpc/contract": "1.14.4",
     "@orpc/openapi": "1.14.4",
@@ -421,35 +421,35 @@
 
     "@gobing-ai/spur-web": ["@gobing-ai/spur-web@workspace:apps/web"],
 
-    "@gobing-ai/superskill": ["@gobing-ai/superskill@0.3.44", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "0.5.33", "@gobing-ai/ts-db": "0.5.33", "@gobing-ai/ts-runtime": "0.5.33", "@gobing-ai/ts-utils": "0.5.33", "commander": "^14.0.0", "drizzle-orm": "^0.44.0", "drizzle-zod": "^0.7.0", "rulesync": "^8.28.1", "yaml": "^2.9.0", "zod": "^3.25.0" }, "bin": { "superskill": "dist/index.js" } }, "sha512-p/2l0uaiLhnXMb/oN11jrsKn1d4gqvhFVVtOdtO2lsPYxeMXW/swLdJPtZB01jhc8ceVNDPZ29dKDz8FPCRJUA=="],
+    "@gobing-ai/superskill": ["@gobing-ai/superskill@0.3.48", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "0.8.7", "@gobing-ai/ts-db": "0.8.7", "@gobing-ai/ts-runtime": "0.8.7", "@gobing-ai/ts-utils": "0.8.7", "commander": "^14.0.0", "drizzle-orm": "^0.44.0", "drizzle-zod": "^0.7.0", "rulesync": "^8.28.1", "yaml": "^2.9.0", "zod": "^3.25.0" }, "bin": { "superskill": "dist/index.js" } }, "sha512-mcxFQ8GbFzuce3OhW3aVklH3HoBZCFy8YAxZyCk+SuR3kl81krvemLswZAvktJ3hydza93IdZCfJzXfuLvdmuQ=="],
 
-    "@gobing-ai/ts-ai-decision": ["@gobing-ai/ts-ai-decision@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-decision-fm": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7", "@typesafe-ai/sdk": "0.7.0", "zod": "^4.1.0" }, "optionalDependencies": { "@gobing-ai/ts-laya-mlx": "^0.8.7" } }, "sha512-qsnFlDVgQdzOSK+NaCeEQTNjBTPKq3PikUQVijX75P3778VWHbQbabhyxLTnXjHiMoPLB0Yp9vVovoRTEXSEGw=="],
+    "@gobing-ai/ts-ai-decision": ["@gobing-ai/ts-ai-decision@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-decision-fm": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8", "@typesafe-ai/sdk": "0.7.0", "zod": "^4.1.0" }, "optionalDependencies": { "@gobing-ai/ts-laya-mlx": "^0.8.8" } }, "sha512-d3yu2T5ag9tTjV8XTL4DY5K5VeeVPDzswS5yy/KTjM2X8Ot1/KA8UHW2ztxKcvcTB1l+D3PEoen8O6RyCGe2tg=="],
 
-    "@gobing-ai/ts-ai-runner": ["@gobing-ai/ts-ai-runner@0.8.7", "", { "dependencies": { "@gobing-ai/ts-infra": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7" } }, "sha512-jGMPUgFAj27s4RaZQdyDm4P8PpUYVTUDpwtg2vU3t3+CAy9rqnzi4WLVqjx7h20VpKvGjADN8VmStIV1XeT4xQ=="],
+    "@gobing-ai/ts-ai-runner": ["@gobing-ai/ts-ai-runner@0.8.8", "", { "dependencies": { "@gobing-ai/ts-infra": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8" } }, "sha512-iy2xiJlNxUwo1+bS++2LEC+aQlWmkzRXD+SWMurMtrzIgsDm485aIShsZ1gCMcsanMXiY5dQobedFizLUTj2xw=="],
 
-    "@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.8.7", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.8.7", "@gobing-ai/ts-utils": "^0.8.7" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-JYTR8T6jDUGi+OEdloAh0LM/DfVOzPf8rCDHRlA39KS+Mgsr9pECHfvQhOAetjnpRmaRx7HXSqw1QcwkhTWlrQ=="],
+    "@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.8.8", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.8.8", "@gobing-ai/ts-utils": "^0.8.8" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-k/kL3gtw17C0Nb6ySQBtdm57ZIsBZyACa6OhXDy//BXhBGR8py7+dL3effil2RCRuwvlpy8+/RUc7fUMve6fGg=="],
 
-    "@gobing-ai/ts-decision-clef": ["@gobing-ai/ts-decision-clef@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-infra": "^0.8.7" } }, "sha512-0RKh0Cjtpgr1fjUHsGKib5Gd1qrf40jO/8UxPkeuR2I7vZIvY5Odq9sJuY4EPh8VOHdo/q0JRm1syv9nOqwUYA=="],
+    "@gobing-ai/ts-decision-clef": ["@gobing-ai/ts-decision-clef@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-infra": "^0.8.8" } }, "sha512-4BUxF7ILcmenxXuvjdwCX3o48G1wVqbkPJ2FExkf1G3+B6djhlJBkex5MLs7Rb9jW0b8J3FQyWkSO2qOvTL0gQ=="],
 
-    "@gobing-ai/ts-decision-fm": ["@gobing-ai/ts-decision-fm@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7" } }, "sha512-g5SehWWpoiMnHk6eDooCxbQlGakOxFeobxKroeouH5/DFXAHmgL1A0lqIT8y1GAF98ujjDeLbmr7i2T9mVRO2Q=="],
+    "@gobing-ai/ts-decision-fm": ["@gobing-ai/ts-decision-fm@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8" } }, "sha512-KuFZvk2ZmIKfqLYACUoFJd1clK97VZUEoZsiCeKVFsbF1XxYaSts9oQ3PhRYokZC0rwMxEhLWUSUbUXzm+aLag=="],
 
-    "@gobing-ai/ts-decision-gemini": ["@gobing-ai/ts-decision-gemini@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-infra": "^0.8.7" } }, "sha512-mhfIjv2+udTtkv+GxXUc2E2+fVkSEzm5wfjpE8QSHryUH3wGsze69jKvMMZf6aTWExGRtEyOi24I9BowVrdxrA=="],
+    "@gobing-ai/ts-decision-gemini": ["@gobing-ai/ts-decision-gemini@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-infra": "^0.8.8" } }, "sha512-Sj2kdZMdmDnP2rBBMnL0bPvmIIa3QeNjSY2hR3p5NZxEYrKCEq69bZz/DtwMmA8Q6LSK6ilAKAfKBlowR/MNhg=="],
 
-    "@gobing-ai/ts-decision-openai": ["@gobing-ai/ts-decision-openai@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-infra": "^0.8.7" } }, "sha512-w/IKR7iYt20b205osMAE4qe8aNzAlRvpUbeGAzBXX9fqxFeZfSnW0ypM+M5yCUFfLdOOqdERLya25iDYXRw38w=="],
+    "@gobing-ai/ts-decision-openai": ["@gobing-ai/ts-decision-openai@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-infra": "^0.8.8" } }, "sha512-imYFa69EPeNS/u9seWm4JL4C3QAcGXVosopvmUeovosHjn0KLXOMaE1FtmgUqWXQ4jNqHJHDgrCU7nwlfvut3w=="],
 
-    "@gobing-ai/ts-dual-workflow-engine": ["@gobing-ai/ts-dual-workflow-engine@0.8.7", "", { "dependencies": { "@gobing-ai/ts-db": "^0.8.7", "@gobing-ai/ts-infra": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7", "zod": "^4.1.0" } }, "sha512-6XnNXAfHRIoonb1KzLiXbf/DWpnnsjkc6mahLzyYIDqE34fVZ/t8uw8hfhbQWGEPnVBQAVzDAFhqFRXy54y70w=="],
+    "@gobing-ai/ts-dual-workflow-engine": ["@gobing-ai/ts-dual-workflow-engine@0.8.8", "", { "dependencies": { "@gobing-ai/ts-db": "^0.8.8", "@gobing-ai/ts-infra": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8", "zod": "^4.1.0" } }, "sha512-t5+aSsBIJu93BRf8YhdV7Lo2uU3p5+d77Bofm0fGq1At1nCLanKk44CYTzPoNGS4jqHALSkdTKIS4I6Tv53MVg=="],
 
-    "@gobing-ai/ts-infra": ["@gobing-ai/ts-infra@0.8.7", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.7", "@logtape/logtape": "^2.0.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7", "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-metrics-otlp-http": ">=0.200.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.30.0" }, "optionalPeers": ["@gobing-ai/ts-db", "@gobing-ai/ts-runtime", "@opentelemetry/exporter-metrics-otlp-http", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/resources", "@opentelemetry/sdk-metrics", "@opentelemetry/sdk-trace-node"] }, "sha512-WcGCaGs4gJgu6QO4jabWHB8vApR70mtaq5WlThvKGTFjpnwwvWUOow/8LYqVbJoLSKx2vUIJKSpuoLIDRfqV0g=="],
+    "@gobing-ai/ts-infra": ["@gobing-ai/ts-infra@0.8.8", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.8", "@logtape/logtape": "^2.0.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8", "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-metrics-otlp-http": ">=0.200.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.30.0" }, "optionalPeers": ["@gobing-ai/ts-db", "@gobing-ai/ts-runtime", "@opentelemetry/exporter-metrics-otlp-http", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/resources", "@opentelemetry/sdk-metrics", "@opentelemetry/sdk-trace-node"] }, "sha512-ZWCeGaUU7os8/qa11iiMobuA9PoGhmPpxtkA9SNvkBSS4GAKCDMJ0lxNl0cK/61MGbR9Y29+Rv6RpDse4n1ZDg=="],
 
-    "@gobing-ai/ts-laya-mlx": ["@gobing-ai/ts-laya-mlx@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7", "@johnhenry/laya": "0.3.2" }, "optionalDependencies": { "@johnhenry/backend-mlx": "0.5.0" }, "os": "darwin" }, "sha512-+WcsvxW37zUPN8H2eQ+1N+JzPWuNQwpRMbdnq53TeLGyOVctO/ylU4UaIseo+ZQFe2wBfXArQiSeuXbruRLs4w=="],
+    "@gobing-ai/ts-laya-mlx": ["@gobing-ai/ts-laya-mlx@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8", "@johnhenry/laya": "0.3.2" }, "optionalDependencies": { "@johnhenry/backend-mlx": "0.5.0" }, "os": "darwin" }, "sha512-MTuJmGPqiNKxOMrA5Dqorc17PDlJ/3DAzWXMD8fhLlE+t0l7TdbxvDrByOt8AZQccP+BEuNffGTvgoA26+pCWg=="],
 
-    "@gobing-ai/ts-llm-jsonl-importer": ["@gobing-ai/ts-llm-jsonl-importer@0.8.7", "", { "dependencies": { "@gobing-ai/ts-db": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7", "@gobing-ai/ts-utils": "^0.8.7", "zod": "^4.1.0" } }, "sha512-NJCjiwikNGyGuQa+gLJ2vpHFG0qSRM2MLG99lp3HUcqwsv8Rf7CmMsF3OQHvh4R3tnJ4P/Wx+qC1HGqiSqBXrw=="],
+    "@gobing-ai/ts-llm-jsonl-importer": ["@gobing-ai/ts-llm-jsonl-importer@0.8.8", "", { "dependencies": { "@gobing-ai/ts-db": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8", "@gobing-ai/ts-utils": "^0.8.8", "zod": "^4.1.0" } }, "sha512-ckpo4Q+v7BqnOb2s006eNemE2HoCBQi2jP72oPG9g9IKrB0MuddrYghZ0+T2C33J6gEXiXpeog0PVkuCXVT0pA=="],
 
-    "@gobing-ai/ts-rule-engine": ["@gobing-ai/ts-rule-engine@0.8.7", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.7", "@gobing-ai/ts-db": "^0.8.7", "@gobing-ai/ts-infra": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7", "yaml": "^2.7.0", "zod": "^4.1.0" } }, "sha512-b87Llo2Zb9FHpwybbrvRZePr3wWTVURNTQ6EY3ak/E9RSwxt9/UTIxuM6iGFZRABV0YXjMeQ/upgM99kgxzIzQ=="],
+    "@gobing-ai/ts-rule-engine": ["@gobing-ai/ts-rule-engine@0.8.8", "", { "dependencies": { "@gobing-ai/ts-ai-runner": "^0.8.8", "@gobing-ai/ts-db": "^0.8.8", "@gobing-ai/ts-infra": "^0.8.8", "@gobing-ai/ts-runtime": "^0.8.8", "yaml": "^2.7.0", "zod": "^4.1.0" } }, "sha512-dyCWb81Vw927KkhKr9grRdI2OZfv4XlmBuFEVkWtS7XSxX81yKlFa6PF6FiqG9Y6mWbgSlYb5IzJquBDzMVncg=="],
 
-    "@gobing-ai/ts-runtime": ["@gobing-ai/ts-runtime@0.8.7", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.7", "execa": "^9.5.0", "yaml": "^2.7.0", "zod": "^4.1.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.7" }, "optionalPeers": ["@gobing-ai/ts-db"] }, "sha512-4AR2Q6NXc6AHu+xIq1lReT4aCIsCefqq1Q3beY1wBazHPw/CvmgbxmnHJ/nrM9T5TdOPLbswEJvPk2BKBQpQOw=="],
+    "@gobing-ai/ts-runtime": ["@gobing-ai/ts-runtime@0.8.8", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.8", "execa": "^9.5.0", "yaml": "^2.7.0", "zod": "^4.1.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.8" }, "optionalPeers": ["@gobing-ai/ts-db"] }, "sha512-iVnMtgppgvBtrNbopCmqKYee6Y01FKsVxYf6xF/wX5FfSDtGaDCGtsLKVQabOmg6i3TpAG3DZyVHHwH6cWh6TA=="],
 
-    "@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.8.7", "", {}, "sha512-xAklNUjkJVhyplXRc+VrmlgNe676Tau3qs6grXlqh0BCTKUN6sem3qop5pSPLOqV+lUPNjfyOMy7CKxV/MfDtw=="],
+    "@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.8.8", "", {}, "sha512-72tpWaC+BgrYBNYZqRKdlWEq9AaREiMMxmV8z3OoTS/Wn0dyp5LzLEExceZPCzeeelqdJHj99nVJ0xS+LfOCxg=="],
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.10.4", "", { "dependencies": { "@types/node": ">=20.0.0", "happy-dom": "^20.10.4" } }, "sha512-d1iWnYgb20MuHYyXVcjkEdFkUy5+myq8RyLAFK9Sy4PVNy/cU5xrM5JM/MMMR3KDZQ6YNVj9puy96lcfEaKh8Q=="],
 
@@ -2217,13 +2217,13 @@
 
     "@gobing-ai/spur-web/yaml": ["yaml@2.9.1", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw=="],
 
-    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner": ["@gobing-ai/ts-ai-runner@0.5.33", "", { "dependencies": { "@gobing-ai/ts-infra": "^0.5.33", "@gobing-ai/ts-runtime": "^0.5.33" } }, "sha512-FAbsvJz0fqxvM7DLvOpyppxbRdqSuQ452sP0u+fUgmOL+CuavotNmgBaKCpKbSFASdh5JldTX1kyD5JPjfos5A=="],
+    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner": ["@gobing-ai/ts-ai-runner@0.8.7", "", { "dependencies": { "@gobing-ai/ts-infra": "^0.8.7", "@gobing-ai/ts-runtime": "^0.8.7" } }, "sha512-jGMPUgFAj27s4RaZQdyDm4P8PpUYVTUDpwtg2vU3t3+CAy9rqnzi4WLVqjx7h20VpKvGjADN8VmStIV1XeT4xQ=="],
 
-    "@gobing-ai/superskill/@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.5.33", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.5.33", "@gobing-ai/ts-utils": "^0.5.33" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-5MfPv3/63tRdJiaE5Fx3fvp47pQaylpsh7rMyVpZO7/c1seO4x15SPeCiPWzQ9+hLYJbwWkgfSF/VZ80PQ2ooQ=="],
+    "@gobing-ai/superskill/@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.8.7", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.8.7", "@gobing-ai/ts-utils": "^0.8.7" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-JYTR8T6jDUGi+OEdloAh0LM/DfVOzPf8rCDHRlA39KS+Mgsr9pECHfvQhOAetjnpRmaRx7HXSqw1QcwkhTWlrQ=="],
 
-    "@gobing-ai/superskill/@gobing-ai/ts-runtime": ["@gobing-ai/ts-runtime@0.5.33", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.5.33", "execa": "^9.5.0", "yaml": "^2.7.0", "zod": "^4.1.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.5.33" }, "optionalPeers": ["@gobing-ai/ts-db"] }, "sha512-NNeuDcaii/+lr53T3ey3kz6bKRoyJT7TIF7Js8yRR3kVlUUyPKTvjJVCqkyn7zasByc0a54I1zz8IhnS5+a6JQ=="],
+    "@gobing-ai/superskill/@gobing-ai/ts-runtime": ["@gobing-ai/ts-runtime@0.8.7", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.7", "execa": "^9.5.0", "yaml": "^2.7.0", "zod": "^4.1.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.7" }, "optionalPeers": ["@gobing-ai/ts-db"] }, "sha512-4AR2Q6NXc6AHu+xIq1lReT4aCIsCefqq1Q3beY1wBazHPw/CvmgbxmnHJ/nrM9T5TdOPLbswEJvPk2BKBQpQOw=="],
 
-    "@gobing-ai/superskill/@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.5.33", "", {}, "sha512-jNiSVG5Te8vLJN2Acv2P5TTOMJ/UpWQ0JvmTaUpzqzv06q0rJ4OiIJrTsMoUAwZ0YGBFBxNx11xd6N+KoYq4Jw=="],
+    "@gobing-ai/superskill/@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.8.7", "", {}, "sha512-xAklNUjkJVhyplXRc+VrmlgNe676Tau3qs6grXlqh0BCTKUN6sem3qop5pSPLOqV+lUPNjfyOMy7CKxV/MfDtw=="],
 
     "@gobing-ai/superskill/drizzle-zod": ["drizzle-zod@0.7.1", "", { "peerDependencies": { "drizzle-orm": ">=0.36.0", "zod": ">=3.0.0" } }, "sha512-nZzALOdz44/AL2U005UlmMqaQ1qe5JfanvLujiTHiiT8+vZJTBFhj3pY4Vk+L6UWyKFfNmLhk602Hn4kCTynKQ=="],
 
@@ -2429,7 +2429,13 @@
 
     "@cloudflare/vitest-pool-workers/wrangler/workerd": ["workerd@1.20260815.1", "", { "optionalDependencies": { "@cloudflare/workerd-darwin-64": "1.20260815.1", "@cloudflare/workerd-darwin-arm64": "1.20260815.1", "@cloudflare/workerd-linux-64": "1.20260815.1", "@cloudflare/workerd-linux-arm64": "1.20260815.1", "@cloudflare/workerd-windows-64": "1.20260815.1" }, "bin": { "workerd": "bin/workerd" } }, "sha512-8bArFkHmlp7qFEKVPyNzDzHzS35gc2fg0PYBcDtaNLF7UCDryCX2BQnpkUkTHYIy824IRrHOTwOEoTj0sUO2Fg=="],
 
-    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner/@gobing-ai/ts-infra": ["@gobing-ai/ts-infra@0.5.33", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.5.33", "@logtape/logtape": "^2.0.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.5.33", "@gobing-ai/ts-runtime": "^0.5.33", "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-metrics-otlp-http": ">=0.200.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.30.0" }, "optionalPeers": ["@gobing-ai/ts-db", "@gobing-ai/ts-runtime", "@opentelemetry/exporter-metrics-otlp-http", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/resources", "@opentelemetry/sdk-metrics", "@opentelemetry/sdk-trace-node"] }, "sha512-fyNjJwCOn2jY84dWPRmdurfCqu223Tu8Eb6n/EblvwKrnxEyLgf1T63lj1uzdl7mHNbMsn3qNYP+Pw8vmHA8fA=="],
+    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner/@gobing-ai/ts-runtime": ["@gobing-ai/ts-runtime@0.8.8", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.8", "execa": "^9.5.0", "yaml": "^2.7.0", "zod": "^4.1.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.8" }, "optionalPeers": ["@gobing-ai/ts-db"] }, "sha512-iVnMtgppgvBtrNbopCmqKYee6Y01FKsVxYf6xF/wX5FfSDtGaDCGtsLKVQabOmg6i3TpAG3DZyVHHwH6cWh6TA=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-db/@gobing-ai/ts-runtime": ["@gobing-ai/ts-runtime@0.8.8", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.8.8", "execa": "^9.5.0", "yaml": "^2.7.0", "zod": "^4.1.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.8.8" }, "optionalPeers": ["@gobing-ai/ts-db"] }, "sha512-iVnMtgppgvBtrNbopCmqKYee6Y01FKsVxYf6xF/wX5FfSDtGaDCGtsLKVQabOmg6i3TpAG3DZyVHHwH6cWh6TA=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-db/@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.8.8", "", {}, "sha512-72tpWaC+BgrYBNYZqRKdlWEq9AaREiMMxmV8z3OoTS/Wn0dyp5LzLEExceZPCzeeelqdJHj99nVJ0xS+LfOCxg=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-runtime/@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.8.8", "", {}, "sha512-72tpWaC+BgrYBNYZqRKdlWEq9AaREiMMxmV8z3OoTS/Wn0dyp5LzLEExceZPCzeeelqdJHj99nVJ0xS+LfOCxg=="],
 
     "@gobing-ai/superskill/@gobing-ai/ts-runtime/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
 
@@ -2745,7 +2751,15 @@
 
     "@cloudflare/vitest-pool-workers/wrangler/workerd/@cloudflare/workerd-windows-64": ["@cloudflare/workerd-windows-64@1.20260815.1", "", { "os": "win32", "cpu": "x64" }, "sha512-PiIUWrhbMg3quolwjgMvPOd75vKESjT4aDm7nL6mSjL5IOgmpO/zKstXnYfnEH3pq7sC0UCvKlF8ZPcfsh8NMw=="],
 
-    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner/@gobing-ai/ts-infra/@logtape/logtape": ["@logtape/logtape@2.4.2", "", {}, "sha512-YJyC1gEMgWmTqJTRtKkjgasEbi8/0gP7Dj8n6bL46gQIAhpTY8uXJ+1QYMOgF5asotlGMvy3G7ejXUe45Yd1MQ=="],
+    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner/@gobing-ai/ts-runtime/@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.8.8", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.8.8", "@gobing-ai/ts-utils": "^0.8.8" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-k/kL3gtw17C0Nb6ySQBtdm57ZIsBZyACa6OhXDy//BXhBGR8py7+dL3effil2RCRuwvlpy8+/RUc7fUMve6fGg=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner/@gobing-ai/ts-runtime/@gobing-ai/ts-utils": ["@gobing-ai/ts-utils@0.8.8", "", {}, "sha512-72tpWaC+BgrYBNYZqRKdlWEq9AaREiMMxmV8z3OoTS/Wn0dyp5LzLEExceZPCzeeelqdJHj99nVJ0xS+LfOCxg=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-ai-runner/@gobing-ai/ts-runtime/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-db/@gobing-ai/ts-runtime/@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.8.8", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.8.8", "@gobing-ai/ts-utils": "^0.8.8" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-k/kL3gtw17C0Nb6ySQBtdm57ZIsBZyACa6OhXDy//BXhBGR8py7+dL3effil2RCRuwvlpy8+/RUc7fUMve6fGg=="],
+
+    "@gobing-ai/superskill/@gobing-ai/ts-db/@gobing-ai/ts-runtime/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
 
     "astro/vite/esbuild/@esbuild/aix-ppc64": ["@esbuild/aix-ppc64@0.28.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ=="],
 
