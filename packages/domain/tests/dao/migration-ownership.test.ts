@@ -341,8 +341,7 @@ async function columnNames(adapter: DbAdapter, table: string): Promise<string[]>
     return rows.map((row) => row.name);
 }
 
-function idsMatchReleased(ids: readonly string[]): boolean {
-    if (ids.length !== FIXTURE_SEED.expectedCount) return false;
+function idsAreContiguous(ids: readonly string[]): boolean {
     return ids.every((id, index) => id.startsWith(`${String(index).padStart(4, '0')}_`));
 }
 
@@ -641,8 +640,11 @@ describe('1311 SQL normalization and decision', () => {
 
 describe('1311 migration ownership evidence', () => {
     test('publishes the 0037 ownership decision from fixtures', async () => {
-        const embeddedIds = CLI_MIGRATIONS.map((migration) => migration.id);
-        const contiguous = idsMatchReleased(embeddedIds);
+        expect(idsAreContiguous(CLI_MIGRATIONS.map((migration) => migration.id))).toBe(true);
+        // The frozen 1311 ownership decision measured this released prefix through 0056.
+        const fixtureMigrations = CLI_MIGRATIONS.slice(0, FIXTURE_SEED.expectedCount);
+        const embeddedIds = fixtureMigrations.map((migration) => migration.id);
+        const contiguous = embeddedIds.length === FIXTURE_SEED.expectedCount && idsAreContiguous(embeddedIds);
         const trackedMigrations = await loadSqlMigrations(resolve(REPO_ROOT, 'drizzle'));
         const trackedById = new Map(trackedMigrations.map((migration) => [migration.id, migration.sql]));
         const trackedFile = readFileSync(resolve(REPO_ROOT, CANDIDATE_FILE));
@@ -666,7 +668,7 @@ describe('1311 migration ownership evidence', () => {
         const cases: FixtureCase[] = [];
 
         const fresh = await openMemory();
-        const freshApplied = await applyCliMigrations(fresh);
+        const freshApplied = await applyCliMigrations(fresh, fixtureMigrations);
         const freshJournal = await journalIds(fresh);
         const freshColumns = await columnNames(fresh, '__spur_cli_migrations');
         const measureColumns = await fresh.queryAll<{ name: string; notnull: number; dflt_value: string | null }>(
@@ -678,7 +680,7 @@ describe('1311 migration ownership evidence', () => {
         });
         const freshOrder = migrationOrder(freshJournal);
         const freshPass =
-            freshApplied === CLI_MIGRATIONS.length &&
+            freshApplied === fixtureMigrations.length &&
             freshOrder.join('\n') === embeddedIds.join('\n') &&
             freshColumns.includes('id') &&
             freshColumns.includes('applied_at') &&
@@ -691,7 +693,7 @@ describe('1311 migration ownership evidence', () => {
             detail: `applied ${freshApplied}; journal columns ${freshColumns.join(',')}; nullable measures ${measuresNullable}`,
         });
 
-        const already = await applyCliMigrations(fresh);
+        const already = await applyCliMigrations(fresh, fixtureMigrations);
         cases.push({
             id: 'already-applied',
             pass: already === 0 && (await journalIds(fresh)).join('\n') === freshJournal.join('\n'),
@@ -700,23 +702,23 @@ describe('1311 migration ownership evidence', () => {
         fresh.close();
 
         const previous = await openMemory();
-        await applyCliMigrations(previous, CLI_MIGRATIONS.slice(0, 37));
-        const previousApplied = await applyCliMigrations(previous);
+        await applyCliMigrations(previous, fixtureMigrations.slice(0, 37));
+        const previousApplied = await applyCliMigrations(previous, fixtureMigrations);
         const previousHasMart = (await masterSql(previous, DIMENSION_NAMES)).every((row) => !row.endsWith(':'));
         cases.push({
             id: 'previous-release',
-            pass: previousApplied === CLI_MIGRATIONS.length - 37 && previousHasMart,
+            pass: previousApplied === fixtureMigrations.length - 37 && previousHasMart,
             detail: `upgrade from 0036 applied ${previousApplied}`,
         });
         previous.close();
 
         const interrupted = await openMemory();
-        await applyCliMigrations(interrupted, CLI_MIGRATIONS.slice(0, 37));
+        await applyCliMigrations(interrupted, fixtureMigrations.slice(0, 37));
         await applySql(interrupted, embeddedSql);
-        const resumed = await applyCliMigrations(interrupted);
+        const resumed = await applyCliMigrations(interrupted, fixtureMigrations);
         const interruptedJournal = migrationOrder(await journalIds(interrupted));
         const interruptedPass =
-            resumed === CLI_MIGRATIONS.length - 37 && interruptedJournal.join('\n') === embeddedIds.join('\n');
+            resumed === fixtureMigrations.length - 37 && interruptedJournal.join('\n') === embeddedIds.join('\n');
         cases.push({
             id: 'interrupted',
             pass: interruptedPass,
@@ -761,7 +763,7 @@ describe('1311 migration ownership evidence', () => {
         absent.close();
 
         const offlineProof = await sourceFreeSmoke();
-        const guards: GuardRef[] = CLI_MIGRATIONS.flatMap((migration) =>
+        const guards: GuardRef[] = fixtureMigrations.flatMap((migration) =>
             migration.addColumnIfMissing
                 ? [
                       {
@@ -772,7 +774,7 @@ describe('1311 migration ownership evidence', () => {
                   ]
                 : [],
         );
-        const rows: MirrorRow[] = CLI_MIGRATIONS.map((migration) => {
+        const rows: MirrorRow[] = fixtureMigrations.map((migration) => {
             const tracked = trackedById.get(migration.id);
             return {
                 id: migration.id,
@@ -938,12 +940,13 @@ describe('1311 migration ownership evidence', () => {
         expect(schemaEqual).toBe(true);
         // The proof is run-scoped (it needs the bundled CLI); its shape is asserted below.
         expect(typeof offlineProof.pass).toBe('boolean');
-        // `go` is only reachable where the offline proof could run; a clean checkout fails closed.
-        // The decision reads BOTH cleanliness inputs: a dirty released-SQL path OR a dirty upstream
-        // package manifest (`apps/cli/package.json`, `package.json`, the lockfile) is `no-go`, so the
-        // expectation has to carry both, not just the SQL paths (A94 1410 edits a manifest).
+        // A missing bundle is inconclusive. A measurable bundle missing a live migration is no-go.
         expect(report.status, `${JSON.stringify(offlineProof)}\n${sourceFreeStderr}`).toBe(
-            releasedClean && dependencyClean ? (offlineProof.pass ? 'go' : 'inconclusive') : 'no-go',
+            offlineProof.bundleDigest === ''
+                ? 'inconclusive'
+                : releasedClean && dependencyClean && offlineProof.pass
+                  ? 'go'
+                  : 'no-go',
         );
     }, 120_000);
 });
