@@ -207,10 +207,48 @@ async function git(repoRoot: string, args: string[], timeoutMs?: number): Promis
     return result.stdout;
 }
 
-/** True if `name@version` is already on the npm registry (so we never re-tag a published version). */
-async function npmViewVersion(repoRoot: string, name: string, version: string): Promise<boolean> {
-    const result = await run(repoRoot, ['npm', 'view', `${name}@${version}`, 'version']);
-    return result.ok && result.stdout === version;
+/**
+ * True when the registry's `time` map knows `version`. Covers a version that was published and
+ * later unpublished: it 404s on `npm view <name>@<version>` but stays in `time`, and npm then
+ * refuses that number forever (E400 on publish), so it must block a release like a live one.
+ */
+export function registryTimeHasVersion(timeJson: string, version: string): boolean {
+    try {
+        const map = JSON.parse(timeJson) as unknown;
+        return map !== null && typeof map === 'object' && Object.hasOwn(map, version);
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Why `name@version` cannot be released, or null when the number is free: `published` for a live
+ * version, `unpublished` for a burned one (release 0.4.50: published 2026-09-01, unpublished, then
+ * re-bumped and rejected by npm mid-publish).
+ */
+async function npmVersionConflict(
+    repoRoot: string,
+    name: string,
+    version: string,
+): Promise<'published' | 'unpublished' | null> {
+    const direct = await run(repoRoot, ['npm', 'view', `${name}@${version}`, 'version']);
+    if (direct.ok && direct.stdout === version) return 'published';
+    const time = await run(repoRoot, ['npm', 'view', name, 'time', '--json']);
+    if (time.ok && registryTimeHasVersion(time.stdout, version)) return 'unpublished';
+    return null;
+}
+
+/** Throw with the operator's next step when the version number is already spent on npm. */
+async function assertNpmVersionFree(repoRoot: string, name: string, version: string): Promise<void> {
+    const conflict = await npmVersionConflict(repoRoot, name, version);
+    if (conflict === 'published') {
+        throw new Error(`${name}@${version} is already published on npm. Use a new version.`);
+    }
+    if (conflict === 'unpublished') {
+        throw new Error(
+            `${name}@${version} was published and then unpublished — npm never accepts that number again. Use a new version.`,
+        );
+    }
 }
 
 /** Read a JSON object file, or null when absent/malformed. */
@@ -572,9 +610,7 @@ async function bumpVersion(
     const branch = await assertCleanTreeOnBranch(ctx);
     await assertTagFree(ctx, config, tag, version, output);
 
-    if (await npmViewVersion(ctx.repoRoot, config.packageName, version)) {
-        throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
-    }
+    await assertNpmVersionFree(ctx.repoRoot, config.packageName, version);
     await assertPluginInstallable(ctx, output);
     const manifestPath = join(ctx.repoRoot, config.packageDir, 'package.json');
     const manifest = await readJson(manifestPath);
@@ -669,9 +705,7 @@ async function bumpAll(
         }
     }
     for (const config of configs) {
-        if (await npmViewVersion(ctx.repoRoot, config.packageName, version)) {
-            throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
-        }
+        await assertNpmVersionFree(ctx.repoRoot, config.packageName, version);
     }
 
     // Bump all manifests in one pass.

@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
-import { bumpVer as runBumpVer, dropTags as runDropTags } from '../src/release-ops';
+import { registryTimeHasVersion, bumpVer as runBumpVer, dropTags as runDropTags } from '../src/release-ops';
 import { createCapturedOutput } from './helpers';
 
 // Task 0617 R3: the test sibling the spur-dev release command never had. Every case drives
@@ -169,6 +169,44 @@ describe('builder bump-ver', () => {
     test('rejects unknown package ids with the available ids', async () => {
         const { repo } = mkRepo();
         await expect(bumpVer(['nope', '0.2.0'], repo)).rejects.toThrow('unknown package "nope"');
+    });
+
+    test('registry time map marks a published-then-unpublished version as spent', () => {
+        expect(registryTimeHasVersion('{"0.4.50":"2026-09-01T04:02:10.800Z"}', '0.4.50')).toBeTrue();
+        expect(registryTimeHasVersion('{"0.4.49":"2026-11-27T07:57:00.000Z"}', '0.4.50')).toBeFalse();
+        expect(registryTimeHasVersion('not json', '0.4.50')).toBeFalse();
+    });
+
+    test('rejects a version npm burned by publishing then unpublishing (0.4.50 class)', async () => {
+        // 0.4.50 was published 2026-09-01 and later unpublished: `npm view <pkg>@0.4.50` 404s, so
+        // the old guard let the bump through and the publish workflow burnt its build only to hit
+        // E400 "Cannot publish over previously published version". The registry `time` map still
+        // lists the number, and npm never accepts it again.
+        const { repo } = mkRepo();
+        const real = NodeProcessExecutor.prototype.run;
+        using _spy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementation(async function (
+            this: NodeProcessExecutor,
+            options: Parameters<typeof real>[0],
+        ) {
+            const argv = [options.command, ...(options.args ?? [])].join(' ');
+            const base = { command: options.command, args: [...(options.args ?? [])], durationMs: 1 };
+            if (argv === 'npm view @demo/lib@0.4.50 version') {
+                return { ...base, exitCode: 1, stdout: '', stderr: 'npm error code E404' };
+            }
+            if (argv === 'npm view @demo/lib time --json') {
+                return {
+                    ...base,
+                    exitCode: 0,
+                    stdout: '{"0.4.50":"2026-09-01T04:02:10.800Z","modified":"2026-11-01T00:00:00.000Z"}',
+                    stderr: '',
+                };
+            }
+            return real.call(this, options);
+        });
+
+        await expect(bumpVer(['lib', '0.4.50'], repo)).rejects.toThrow('unpublished');
+        expect((await Bun.file(join(repo, 'pkgs', 'lib', 'package.json')).json()).version).toBe('0.1.0');
+        expect(localTags(repo)).toEqual([]);
     });
 
     test('refuses to release on a dirty tree', async () => {
