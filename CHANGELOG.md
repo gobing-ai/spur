@@ -8,6 +8,66 @@
 - ship the module-kit declaration mirror behind the CLI package's `./board/ui` export
   <!-- src: packages/app/src/builder/emit-board-types.ts:76 · confidence: HIGH -->
 
+## [0.4.50] - 2026-11-27
+
+### Added
+- the `builder` verb set has a machine-readable consent table, and the CLI-surface parity suite asserts set equality against the live registration in both directions (c67b064d1)
+  <!-- src: plugins/sp/tests/cli-surface-parity.test.ts:535, docs/design/harness-surface-governance.md:236 · confidence: HIGH -->
+- root test files that spawn subprocesses are classified into a committed lane manifest the launcher reads, so that lane runs at the proven bound while everything else keeps full fan-out (7e93b90c5)
+  <!-- src: packages/app/src/rules/test-lanes.ts:126 · confidence: HIGH -->
+- the heavy gate's files are hand-classified into concurrent and serial lanes with declared shared resources, and `test:heavy` runs both phases under one registry and one Board seed (2830cb040, 3bb7d13fc)
+  <!-- src: scripts/commands/run-tests.ts:291, packages/app/src/rules/test-lanes.ts:245 · confidence: HIGH -->
+- `builder.scopeTestMap` declares corpus→test mappings, so a workflow-YAML, preset or manifest change selects the suites that guard it; a malformed `when` regex fails config load naming the entry (62fbd748a)
+  <!-- src: packages/app/src/services/quality-gate.ts:659, packages/config/src/index.ts:1198 · confidence: HIGH -->
+- an outbound A2A receipt reads its peer's dialog through the local gateway: same-gateway project members only, loopback, no redirect and no forwarded credential, answered as a remote-or-marker union (b2def3c6d)
+  <!-- src: packages/app/src/services/a2a-remote-dialog.ts:38, packages/contracts/src/integrations.ts:330 · confidence: HIGH -->
+- that remote half renders under the outbound arrow as an opt-in disclosure, with fixed copy for a peer outside this gateway (3051e7745)
+  <!-- src: apps/web/src/modules/integrations/A2aSequence.tsx:621 · confidence: HIGH -->
+- `dsh` (deepseek) is an enrolled history source, so `spur history import --source deepseek` reads its `~/.dsh/sessions` transcripts (df4e654ca)
+  <!-- src: packages/app/src/services/history-service.ts:460, packages/app/src/services/history-board-service.ts:151 · confidence: HIGH -->
+- the History Board lists `dsh` with its own source row, filter id and monogram icon (a34e8000d)
+  <!-- src: packages/app/src/services/history-board-service.ts:151, apps/web/src/modules/history/HistoryFilters.tsx:38 · confidence: HIGH -->
+- `decision_logs` carries the served model — answer metadata reaches the row, the wire schema and the detail drawer, and stays NULL for a fallback, a rejection or a pre-0057 row (23768b4ea, 174635bfd)
+  <!-- src: packages/app/src/decision/decision-log.ts:175, packages/domain/src/dao/decision-log-dao.ts:42 · confidence: HIGH -->
+
+### Fixed
+- action ambiguity is decided from the state's total same-kind row count, so a correct N-declared/N-recorded state no longer reads ambiguous from its second action on (4ea7dc21d)
+  <!-- src: packages/app/src/workflow/progress-projection.ts:529 · confidence: HIGH -->
+- a project-registry refusal during the remote dialog read degrades to the `unavailable` marker carrying its reason instead of breaking the receipt (9ac9542cb)
+  <!-- src: packages/app/src/services/a2a-member-address.ts:77 · confidence: HIGH -->
+- remote dialog bodies render a 280-character excerpt instead of the full message (0a512f45c)
+  <!-- src: apps/web/src/modules/integrations/A2aSequence.tsx:611 · confidence: HIGH -->
+- MCP readiness prefers native dsh `insert` entries and still reads a valid flat loader array, so an operator profile in either shape reports ready (425e872c1)
+  <!-- src: packages/app/src/services/agent-mcp-readiness.ts:66 · confidence: HIGH -->
+- a first-pass-green gate no longer starves the review lane's remediate hop: the findings file is seeded from the review answer's `path:line` anchors, and `file.read.into-var` gains `missing: empty` for an artifact a lane may legitimately lack (b2c6abaf6)
+  <!-- src: packages/app/src/workflow/actions/file-read-into-var.ts:63, config/workflows/task-pipeline.yaml:580 · confidence: HIGH -->
+- the heavy exec-parallel test waits for the supervisor's ready event before SIGINT, so the interrupt lands on a live child instead of bun's default handler (422f5e9de)
+  <!-- src: apps/cli/tests/commands/self/exec-parallel.heavy.test.ts:66 · confidence: HIGH -->
+- `test-lanes --profile-heavy` defaults explicitly, keeping the argv parser exhaustive (1ff1c9672)
+  <!-- src: scripts/commands/test-lanes.ts:191 · confidence: HIGH -->
+
+### Changed
+- the `@gobing-ai/ts-*` catalog moves to 0.8.8 and `@gobing-ai/superskill` to 0.3.48 (2ecf70625)
+  <!-- src: package.json:32 · confidence: HIGH -->
+- every test script passes `--timeout 20000`, and the light tier's `test-changed` binding passes the same flag instead of falling back to bun's 5000 ms default (aff051ea7, 542de0888)
+  <!-- src: package.json:86, .spur/config.yaml:134 · confidence: HIGH -->
+- the heavy suite builds the Board once per launcher run into a run-scoped seed and hands each caller a copy, so the build cost is paid once (e59f7d70a)
+  <!-- src: apps/web/tests/test-helpers/board-build.ts:37 · confidence: HIGH -->
+- `test-lanes --spawn-cost` records a file's wall time and the children it spawns by kind, so lane membership follows measured cost instead of a guess (b5f2816f0)
+  <!-- src: scripts/commands/spawn-cost-preload.ts:42, scripts/commands/test-lanes.ts:95 · confidence: HIGH -->
+
+### Other
+- the lane plan records were reconciled with what landed, and 1460 was parked on its measured falsification (cad6ccfa1, 8be40e735, f0be44e6b)
+- the 1464–1472 tasks were refined to ready depth and their fresh verification evidence recorded (4f7c90ec0, 367f425f9, d10baf94f, 1b21180fe, 25e94a36f, 3b5ed5a8a, 417f62e69, 0a82fd0c3, 2ecc1c9f6, 08de2c78c, 1f217f732)
+- the two defects the knowledge-kit D9 batch exposed were filed and refined (3958ca838, de09af2a6)
+- the 1459–1462 evidence was re-pointed at the verified tree and the test-lanes generator registered in the script-ownership report (7e4b2557d, e3b72cd7f, f5f691c4d)
+- `--profile-heavy` and the dsh profile composition blocker were documented (f2fdcc354, 6827fc88f)
+- the 1473 remediate-hop observation and receipt-path contract were recorded, and its foreign run-artifact citations qualified (e3855bf9c, 2ffc36807, 8259c5f87)
+- 1463's stale dependency edge was dropped and its three-run heavy-lane receipt recorded (ab4916d64, ba80a9041)
+- 1475's scope was narrowed to the measured top spawn-cost files, linked to H161, and its post-merge and durable merged-suite evidence recorded (b89b690dd, b253afea0, e1605d3ff, 13f81600e)
+- the batch learnings and pitfalls for 1473/1474 and 1464–1472 were captured (84cbed761, 3ffa88412)
+- test housekeeping: migration ids assert contiguity, dsh tool calls are attributed, the task action budget ratchet rises to 43, and the drawer test stubs fetch (3acc02ae6, 03bde06c1, 6c7fc408e, 64e541fd7, 9a06f43da)
+
 ## [0.4.49] - 2026-11-26
 
 ### Added
