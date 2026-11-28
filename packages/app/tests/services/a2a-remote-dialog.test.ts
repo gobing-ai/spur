@@ -167,6 +167,14 @@ describe('1468 R2/AC3 — a failed remote read degrades to the marker', () => {
         expect(result).toEqual({ status: 'unavailable', reason: 'remote thread body is not an inbox message list' });
     });
 
+    test('invalid JSON is unavailable without throwing', async () => {
+        const gateway = stubGateway(() => new Response('{'));
+        expect(await readRemoteDialog(deps(gateway.port))).toEqual({
+            status: 'unavailable',
+            reason: 'remote thread body is not an inbox message list',
+        });
+    });
+
     test('a slow peer hits the 2 s budget and reports a timeout', async () => {
         const gateway = stubGateway(async () => {
             await Bun.sleep(2_500);
