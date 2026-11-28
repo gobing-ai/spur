@@ -4,14 +4,14 @@ name: Run test:heavy as a concurrent-safe phase then a serial phase and prove th
 status: todo
 template: feature-impl
 created_at: 2026-11-27T07:07:41.710Z
-updated_at: "2026-11-27T19:51:15.061Z"
+updated_at: "2026-11-28T02:38:28.155Z"
 feature_id: H162
 priority: P2
 tags:
   - testing
   - performance
 
-dependencies: ["1461", "1462", "1460"]
+dependencies: ["1461", "1462"]
 estimate_hours: 6
 ---
 
@@ -53,6 +53,17 @@ Out of scope: classifying files (1461); the seed (1462); root-suite lanes (1460)
 - Phase failure policy: run serial phase regardless, first nonzero exit wins (closed).
 - Test-count source: Bun dots summary lines from tee'd logs (closed; no extra reporter).
 - Concurrent width: `min(4, cores)` default (closed).
+
+#### Q&A entry — 2026-11-27T18:38:15.000Z
+
+- **Closed — the dependency edge on 1460 is dropped; `dependencies` is now `[1461, 1462]`.** 1460 was
+  cancelled on 2026-11-27, and a frozen task never reads as `done` (ADR-137), so the edge could never be
+  satisfied and `spur task preflight 1463` stopped the task on it (A2 "unmet: 1460"). What this task
+  actually needed from 1460 — the lane-loop shape in `scripts/commands/run-tests.ts` — landed
+  independently (`3bb7d13fc feat(test): lane test:heavy as concurrent then serial phases (1463)`), and
+  1461/1462 are `done`. Remaining work is the three-run proof and the recorded sections, not a build.
+  Re-pointing rather than un-deprecating 1460 was chosen because 1460's own finding (scheduling is not
+  the lever for the root suite) is what cancelled it; re-opening it would resurrect a measured dead end.
 
 ### Design
 
