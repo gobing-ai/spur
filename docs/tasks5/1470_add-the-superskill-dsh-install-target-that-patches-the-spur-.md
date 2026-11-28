@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Add the superskill dsh install target that patches the Spur MCP loader entry
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-11-27T07:35:47.781Z
-updated_at: "2026-11-27T23:04:46.656Z"
+updated_at: "2026-11-27T23:33:00.913Z"
 feature_id: B811
 
 estimate_hours: 4
 priority: P2
+done_forced: "false"
+done_reason: unforced close
 ---
 
 ## 1470. Add the superskill dsh install target that patches the Spur MCP loader entry
@@ -42,13 +44,13 @@ Cross-repo precedent (task 1456): do the work and run the gates in `../superskil
 - [x] R3. Reinstall is idempotent. Items are keyed by `name` + `config.serverName`: owned items are replaced in place, and foreign items (other loaders, other server names) keep their content and order. A second identical install produces byte-identical output.
 - [x] R4. `--dry-run` prints the planned patch diff and writes nothing. An unparseable existing patch fails with an actionable message and leaves the file untouched.
 - [x] R5. No secret values are written: `env` entries are `!!js process.env.<NAME>` references only. Nothing under `~/.dsh` other than that patch file is read or written.
-- [ ] R6. Spur's readiness probe reports the written entry as ready. The superskill gate (`bun run spur-check`) passes. Bump/publish waits for Robin's authorization.
+- [x] R6. Spur's readiness probe reports the written entry as ready. The superskill gate (`bun run spur-check`) passes. Bump/publish waits for Robin's authorization.
 
 Out of scope: dsh hooks; other dsh profiles; the dsh skills install (§4 of the design); changing Spur's probe.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The dsh target writes the Spur MCP loader entry (req: R1; R2; R4; R5; R6) — unit (superskill, temp HOME): absent patch → created with one `@deepseek-ai/dsh-mcp-client` item carrying `transport: stdio`, `command: spur`, `args: [mcp, --gateway]` and four `!!js process.env.<NAME>` env references and no literal values; `--dry-run` writes nothing; unparseable YAML errors and leaves the file untouched. Real proof: Spur's readiness probe reports dsh "ready" against that HOME.
+- [x] AC1 — The dsh target writes the Spur MCP loader entry (req: R1; R2; R4; R5; R6) — unit (superskill, temp HOME): absent patch → created with one `@deepseek-ai/dsh-mcp-client` item carrying `transport: stdio`, `command: spur`, `args: [mcp, --gateway]` and four `!!js process.env.<NAME>` env references and no literal values; `--dry-run` writes nothing; unparseable YAML errors and leaves the file untouched. Real proof: Spur's readiness probe reports dsh "ready" against that HOME.
 - [x] AC2 — Reinstall is idempotent and preserves foreign entries (req: R3) — unit (superskill, temp HOME): a second install is byte-identical; a foreign loader and a foreign `serverName` keep content and order; a stale owned item is replaced in place.
 
 ### Q&A
@@ -135,7 +137,7 @@ Follow-up for the native dsh profile format. The installed dsh 0.2.2-rc.1 accept
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
@@ -144,11 +146,11 @@ Follow-up for the native dsh profile format. The installed dsh 0.2.2-rc.1 accept
 | R3 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 150 covers byte-stable reinstall, migration of an owned flat entry, and preservation of a native group’s ID and foreign sibling. Source CLI reinstall preserved the patch SHA-256. |
 | R4 | MET | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 103 proves preview diff and no write, and line 133 proves malformed input is left untouched without leaking its contents. |
 | R5 | MET | @gobing-ai/superskill-core `packages/core/src/operations/dsh-mcp-patch.ts` lines 122–142 validate names and construct env references. The isolated patch held all four references, and neither preview nor error printed prior values. |
-| R6 | PARTIAL | The production Spur readiness probe reported configured with stdio from the same native patch that dsh composed. The full Superskill gate reached failures in two Pi hook subprocess cases, so it has no passing receipt. |
+| R6 | MET | Actual dsh composition and Spur production readiness returned the native stdio configuration. The full Superskill spur-check passed lint, typecheck, 2,757 tests, and all pre/post rules. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The dsh target writes the Spur MCP loader entry | PARTIAL | command | The source Superskill install and dry-run, actual dsh profile composition, and production readiness probe passed against the same isolated HOME_DIR. The full Superskill gate reached failures in two Pi hook subprocess cases, so it has no passing receipt. |
+| AC1 — The dsh target writes the Spur MCP loader entry | MET | command | Source Superskill install, actual dsh profile composition, and the Spur readiness probe all passed against one isolated HOME_DIR. 14 focused installer cases passed, and the full Superskill gate passed. |
 | AC2 — Reinstall is idempotent and preserves foreign entries | MET | test | @gobing-ai/superskill-core `packages/core/tests/operations/dsh-mcp-patch.test.ts` line 157 passed. The CLI repeated the same hash on an isolated HOME_DIR. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
@@ -180,4 +182,6 @@ Disposition: PARTIAL — R1–R5 met with eleven green cases, R6's probe clause 
 
 - 2026-11-27T07:54:34.723Z backlog → todo (system)
 - 2026-11-27T21:39:12.055Z todo → wip (system)
+- 2026-11-27T23:31:34.729Z wip → testing (system)
+- 2026-11-27T23:33:00.366Z testing → done (system)
 
