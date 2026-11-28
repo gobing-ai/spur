@@ -105,7 +105,8 @@ describe('history handlers', () => {
         const result = (await handler({})) as { ok: boolean; data: { agents: unknown[] } };
 
         expect(result.ok).toBe(true);
-        expect(result.data.agents.length).toBe(9);
+        expect(result.data.agents).toHaveLength(10);
+        expect(result.data.agents).toContainEqual(expect.objectContaining({ id: 'deepseek', name: 'DeepSeek dsh' }));
     });
 
     test('triggerImport handler returns ok:true with import receipt', async () => {

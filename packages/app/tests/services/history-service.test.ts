@@ -2111,7 +2111,7 @@ describe('HistoryService.readHistoryHealth (task 1178 R3)', () => {
 
 // ─── feature E11 / task 1471: dsh (deepseek) is enrolled ──────────────────────────────────────
 describe('deepseek enrolment (1471, feature E11 R1)', () => {
-    /** A dsh sessions tree under an injected home: one v4 session, user + assistant + a torn tail. */
+    /** A v4 dsh session with user and assistant messages, a tool call, and a torn tail. */
     function dshHome(): string {
         const home = mkdtempSync(join(tmpdir(), 'spur-dsh-home-'));
         const dir = join(home, '.dsh', 'sessions', '--tmp--proj--', 'session-11111111-2222-4333-8444-555555555555');
@@ -2139,7 +2139,10 @@ describe('deepseek enrolment (1471, feature E11 R1)', () => {
                     message: {
                         role: 'assistant',
                         id: 'm-2',
-                        content: [{ type: 'text', text: 'dsh answers' }],
+                        content: [
+                            { type: 'text', text: 'dsh answers' },
+                            { type: 'tool-call', id: 'dsh-call', name: 'read', arguments: '{"file":"fixture"}' },
+                        ],
                         source: { provider: 'deepseek', model: 'deepseek-v4' },
                         usage: { input_tokens: 7, output_tokens: 3 },
                     },
@@ -2167,14 +2170,19 @@ describe('deepseek enrolment (1471, feature E11 R1)', () => {
             // The session header is bookkeeping (`meta`); the two message records follow it.
             expect(messages.map((row) => row.role)).toEqual(['meta', 'user', 'assistant']);
             expect(messages[1]?.content_text).toBe('from dsh');
-            // The torn final line is skipped, not fatal: the preceding records still imported.
-            expect(entry?.status).toBe('ok');
+            expect(entry?.toolCalls).toBe(1);
+            const tools = await db.queryAll(
+                `SELECT t.source, t.call_id, t.tool_name, m.role
+                 FROM history_tool_call t JOIN history_message m ON m.record_hash = t.message_hash`,
+            );
+            expect(tools).toEqual([{ source: 'deepseek', call_id: 'dsh-call', tool_name: 'read', role: 'assistant' }]);
 
             // Idempotent: a second full import of the same tree adds no rows.
             const before = await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_message');
             await svc.importAll({ sources: ['deepseek'], root: home, mode: 'full' });
             const after = await db.queryFirst<{ n: number }>('SELECT COUNT(*) AS n FROM history_message');
             expect(after?.n).toBe(before?.n ?? -1);
+            expect(await db.queryFirst('SELECT COUNT(*) AS n FROM history_tool_call')).toEqual({ n: 1 });
         } finally {
             rmSync(home, { recursive: true, force: true });
         }
