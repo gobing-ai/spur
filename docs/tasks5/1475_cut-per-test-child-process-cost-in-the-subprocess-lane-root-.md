@@ -4,7 +4,7 @@ name: Cut per-test child-process cost in the subprocess-lane root test files
 status: done
 template: standard
 created_at: 2026-11-27T19:06:07.059Z
-updated_at: "2026-11-28T01:59:02.333Z"
+updated_at: "2026-11-28T02:09:10.482Z"
 
 ac_numbering: task-local
 ac_altitude: task-local
@@ -181,7 +181,7 @@ Possibly a small shared helper in `apps/cli/tests/helpers.ts` (`runMain(args, cw
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PARTIAL at close (AC3's exit-0 clause); **MET after merge** — see the post-merge confirmation below.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
@@ -189,14 +189,17 @@ Possibly a small shared helper in `apps/cli/tests/helpers.ts` (`runMain(args, cw
 | R2 | MET | Both named levers landed. CLI spawns → in-process `main()` on the measured top contributors: pr5 124→4 s, help-docs 82→0 s, pr6 53→1 s, show-branches 46→7 s, init 45→6 s, artifacts 25→4 s, pr7 20→0 s. Repeated per-test git fixture setup → per-file template on `apps/cli/tests/commands/builder/show-branches.test.ts:66` (one repo built once, copied per test; identity via `GIT_AUTHOR_*`/`GIT_COMMITTER_*`). Set sum 613 s → 170 s (−72 %). |
 | R3 | MET | Test counts unchanged per touched file: pr5 35→35, pr6 32→32, pr7 15→15, init 72→72, artifacts 16→16, show-branches 34 (32 pass + 2 load-related base failures) → 34, help-docs 3→3, cli-surface 17→17. No timeout raised, no `test.skip` added, no `expect` removed — conversions change only the source of the same claim (`r.status`/`proc.exited` → `main()` code, captured stdout/stderr). |
 | R4 | MET | `config/test-lanes.json` regenerated: 142 subprocess-lane files; `test-lanes --check` reports "matches the tree (142 file(s))". pr5/pr6/pr7 left the lane because they no longer spawn. |
-| R5 | MET | `.spur/run/spawn-cost/after.json` (same driver, same host, final tree) plus the root pair: `bun run test` 788 s before (`before-root.json`) → 398 s after (`after-root.json`), both `0 fail`. |
+| R5 | MET | `.spur/run/spawn-cost/after.json` (same driver, same host) plus the root pair: `bun run test` 788 s before (`before-root.json`) → 398 s after (`after-root.json`), both `0 fail`. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 — a per-file spawn-cost receipt ranks the subprocess lane | MET | command | `.spur/run/spawn-cost/before.json`: one row per `root.subprocess` file with `wallMs`, `testCount`, `children{spur-cli,git,bun,sh,other}`; repeat-run counts identical (hooks 59 bun/15 sh ×2, status 15 spur-cli ×2); driver `scripts/commands/test-lanes.ts:305` |
 | AC2 — the top contributors drop their avoidable children | MET | command | before.json top-12 (613 s) → 170 s on the same host = −72 % (−40 % required); test counts unchanged (R3 row); diff review: no skip, no raised timeout, no removed `expect` |
-| AC3 — the lane manifest and root suite stay honest | PARTIAL | command | manifest: `test-lanes --check` passes on the regenerated 142-file manifest; wall: 788 s → 398 s (−49 %). **Exit code**: both runs exit 1 while reporting `0 fail` — the `a2a-remote-dialog.ts` per-file threshold (80 % functions) breaches at base too (`before-root.log:328`); not introduced or touched here (P4-2) |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+| AC3 — the lane manifest and root suite stay honest | MET | command | manifest: `test-lanes --check` passes on the regenerated 142-file manifest. Wall: 788 s before → 398 s after (−49 %), and **exit 0** on the merged tree (444 s / 13598 pass / 0 fail, `/tmp/final-root.log` run at `main` = `b5f2816f0`). At close the tree exited 1 from the pre-existing `packages/app/src/services/a2a-remote-dialog.ts` per-file coverage breach (`before-root.log:328`); the concurrent commit `9a06f43da` (that suite's invalid-JSON coverage) fixed it, which is why the merged run is green. |
+
+**Post-merge confirmation.** The task was force-done on a tree that exited 1 for a pre-existing, out-of-scope coverage breach. After `spur merge`-free FF landing onto `main` (which had advanced to `9a06f43da`, a change that adds the missing `a2a-remote-dialog` coverage), a full `bun run test` on the merged tree returned **exit 0** with 13598 pass / 0 fail — the AC3 exit-0 clause is satisfied by the delivered change plus that unrelated fix. The recorded `--force-done` reason stands as the accurate account of the pre-merge tree.
+
+- Coverage: N/A (verdict-based; the verify pipeline does not measure code coverage). The touched suites keep per-file coverage at 100 % (`apps/cli/tests/script-absorption-pr{6,7}/harness.ts`, `plugins/sp/tests/helpers/cli-surface.ts` 95.21 % lines).
 
 ### Review
 
