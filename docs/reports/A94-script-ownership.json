@@ -1,12 +1,12 @@
 {
     "schemaVersion": 2,
-    "generatedAt": "2026-11-27T22:46:00Z",
-    "sourceCommit": "6827fc88f63163a28b5ed00757924c18a9795924",
+    "generatedAt": "2026-11-28T03:29:00Z",
+    "sourceCommit": "ffe7ea4f8015b136ea3b6ca910791db7508e45dd",
     "consentStatus": {
         "state": "granted",
         "at": "2026-11-19",
         "by": "Robin",
-        "record": "docs/design/downstream-tooling-absorption.md §5",
+        "record": "docs/design/downstream-tooling-absorption.md \u00a75",
         "amendment": "2026-11-20 surface-shape"
     },
     "waves": ["1410", "1411", "1412", "1413", "1414", "1415"],
@@ -131,7 +131,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: pins Spur’s own CLI flag surface, a repository contract",
+            "downstreamReason": "Retained: pins Spur\u2019s own CLI flag surface, a repository contract",
             "subject": "plugins/sp/commands"
         },
         {
@@ -141,7 +141,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -152,7 +152,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches",
+            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/fleet-e2e-batch-perf.ts"
         },
@@ -171,7 +171,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: benchmark receipt producer for this repo’s batches"
+            "downstreamReason": "Retained: benchmark receipt producer for this repo\u2019s batches"
         },
         {
             "path": "scripts/commands/fleet-e2e-matrix.test.ts",
@@ -239,6 +239,17 @@
             "downstreamReason": "Retained: fleet E2E scenario fixture; only the host-probe arm moves (1414)"
         },
         {
+            "path": "scripts/commands/install-sh.test.ts",
+            "responsibility": "Bootstrap fixture tests for checksum verification and atomic replacement",
+            "tests": [],
+            "callers": [],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: proves the first-binary bootstrap, a repository-only step",
+            "noRuntimeCaller": true,
+            "subject": "scripts/install.sh"
+        },
+        {
             "path": "scripts/commands/integrations-e2e.ts",
             "responsibility": "Real-server MCP/A2A integration fixture and optional Board browser proof, writing a repeatable receipt",
             "tests": ["apps/web/tests/modules/integrations-browser.heavy.test.ts"],
@@ -261,15 +272,22 @@
             "downstreamReason": "Retained: isolated Spur MCP/A2A and Board scenario fixture, not reusable downstream runtime behavior"
         },
         {
-            "path": "scripts/commands/install-sh.test.ts",
-            "responsibility": "Bootstrap fixture tests for checksum verification and atomic replacement",
-            "tests": [],
-            "callers": [],
+            "path": "scripts/commands/mcp-agent-interop.ts",
+            "responsibility": "Operator-run real-agent MCP transport interoperability fixture with a recording proxy and receipt",
+            "tests": ["apps/cli/tests/mcp-agent-interop.test.ts"],
+            "callers": [
+                {
+                    "path": "package.json",
+                    "line": 105
+                },
+                {
+                    "path": "scripts/spur-dev.ts",
+                    "line": 159
+                }
+            ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: proves the first-binary bootstrap, a repository-only step",
-            "noRuntimeCaller": true,
-            "subject": "scripts/install.sh"
+            "downstreamReason": "Retained: installed-agent authentication and protocol scenario fixture for Spur, not reusable downstream runtime behavior"
         },
         {
             "path": "scripts/commands/plugin-install-smoke.ts",
@@ -335,25 +353,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo’s suite policy"
-        },
-        {
-            "path": "scripts/commands/mcp-agent-interop.ts",
-            "responsibility": "Operator-run real-agent MCP transport interoperability fixture with a recording proxy and receipt",
-            "tests": ["apps/cli/tests/mcp-agent-interop.test.ts"],
-            "callers": [
-                {
-                    "path": "package.json",
-                    "line": 105
-                },
-                {
-                    "path": "scripts/spur-dev.ts",
-                    "line": 159
-                }
-            ],
-            "downstream": "retain",
-            "disposition": "retained",
-            "downstreamReason": "Retained: installed-agent authentication and protocol scenario fixture for Spur, not reusable downstream runtime behavior"
+            "downstreamReason": "Retained: hermetic env scrub (registry/credential/global layers) is this repo\u2019s suite policy"
         },
         {
             "path": "scripts/commands/script-contract-check.test.ts",
@@ -418,6 +418,20 @@
             "downstreamReason": "Retained: enforces sp-plugin contracts; the generic form belongs to Superskill"
         },
         {
+            "path": "scripts/commands/spawn-cost-preload.ts",
+            "responsibility": "Counts the child processes one test file spawns, by kind, for the test-lanes --spawn-cost receipt",
+            "tests": ["scripts/commands/test-lanes.test.ts"],
+            "callers": [
+                {
+                    "path": "scripts/commands/test-lanes.ts",
+                    "line": 310
+                }
+            ],
+            "downstream": "retain",
+            "disposition": "retained",
+            "downstreamReason": "Retained: repository-specific measurement preload for this suite's lane costing"
+        },
+        {
             "path": "scripts/commands/surface-drift-inventory.test.ts",
             "responsibility": "Companion tests for plugin/workflow drift inventory extraction",
             "tests": [],
@@ -474,7 +488,7 @@
             "callers": [],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo’s suite",
+            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite",
             "noRuntimeCaller": true,
             "subject": "scripts/commands/test-suite-termination.ts"
         },
@@ -490,7 +504,7 @@
             ],
             "downstream": "retain",
             "disposition": "retained",
-            "downstreamReason": "Retained: child-termination proof for this repo’s suite"
+            "downstreamReason": "Retained: child-termination proof for this repo\u2019s suite"
         },
         {
             "path": "scripts/commands/validate-commands.ts",
